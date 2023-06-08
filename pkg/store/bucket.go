@@ -241,7 +241,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	}, []string{"reason"})
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
-		Help: fmt.Sprintf("Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch."),
+		Help: "Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch.",
 	})
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
