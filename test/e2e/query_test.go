@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -598,7 +599,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
 	testutil.Ok(t, err)
 
-	// Preparing 2 different blocks for the tests.
+	// Preparing 3 different blocks for the tests.
 	{
 		blockSizes := []struct {
 			samples int
@@ -607,6 +608,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		}{
 			{samples: 10, series: 1, name: "one_series"},
 			{samples: 10, series: 1001, name: "thousand_one_series"},
+			{samples: 10, series: 10001, name: "inf_series"},
 		}
 		now := time.Now()
 		externalLabels := labels.FromStrings("prometheus", "p1", "replica", "0")
@@ -644,9 +646,12 @@ func TestQueryStoreMetrics(t *testing.T) {
 		"",
 		nil,
 	)
-	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).Init()
+
+	sampleBuckets := []float64{100, 1000, 10000, 100000}
+	seriesBuckets := []float64{10, 100, 1000, 10000}
+	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).WithTelemetryQuantiles(nil, sampleBuckets, seriesBuckets).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querier))
-	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(3), "thanos_blocks_meta_synced"))
 
 	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
 	{
@@ -662,6 +667,13 @@ func TestQueryStoreMetrics(t *testing.T) {
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, 1001)
+		testutil.Ok(t, err)
+
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+			return "max_over_time(inf_series[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 10001)
 		testutil.Ok(t, err)
 	}
 
@@ -701,6 +713,24 @@ func TestQueryStoreMetrics(t *testing.T) {
 			Value: model.SampleValue(1),
 		},
 	})
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='+Inf',series_le='+Inf'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "storemetrics01-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "+Inf",
+				"series_le":  "+Inf",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/5033.
@@ -817,6 +847,344 @@ func TestSidecarStorePushdown(t *testing.T) {
 			"instance": "foo",
 			"__name__": "my_fake_metric",
 		},
+	})
+}
+
+type seriesWithLabels struct {
+	intLabels labels.Labels
+	extLabels labels.Labels
+}
+
+func TestQueryStoreDedup(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("storededup"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	bucket := "store-gw-dedup-test"
+	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+	testutil.Ok(t, err)
+
+	storeGW := e2ethanos.NewStoreGW(
+		e,
+		"s1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+		},
+		"",
+		nil,
+	)
+	testutil.Ok(t, e2e.StartAndWaitReady(storeGW))
+
+	tests := []struct {
+		extReplicaLabel  string
+		intReplicaLabel  string
+		desc             string
+		blockFinderLabel string
+		series           []seriesWithLabels
+		expectedSeries   int
+		expectedDedupBug bool
+	}{
+		{
+			desc:            "Deduplication works with external label",
+			extReplicaLabel: "replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("replica", "a"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("replica", "b"),
+				},
+			},
+			blockFinderLabel: "dedupext",
+			expectedSeries:   1,
+		},
+		{
+			desc:            "Deduplication works on external label with resorting required",
+			intReplicaLabel: "a",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "1", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "1", "b", "2"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "2", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "2", "b", "2"),
+				},
+			},
+			blockFinderLabel: "dedupextresort",
+			expectedSeries:   2,
+		},
+		{
+			desc:            "Deduplication works with internal label",
+			intReplicaLabel: "replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "a"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "b"),
+				},
+			},
+			blockFinderLabel: "dedupint",
+			expectedSeries:   1,
+			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
+			// is fixed. This means that it will return double the expected series until then.
+			expectedDedupBug: true,
+		},
+		{
+			desc:            "Deduplication works on internal label with resorting required",
+			intReplicaLabel: "a",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "1", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "1", "b", "2"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "2", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "2", "b", "2"),
+				},
+			},
+			blockFinderLabel: "dedupintresort",
+			expectedSeries:   2,
+			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
+			// is fixed. This means that it will return double the expected series until then.
+			expectedDedupBug: true,
+		},
+		{
+			desc:            "Deduplication works with extra internal label",
+			intReplicaLabel: "replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "a", "my_label", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "a", "my_label", "2"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "b", "my_label", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "b", "my_label", "2"),
+				},
+			},
+			blockFinderLabel: "dedupintextra",
+			expectedSeries:   2,
+			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
+			// is fixed. This means that it will return double the expected series until then.
+			expectedDedupBug: true,
+		},
+		{
+			desc:            "Deduplication works with both internal and external label",
+			intReplicaLabel: "replica",
+			extReplicaLabel: "receive_replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "a"),
+					extLabels: labels.FromStrings("replica", "a"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "b"),
+					extLabels: labels.FromStrings("replica", "b"),
+				},
+			},
+			blockFinderLabel: "dedupintext",
+			expectedSeries:   1,
+			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
+			// is fixed. This means that it will return double the expected series until then.
+			expectedDedupBug: true,
+		},
+	}
+
+	// Prepare and upload all the blocks that will be used to S3.
+	var totalBlocks int
+	for _, tt := range tests {
+		createSimpleReplicatedBlocksInS3(ctx, t, e, l, bkt, tt.series, tt.blockFinderLabel)
+		totalBlocks += len(tt.series)
+	}
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(float64(totalBlocks)), "thanos_blocks_meta_synced"))
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			querierBuilder := e2ethanos.NewQuerierBuilder(e, tt.blockFinderLabel, storeGW.InternalEndpoint("grpc")).WithProxyStrategy("lazy")
+			var replicaLabels []string
+			if tt.intReplicaLabel != "" {
+				replicaLabels = append(replicaLabels, tt.intReplicaLabel)
+			}
+			if tt.extReplicaLabel != "" {
+				replicaLabels = append(replicaLabels, tt.extReplicaLabel)
+			}
+			if len(replicaLabels) > 0 {
+				sort.Strings(replicaLabels)
+				querierBuilder = querierBuilder.WithReplicaLabels(replicaLabels...)
+			}
+			querier := querierBuilder.Init()
+			testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+			expectedSeries := tt.expectedSeries
+			if tt.expectedDedupBug {
+				expectedSeries *= 2
+			}
+			instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinderLabel)
+			}, time.Now, promclient.QueryOptions{
+				Deduplicate: true,
+			}, expectedSeries)
+			testutil.Ok(t, err)
+			testutil.Ok(t, querier.Stop())
+		})
+	}
+}
+
+// createSimpleReplicatedBlocksInS3 creates blocks in S3 with the series. If blockFinderLabel is not empty,
+// it will be added to the block's labels to easily find the blocks on with queries later.
+func createSimpleReplicatedBlocksInS3(
+	ctx context.Context,
+	t *testing.T,
+	dockerEnv *e2e.DockerEnvironment,
+	logger log.Logger,
+	bucket *s3.Bucket,
+	series []seriesWithLabels,
+	blockFinderLabel string,
+) {
+	now := time.Now()
+	dir := filepath.Join(dockerEnv.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+	for _, s := range series {
+		intLabels := s.intLabels
+		if blockFinderLabel != "" {
+			intLabels = labels.NewBuilder(s.intLabels.Copy()).Set("block_finder", blockFinderLabel).Labels()
+		}
+		blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+			dir,
+			[]labels.Labels{intLabels},
+			1,
+			timestamp.FromTime(now),
+			timestamp.FromTime(now.Add(2*time.Hour)),
+			30*time.Minute,
+			s.extLabels,
+			0,
+			metadata.NoneFunc,
+		)
+		testutil.Ok(t, err)
+		blockPath := path.Join(dir, blockID.String())
+		testutil.Ok(t, objstore.UploadDir(ctx, logger, bucket, blockPath, blockID.String()))
+	}
+}
+
+func TestSidecarQueryDedup(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("sidecar-dedup")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "p3", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
+
+	{
+		samples := []seriesWithLabels{
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "1")},
+			// Now replicating based on the "instance" label.
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "2")},
+		}
+		testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom1, samples))
+		testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom2, samples))
+	}
+
+	{
+		samples := []seriesWithLabels{
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2")},
+		}
+		testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom3, samples))
+	}
+
+	query1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithReplicaLabels("replica", "instance").
+		Init()
+	query2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithReplicaLabels("replica").
+		Init()
+	query3 := e2ethanos.NewQuerierBuilder(e, "3", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithReplicaLabels("instance").
+		Init()
+	query4 := e2ethanos.NewQuerierBuilder(e, "4", sidecar3.InternalEndpoint("grpc")).
+		WithReplicaLabels("a").
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(query1, query2, query3, query4))
+
+	t.Run("deduplication on internal and external labels", func(t *testing.T) {
+		// Uses both an internal and external labels as replica labels
+		instantQuery(t, ctx, query1.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 4)
+	})
+
+	t.Run("deduplication on external label", func(t *testing.T) {
+		// Uses "replica" as replica label, which is an external label when being captured by Thanos Sidecar.
+		instantQuery(t, ctx, query2.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 8)
+	})
+
+	t.Run("deduplication on internal label", func(t *testing.T) {
+		// Uses "instance" as replica label, which is an internal label from the samples used.
+		instantQuery(t, ctx, query3.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 8)
+	})
+
+	t.Run("deduplication on internal label with reorder", func(t *testing.T) {
+		// Uses "a" as replica label, which is an internal label from the samples used.
+		// Should return 4 samples as long as the bug described by https://github.com/thanos-io/thanos/issues/6257#issuecomment-1544023978
+		// is not fixed. When it is fixed, it should return 2 samples.
+		instantQuery(t, ctx, query4.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 4)
 	})
 }
 
@@ -1222,6 +1590,37 @@ func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunna
 				{
 					Value:     float64(sample.Value),
 					Timestamp: sample.Timestamp.Time().Unix() * 1000,
+				},
+			},
+		})
+	}
+
+	writeRequest := &prompb.WriteRequest{
+		Timeseries: samplespb,
+	}
+
+	return storeWriteRequest(ctx, rawRemoteWriteURL, writeRequest)
+}
+
+func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, series []seriesWithLabels) error {
+	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
+
+	samplespb := make([]prompb.TimeSeries, 0, len(series))
+	r := rand.New(rand.NewSource(int64(len(series))))
+	for _, serie := range series {
+		labelspb := make([]prompb.Label, 0, len(serie.intLabels))
+		for labelKey, labelValue := range serie.intLabels.Map() {
+			labelspb = append(labelspb, prompb.Label{
+				Name:  labelKey,
+				Value: labelValue,
+			})
+		}
+		samplespb = append(samplespb, prompb.TimeSeries{
+			Labels: labelspb,
+			Samples: []prompb.Sample{
+				{
+					Value:     r.Float64(),
+					Timestamp: time.Now().Unix() * 1000,
 				},
 			},
 		})

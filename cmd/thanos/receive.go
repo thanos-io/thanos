@@ -281,7 +281,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, dbs); err != nil {
 			return err
 		}
 	}
@@ -451,12 +451,13 @@ func setupHashring(g *run.Group,
 	webHandler *receive.Handler,
 	statusProber prober.Probe,
 	enableIngestion bool,
+	dbs *receive.MultiTSDB,
 ) error {
 	// Note: the hashring configuration watcher
 	// is the sender and thus closes the chan.
 	// In the single-node case, which has no configuration
 	// watcher, we close the chan ourselves.
-	updates := make(chan receive.Hashring, 1)
+	updates := make(chan []receive.HashringConfig, 1)
 	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 
 	// The Hashrings config file path is given initializing config watcher.
@@ -475,33 +476,28 @@ func setupHashring(g *run.Group,
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
-			return receive.HashringFromConfigWatcher(ctx, algorithm, conf.replicationFactor, updates, cw)
+			return receive.ConfigFromWatcher(ctx, updates, cw)
 		}, func(error) {
 			cancel()
 		})
 	} else {
 		var (
-			ring receive.Hashring
-			err  error
+			cf  []receive.HashringConfig
+			err error
 		)
 		// The Hashrings config file content given initialize configuration from content.
 		if len(conf.hashringsFileContent) > 0 {
-			ring, err = receive.HashringFromConfig(algorithm, conf.replicationFactor, conf.hashringsFileContent)
+			cf, err = receive.ParseConfig([]byte(conf.hashringsFileContent))
 			if err != nil {
 				close(updates)
-				return errors.Wrap(err, "failed to validate hashring configuration file")
+				return errors.Wrap(err, "failed to validate hashring configuration content")
 			}
-			level.Info(logger).Log("msg", "the hashring initialized directly with the given content through the flag.")
-		} else {
-			level.Info(logger).Log("msg", "the hashring file is not specified use single node hashring.")
-			ring = receive.SingleNodeHashring(conf.endpoint)
 		}
 
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			defer close(updates)
-			updates <- ring
+			updates <- cf
 			<-cancel
 			return nil
 		}, func(error) {
@@ -518,11 +514,27 @@ func setupHashring(g *run.Group,
 
 		for {
 			select {
-			case h, ok := <-updates:
+			case c, ok := <-updates:
 				if !ok {
 					return nil
 				}
-				webHandler.Hashring(h)
+
+				if c == nil {
+					webHandler.Hashring(receive.SingleNodeHashring(conf.endpoint))
+					level.Info(logger).Log("msg", "Empty hashring config. Set up single node hashring.")
+				} else {
+					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c)
+					if err != nil {
+						return errors.Wrap(err, "unable to create new hashring from config")
+					}
+					webHandler.Hashring(h)
+					level.Info(logger).Log("msg", "Set up hashring for the given hashring config.")
+				}
+
+				if err := dbs.SetHashringConfig(c); err != nil {
+					return errors.Wrap(err, "failed to set hashring config in MultiTSDB")
+				}
+
 				// If ingestion is enabled, send a signal to TSDB to flush.
 				if enableIngestion {
 					hashringChangedChan <- struct{}{}
