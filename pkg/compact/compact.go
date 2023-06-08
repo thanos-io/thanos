@@ -5,6 +5,7 @@ package compact
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -350,7 +351,7 @@ type Group struct {
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
-	partitionInfo                 *metadata.PartitionInfo
+	extensions                    any
 }
 
 // NewGroup returns a new compaction group.
@@ -491,12 +492,23 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
-func (cg *Group) PartitionedInfo() *metadata.PartitionInfo {
-	return cg.partitionInfo
+func (cg *Group) Extensions() any {
+	return cg.extensions
 }
 
-func (cg *Group) SetPartitionInfo(partitionInfo *metadata.PartitionInfo) {
-	cg.partitionInfo = partitionInfo
+func (cg *Group) ParseExtensions(v any) error {
+	extensionsContent, err := json.Marshal(cg.extensions)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(extensionsContent, v); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cg *Group) SetExtensions(extensions any) {
+	cg.extensions = extensions
 }
 
 // CompactProgressMetrics contains Prometheus metrics related to compaction progress.
@@ -544,7 +556,7 @@ func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, g
 			if len(g.IDs()) == 1 {
 				continue
 			}
-			plan, err := ps.planner.Plan(ctx, g.metasByMinTime)
+			plan, err := ps.planner.Plan(ctx, g.metasByMinTime, nil, g.extensions)
 			if err != nil {
 				return errors.Wrapf(err, "could not plan")
 			}
@@ -736,9 +748,7 @@ func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, gr
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
-	Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error)
-
-	PlanWithPartition(ctx context.Context, metasByMinTime []*metadata.Meta, partitionID int, errChan chan error) ([]*metadata.Meta, error)
+	Plan(ctx context.Context, metasByMinTime []*metadata.Meta, errChan chan error, extensions any) ([]*metadata.Meta, error)
 }
 
 type BlockDeletableChecker interface {
@@ -753,15 +763,15 @@ func (c DefaultBlockDeletableChecker) CanDelete(_ *Group, _ ulid.ULID) bool {
 }
 
 type CompactionLifecycleCallback interface {
-	PreCompactionCallback(group *Group, toCompactBlocks []*metadata.Meta) error
-	PostCompactionCallback(group *Group, blockID ulid.ULID) error
-	GetBlockPopulator(group *Group, logger log.Logger) (tsdb.BlockPopulator, error)
+	PreCompactionCallback(ctx context.Context, logger log.Logger, group *Group, toCompactBlocks []*metadata.Meta) error
+	PostCompactionCallback(ctx context.Context, logger log.Logger, group *Group, blockID ulid.ULID) error
+	GetBlockPopulator(ctx context.Context, logger log.Logger, group *Group) (tsdb.BlockPopulator, error)
 }
 
 type DefaultCompactionLifecycleCallback struct {
 }
 
-func (c DefaultCompactionLifecycleCallback) PreCompactionCallback(_ *Group, toCompactBlocks []*metadata.Meta) error {
+func (c DefaultCompactionLifecycleCallback) PreCompactionCallback(_ context.Context, _ log.Logger, _ *Group, toCompactBlocks []*metadata.Meta) error {
 	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
 	// This is one potential source of how we could end up with duplicated chunks.
 	uniqueSources := map[ulid.ULID]struct{}{}
@@ -776,11 +786,11 @@ func (c DefaultCompactionLifecycleCallback) PreCompactionCallback(_ *Group, toCo
 	return nil
 }
 
-func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ *Group, _ ulid.ULID) error {
+func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ context.Context, _ log.Logger, _ *Group, _ ulid.ULID) error {
 	return nil
 }
 
-func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ *Group, _ log.Logger) (tsdb.BlockPopulator, error) {
+func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
 	return tsdb.DefaultBlockPopulator{}, nil
 }
 
@@ -1050,13 +1060,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
-		if cg.partitionInfo != nil && cg.partitionInfo.PartitionCount > 0 {
-			toCompact, e = planner.PlanWithPartition(ctx, cg.metasByMinTime, cg.partitionInfo.PartitionID, errChan)
-			return e
-		} else {
-			toCompact, e = planner.Plan(ctx, cg.metasByMinTime)
-			return e
-		}
+		toCompact, e = planner.Plan(ctx, cg.metasByMinTime, errChan, cg.extensions)
+		return e
 	}); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
 	}
@@ -1071,7 +1076,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	groupCompactionBegin := time.Now()
 	begin := groupCompactionBegin
 
-	if err := compactionLifecycleCallback.PreCompactionCallback(cg, toCompact); err != nil {
+	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
 	}
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "plan", fmt.Sprintf("%v", toCompact), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
@@ -1136,7 +1141,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
-		populateBlockFunc, e := compactionLifecycleCallback.GetBlockPopulator(cg, cg.logger)
+		populateBlockFunc, e := compactionLifecycleCallback.GetBlockPopulator(ctx, cg.logger, cg)
 		if e != nil {
 			return e
 		}
@@ -1169,11 +1174,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	index := filepath.Join(bdir, block.IndexFilename)
 
 	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
-		Labels:        cg.labels.Map(),
-		Downsample:    metadata.ThanosDownsample{Resolution: cg.resolution},
-		Source:        metadata.CompactorSource,
-		SegmentFiles:  block.GetSegmentFiles(bdir),
-		PartitionInfo: cg.partitionInfo,
+		Labels:       cg.labels.Map(),
+		Downsample:   metadata.ThanosDownsample{Resolution: cg.resolution},
+		Source:       metadata.CompactorSource,
+		SegmentFiles: block.GetSegmentFiles(bdir),
+		Extensions:   cg.extensions,
 	}, nil)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
@@ -1209,12 +1214,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
-	level.Info(cg.logger).Log("msg", "running post compaction callback", "result_block", compID)
-	if err := compactionLifecycleCallback.PostCompactionCallback(cg, compID); err != nil {
-		return false, ulid.ULID{}, retry(errors.Wrapf(err, "failed to run post compaction callback for result block %s", compID))
-	}
-	level.Info(cg.logger).Log("msg", "finished running post compaction callback", "result_block", compID)
-
 	// Mark for deletion the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
@@ -1227,6 +1226,12 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
+
+	level.Info(cg.logger).Log("msg", "running post compaction callback", "result_block", compID)
+	if err := compactionLifecycleCallback.PostCompactionCallback(ctx, cg.logger, cg, compID); err != nil {
+		return false, ulid.ULID{}, retry(errors.Wrapf(err, "failed to run post compaction callback for result block %s", compID))
+	}
+	level.Info(cg.logger).Log("msg", "finished running post compaction callback", "result_block", compID)
 
 	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
 		"duration", time.Since(groupCompactionBegin), "duration_ms", time.Since(groupCompactionBegin).Milliseconds())
