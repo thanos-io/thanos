@@ -1,5 +1,8 @@
 ---
 adopters:
+- name: Aiven
+  url: https://aiven.io
+  logo: aivenlogo.png
 - name: Infinite Devices
   url: https://infinimesh.io
   logo: infdevlogo.png
