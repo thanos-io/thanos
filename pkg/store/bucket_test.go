@@ -1530,14 +1530,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b1 = &bucketBlock{
-			indexCache:  indexCache,
-			logger:      logger,
-			metrics:     newBucketStoreMetrics(nil),
-			bkt:         bkt,
-			meta:        meta,
-			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
-			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:   chunkPool,
+			indexCache:             indexCache,
+			logger:                 logger,
+			metrics:                newBucketStoreMetrics(nil),
+			bkt:                    bkt,
+			meta:                   meta,
+			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+			chunkObjs:              []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:              chunkPool,
+			estimatedMaxSeriesSize: EstimatedMaxSeriesSize,
+			estimatedMaxChunkSize:  EstimatedMaxChunkSize,
 		}
 		b1.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b1.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
@@ -1569,14 +1571,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b2 = &bucketBlock{
-			indexCache:  indexCache,
-			logger:      logger,
-			metrics:     newBucketStoreMetrics(nil),
-			bkt:         bkt,
-			meta:        meta,
-			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
-			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:   chunkPool,
+			indexCache:             indexCache,
+			logger:                 logger,
+			metrics:                newBucketStoreMetrics(nil),
+			bkt:                    bkt,
+			meta:                   meta,
+			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+			chunkObjs:              []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:              chunkPool,
+			estimatedMaxSeriesSize: EstimatedMaxSeriesSize,
+			estimatedMaxChunkSize:  EstimatedMaxChunkSize,
 		}
 		b2.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b2.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
