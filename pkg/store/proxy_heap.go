@@ -165,8 +165,8 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 // might not be much of a difference.
 type ProxyResponseHeap struct {
 	nodes        []ProxyResponseHeapNode
-	iLblsScratch labels.Labels
-	jLblsScratch labels.Labels
+	iLblsScratch []labelpb.ZLabel
+	jLblsScratch []labelpb.ZLabel
 }
 
 func (h *ProxyResponseHeap) Less(i, j int) bool {
@@ -179,21 +179,21 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 		iStoreLbls := h.nodes[i].rs.StoreLabels()
 		jStoreLbls := h.nodes[j].rs.StoreLabels()
 
-		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
+		iLbls := iResp.GetSeries().Labels
+		jLbls := jResp.GetSeries().Labels
 
 		copyLabels(&h.iLblsScratch, iLbls)
 		copyLabels(&h.jLblsScratch, jLbls)
 
-		var iExtLbls, jExtLbls labels.Labels
+		var iExtLbls, jExtLbls []labelpb.ZLabel
 		h.iLblsScratch, iExtLbls = dropLabels(h.iLblsScratch, iStoreLbls)
 		h.jLblsScratch, jExtLbls = dropLabels(h.jLblsScratch, jStoreLbls)
 
-		c := labels.Compare(h.iLblsScratch, h.jLblsScratch)
+		c := labelpb.Compare(h.iLblsScratch, h.jLblsScratch)
 		if c != 0 {
 			return c < 0
 		}
-		return labels.Compare(iExtLbls, jExtLbls) < 0
+		return labelpb.Compare(iExtLbls, jExtLbls) < 0
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
@@ -404,9 +404,9 @@ func newLazyRespSet(
 	}
 	respSet.storeLabels = make(map[string]struct{})
 	for _, ls := range storeLabelSets {
-		for _, l := range ls {
+		ls.Range(func(l labels.Label) {
 			respSet.storeLabels[l.Name] = struct{}{}
-		}
+		})
 	}
 
 	go func(st string, l *lazyRespSet) {
@@ -678,9 +678,9 @@ func newEagerRespSet(
 	}
 	ret.storeLabels = make(map[string]struct{})
 	for _, ls := range st.LabelSets() {
-		for _, l := range ls {
+		ls.Range(func(l labels.Label) {
 			ret.storeLabels[l.Name] = struct{}{}
-		}
+		})
 	}
 
 	ret.wg.Add(1)
@@ -778,7 +778,7 @@ func newEagerRespSet(
 	return ret
 }
 
-func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels {
+func rmLabels(l []labelpb.ZLabel, labelsToRemove map[string]struct{}) []labelpb.ZLabel {
 	for i := 0; i < len(l); i++ {
 		if _, ok := labelsToRemove[l[i].Name]; !ok {
 			continue
@@ -790,7 +790,7 @@ func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels
 }
 
 // dropLabels removes labels from the given label set and returns the removed labels.
-func dropLabels(l labels.Labels, labelsToDrop map[string]struct{}) (labels.Labels, labels.Labels) {
+func dropLabels(l []labelpb.ZLabel, labelsToDrop map[string]struct{}) ([]labelpb.ZLabel, []labelpb.ZLabel) {
 	cutoff := len(l)
 	for i := 0; i < len(l); i++ {
 		if i == cutoff {
@@ -809,9 +809,9 @@ func dropLabels(l labels.Labels, labelsToDrop map[string]struct{}) (labels.Label
 	return l[:cutoff], l[cutoff:]
 }
 
-func copyLabels(dest *labels.Labels, src labels.Labels) {
+func copyLabels(dest *[]labelpb.ZLabel, src []labelpb.ZLabel) {
 	if len(*dest) < cap(src) {
-		*dest = make([]labels.Label, len(src))
+		*dest = make([]labelpb.ZLabel, len(src))
 	}
 	*dest = (*dest)[:len(src)]
 	copy(*dest, src)
@@ -826,7 +826,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 			continue
 		}
 
-		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		ser.Labels = rmLabels(ser.Labels, labelsToRemove)
 	}
 
 	// With the re-ordered label sets, re-sorting all series aligns the same series

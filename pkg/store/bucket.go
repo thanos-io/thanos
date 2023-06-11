@@ -579,12 +579,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	}
 
 	// Sync advertise labels.
-	var storeLabels labels.Labels
 	s.mtx.Lock()
 	s.advLabelSets = make([]labelpb.ZLabelSet, 0, len(s.advLabelSets))
 	for _, bs := range s.blockSets {
-		storeLabels = storeLabels[:0]
-		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(append(storeLabels, bs.labels...))})
+		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(bs.labels)})
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
 		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
@@ -702,8 +700,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-
-	sort.Sort(lset)
 
 	set, ok := s.blockSets[h]
 	if !ok {
@@ -843,7 +839,7 @@ func (s *BucketStore) limitMaxTime(maxt int64) int64 {
 }
 
 type seriesEntry struct {
-	lset labels.Labels
+	lset []labelpb.ZLabel
 	refs []chunks.ChunkRef
 	chks []storepb.AggrChunk
 }
@@ -873,7 +869,7 @@ type blockSeriesClient struct {
 	i               uint64
 	postings        []storage.SeriesRef
 	chkMetas        []chunks.Meta
-	lset            labels.Labels
+	lset            labels.ScratchBuilder
 	symbolizedLset  []symbolizedLabel
 	entries         []seriesEntry
 	hasMorePostings bool
@@ -898,15 +894,15 @@ func newBlockSeriesClient(
 		chunkr = b.chunkReader()
 	}
 
-	extLset := b.extLset
+	extLset := labelpb.ZLabelsFromPromLabels(b.extLset)
 	if extLsetToRemove != nil {
-		extLset = rmLabels(extLset.Copy(), extLsetToRemove)
+		extLset = rmLabels(extLset, extLsetToRemove)
 	}
 
 	return &blockSeriesClient{
 		ctx:                ctx,
 		logger:             logger,
-		extLset:            extLset,
+		extLset:            labelpb.ZLabelsToPromLabels(extLset),
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -983,7 +979,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	b.entries = b.entries[1:]
 
 	return storepb.NewSeriesResponse(&storepb.Series{
-		Labels: labelpb.ZLabelsFromPromLabels(next.lset),
+		Labels: next.lset,
 		Chunks: next.chks,
 	}), nil
 }
@@ -1028,8 +1024,8 @@ func (b *blockSeriesClient) nextBatch() error {
 			return errors.Wrap(err, "Lookup labels symbols")
 		}
 
-		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
-		if !b.shardMatcher.MatchesLabels(completeLabelset) {
+		completeLabelset := labelpb.ExtendSortedLabels(b.lset.Labels(), b.extLset)
+		if !b.shardMatcher.MatchesZLabels(completeLabelset) {
 			continue
 		}
 
@@ -1525,10 +1521,10 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				// Add  a set for the external labels as well.
 				// We're not adding them directly to refs because there could be duplicates.
 				// b.extLset is already sorted by label name, no need to sort it again.
-				extRes := make([]string, 0, len(b.extLset))
-				for _, l := range b.extLset {
+				extRes := make([]string, 0, b.extLset.Len())
+				b.extLset.Range(func(l labels.Label) {
 					extRes = append(extRes, l.Name)
-				}
+				})
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
@@ -1985,6 +1981,13 @@ func newBucketBlock(
 	indexHeadReader indexheader.Reader,
 	p Partitioner,
 ) (b *bucketBlock, err error) {
+
+	blockLabels := make(map[string]string, len(meta.Thanos.Labels))
+	for l, v := range meta.Thanos.Labels {
+		blockLabels[l] = v
+	}
+	blockLabels[block.BlockIDLabel] = meta.ULID.String()
+
 	b = &bucketBlock{
 		logger:            logger,
 		metrics:           metrics,
@@ -1998,13 +2001,8 @@ func newBucketBlock(
 		extLset:           labels.FromMap(meta.Thanos.Labels),
 		// Translate the block's labels and inject the block ID as a label
 		// to allow to match blocks also by ID.
-		relabelLabels: append(labels.FromMap(meta.Thanos.Labels), labels.Label{
-			Name:  block.BlockIDLabel,
-			Value: meta.ULID.String(),
-		}),
+		relabelLabels: labels.FromMap(blockLabels),
 	}
-	sort.Sort(b.extLset)
-	sort.Sort(b.relabelLabels)
 
 	// Get object handles for all chunk files (segment files) from meta.json, if available.
 	if len(meta.Thanos.SegmentFiles) > 0 {
@@ -2781,9 +2779,10 @@ func (r *bucketIndexReader) Close() error {
 }
 
 // LookupLabelsSymbols allows populates label set strings from symbolized label set.
-func (r *bucketIndexReader) LookupLabelsSymbols(symbolized []symbolizedLabel, lbls *labels.Labels) error {
-	*lbls = (*lbls)[:0]
+func (r *bucketIndexReader) LookupLabelsSymbols(symbolized []symbolizedLabel, lbls *labels.ScratchBuilder) error {
+	lbls.Reset()
 	for _, s := range symbolized {
+		lbls.Reset()
 		ln, err := r.dec.LookupSymbol(s.name)
 		if err != nil {
 			return errors.Wrap(err, "lookup label name")
@@ -2792,7 +2791,7 @@ func (r *bucketIndexReader) LookupLabelsSymbols(symbolized []symbolizedLabel, lb
 		if err != nil {
 			return errors.Wrap(err, "lookup label value")
 		}
-		*lbls = append(*lbls, labels.Label{Name: ln, Value: lv})
+		lbls.Add(ln, lv)
 	}
 	return nil
 }

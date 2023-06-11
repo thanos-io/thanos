@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -379,7 +378,7 @@ func runRule(
 		}, conf.dataDir, 1*time.Minute, nil)
 		if err := remoteStore.ApplyConfig(&config.Config{
 			GlobalConfig: config.GlobalConfig{
-				ExternalLabels: labelsTSDBToProm(conf.lset),
+				ExternalLabels: conf.lset.Copy(),
 			},
 			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
 		}); err != nil {
@@ -479,7 +478,7 @@ func runRule(
 
 	var (
 		ruleMgr *thanosrules.Manager
-		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
+		alertQ  = alert.NewQueue(logger, reg, 10000, 100, conf.lset.Copy(), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
 	)
 	{
 		// Run rule evaluation and alert notifications.
@@ -768,33 +767,22 @@ func removeLockfileIfAny(logger log.Logger, dataDir string) error {
 }
 
 func parseFlagLabels(s []string) (labels.Labels, error) {
-	var lset labels.Labels
+	var builder labels.ScratchBuilder
 	for _, l := range s {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
-			return nil, errors.Errorf("unrecognized label %q", l)
+			return labels.EmptyLabels(), errors.Errorf("unrecognized label %q", l)
 		}
 		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
-			return nil, errors.Errorf("unsupported format for label %s", l)
+			return labels.EmptyLabels(), errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {
-			return nil, errors.Wrap(err, "unquote label value")
+			return labels.EmptyLabels(), errors.Wrap(err, "unquote label value")
 		}
-		lset = append(lset, labels.Label{Name: parts[0], Value: val})
+		builder.Add(parts[0], val)
 	}
-	sort.Sort(lset)
-	return lset, nil
-}
-
-func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
-	for _, l := range lset {
-		res = append(res, labels.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
-	return res
+	return builder.Labels(), nil
 }
 
 func queryFuncCreator(

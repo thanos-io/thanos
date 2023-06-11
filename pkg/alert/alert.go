@@ -57,21 +57,21 @@ type Queue struct {
 }
 
 func relabelLabels(lset labels.Labels, excludeLset []string) (toAdd, toExclude labels.Labels) {
+	var addBuilder labels.ScratchBuilder
+	var excludeSet = make(map[string]string)
+
 	for _, ln := range excludeLset {
-		toExclude = append(toExclude, labels.Label{Name: ln})
+		excludeSet[ln] = ""
 	}
 
-	for _, l := range lset {
+	lset.Range(func(l labels.Label) {
 		// Exclude labels to  to add straight away.
-		if toExclude.Has(l.Name) {
-			continue
+		if _, ok := excludeSet[l.Name]; ok {
+			return
 		}
-		toAdd = append(toAdd, labels.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
-	return toAdd, toExclude
+		addBuilder.Add(l.Name, l.Value)
+	})
+	return addBuilder.Labels(), labels.FromMap(excludeSet)
 }
 
 // NewQueue returns a new queue. The given label set is attached to all alerts pushed to the queue.
@@ -174,15 +174,15 @@ func (q *Queue) Push(alerts []*notifier.Alert) {
 	var relabeledAlerts []*notifier.Alert
 	for _, a := range alerts {
 		lb := labels.NewBuilder(labels.Labels{})
-		for _, l := range a.Labels {
+		a.Labels.Range(func(l labels.Label) {
 			if q.toExcludeLabels.Has(l.Name) {
-				continue
+				return
 			}
 			lb.Set(l.Name, l.Value)
-		}
-		for _, l := range q.toAddLset {
+		})
+		q.toAddLset.Range(func(l labels.Label) {
 			lb.Set(l.Name, l.Value)
-		}
+		})
 
 		if lset, keep := relabel.Process(lb.Labels(), q.alertRelabelConfigs...); keep {
 			a.Labels = lset
@@ -284,11 +284,11 @@ func NewSender(
 	return s
 }
 
-func toAPILabels(labels labels.Labels) models.LabelSet {
-	apiLabels := make(models.LabelSet, len(labels))
-	for _, label := range labels {
+func toAPILabels(lbls labels.Labels) models.LabelSet {
+	apiLabels := make(models.LabelSet, lbls.Len())
+	lbls.Range(func(label labels.Label) {
 		apiLabels[label.Name] = label.Value
-	}
+	})
 
 	return apiLabels
 }

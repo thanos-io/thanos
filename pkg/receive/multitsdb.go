@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -567,13 +566,14 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
 	reg = NewUnRegisterer(reg)
 
-	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+	builder := labels.NewScratchBuilder(t.labels.Len() + 1)
+	builder.Assign(t.labels)
+	builder.Add(t.tenantLabelName, tenantID)
 
-	lset, err := t.extractTenantsLabels(tenantID, initialLset)
+	lset, err := t.extractTenantsLabels(tenantID, builder.Labels())
 	if err != nil {
 		return err
 	}
-
 	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
@@ -674,10 +674,14 @@ func (t *MultiTSDB) SetHashringConfig(cfg []HashringConfig) error {
 			if t.tenants[tenantID] != nil {
 				updatedTenants = append(updatedTenants, tenantID)
 
-				lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+				builder := labels.NewScratchBuilder(t.labels.Len() + 1)
+				builder.Assign(t.labels)
+				builder.Add(t.tenantLabelName, tenantID)
+
+				lset := builder.Labels()
 
 				if hc.ExternalLabels != nil {
-					extendedLset, err := extendLabels(lset, hc.ExternalLabels, t.logger)
+					extendedLset, err := extendLabels(lset, hc.ExternalLabels)
 					if err != nil {
 						return errors.Wrap(err, "failed to extend external labels for tenant "+tenantID)
 					}
@@ -862,9 +866,9 @@ func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Lab
 			}
 
 			if hc.ExternalLabels != nil {
-				extendedLset, err := extendLabels(initialLset, hc.ExternalLabels, t.logger)
+				extendedLset, err := extendLabels(initialLset, hc.ExternalLabels)
 				if err != nil {
-					return nil, errors.Wrap(err, "failed to extend external labels for tenant "+tenantID)
+					return labels.EmptyLabels(), errors.Wrap(err, "failed to extend external labels for tenant "+tenantID)
 				}
 				return extendedLset, nil
 			}
@@ -879,38 +883,17 @@ func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Lab
 // extendLabels extends external labels of the initial label set.
 // If an external label shares same name with a label in the initial label set,
 // use the label in the initial label set and inform user about it.
-func extendLabels(labelSet labels.Labels, extend map[string]string, logger log.Logger) (labels.Labels, error) {
-	var extendLabels labels.Labels
+func extendLabels(labelSet labels.Labels, extend map[string]string) (labels.Labels, error) {
+	var builder labels.ScratchBuilder
 	for name, value := range extend {
 		if !model.LabelName.IsValid(model.LabelName(name)) {
-			return nil, errors.Errorf("unsupported format for label's name: %s", name)
+			return labels.EmptyLabels(), errors.Errorf("unsupported format for label's name: %s", name)
 		}
-		extendLabels = append(extendLabels, labels.Label{Name: name, Value: value})
+		builder.Add(name, value)
 	}
 
-	sort.Sort(labelSet)
-	sort.Sort(extendLabels)
+	externalLabels := labels.FromMap(extend)
+	extendedLabels := labelpb.ExtendSortedLabels(labelSet, externalLabels)
 
-	extendedLabelSet := make(labels.Labels, 0, len(labelSet)+len(extendLabels))
-	for len(labelSet) > 0 && len(extendLabels) > 0 {
-		d := strings.Compare(labelSet[0].Name, extendLabels[0].Name)
-		if d == 0 {
-			extendedLabelSet = append(extendedLabelSet, labelSet[0])
-			level.Info(logger).Log("msg", "Duplicate label found. Using initial label instead.",
-				"label's name", extendLabels[0].Name)
-			labelSet, extendLabels = labelSet[1:], extendLabels[1:]
-		} else if d < 0 {
-			extendedLabelSet = append(extendedLabelSet, labelSet[0])
-			labelSet = labelSet[1:]
-		} else if d > 0 {
-			extendedLabelSet = append(extendedLabelSet, extendLabels[0])
-			extendLabels = extendLabels[1:]
-		}
-	}
-	extendedLabelSet = append(extendedLabelSet, labelSet...)
-	extendedLabelSet = append(extendedLabelSet, extendLabels...)
-
-	sort.Sort(extendedLabelSet)
-
-	return extendedLabelSet, nil
+	return labelpb.ZLabelsToPromLabels(extendedLabels), nil
 }

@@ -205,17 +205,16 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		extLsetToRemove[lbl] = struct{}{}
 	}
 
-	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
 
-		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(completeLabelset) {
+		completeLabelset := rmLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset), extLsetToRemove)
+		if !shardMatcher.MatchesZLabels(completeLabelset) {
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: completeLabelset}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -307,9 +306,9 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	}
 
 	if len(res) > 0 {
-		for _, lbl := range s.getExtLset() {
+		s.getExtLset().Range(func(lbl labels.Label) {
 			res = append(res, lbl.Name)
-		}
+		})
 		sort.Strings(res)
 	}
 
