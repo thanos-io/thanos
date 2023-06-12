@@ -285,19 +285,19 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (h *Handler) getStatsLimitParameter(r *http.Request) (int, error) {
-	limitStatsStr := r.FormValue(LimitStatsQueryParam)
-	if limitStatsStr == "" {
+func getStatsLimitParameter(r *http.Request) (int, error) {
+	statsLimitStr := r.URL.Query().Get(LimitStatsQueryParam)
+	if statsLimitStr == "" {
 		return DefaultStatsLimit, nil
 	}
-	limitStats, err := strconv.ParseInt(limitStatsStr, 10, 0)
+	statsLimit, err := strconv.ParseInt(statsLimitStr, 10, 0)
 	if err != nil {
 		return 0, fmt.Errorf("unable to parse '%s' parameter: %w", LimitStatsQueryParam, err)
 	}
-	if limitStats > math.MaxInt {
+	if statsLimit > math.MaxInt {
 		return 0, fmt.Errorf("'%s' parameter is larger than %d", LimitStatsQueryParam, math.MaxInt)
 	}
-	return int(limitStats), nil
+	return int(statsLimit), nil
 }
 
 func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
@@ -312,7 +312,7 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
-	statsLimit, err := h.getStatsLimitParameter(r)
+	statsLimit, err := getStatsLimitParameter(r)
 	if err != nil {
 		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}

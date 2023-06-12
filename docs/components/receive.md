@@ -32,7 +32,7 @@ The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-
 
 ## TSDB stats
 
-Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. Use the `limit` query parameter to tweak the number of stats to return (the default is 10). The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
 
 Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
 

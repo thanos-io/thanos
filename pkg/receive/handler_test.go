@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1519,4 +1520,51 @@ func TestRelabel(t *testing.T) {
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}
+}
+
+func TestGetStatsLimitParameter(t *testing.T) {
+	t.Run("invalid limit parameter, not integer", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, "abc")
+		r.URL.RawQuery = q.Encode()
+
+		_, err = getStatsLimitParameter(r)
+		testutil.NotOk(t, err)
+	})
+	t.Run("invalid limit parameter, too large", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, strconv.FormatUint(math.MaxInt+1, 10))
+		r.URL.RawQuery = q.Encode()
+
+		_, err = getStatsLimitParameter(r)
+		testutil.NotOk(t, err)
+	})
+	t.Run("not present returns default", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		limit, err := getStatsLimitParameter(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, limit, DefaultStatsLimit)
+	})
+	t.Run("if present and valid, the parameter is returned", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		const givenLimit = 20
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, strconv.FormatUint(givenLimit, 10))
+		r.URL.RawQuery = q.Encode()
+
+		limit, err := getStatsLimitParameter(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, limit, givenLimit)
+	})
 }
