@@ -568,7 +568,7 @@ func TestMultiTSDBStats(t *testing.T) {
 			testutil.Ok(t, appendSample(m, "baz", time.Now()))
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
-			stats := m.TenantStats(labels.MetricName, test.tenants...)
+			stats := m.TenantStats(10, labels.MetricName, test.tenants...)
 			testutil.Equals(t, test.expectedStats, len(stats))
 		})
 	}
