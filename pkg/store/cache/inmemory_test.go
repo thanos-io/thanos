@@ -122,6 +122,7 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 
 	uid := func(id storage.SeriesRef) ulid.ULID { return ulid.MustNew(uint64(id), nil) }
 	lbl := labels.Label{Name: "foo", Value: "bar"}
+	matcher := labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")
 	ctx := context.Background()
 
 	for _, tt := range []struct {
@@ -147,6 +148,15 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 				b, ok := hits[id]
 
 				return b, ok
+			},
+		},
+		{
+			typ: cacheTypeExpandedPostings,
+			set: func(id storage.SeriesRef, b []byte) {
+				cache.StoreExpandedPostings(uid(id), []*labels.Matcher{matcher}, b)
+			},
+			get: func(id storage.SeriesRef) ([]byte, bool) {
+				return cache.FetchExpandedPostings(ctx, uid(id), []*labels.Matcher{matcher})
 			},
 		},
 	} {

@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6163](https://github.com/thanos-io/thanos/pull/6163) Receiver: Add hidden flag `--receive-forward-max-backoff` to configure the max backoff for forwarding requests.
 - [#5777](https://github.com/thanos-io/thanos/pull/5777) Receive: Allow specifying tenant-specific external labels in Router Ingestor.
 - [#6352](https://github.com/thanos-io/thanos/pull/6352) Store: Expose store gateway query stats in series response hints.
+- [#6420](https://github.com/thanos-io/thanos/pull/6420) Index Cache: Cache expanded postings.
 
 ### Fixed
 - [#6427](https://github.com/thanos-io/thanos/pull/6427) Receive: increasing log level for failed uploads to error

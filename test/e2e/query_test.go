@@ -645,6 +645,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
+		"",
 		nil,
 	)
 
@@ -779,6 +780,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
+		"",
 		nil,
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
@@ -881,6 +883,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
+		"",
 		"",
 		nil,
 	)
