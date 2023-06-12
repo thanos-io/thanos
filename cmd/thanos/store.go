@@ -63,6 +63,8 @@ type storeConfig struct {
 	httpConfig                  httpConfig
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
+	estimatedMaxSeriesSize      uint64
+	estimatedMaxChunkSize       uint64
 	seriesBatchSize             int
 	storeRateLimits             store.SeriesSelectLimits
 	maxDownloadedBytes          units.Base2Bytes
@@ -138,6 +140,12 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("debug.series-batch-size", "The batch size when fetching series from TSDB blocks. Setting the number too high can lead to slower retrieval, while setting it too low can lead to throttling caused by too many calls made to object storage.").
 		Hidden().Default(strconv.Itoa(store.SeriesBatchSize)).IntVar(&sc.seriesBatchSize)
+
+	cmd.Flag("debug.estimated-max-series-size", "Estimated max series size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 64KB.").
+		Hidden().Default(strconv.Itoa(store.EstimatedMaxSeriesSize)).Uint64Var(&sc.estimatedMaxSeriesSize)
+
+	cmd.Flag("debug.estimated-max-chunk-size", "Estimated max chunk size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 16KiB.").
+		Hidden().Default(strconv.Itoa(store.EstimatedMaxChunkSize)).Uint64Var(&sc.estimatedMaxChunkSize)
 
 	sc.filterConf = &store.FilterConfig{}
 
@@ -358,6 +366,12 @@ func runStore(
 		store.WithFilterConfig(conf.filterConf),
 		store.WithChunkHashCalculation(true),
 		store.WithSeriesBatchSize(conf.seriesBatchSize),
+		store.WithBlockEstimatedMaxSeriesFunc(func(_ metadata.Meta) uint64 {
+			return conf.estimatedMaxSeriesSize
+		}),
+		store.WithBlockEstimatedMaxChunkFunc(func(_ metadata.Meta) uint64 {
+			return conf.estimatedMaxChunkSize
+		}),
 	}
 
 	if conf.debugLogging {
