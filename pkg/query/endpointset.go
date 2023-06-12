@@ -636,6 +636,11 @@ type endpointRef struct {
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec) (*endpointRef, error) {
 	dialOpts := append(e.dialOpts, spec.dialOpts...)
+	// By default DialContext is non-blocking which means that any connection
+	// failure won't be reported/logged. Instead block until the connection is
+	// successfully established and return the details of the connection error
+	// if any.
+	dialOpts = append(dialOpts, grpc.WithReturnConnectionError())
 	conn, err := grpc.DialContext(ctx, spec.Addr(), dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
