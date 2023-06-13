@@ -391,7 +391,7 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 
 type Explanation struct {
 	Name     string         `json:"name"`
-	Children []*Explanation `json:"children"`
+	Children []*Explanation `json:"children,omitempty"`
 }
 
 // QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
@@ -431,7 +431,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 		Data struct {
 			ResultType  string          `json:"resultType"`
 			Result      json.RawMessage `json:"result"`
-			Explanation *Explanation    `json:"explanation"`
+			Explanation *Explanation    `json:"explanation,omitempty"`
 		} `json:"data"`
 
 		Error     string `json:"error,omitempty"`
@@ -535,7 +535,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 		Data struct {
 			ResultType  string          `json:"resultType"`
 			Result      json.RawMessage `json:"result"`
-			Explanation *Explanation    `json:"explanation"`
+			Explanation *Explanation    `json:"explanation,omitempty"`
 		} `json:"data"`
 
 		Error     string `json:"error,omitempty"`
