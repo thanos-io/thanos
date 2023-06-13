@@ -58,7 +58,6 @@ type HeadGenOptions struct {
 	PrependLabels labels.Labels
 	SkipChunks    bool // Skips chunks in returned slice (not in generated head!).
 	SampleType    chunkenc.ValueType
-	IncludeName   bool
 
 	Random *rand.Rand
 }
@@ -181,10 +180,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 }
 
 func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
-	lblSet := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix))
-	if opts.IncludeName {
-		lblSet = append(lblSet, labels.Label{Name: "__name__", Value: "test_float_metric"})
-	}
+	lblSet := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel))
 	ref, err := app.Append(0, lblSet, int64(tsLabel)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64())
 	testutil.Ok(t, err)
 
@@ -197,10 +193,7 @@ func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts He
 func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
 	histograms := tsdbutil.GenerateTestHistograms(opts.SamplesPerSeries)
 
-	lblSet := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix))
-	if opts.IncludeName {
-		lblSet = append(lblSet, labels.Label{Name: "__name__", Value: "test_metric"})
-	}
+	lblSet := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel))
 	ref, err := app.AppendHistogram(
 		0,
 		lblSet,

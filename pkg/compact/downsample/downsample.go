@@ -1200,7 +1200,7 @@ func (it *AverageChunkIterator) Next() chunkenc.ValueType {
 
 	if st == chunkenc.ValFloatHistogram {
 		_, sumV := it.sumIt.AtFloatHistogram()
-		it.fh = sumV.Scale(1 / cntV)
+		it.fh = sumV.Mul(1 / cntV)
 		return chunkenc.ValFloatHistogram
 	}
 
