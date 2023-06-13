@@ -818,7 +818,7 @@ func outOfOrderChunkError(err error, brokenBlock ulid.ULID) OutOfOrderChunksErro
 	return OutOfOrderChunksError{err: err, id: brokenBlock}
 }
 
-// IsOutOfOrderChunk returns true if the base error is a OutOfOrderChunkError.
+// IsOutOfOrderChunkError returns true if the base error is a OutOfOrderChunkError.
 func IsOutOfOrderChunkError(err error) bool {
 	_, ok := errors.Cause(err).(OutOfOrderChunksError)
 	return ok
@@ -1100,26 +1100,44 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
 
-	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
+	if err := os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
+		return false, ulid.ULID{}, errors.Wrap(err, "remove tombstones")
+	}
+
+	newMeta, err := metadata.ReadFromDir(bdir)
+	if err != nil {
+		return false, ulid.ULID{}, errors.Wrap(err, "read new meta")
+	}
+
+	var stats block.HealthStats
+	// Ensure the output block is valid.
+	err = tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
+		stats, err = block.GatherIndexHealthStats(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
+		if err != nil {
+			return err
+		}
+		return stats.AnyErr()
+	})
+	if !cg.acceptMalformedIndex && err != nil {
+		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
+	}
+
+	newMeta, err = metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
 		Labels:       cg.labels.Map(),
 		Downsample:   metadata.ThanosDownsample{Resolution: cg.resolution},
 		Source:       metadata.CompactorSource,
 		SegmentFiles: block.GetSegmentFiles(bdir),
+		IndexStats: metadata.IndexStats{
+			SeriesMinSize: stats.SeriesMinSize,
+			SeriesMaxSize: stats.SeriesMaxSize,
+			SeriesAvgSize: stats.SeriesAvgSize,
+			ChunkMinSize:  stats.ChunkMinSize,
+			ChunkMaxSize:  stats.ChunkMaxSize,
+			ChunkAvgSize:  stats.ChunkAvgSize,
+		},
 	}, nil)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
-	}
-
-	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "remove tombstones")
-	}
-
-	// Ensure the output block is valid.
-	err = tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
-		return block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
-	})
-	if !cg.acceptMalformedIndex && err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else,

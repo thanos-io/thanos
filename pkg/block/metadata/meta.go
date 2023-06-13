@@ -90,6 +90,18 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	IndexStats IndexStats `json:"index_stats,omitempty"`
+}
+
+type IndexStats struct {
+	SeriesMinSize int64 `json:"series_min_size,omitempty"`
+	SeriesMaxSize int64 `json:"series_max_size,omitempty"`
+	SeriesAvgSize int64 `json:"series_avg_size,omitempty"`
+
+	ChunkMinSize int64 `json:"chunk_min_size,omitempty"`
+	ChunkMaxSize int64 `json:"chunk_max_size,omitempty"`
+	ChunkAvgSize int64 `json:"chunk_avg_size,omitempty"`
 }
 
 type Rewrite struct {
