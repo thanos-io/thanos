@@ -74,6 +74,10 @@ func TestMeta_ReadWrite(t *testing.T) {
 				Downsample: ThanosDownsample{
 					Resolution: 123144,
 				},
+				IndexStats: IndexStats{
+					SeriesMaxSize: 2000,
+					ChunkMaxSize:  1000,
+				},
 			},
 		}
 		testutil.Ok(t, m1.Write(&b))
@@ -123,7 +127,10 @@ func TestMeta_ReadWrite(t *testing.T) {
 				"rel_path": "meta.json"
 			}
 		],
-		"index_stats": {}
+		"index_stats": {
+			"series_max_size": 2000,
+			"chunk_max_size": 1000
+		}
 	}
 }
 `, b.String())
