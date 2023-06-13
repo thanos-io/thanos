@@ -385,8 +385,25 @@ func processDownsampling(
 		"from", m.ULID, "to", id, "duration", downsampleDuration, "duration_ms", downsampleDuration.Milliseconds())
 	metrics.downsampleDuration.WithLabelValues(m.Thanos.GroupKey()).Observe(downsampleDuration.Seconds())
 
-	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil && !acceptMalformedIndex {
+	stats, err := block.GatherIndexHealthStats(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime)
+	if err == nil {
+		err = stats.AnyErr()
+	}
+	if err != nil && !acceptMalformedIndex {
 		return errors.Wrap(err, "output block index not valid")
+	}
+
+	meta, err := metadata.ReadFromDir(resdir)
+	if err != nil {
+		return errors.Wrap(err, "read meta")
+	}
+
+	meta.Thanos.IndexStats = metadata.IndexStats{
+		SeriesMaxSize: stats.SeriesMaxSize,
+		ChunkMaxSize:  stats.ChunkMaxSize,
+	}
+	if err := meta.WriteToDir(logger, resdir); err != nil {
+		return errors.Wrap(err, "write meta")
 	}
 
 	begin = time.Now()

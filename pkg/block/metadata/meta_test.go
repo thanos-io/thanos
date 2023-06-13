@@ -31,7 +31,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"downsample": {
 			"resolution": 0
 		},
-		"source": ""
+		"source": "",
+		"index_stats": {}
 	}
 }
 `, b.String())
@@ -121,7 +122,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 			{
 				"rel_path": "meta.json"
 			}
-		]
+		],
+		"index_stats": {}
 	}
 }
 `, b.String())
@@ -199,7 +201,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 				"rel_path": "index",
 				"size_bytes": 1313
 			}
-		]
+		],
+		"index_stats": {}
 	}
 }
 `, b.String())
