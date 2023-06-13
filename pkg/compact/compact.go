@@ -1128,12 +1128,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		Source:       metadata.CompactorSource,
 		SegmentFiles: block.GetSegmentFiles(bdir),
 		IndexStats: metadata.IndexStats{
-			SeriesMinSize: stats.SeriesMinSize,
 			SeriesMaxSize: stats.SeriesMaxSize,
-			SeriesAvgSize: stats.SeriesAvgSize,
-			ChunkMinSize:  stats.ChunkMinSize,
 			ChunkMaxSize:  stats.ChunkMaxSize,
-			ChunkAvgSize:  stats.ChunkAvgSize,
 		},
 	}, nil)
 	if err != nil {
