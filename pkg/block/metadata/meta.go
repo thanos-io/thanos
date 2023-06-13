@@ -91,6 +91,7 @@ type Thanos struct {
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
 
+	// IndexStats contains stats info related to block index.
 	IndexStats IndexStats `json:"index_stats,omitempty"`
 }
 
