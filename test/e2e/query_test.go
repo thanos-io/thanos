@@ -45,7 +45,6 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -1367,7 +1366,7 @@ func urlParse(t testing.TB, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *queryrange.Explanation) {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation) {
 	t.Helper()
 
 	var result model.Vector
@@ -1379,7 +1378,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 
-	var explanation *queryrange.Explanation
+	var explanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
 		res, rexplanation, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
@@ -1393,7 +1392,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result, explanation
 }
 
-func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *queryrange.Explanation, error) {
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
 	res, warnings, explanation, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
 		return nil, nil, err
@@ -1527,12 +1526,12 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) *queryrange.Explanation {
+func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) *promclient.Explanation {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	var retExplanation *queryrange.Explanation
+	var retExplanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, warnings, explanation, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q(), start, end, step, opts)
 		if err != nil {
