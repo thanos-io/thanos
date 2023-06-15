@@ -181,7 +181,8 @@ func TestUpload(t *testing.T) {
 			{
 				"rel_path": "meta.json"
 			}
-		]
+		],
+		"index_stats": {}
 	}
 }
 `, b1.String(), b1.String()), string(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
@@ -224,7 +225,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 6, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
-		testutil.Equals(t, 525, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
+		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
 	}
 }
 
