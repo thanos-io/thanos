@@ -2486,6 +2486,12 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	return true, ps, nil
 }
 
+var bufioReaderPool = sync.Pool{
+	New: func() any {
+		return bufio.NewReader(nil)
+	},
+}
+
 // fetchPostings fill postings requested by posting groups.
 // It returns one posting for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
@@ -2570,52 +2576,60 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		// We assume index does not have any ptrs that has 0 length.
 		length := int64(part.End) - start
 
+		brdr := bufioReaderPool.Get().(*bufio.Reader)
+		defer bufioReaderPool.Put(brdr)
+
 		// Fetch from object storage concurrently and update stats and posting list.
 		g.Go(func() error {
 			begin := time.Now()
 
-			b, err := r.block.readIndexRange(ctx, start, length)
+			partReader, err := r.block.bkt.GetRange(ctx, r.block.indexFilename(), start, length)
 			if err != nil {
 				return errors.Wrap(err, "read postings range")
 			}
-			fetchTime := time.Since(begin)
+			defer runutil.CloseWithLogOnErr(r.block.logger, partReader, "readIndexRange close range reader")
+			brdr.Reset(partReader)
+
+			rdr := newPostingsReaderBuilder(ctx, brdr, ptrs[i:j], start, length)
 
 			r.mtx.Lock()
 			r.stats.postingsFetchCount++
 			r.stats.postingsFetched += j - i
-			r.stats.PostingsFetchDurationSum += fetchTime
 			r.stats.PostingsFetchedSizeSum += units.Base2Bytes(int(length))
 			r.mtx.Unlock()
 
-			for _, p := range ptrs[i:j] {
-				// index-header can estimate endings, which means we need to resize the endings.
-				pBytes, err := resizePostings(b[p.ptr.Start-start : p.ptr.End-start])
+			for rdr.Next() {
+				diffVarintPostings, postingsCount, keyID := rdr.AtDiffVarint()
+
+				output[keyID] = newDiffVarintPostings(diffVarintPostings, nil)
+
+				startCompression := time.Now()
+				dataToCache, err := snappyStreamedEncode(int(postingsCount), diffVarintPostings)
 				if err != nil {
-					return err
+					r.mtx.Lock()
+					r.stats.cachedPostingsCompressionErrors += 1
+					r.mtx.Unlock()
+					return errors.Wrap(err, "encoding with snappy")
 				}
 
-				// Reencode postings before storing to cache. If that fails, we store original bytes.
-				// This can only fail, if postings data was somehow corrupted,
-				// and there is nothing we can do about it.
-				// Errors from corrupted postings will be reported when postings are used.
-				bep := newBigEndianPostings(pBytes[4:])
-				dataToCache, compressionTime, compressionErrors, compressedSize := r.encodePostingsToCache(bep, bep.length())
 				r.mtx.Lock()
-				// Return postings and fill LRU cache.
-				// Truncate first 4 bytes which are length of posting.
-				output[p.keyID] = newBigEndianPostings(pBytes[4:])
-
-				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache)
-
-				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
-				r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(pBytes))
+				r.stats.PostingsTouchedSizeSum += units.Base2Bytes(int(len(diffVarintPostings)))
 				r.stats.cachedPostingsCompressions += 1
-				r.stats.cachedPostingsCompressionErrors += compressionErrors
-				r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(pBytes))
-				r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
-				r.stats.CachedPostingsCompressionTimeSum += compressionTime
+				r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(diffVarintPostings))
+				r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(len(dataToCache))
+				r.stats.CachedPostingsCompressionTimeSum += time.Since(startCompression)
 				r.mtx.Unlock()
+
+				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[keyID], dataToCache)
+			}
+
+			r.mtx.Lock()
+			r.stats.PostingsFetchDurationSum += time.Since(begin)
+			r.mtx.Unlock()
+
+			if rdr.Error() != nil {
+				return errors.Wrap(err, "reading postings")
 			}
 			return nil
 		})
@@ -2663,21 +2677,6 @@ func (r *bucketIndexReader) encodePostingsToCache(p index.Postings, length int) 
 		compressionErrors = 1
 	}
 	return dataToCache, compressionTime, compressionErrors, compressedSize
-}
-
-func resizePostings(b []byte) ([]byte, error) {
-	d := encoding.Decbuf{B: b}
-	n := d.Be32int()
-	if d.Err() != nil {
-		return nil, errors.Wrap(d.Err(), "read postings list")
-	}
-
-	// 4 for postings number of entries, then 4, foreach each big endian posting.
-	size := 4 + n*4
-	if len(b) < size {
-		return nil, encoding.ErrInvalidSize
-	}
-	return b[:size], nil
 }
 
 // bigEndianPostings implements the Postings interface over a byte stream of

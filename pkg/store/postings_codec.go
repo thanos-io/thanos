@@ -339,3 +339,27 @@ func (it *diffVarintPostings) Seek(x storage.SeriesRef) bool {
 func (it *diffVarintPostings) Err() error {
 	return it.buf.Err()
 }
+
+func snappyStreamedEncode(postingsLength int, diffVarintPostings []byte) ([]byte, error) {
+	compressedBuf := bytes.NewBuffer(make([]byte, 0, estimateSnappyStreamSize(postingsLength)))
+	if n, err := compressedBuf.WriteString(codecHeaderStreamedSnappy); err != nil {
+		return nil, fmt.Errorf("writing streamed snappy header")
+	} else if n != len(codecHeaderStreamedSnappy) {
+		return nil, fmt.Errorf("short-write streamed snappy header")
+	}
+
+	sw, err := extsnappy.Compressor.Compress(compressedBuf)
+	if err != nil {
+		return nil, fmt.Errorf("creating snappy compressor: %w", err)
+	}
+
+	_, err = sw.Write(diffVarintPostings)
+	if err != nil {
+		return nil, err
+	}
+	if err := sw.Close(); err != nil {
+		return nil, errors.Wrap(err, "closing snappy stream writer")
+	}
+
+	return compressedBuf.Bytes(), nil
+}
