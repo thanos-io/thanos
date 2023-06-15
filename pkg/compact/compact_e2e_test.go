@@ -399,8 +399,8 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			testutil.Assert(t, labels.Equal(extLabels, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 			testutil.Assert(t, len(meta.Thanos.SegmentFiles) > 0, "compacted blocks have segment files set")
-			testutil.Assert(t, meta.Thanos.IndexStats.ChunkMaxSize > 0, "compacted blocks have index stats chunk max size set")
-			testutil.Assert(t, meta.Thanos.IndexStats.SeriesMaxSize > 0, "compacted blocks have index stats chunk max size set")
+			// Only one chunk will be generated in that block, so we won't set chunk size.
+			testutil.Assert(t, meta.Thanos.IndexStats.SeriesMaxSize > 0, "compacted blocks have index stats series max size set")
 		}
 		{
 			meta, ok := others[groupKey2]
@@ -417,8 +417,8 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			testutil.Assert(t, labels.Equal(extLabels2, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 			testutil.Assert(t, len(meta.Thanos.SegmentFiles) > 0, "compacted blocks have segment files set")
-			testutil.Assert(t, meta.Thanos.IndexStats.ChunkMaxSize > 0, "compacted blocks have index stats chunk max size set")
-			testutil.Assert(t, meta.Thanos.IndexStats.SeriesMaxSize > 0, "compacted blocks have index stats chunk max size set")
+			// Only one chunk will be generated in that block, so we won't set chunk size.
+			testutil.Assert(t, meta.Thanos.IndexStats.SeriesMaxSize > 0, "compacted blocks have index stats series max size set")
 		}
 	})
 }

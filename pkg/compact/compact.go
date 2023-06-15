@@ -1122,16 +1122,19 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
-	newMeta, err = metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
+	thanosMeta := metadata.Thanos{
 		Labels:       cg.labels.Map(),
 		Downsample:   metadata.ThanosDownsample{Resolution: cg.resolution},
 		Source:       metadata.CompactorSource,
 		SegmentFiles: block.GetSegmentFiles(bdir),
-		IndexStats: metadata.IndexStats{
-			SeriesMaxSize: stats.SeriesMaxSize,
-			ChunkMaxSize:  stats.ChunkMaxSize,
-		},
-	}, nil)
+	}
+	if stats.ChunkMaxSize > 0 {
+		thanosMeta.IndexStats.ChunkMaxSize = stats.ChunkMaxSize
+	}
+	if stats.SeriesMaxSize > 0 {
+		thanosMeta.IndexStats.SeriesMaxSize = stats.SeriesMaxSize
+	}
+	newMeta, err = metadata.InjectThanos(cg.logger, bdir, thanosMeta, nil)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}

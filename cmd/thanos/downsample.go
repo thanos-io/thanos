@@ -398,9 +398,11 @@ func processDownsampling(
 		return errors.Wrap(err, "read meta")
 	}
 
-	meta.Thanos.IndexStats = metadata.IndexStats{
-		SeriesMaxSize: stats.SeriesMaxSize,
-		ChunkMaxSize:  stats.ChunkMaxSize,
+	if stats.ChunkMaxSize > 0 {
+		meta.Thanos.IndexStats.ChunkMaxSize = stats.ChunkMaxSize
+	}
+	if stats.SeriesMaxSize > 0 {
+		meta.Thanos.IndexStats.SeriesMaxSize = stats.SeriesMaxSize
 	}
 	if err := meta.WriteToDir(logger, resdir); err != nil {
 		return errors.Wrap(err, "write meta")
