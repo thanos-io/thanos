@@ -90,6 +90,14 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	// IndexStats contains stats info related to block index.
+	IndexStats IndexStats `json:"index_stats,omitempty"`
+}
+
+type IndexStats struct {
+	SeriesMaxSize int64 `json:"series_max_size,omitempty"`
+	ChunkMaxSize  int64 `json:"chunk_max_size,omitempty"`
 }
 
 type Rewrite struct {
