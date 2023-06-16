@@ -34,15 +34,15 @@ Thanos needs to specify which engine to utilize to execute the promql queries. A
 
 Here is the sketch of how the engine switch should look (made by Giedrius):
 
-<img src="img/giedrius-sketch.png" alt="Giedrius&#39;s Sketch" width="800"/>
+![Giedrius's Sketch](img/giedrius-sketch.png)
 
 I looked into Thanos and made changes in Thanos components from the API to the UI to implement this engine switch. I tried to make the UI as close as possible to the sketch.
 
-<img src="img/engine-1.png" alt="Engine Switch 1" width="800"/>
+![Engine Switch 1](img/engine-1.png)
 
 After initial review, I move this switch to each panel. As this helps to run the same query over the different engines and compare the results.
 
-<img src="img/engine-2.png" alt="Engine Switch 2" width="800"/>
+![Engine Switch 2](img/engine-2.png)
 
 **Pull Requests**
 - Add engine param to Thanos engine constructor ([thanos-io/promql-engine#228](https://github.com/thanos-io/promql-engine/pull/228))
@@ -56,11 +56,11 @@ I started with generating query explanations through the Thanos promql-engine an
 
 Thanos UI got updated with time, resulting in the development of the explanation tree that can be seen through the screenshots provided.
 
-<img src="img/tree-1.png" alt="Tree 1" width="800"/>
+![Tree 1](img/tree-1.png)
 
-<img src="img/tree-2.png" alt="Tree 2" width="800"/>
+![Tree 2](img/tree-2.png)
 
-<img src="img/tree-3.png" alt="Tree 3" width="800"/>
+![Tree 3](img/tree-3.png)
 
 **Pull Requests**
 - Add method to explain query vector ([thanos-io/promql-engine#252](https://github.com/thanos-io/promql-engine/pull/252))
