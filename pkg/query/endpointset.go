@@ -843,6 +843,17 @@ func (er *endpointRef) SupportsWithoutReplicaLabels() bool {
 	return er.metadata.Store.SupportsWithoutReplicaLabels
 }
 
+func (er *endpointRef) SupportsSortWithoutExternalLabels() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SupportsSortWithoutExternalLabels
+}
+
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(

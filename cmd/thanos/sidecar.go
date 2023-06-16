@@ -268,11 +268,12 @@ func runSidecar(
 				if httpProbe.IsReady() {
 					mint, maxt := promStore.Timestamps()
 					return &infopb.StoreInfo{
-						MinTime:                      mint,
-						MaxTime:                      maxt,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-						TsdbInfos:                    promStore.TSDBInfos(),
+						MinTime:                           mint,
+						MaxTime:                           maxt,
+						SupportsSharding:                  true,
+						SupportsWithoutReplicaLabels:      true,
+						SupportsSortWithoutExternalLabels: true,
+						TsdbInfos:                         promStore.TSDBInfos(),
 					}
 				}
 				return nil

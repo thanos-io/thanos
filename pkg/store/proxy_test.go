@@ -629,6 +629,7 @@ func TestProxyStore_Series(t *testing.T) {
 					for _, s := range tc.storeAPIs {
 						cl := s.(*storetestutil.TestClient)
 						cl.WithoutReplicaLabelsEnabled = replicaLabelSupport
+						cl.SortWithoutExtLabels = true
 					}
 					for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 						t.Run(string(strategy), func(t *testing.T) {

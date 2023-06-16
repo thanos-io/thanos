@@ -174,26 +174,13 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	jResp := h.nodes[j].rs.At()
 
 	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
-		// Response sets are sorted before adding external labels.
-		// This comparison excludes those labels to keep the same order.
-		iStoreLbls := h.nodes[i].rs.StoreLabels()
-		jStoreLbls := h.nodes[j].rs.StoreLabels()
-
+		var less bool
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-
-		copyLabels(&h.iLblsScratch, iLbls)
-		copyLabels(&h.jLblsScratch, jLbls)
-
-		var iExtLbls, jExtLbls labels.Labels
-		h.iLblsScratch, iExtLbls = dropLabels(h.iLblsScratch, iStoreLbls)
-		h.jLblsScratch, jExtLbls = dropLabels(h.jLblsScratch, jStoreLbls)
-
-		c := labels.Compare(h.iLblsScratch, h.jLblsScratch)
-		if c != 0 {
-			return c < 0
-		}
-		return labels.Compare(iExtLbls, jExtLbls) < 0
+		iStoreLbls := h.nodes[i].rs.StoreLabels()
+		jStoreLbls := h.nodes[j].rs.StoreLabels()
+		less, h.iLblsScratch, h.jLblsScratch = compareSeries(iLbls, jLbls, iStoreLbls, jStoreLbls, h.iLblsScratch, h.jLblsScratch)
+		return less
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
@@ -203,6 +190,23 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	// If it is not a series then the order does not matter. What matters
 	// is that we get different types of responses one after another.
 	return false
+}
+
+func compareSeries(iLbls, jLbls labels.Labels, iStoreLbls, jStoreLbls map[string]struct{}, iLblsScratch, jLblsScratch labels.Labels) (bool, labels.Labels, labels.Labels) {
+	// Response sets are sorted before adding external labels.
+	// This comparison excludes those labels to keep the same order.
+	copyLabels(&iLblsScratch, iLbls)
+	copyLabels(&jLblsScratch, jLbls)
+
+	var iExtLbls, jExtLbls labels.Labels
+	iLblsScratch, iExtLbls = dropLabels(iLblsScratch, iStoreLbls)
+	jLblsScratch, jExtLbls = dropLabels(jLblsScratch, jStoreLbls)
+
+	c := labels.Compare(iLblsScratch, jLblsScratch)
+	if c != 0 {
+		return c < 0, iLblsScratch, jLblsScratch
+	}
+	return labels.Compare(iExtLbls, jExtLbls) < 0, iLblsScratch, jLblsScratch
 }
 
 func (h *ProxyResponseHeap) Len() int {
@@ -575,7 +579,7 @@ func newAsyncRespSet(
 	}
 
 	var labelsToRemove map[string]struct{}
-	if !st.SupportsWithoutReplicaLabels() && len(req.WithoutReplicaLabels) > 0 {
+	if !st.SupportsSortWithoutExternalLabels() || !st.SupportsWithoutReplicaLabels() && len(req.WithoutReplicaLabels) > 0 {
 		level.Warn(logger).Log("msg", "detecting store that does not support without replica label setting. "+
 			"Falling back to eager retrieval with additional sort. Make sure your storeAPI supports it to speed up your queries", "store", st.String())
 		retrievalStrategy = EagerRetrieval
@@ -770,7 +774,7 @@ func newEagerRespSet(
 		// This should be used only for stores that does not support doing this on server side.
 		// See docs/proposals-accepted/20221129-avoid-global-sort.md for details.
 		if len(l.removeLabels) > 0 {
-			sortWithoutLabels(l.bufferedResponses, l.removeLabels)
+			sortWithoutLabels(l.bufferedResponses, l.storeLabels, l.removeLabels)
 		}
 
 	}(st, ret)
@@ -819,7 +823,7 @@ func copyLabels(dest *labels.Labels, src labels.Labels) {
 
 // sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
 // series with different labels are coming right after each other. Other types of responses are moved to front.
-func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]struct{}) {
+func sortWithoutLabels(set []*storepb.SeriesResponse, storeLabels map[string]struct{}, labelsToRemove map[string]struct{}) {
 	for _, s := range set {
 		ser := s.GetSeries()
 		if ser == nil {
@@ -829,6 +833,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
 	}
 
+	var iLblScratch, jLblScratch labels.Labels
 	// With the re-ordered label sets, re-sorting all series aligns the same series
 	// from different replicas sequentially.
 	sort.Slice(set, func(i, j int) bool {
@@ -840,7 +845,12 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
+
+		iLbls := labelpb.ZLabelsToPromLabels(si.Labels)
+		jLbls := labelpb.ZLabelsToPromLabels(sj.Labels)
+		var less bool
+		less, iLblScratch, jLblScratch = compareSeries(iLbls, jLbls, storeLabels, storeLabels, iLblScratch, jLblScratch)
+		return less
 	})
 }
 

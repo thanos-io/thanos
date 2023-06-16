@@ -4,6 +4,7 @@
 package store
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -205,9 +206,10 @@ func TestProxyResponseHeapSort(t *testing.T) {
 }
 
 func TestSortWithoutLabels(t *testing.T) {
-	for _, tcase := range []struct {
+	for i, tcase := range []struct {
 		input       []*storepb.SeriesResponse
 		exp         []*storepb.SeriesResponse
+		extLset     map[string]struct{}
 		dedupLabels map[string]struct{}
 	}{
 		// Single deduplication label.
@@ -297,9 +299,26 @@ func TestSortWithoutLabels(t *testing.T) {
 			},
 			dedupLabels: map[string]struct{}{"replica": {}},
 		},
+		// Stores with external labels.
+		{
+			input: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "replica-1", "c", "1")),
+				storeSeriesResponse(t, labelsFromStrings("a", "2", "b", "replica-1", "c", "4")),
+				storeSeriesResponse(t, labelsFromStrings("a", "2", "b", "replica-2", "c", "3")),
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "1")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
+				storeSeriesResponse(t, labelsFromStrings("a", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "2", "c", "4")),
+			},
+			dedupLabels: map[string]struct{}{"b": {}},
+			extLset:     map[string]struct{}{"c": {}},
+		},
 	} {
-		t.Run("", func(t *testing.T) {
-			sortWithoutLabels(tcase.input, tcase.dedupLabels)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			sortWithoutLabels(tcase.input, tcase.extLset, tcase.dedupLabels)
 			testutil.Equals(t, tcase.exp, tcase.input)
 		})
 	}
@@ -332,6 +351,6 @@ func BenchmarkSortWithoutLabels(b *testing.B) {
 			resps[i] = storeSeriesResponse(b, labels.FromStrings("a", "1", "b", "replica-1", "c", "replica-1", "d", "1"))
 		}
 		b.StartTimer()
-		sortWithoutLabels(resps, labelsToRemove)
+		sortWithoutLabels(resps, nil, labelsToRemove)
 	}
 }

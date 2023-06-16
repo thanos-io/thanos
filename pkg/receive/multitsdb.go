@@ -160,6 +160,10 @@ func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
+func (l *localClient) SupportsSortWithoutExternalLabels() bool {
+	return true
+}
+
 type tenant struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore

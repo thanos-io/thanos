@@ -339,11 +339,12 @@ func runReceive(
 				if httpProbe.IsReady() {
 					minTime, maxTime := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:                      minTime,
-						MaxTime:                      maxTime,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-						TsdbInfos:                    proxy.TSDBInfos(),
+						MinTime:                           minTime,
+						MaxTime:                           maxTime,
+						SupportsSharding:                  true,
+						SupportsWithoutReplicaLabels:      true,
+						SupportsSortWithoutExternalLabels: true,
+						TsdbInfos:                         proxy.TSDBInfos(),
 					}
 				}
 				return nil

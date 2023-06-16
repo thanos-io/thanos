@@ -64,6 +64,10 @@ message StoreInfo {
 
     // TSDBInfos holds metadata for all TSDBs exposed by the store.
     repeated TSDBInfo tsdb_infos = 6 [(gogoproto.nullable) = false];
+
+    // supports_sort_without_external_labels indicates whether the store ignores external labels
+    // when comparing two label sets.
+    bool supports_sort_without_external_labels = 7;
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.

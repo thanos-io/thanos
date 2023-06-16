@@ -783,11 +783,12 @@ func runQuery(
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:                      mint,
-						MaxTime:                      maxt,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-						TsdbInfos:                    proxy.TSDBInfos(),
+						MinTime:                           mint,
+						MaxTime:                           maxt,
+						SupportsSharding:                  true,
+						SupportsWithoutReplicaLabels:      true,
+						SupportsSortWithoutExternalLabels: true,
+						TsdbInfos:                         proxy.TSDBInfos(),
 					}
 				}
 				return nil

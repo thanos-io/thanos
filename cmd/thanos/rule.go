@@ -628,11 +628,12 @@ func runRule(
 				if httpProbe.IsReady() {
 					mint, maxt := tsdbStore.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:                      mint,
-						MaxTime:                      maxt,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-						TsdbInfos:                    tsdbStore.TSDBInfos(),
+						MinTime:                           mint,
+						MaxTime:                           maxt,
+						SupportsSharding:                  true,
+						SupportsWithoutReplicaLabels:      true,
+						SupportsSortWithoutExternalLabels: true,
+						TsdbInfos:                         tsdbStore.TSDBInfos(),
 					}
 				}
 				return nil

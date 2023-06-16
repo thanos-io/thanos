@@ -215,6 +215,10 @@ func (s *storeRef) SupportsWithoutReplicaLabels() bool {
 	return false
 }
 
+func (s *storeRef) SupportsSortWithoutExternalLabels() bool {
+	return false
+}
+
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf(

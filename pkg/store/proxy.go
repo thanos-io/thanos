@@ -64,6 +64,10 @@ type Client interface {
 	// and sorted response is supported by the underlying store.
 	SupportsWithoutReplicaLabels() bool
 
+	// SupportsSortWithoutExternalLabels returns true if the store sorts series
+	// with external labels excluded from the comparison function.
+	SupportsSortWithoutExternalLabels() bool
+
 	// String returns the string representation of the store client.
 	String() string
 
