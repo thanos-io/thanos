@@ -118,12 +118,14 @@ The community has been critical for us. One example we ran into around this port
 
 After concluding the POC we determined that it was feasible and we also found that the cost savings were pretty significant:
 
+## M3DB Cost breakdown
 Service | Instance type | Price | Count | Total price (monthly)
 ------- | ------------- | ----- | ----- | ---------------------
 m3db    | n2d-highmem-32 | 1172.61 | 18 | 21106.98 
 m3coordinator | n2d-standard-48 | 1303.73 | 9 | 11733.57 
 M3 TOTAL | | 32840.55
 
+## Thanos Cost breakdown
 Service | Instance type | Price | Count | Total price (monthly)
 ------- | ------------- | ----- | ----- | ---------------------
 thanosreceiver | n2d-highcpu-96 | 1924 | 6 | 11544
