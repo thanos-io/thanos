@@ -18,11 +18,11 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel(
             'Rate',
-            'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
+            'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction resolution.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s, group) (rate(thanos_compact_group_compactions_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
-            'compaction {{job}} {{group}}'
+            'sum by (%(dimensions)s, resolution) (rate(thanos_compact_group_compactions_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
+            'compaction {{job}} {{resolution}}'
           ) +
           g.stack
         )
@@ -43,11 +43,11 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel(
             'Rate',
-            'Shows rate of execution for downsampling against blocks that are stored in the bucket by compaction group.'
+            'Shows rate of execution for downsampling against blocks that are stored in the bucket by compaction resolution.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s, group) (rate(thanos_compact_downsample_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
-            'downsample {{job}} {{group}}'
+            'sum by (%(dimensions)s, resolution) (rate(thanos_compact_downsample_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
+            'downsample {{job}} {{resolution}}'
           ) +
           g.stack
         )
@@ -178,7 +178,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addPanel(
         g.panel(
           'Compaction Rate',
-          'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
+          'Shows rate of execution for compactions against blocks that are stored in the bucket.'
         ) +
         g.queryPanel(
           'sum by (%(dimensions)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$__rate_interval]))' % thanos.dashboard.overview,
