@@ -40,7 +40,7 @@ After we tackled these challenges, we decided to begin building a scale out impl
 
 The community has been critical for us. One example we ran into around this portion of the implementation which we received some help from the other users and maintainers on the CNCF Slack. We also ran into some other issues which would create replication loops causing a crash as well. We addressed this issue by moving to a routing-ingesting receiver topology as suggested by the community. 
 
-   ```mermaid
+  ```mermaid
     flowchart TD
         subgraph ThanosQueryCluster
             Query1
