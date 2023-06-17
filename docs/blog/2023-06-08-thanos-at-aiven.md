@@ -28,7 +28,7 @@ With these options, we had to discount Mimir even though it’s great technology
 
 We began the process with creating a plan on how we would test the solution to see how it met our needs. This would be a Proof of Concept (POC) to see if it were feasible. Here was our basic setup today
 
-ADD DIAGRAM OF ARCHITECTURE IN PROD
+<img src="img/aiven_thanos_arch_current.png" alt="Current Aiven Thanos Architecture" width="800"/>
 
 As you can see in our architecture, we are using Telegraf since it supports monitoring the many technologies which Aiven provides in a smaller footprint. Although we support Prometheus scraping for our users, internally we push metrics to M3DB via influx line protocol. We use additional technologies together, as you can also see. We had several options where we could introduce Thanos into the mix. Furthermore, we decided to continue using Telegraf, but sending directly via remote write, versus using the Influx protocol. This created one of our first challenges, which is that some of our metrics are delayed due to the number of clouds we support. When a metric is written in the future, the ingesters would crash. Our engineer Michael fixed this upstream (https://github.com/thanos-io/thanos/pull/6195). 
 
