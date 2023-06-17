@@ -30,7 +30,7 @@ We began the process with creating a plan on how we would test the solution to s
 
   ```mermaid
 ---
-title: "Aiven Thanos Current Architecture<br>"
+title: "Aiven Thanos Current Architecture"
 ---
 flowchart
 	1[("Customer Databases")] -->|"Telegraf"| 2((("Kafka")))
