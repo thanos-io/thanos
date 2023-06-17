@@ -124,6 +124,8 @@ m3db    | n2d-highmem-32 | 1172.61 | 18 | 21106.98
 m3coordinator | n2d-standard-48 | 1303.73 | 9 | 11733.57 
 M3 TOTAL | | 32840.55
 
+Service | Instance type | Price | Count | Total price (monthly)
+------- | ------------- | ----- | ----- | ---------------------
 thanosreceiver | n2d-highcpu-96 | 1924 | 6 | 11544
 thanosquery | n2d-highcpu-16 | 321.57 | 6 | 1929
 thanosstore | n2d-highmem-8 | 293.90 | 3 | 881.7
