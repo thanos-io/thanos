@@ -131,7 +131,6 @@ thanosquery | n2d-highcpu-16 | 321.57 | 6 | 1929
 thanosstore | n2d-highmem-8 | 293.90 | 3 | 881.7
 thanoscompactor | n2d-highmem-8 | 293.90 | 1 | 293.90
 redis | n2d-highmem-4 | 147.45 | 2 | 294.9
-
 THANOS TOTAL | | 14942.68
 
 We are also paying roughly 25% for the storage costs. M3DB has a total of 54TB of storage provisioned today, at a cost of $4320 per month. We could house 216TB of storage for the same cost with Thanos. We are currently generating about 750GB per day, which means we can keep almost a year of metrics for the same cost as M3DB. Additionally, we are backing up M3DB which is using 33TB of object storage at a cost of $1320 per month. With object storage, we have the added cost for the networking, this is around $1800 per month in additional costs. Here are our estimated costs:
