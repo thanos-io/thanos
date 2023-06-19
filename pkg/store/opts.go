@@ -25,6 +25,9 @@ func init() {
 // Copied from Prometheus querier.go, removed check for Prometheus wrapper.
 // Returns list of values that can regex matches.
 func findSetMatches(pattern string) []string {
+	if len(pattern) == 0 {
+		return nil
+	}
 	escaped := false
 	sets := []*strings.Builder{{}}
 	init := 0
