@@ -63,62 +63,6 @@ We take great care to manage the hash ring in a way that ensures no failed write
 
 The community has been critical for us. One example we ran into around this portion of the implementation which we received some help from the other users and maintainers on the CNCF Slack. We also ran into some other issues which would create replication loops causing a crash as well. We addressed this issue by moving to a routing-ingesting receiver topology as suggested by the community. 
 
-  ```mermaid
-  ---
-title: "Aiven Thanos Scale Out Architecture"
----
-    flowchart TD
-        subgraph ThanosQueryCluster
-            Query1
-            Query2
-            Query3
-        end
-        ThanosCompactor --> ObjectStorage
-        A["Kafkapump"]
-
-        subgraph ObjectStorage [Cloud ObjectStorage]
-        end
-        subgraph ThanosReceiverCluster
-            router1 --> hashring
-            router2 --> hashring
-            router3 --> hashring
-            hashring --> ingestor1
-            hashring --> ingestor2
-            hashring --> ingestor3
-            direction TB
-            subgraph ReceiverNode1 [ ]
-                direction LR
-                router1
-                ingestor1
-            end
-            subgraph ReceiverNode2 [ ]
-                direction LR
-                router2
-                hashring
-                ingestor2
-            end
-            subgraph ReceiverNode3 [ ]
-                direction LR
-                router3
-                ingestor3
-            end
-
-        end
-        A --> |writes to router endpoint| ThanosReceiverCluster
-        ingestor1 --> ObjectStorage
-        ingestor2 --> ObjectStorage
-        ingestor3 --> ObjectStorage
-        ObjectStorage --> ThanosStoreCluster
-        ThanosQueryCluster --> ThanosReceiverCluster
-        ThanosQueryCluster --> ThanosStoreCluster
-        subgraph ThanosStoreCluster
-            Store1
-            Store2
-            Store3
-        end
-```
-This is how we would scale out the components in our architecture outlined above.
-
 ## Cost Savings
 
 After concluding the POC we determined that it was feasible and we also found that the cost savings were pretty significant:
