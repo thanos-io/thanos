@@ -1,7 +1,7 @@
 ---
 title: 'Aiven’s Journey to Thanos from M3DB'
 date: "2023-06-08"
-authors: Jonah Kowall (@jkowall) , Michael Hoffmann (@MichaHoffmann) , Alexander Rickardsson (@alxric)
+authors: [Jonah Kowall (@jkowall)](https://github.com/jkowall) , [Michael Hoffmann (@MichaHoffmann)](https://github.com/MichaHoffmann) , [Alexander Rickardsson (@alxric)](https://github.com/alxric)
 ---
 
 ## About Aiven
@@ -148,7 +148,7 @@ We are also paying roughly 25% for the storage costs. M3DB has a total of 54TB o
 * Thanos with 2 years retention: $27955
 * Thanos with 3 years retention: $33423
 
-As you can see, the cost savings are significant here. @alxric implemented AZ awareness in Thanos upstream now, which reduced our replication factor from 3 to 2 on Google Cloud Platform. https://github.com/thanos-io/thanos/pull/6369#event-9357572391 
+As you can see, the cost savings are significant here. [Alexander Rickardsson](https://github.com/alxric) implemented AZ awareness in Thanos upstream now, which reduced our replication factor from 3 to 2 on Google Cloud Platform. https://github.com/thanos-io/thanos/pull/6369#event-9357572391 
 
 ## Performance Gains
 
@@ -162,6 +162,6 @@ Additionally, we allowed unlimited retention of metrics since the cost of object
 
 ## Wrapping up and next steps
 
-@MichaHoffmann is working on other optimizations in the query engine that we will be contributing upstream. You can follow some of this work on the query engine (https://github.com/thanos-io/promql-engine).
+[Michael Hoffmann](https://github.com/MichaHoffmann) is working on other optimizations in the query engine that we will be contributing upstream. You can follow some of this work on the query engine (https://github.com/thanos-io/promql-engine).
 
 With such remarkable results, we are excited about the next steps, which is to be the first Thanos service. We will also continue to contribute to Thanos, and hope to have dedicated members of our OSPO in the future working in the Thanos community. A very vibrant and helpful community, we have already made contributions to. We will start on the productization work later this year, so stay tuned for our public beta next year. Furthermore, we are also seeking private beta testers who are interested in a cost-effective, truly open source Prometheus service which can run across 11 clouds and over 160+ regions, please reach out to me. 
