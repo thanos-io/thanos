@@ -126,30 +126,30 @@ After concluding the POC we determined that it was feasible and we also found th
 ### M3DB Cost breakdown
 Service | Instance type | Price | Count | Total price (monthly)
 ------- | ------------- | ----- | ----- | ---------------------
-m3db    | n2d-highmem-32 | 1172.61 | 18 | 21106.98 
-m3coordinator | n2d-standard-48 | 1303.73 | 9 | 11733.57 
-M3 TOTAL | | 32840.55
+m3db    | n2d-highmem-32 | $1,172.61 | 18 | $21,106.98 
+m3coordinator | n2d-standard-48 | $1,303.73 | 9 | $11,733.57 
+M3 TOTAL | | $32,840.55
 
 ### Thanos Cost breakdown
 Service | Instance type | Price | Count | Total price (monthly)
 ------- | ------------- | ----- | ----- | ---------------------
-thanosreceiver | n2d-highcpu-96 | 1924 | 6 | 11544
-thanosquery | n2d-highcpu-16 | 321.57 | 6 | 1929
-thanosstore | n2d-highmem-8 | 293.90 | 3 | 881.7
-thanoscompactor | n2d-highmem-8 | 293.90 | 1 | 293.90
-redis | n2d-highmem-4 | 147.45 | 2 | 294.9
-THANOS TOTAL | | 14942.68
+thanosreceiver | n2d-highcpu-96 | $1,924 | 6 | $11,544
+thanosquery | n2d-highcpu-16 | $321.57 | 6 | $1,929
+thanosstore | n2d-highmem-8 | $293.90 | 3 | $881.7
+thanoscompactor | n2d-highmem-8 | $293.90 | 1 | $293.90
+redis | n2d-highmem-4 | $147.45 | 2 | $294.9
+THANOS TOTAL | | $14,942.68
 
-We are also paying roughly 25% for the storage costs. M3DB has a total of 54TB of storage provisioned today, at a cost of $4320 per month. We could house 216TB of storage for the same cost with Thanos. We are currently generating about 750GB per day, which means we can keep almost a year of metrics for the same cost as M3DB. Additionally, we are backing up M3DB which is using 33TB of object storage at a cost of $1320 per month. With object storage, we have the added cost for the networking, this is around $1800 per month in additional costs. Here are our estimated costs:
+We are also paying roughly 25% for the storage costs. M3DB has a total of 54TB of storage provisioned today, at a cost of $4320 per month. We could house 216TB of storage for the same cost with Thanos. We are currently generating about 750GB per day, which means we can keep almost a year of metrics for the same cost as M3DB. Additionally, we are backing up M3DB which is using 33TB of object storage at a cost of $1,320 per month. With object storage, we have the added cost for the networking, this is around $1800 per month in additional costs. Here are our estimated costs:
 
 * M3: $38480
 
-* Thanos without any historical data in storage: $16939
-* Thanos with one month retention in object storage: $17368
-* Thanos with six months retention: $19703
-* Thanos with a years retention: $22447
-* Thanos with 2 years retention: $27955
-* Thanos with 3 years retention: $33423
+* Thanos without any historical data in storage: $16,939
+* Thanos with one month retention in object storage: $17,368
+* Thanos with six months retention: $19,703
+* Thanos with a years retention: $22,447
+* Thanos with 2 years retention: $27,955
+* Thanos with 3 years retention: $33,423
 
 As you can see, the cost savings are significant here. [Alexander Rickardsson](https://github.com/alxric) implemented AZ awareness in Thanos upstream now, which reduced our replication factor from 3 to 2 on Google Cloud Platform. https://github.com/thanos-io/thanos/pull/6369#event-9357572391 
 
