@@ -25,6 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6441](https://github.com/thanos-io/thanos/pull/6441) Compact: Compactor will set `index_stats` in `meta.json` file with max series and chunk size information.
 
 ### Fixed
+- [#6456](https://github.com/thanos-io/thanos/pull/6456) Store: fix crash when computing set matches from regex pattern
 - [#6427](https://github.com/thanos-io/thanos/pull/6427) Receive: increasing log level for failed uploads to error
 - [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.
 - [#6171](https://github.com/thanos-io/thanos/pull/6171) Store: fix error handling on limits.
