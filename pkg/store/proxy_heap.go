@@ -824,34 +824,58 @@ func copyLabels(dest *labels.Labels, src labels.Labels) {
 // sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
 // series with different labels are coming right after each other. Other types of responses are moved to front.
 func sortWithoutLabels(set []*storepb.SeriesResponse, storeLabels map[string]struct{}, labelsToRemove map[string]struct{}) {
-	for _, s := range set {
+	extLabels := make([]labels.Labels, len(set))
+	lblScratch := labels.Labels{}
+	for i, s := range set {
 		ser := s.GetSeries()
 		if ser == nil {
 			continue
 		}
 
-		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		internalLabels := rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove)
+		internalLabels, lblScratch = dropLabels(internalLabels, storeLabels)
+		ser.Labels = labelpb.ZLabelsFromPromLabels(internalLabels)
+		extLabels[i] = lblScratch
 	}
 
-	var iLblScratch, jLblScratch labels.Labels
 	// With the re-ordered label sets, re-sorting all series aligns the same series
 	// from different replicas sequentially.
+	sort.Slice(extLabels, func(i, j int) bool {
+		return compareResponses(set, extLabels, i, j)
+	})
 	sort.Slice(set, func(i, j int) bool {
-		si := set[i].GetSeries()
-		if si == nil {
-			return true
-		}
-		sj := set[j].GetSeries()
-		if sj == nil {
-			return false
+		return compareResponses(set, extLabels, i, j)
+	})
+
+	for i, _ := range set {
+		ser := set[i].GetSeries()
+		if ser == nil {
+			continue
 		}
 
-		iLbls := labelpb.ZLabelsToPromLabels(si.Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(sj.Labels)
-		var less bool
-		less, iLblScratch, jLblScratch = compareSeries(iLbls, jLbls, storeLabels, storeLabels, iLblScratch, jLblScratch)
-		return less
-	})
+		ser.Labels = labelpb.ZLabelsFromPromLabels(
+			labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(ser.Labels), extLabels[i]),
+		)
+	}
+}
+
+func compareResponses(set []*storepb.SeriesResponse, extLabels []labels.Labels, i int, j int) bool {
+	si := set[i].GetSeries()
+	if si == nil {
+		return true
+	}
+	sj := set[j].GetSeries()
+	if sj == nil {
+		return false
+	}
+
+	iLbls := labelpb.ZLabelsToPromLabels(si.Labels)
+	jLbls := labelpb.ZLabelsToPromLabels(sj.Labels)
+	order := labels.Compare(iLbls, jLbls)
+	if order == 0 {
+		return labels.Compare(extLabels[i], extLabels[j]) < 0
+	}
+	return order < 0
 }
 
 func (l *eagerRespSet) Close() {
