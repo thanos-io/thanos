@@ -55,7 +55,7 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	// TSDBInfos returns metadata about each TSDB backed by the client.
-	TSDBInfos() []infopb.TSDBInfo
+	TSDBInfos() []*infopb.TSDBInfo
 
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
@@ -74,6 +74,8 @@ type Client interface {
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
+	storepb.UnimplementedStoreServer
+
 	logger         log.Logger
 	stores         func() []Client
 	component      component.StoreAPI
@@ -159,7 +161,7 @@ func NewProxyStore(
 func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
 		StoreType: s.component.ToProto(),
-		Labels:    labelpb.ZLabelsFromPromLabels(s.selectorLabels),
+		Labels:    labelpb.ProtobufLabelsFromPromLabels(s.selectorLabels),
 	}
 
 	minTime := int64(math.MaxInt64)
@@ -187,15 +189,15 @@ func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 	res.MaxTime = maxTime
 	res.MinTime = minTime
 
-	labelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	labelSets := make(map[uint64]*labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			labelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+			labelSets[mergedLabelSet.Hash()] = &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
-	res.LabelSets = make([]labelpb.ZLabelSet, 0, len(labelSets))
+	res.LabelSets = make([]*labelpb.ZLabelSet, 0, len(labelSets))
 	for _, v := range labelSets {
 		res.LabelSets = append(res.LabelSets, v)
 	}
@@ -205,27 +207,27 @@ func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
 	if len(res.LabelSets) == 0 && len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{Labels: res.Labels})
+		res.LabelSets = append(res.LabelSets, &labelpb.ZLabelSet{Labels: res.Labels})
 	}
 
 	return res, nil
 }
 
-func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
+func (s *ProxyStore) LabelSet() []*labelpb.ZLabelSet {
 	stores := s.stores()
 	if len(stores) == 0 {
-		return []labelpb.ZLabelSet{}
+		return []*labelpb.ZLabelSet{}
 	}
 
-	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]*labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
-	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]*labelpb.ZLabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
 		labelSets = append(labelSets, v)
 	}
@@ -234,9 +236,9 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 	// selector-labels represents. If no label-sets are announced by the
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
-	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
+	selectorLabels := labelpb.ProtobufLabelsFromPromLabels(s.selectorLabels)
 	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
+		labelSets = append(labelSets, &labelpb.ZLabelSet{Labels: selectorLabels})
 	}
 
 	return labelSets
@@ -262,8 +264,8 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	return minTime, maxTime
 }
 
-func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
-	infos := make([]infopb.TSDBInfo, 0)
+func (s *ProxyStore) TSDBInfos() []*infopb.TSDBInfo {
+	infos := make([]*infopb.TSDBInfo, 0)
 	for _, store := range s.stores() {
 		infos = append(infos, store.TSDBInfos()...)
 	}

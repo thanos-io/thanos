@@ -14,12 +14,52 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 const (
 	RuleRecordingType = "recording"
 	RuleAlertingType  = "alerting"
 )
+
+func TimestampToTime(ts *Timestamp) time.Time {
+	if ts == nil {
+		return time.Unix(0, 0).UTC() // treat nil like the empty Timestamp
+	} else {
+		return time.Unix(ts.Seconds, int64(ts.Nanos)).UTC()
+	}
+}
+
+func TimeToTimestamp(t time.Time) *Timestamp {
+	ts := &Timestamp{}
+	if t.IsZero() {
+		ts.Seconds = time.Time{}.Unix()
+		return ts
+	}
+	ts.Seconds = t.Unix()
+	ts.Nanos = int32(t.Nanosecond())
+
+	return ts
+}
+
+func (m *Timestamp) MarshalJSON() ([]byte, error) {
+	ret := TimestampToTime(m)
+	return json.Marshal(ret)
+}
+
+func (m *Timestamp) UnmarshalJSON(data []byte) error {
+	ret := time.Time{}
+	err := json.Unmarshal(data, &ret)
+	if err != nil {
+		return err
+	}
+
+	actualTimestamp := TimeToTimestamp(ret)
+	m.Seconds = actualTimestamp.Seconds
+	m.Nanos = actualTimestamp.Nanos
+
+	return nil
+}
 
 func NewRuleGroupRulesResponse(rg *RuleGroup) *RulesResponse {
 	return &RulesResponse{
@@ -38,6 +78,9 @@ func NewWarningRulesResponse(warning error) *RulesResponse {
 }
 
 func NewRecordingRule(r *RecordingRule) *Rule {
+	if r.GetLabels() == nil {
+		r.Labels = &labelpb.ZLabelSet{}
+	}
 	return &Rule{
 		Result: &Rule_Recording{Recording: r},
 	}
@@ -55,11 +98,11 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 //
 // Note: This method assumes r1 and r2 are logically equal as per Rule#Compare.
 func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
-	if r1.LastEvaluation.Before(r2.LastEvaluation) {
+	if TimestampToTime(r1.GetLastEvaluation()).Before(TimestampToTime(r2.GetLastEvaluation())) {
 		return 1
 	}
 
-	if r1.LastEvaluation.After(r2.LastEvaluation) {
+	if TimestampToTime(r1.GetLastEvaluation()).After(TimestampToTime(r2.GetLastEvaluation())) {
 		return -1
 	}
 
@@ -67,6 +110,12 @@ func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
 }
 
 func NewAlertingRule(a *Alert) *Rule {
+	if a.GetAnnotations() == nil {
+		a.Annotations = &labelpb.ZLabelSet{}
+	}
+	if a.GetLabels() == nil {
+		a.Labels = &labelpb.ZLabelSet{}
+	}
 	return &Rule{
 		Result: &Rule_Alert{Alert: a},
 	}
@@ -75,19 +124,19 @@ func NewAlertingRule(a *Alert) *Rule {
 func (r *Rule) GetLabels() labels.Labels {
 	switch {
 	case r.GetRecording() != nil:
-		return r.GetRecording().Labels.PromLabels()
+		return r.GetRecording().GetLabels().PromLabels()
 	case r.GetAlert() != nil:
-		return r.GetAlert().Labels.PromLabels()
+		return r.GetAlert().GetLabels().PromLabels()
 	default:
 		return nil
 	}
 }
 
 func (r *Rule) SetLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
+	var result = &labelpb.ZLabelSet{}
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(ls)}
 	}
 
 	switch {
@@ -101,9 +150,9 @@ func (r *Rule) SetLabels(ls labels.Labels) {
 func (r *Rule) GetName() string {
 	switch {
 	case r.GetRecording() != nil:
-		return r.GetRecording().Name
+		return r.GetRecording().GetName()
 	case r.GetAlert() != nil:
-		return r.GetAlert().Name
+		return r.GetAlert().GetName()
 	default:
 		return ""
 	}
@@ -112,22 +161,22 @@ func (r *Rule) GetName() string {
 func (r *Rule) GetQuery() string {
 	switch {
 	case r.GetRecording() != nil:
-		return r.GetRecording().Query
+		return r.GetRecording().GetQuery()
 	case r.GetAlert() != nil:
-		return r.GetAlert().Query
+		return r.GetAlert().GetQuery()
 	default:
 		return ""
 	}
 }
 
-func (r *Rule) GetLastEvaluation() time.Time {
+func (r *Rule) GetLastEvaluation() *Timestamp {
 	switch {
 	case r.GetRecording() != nil:
-		return r.GetRecording().LastEvaluation
+		return r.GetRecording().GetLastEvaluation()
 	case r.GetAlert() != nil:
-		return r.GetAlert().LastEvaluation
+		return r.GetAlert().GetLastEvaluation()
 	default:
-		return time.Time{}
+		return nil
 	}
 }
 
@@ -169,7 +218,7 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 	}
 
 	if r1.GetAlert() != nil && r2.GetAlert() != nil {
-		if d := big.NewFloat(r1.GetAlert().DurationSeconds).Cmp(big.NewFloat(r2.GetAlert().DurationSeconds)); d != 0 {
+		if d := big.NewFloat(r1.GetAlert().GetDurationSeconds()).Cmp(big.NewFloat(r2.GetAlert().GetDurationSeconds())); d != 0 {
 			return d
 		}
 	}
@@ -184,6 +233,23 @@ func (r *RuleGroups) MarshalJSON() ([]byte, error) {
 	}
 	type plain RuleGroups
 	return json.Marshal((*plain)(r))
+}
+
+func (r *RuleGroups) UnmarshalJSON(data []byte) error {
+	type plain RuleGroups
+	ret := &plain{}
+	err := json.Unmarshal(data, &ret)
+	if err != nil {
+		return err
+	}
+	if ret.Groups == nil {
+		ret.Groups = []*RuleGroup{}
+	}
+
+	*r = RuleGroups{
+		Groups: ret.Groups,
+	}
+	return nil
 }
 
 // Compare compares rule group x and y and returns:
@@ -219,14 +285,21 @@ func (m *Rule) UnmarshalJSON(entry []byte) error {
 		if err := json.Unmarshal(entry, r); err != nil {
 			return errors.Wrapf(err, "rule: recording rule unmarshal: %v", string(entry))
 		}
-
+		if r.Labels == nil {
+			r.Labels = &labelpb.ZLabelSet{}
+		}
 		m.Result = &Rule_Recording{Recording: r}
 	case "alerting":
 		r := &Alert{}
 		if err := json.Unmarshal(entry, r); err != nil {
 			return errors.Wrapf(err, "rule: alerting rule unmarshal: %v", string(entry))
 		}
-
+		if r.Annotations == nil {
+			r.Annotations = &labelpb.ZLabelSet{}
+		}
+		if r.Labels == nil {
+			r.Labels = &labelpb.ZLabelSet{}
+		}
 		m.Result = &Rule_Alert{Alert: r}
 	case "":
 		return errors.Errorf("rule: no type field provided: %v", string(entry))
@@ -258,6 +331,61 @@ func (m *Rule) MarshalJSON() ([]byte, error) {
 		Alert: a,
 		Type:  RuleAlertingType,
 	})
+}
+
+func (a *AlertInstance) MarshalJSON() ([]byte, error) {
+	if len(a.GetLabels().GetLabels()) == 0 {
+		a.Labels = &labelpb.ZLabelSet{}
+	}
+	if len(a.GetAnnotations().GetLabels()) == 0 {
+		a.Annotations = &labelpb.ZLabelSet{}
+	}
+	aux := struct {
+		Labels                  *labelpb.ZLabelSet               `json:"labels"`
+		Annotations             *labelpb.ZLabelSet               `json:"annotations"`
+		State                   *AlertState                      `json:"state"`
+		ActiveAt                *time.Time                       `json:"activeAt,omitempty"`
+		Value                   string                           `json:"value"`
+		PartialResponseStrategy *storepb.PartialResponseStrategy `json:"partialResponseStrategy"`
+	}{
+		Labels:                  a.GetLabels(),
+		Annotations:             a.GetAnnotations(),
+		State:                   &a.State,
+		Value:                   a.GetValue(),
+		PartialResponseStrategy: &a.PartialResponseStrategy,
+	}
+	if t := TimestampToTime(a.GetActiveAt()); !t.IsZero() {
+		aux.ActiveAt = &t
+	}
+
+	return json.Marshal(aux)
+}
+
+func (a *AlertInstance) UnmarshalJSON(entry []byte) error {
+	type plain AlertInstance
+	ret := &plain{}
+	err := json.Unmarshal(entry, &ret)
+	if err != nil {
+		return err
+	}
+
+	*a = AlertInstance{
+		State:                   ret.State,
+		Value:                   ret.Value,
+		PartialResponseStrategy: ret.PartialResponseStrategy,
+	}
+	if ret.ActiveAt != nil {
+		a.ActiveAt = ret.ActiveAt
+	} else {
+		a.ActiveAt = TimeToTimestamp(time.Time{})
+	}
+	if len(ret.Labels.GetLabels()) > 0 {
+		a.Labels = ret.Labels
+	}
+	if len(ret.Annotations.GetLabels()) > 0 {
+		a.Annotations = ret.Annotations
+	}
+	return nil
 }
 
 func (r *RuleGroup) MarshalJSON() ([]byte, error) {
@@ -315,15 +443,15 @@ func (x AlertState) Compare(y AlertState) int {
 //
 // Note: This method assumes a1 and a2 are logically equal as per Rule#Compare.
 func (a1 *Alert) Compare(a2 *Alert) int {
-	if d := a1.State.Compare(a2.State); d != 0 {
+	if d := a1.GetState().Compare(a2.GetState()); d != 0 {
 		return d
 	}
 
-	if a1.LastEvaluation.Before(a2.LastEvaluation) {
+	if TimestampToTime(a1.GetLastEvaluation()).Before(TimestampToTime(a2.GetLastEvaluation())) {
 		return 1
 	}
 
-	if a1.LastEvaluation.After(a2.LastEvaluation) {
+	if TimestampToTime(a1.GetLastEvaluation()).After(TimestampToTime(a2.GetLastEvaluation())) {
 		return -1
 	}
 

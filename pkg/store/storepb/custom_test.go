@@ -31,7 +31,7 @@ type listSeriesSet struct {
 
 func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
 	s := Series{
-		Labels: labelpb.ZLabelsFromPromLabels(lset),
+		Labels: labelpb.ProtobufLabelsFromPromLabels(lset),
 	}
 
 	for _, smpls := range smplChunks {
@@ -43,7 +43,7 @@ func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series 
 			a.Append(smpl.t, smpl.v)
 		}
 
-		ch := AggrChunk{
+		ch := &AggrChunk{
 			MinTime: smpls[0].t,
 			MaxTime: smpls[len(smpls)-1].t,
 			Raw:     &Chunk{Type: Chunk_XOR, Data: c.Bytes()},
@@ -70,7 +70,7 @@ func (s *listSeriesSet) Next() bool {
 	return s.idx < len(s.series)
 }
 
-func (s *listSeriesSet) At() (labels.Labels, []AggrChunk) {
+func (s *listSeriesSet) At() (labels.Labels, []*AggrChunk) {
 	if s.idx < 0 || s.idx >= len(s.series) {
 		return nil, nil
 	}
@@ -84,7 +84,7 @@ type errSeriesSet struct{ err error }
 
 func (errSeriesSet) Next() bool { return false }
 
-func (errSeriesSet) At() (labels.Labels, []AggrChunk) { return nil, nil }
+func (errSeriesSet) At() (labels.Labels, []*AggrChunk) { return nil, nil }
 
 func (e errSeriesSet) Err() error { return e.err }
 
@@ -467,37 +467,37 @@ func benchmarkMergedSeriesSet(b testutil.TB, overlappingChunks bool) {
 
 func TestMatchersToString_Translate(t *testing.T) {
 	for _, c := range []struct {
-		ms       []LabelMatcher
+		ms       []*LabelMatcher
 		expected string
 	}{
 		{
-			ms: []LabelMatcher{
+			ms: []*LabelMatcher{
 				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
 			},
 			expected: `{__name__="up"}`,
 		},
 		{
-			ms: []LabelMatcher{
+			ms: []*LabelMatcher{
 				{Name: "__name__", Type: LabelMatcher_NEQ, Value: "up"},
 				{Name: "job", Type: LabelMatcher_EQ, Value: "test"},
 			},
 			expected: `{__name__!="up", job="test"}`,
 		},
 		{
-			ms: []LabelMatcher{
+			ms: []*LabelMatcher{
 				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
 				{Name: "job", Type: LabelMatcher_RE, Value: "test"},
 			},
 			expected: `{__name__="up", job=~"test"}`,
 		},
 		{
-			ms: []LabelMatcher{
+			ms: []*LabelMatcher{
 				{Name: "job", Type: LabelMatcher_NRE, Value: "test"},
 			},
 			expected: `{job!~"test"}`,
 		},
 		{
-			ms: []LabelMatcher{
+			ms: []*LabelMatcher{
 				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
 				{Name: "__name__", Type: LabelMatcher_NEQ, Value: "up"},
 			},
@@ -537,7 +537,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 		{
 			name: "Single matcher regular expression",
 			r: &SeriesRequest{
-				Matchers: []LabelMatcher{
+				Matchers: []*LabelMatcher{
 					{
 						Type:  LabelMatcher_RE,
 						Name:  "namespace",
@@ -555,7 +555,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 		{
 			name: "Single matcher regular expression with grouping",
 			r: &SeriesRequest{
-				Matchers: []LabelMatcher{
+				Matchers: []*LabelMatcher{
 					{
 						Type:  LabelMatcher_RE,
 						Name:  "namespace",
@@ -577,7 +577,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 		{
 			name: "Multiple matchers with grouping",
 			r: &SeriesRequest{
-				Matchers: []LabelMatcher{
+				Matchers: []*LabelMatcher{
 					{
 						Type:  LabelMatcher_EQ,
 						Name:  "__name__",
@@ -604,7 +604,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 		{
 			name: "Query with vector range selector",
 			r: &SeriesRequest{
-				Matchers: []LabelMatcher{
+				Matchers: []*LabelMatcher{
 					{
 						Type:  LabelMatcher_EQ,
 						Name:  "__name__",
@@ -630,7 +630,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 		{
 			name: "Query with grouping and vector range selector",
 			r: &SeriesRequest{
-				Matchers: []LabelMatcher{
+				Matchers: []*LabelMatcher{
 					{
 						Type:  LabelMatcher_EQ,
 						Name:  "__name__",

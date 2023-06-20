@@ -70,7 +70,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		testutil.Ok(t, head.Close())
 		for i := 0; i < len(created); i++ {
 			if !dedup || j == 0 {
-				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
+				lset := labelpb.ProtobufLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
 					lset = lset[1:]
 				}

@@ -22,7 +22,6 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -47,6 +47,8 @@ import (
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
+	storepb.UnimplementedStoreServer
+
 	logger           log.Logger
 	base             *url.URL
 	client           *promclient.Client
@@ -115,18 +117,18 @@ func (p *PrometheusStore) Info(_ context.Context, _ *storepb.InfoRequest) (*stor
 	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
-		Labels:    make([]labelpb.ZLabel, 0, len(lset)),
+		Labels:    make([]*labelpb.Label, 0, len(lset)),
 		StoreType: p.component.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
 	}
-	res.Labels = append(res.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
+	res.Labels = append(res.Labels, labelpb.ProtobufLabelsFromPromLabels(lset)...)
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.ZLabelSet{}
+	res.LabelSets = []*labelpb.ZLabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
+		res.LabelSets = append(res.LabelSets, &labelpb.ZLabelSet{
 			Labels: res.Labels,
 		})
 	}
@@ -188,11 +190,11 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			return err
 		}
 		for _, lbm := range labelMaps {
-			lset := make([]labelpb.ZLabel, 0, len(lbm)+len(finalExtLset))
+			lset := make([]*labelpb.Label, 0, len(lbm)+len(finalExtLset))
 			for k, v := range lbm {
-				lset = append(lset, labelpb.ZLabel{Name: k, Value: v})
+				lset = append(lset, &labelpb.Label{Name: k, Value: v})
 			}
-			lset = append(lset, labelpb.ZLabelsFromPromLabels(finalExtLset)...)
+			lset = append(lset, labelpb.ProtobufLabelsFromPromLabels(finalExtLset)...)
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
@@ -302,7 +304,7 @@ func (p *PrometheusStore) queryPrometheus(
 		finalLbls = append(finalLbls, dedup.PushdownMarker)
 
 		series := &prompb.TimeSeries{
-			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
+			Labels:  labelpb.ProtobufLabelsFromPromLabels(finalLbls),
 			Samples: prompb.SamplesFromSamplePairs(vector.Values),
 		}
 
@@ -344,7 +346,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 	for _, e := range resp.Results[0].Timeseries {
 		// Sampled remote read handler already adds external labels for us:
 		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166.
-		lset := rmLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLsetToRemove)
+		lset := rmLabels(labelpb.ProtobufLabelsToPromLabels(e.Labels), extLsetToRemove)
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
@@ -364,7 +366,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.ZLabelsFromPromLabels(lset),
+			Labels: labelpb.ProtobufLabelsFromPromLabels(lset),
 			Chunks: aggregatedChunks,
 		})); err != nil {
 			return err
@@ -404,13 +406,16 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 	for {
-		res := &prompb.ChunkedReadResponse{}
-		err := stream.NextProto(res)
+		rec, err := stream.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return errors.Wrap(err, "next proto")
+		}
+		res := &prompb.ChunkedReadResponse{}
+		if err = proto.Unmarshal(rec, res); err != nil {
+			return errors.Wrap(err, "proto unmarshal")
 		}
 
 		if len(res.ChunkedSeries) != 1 {
@@ -422,17 +427,17 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			// Streamed remote read handler already adds
 			// external labels:
 			// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/codec.go#L210.
-			completeLabelset := rmLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLsetToRemove)
+			completeLabelset := rmLabels(labelpb.ProtobufLabelsToPromLabels(series.Labels), extLsetToRemove)
 			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}
 
 			seriesStats.CountSeries(series.Labels)
-			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
+			thanosChks := make([]*storepb.AggrChunk, len(series.Chunks))
 
 			for i, chk := range series.Chunks {
 				chkHash := hashChunk(hasher, chk.Data, calculateChecksums)
-				thanosChks[i] = storepb.AggrChunk{
+				thanosChks[i] = &storepb.AggrChunk{
 					MaxTime: chk.MaxTimeMs,
 					MinTime: chk.MinTimeMs,
 					Raw: &storepb.Chunk{
@@ -452,7 +457,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(
+				Labels: labelpb.ProtobufLabelsFromPromLabels(
 					completeLabelset,
 				),
 				Chunks: thanosChks,
@@ -525,7 +530,7 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	return &data, nil
 }
 
-func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []storepb.AggrChunk, err error) {
+func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []*storepb.AggrChunk, err error) {
 	samples := series.Samples
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
@@ -542,7 +547,7 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 		}
 
 		chkHash := hashChunk(hasher, cb, calculateChecksums)
-		chks = append(chks, storepb.AggrChunk{
+		chks = append(chks, &storepb.AggrChunk{
 			MinTime: samples[0].Timestamp,
 			MaxTime: samples[chunkSize-1].Timestamp,
 			Raw:     &storepb.Chunk{Type: enc, Data: cb, Hash: chkHash},
@@ -594,7 +599,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
+func matchesExternalLabels(ms []*storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
 	tms, err := storepb.MatchersToPromMatchers(ms...)
 	if err != nil {
 		return false, nil, err
@@ -626,7 +631,7 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 
 // encodeChunk translates the sample pairs into a chunk.
 // TODO(kakkoyun): Linter - result 0 (github.com/thanos-io/thanos/pkg/store/storepb.Chunk_Encoding) is always 0.
-func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
+func (p *PrometheusStore) encodeChunk(ss []*prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
 	c := chunkenc.NewXORChunk()
 
 	a, err := c.Appender()
@@ -741,15 +746,15 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }
 
-func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
+func (p *PrometheusStore) LabelSet() []*labelpb.ZLabelSet {
 	lset := p.externalLabelsFn()
 
-	labels := make([]labelpb.ZLabel, 0, len(lset))
-	labels = append(labels, labelpb.ZLabelsFromPromLabels(lset)...)
+	labels := make([]*labelpb.Label, 0, len(lset))
+	labels = append(labels, labelpb.ProtobufLabelsFromPromLabels(lset)...)
 
-	labelset := []labelpb.ZLabelSet{}
+	labelset := []*labelpb.ZLabelSet{}
 	if len(labels) > 0 {
-		labelset = append(labelset, labelpb.ZLabelSet{
+		labelset = append(labelset, &labelpb.ZLabelSet{
 			Labels: labels,
 		})
 	}
@@ -766,7 +771,7 @@ func (p *PrometheusStore) TSDBInfos() []infopb.TSDBInfo {
 	mint, maxt := p.Timestamps()
 	return []infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
+			Labels: &labelpb.ZLabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
