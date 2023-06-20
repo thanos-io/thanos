@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
+	"math"
 	"net"
 	"net/http"
 	"path"
@@ -54,12 +55,16 @@ const (
 	DefaultTenantHeader = "THANOS-TENANT"
 	// DefaultTenant is the default value used for when no tenant is passed via the tenant header.
 	DefaultTenant = "default-tenant"
+	// DefaultStatsLimit is the default value used for limiting tenant stats.
+	DefaultStatsLimit = 10
 	// DefaultTenantLabel is the default label-name used for when no tenant is passed via the tenant header.
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
 	// AllTenantsQueryParam is the query parameter for getting TSDB stats for all tenants.
 	AllTenantsQueryParam = "all_tenants"
+	// LimitStatsQueryParam is the query parameter for limiting the amount of returned TSDB stats.
+	LimitStatsQueryParam = "limit"
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
@@ -280,6 +285,21 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func getStatsLimitParameter(r *http.Request) (int, error) {
+	statsLimitStr := r.URL.Query().Get(LimitStatsQueryParam)
+	if statsLimitStr == "" {
+		return DefaultStatsLimit, nil
+	}
+	statsLimit, err := strconv.ParseInt(statsLimitStr, 10, 0)
+	if err != nil {
+		return 0, fmt.Errorf("unable to parse '%s' parameter: %w", LimitStatsQueryParam, err)
+	}
+	if statsLimit > math.MaxInt {
+		return 0, fmt.Errorf("'%s' parameter is larger than %d", LimitStatsQueryParam, math.MaxInt)
+	}
+	return int(statsLimit), nil
+}
+
 func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
@@ -292,15 +312,20 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
+	statsLimit, err := getStatsLimitParameter(r)
+	if err != nil {
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
 	if getAllTenantStats {
-		return h.options.TSDBStats.TenantStats(statsByLabelName), nil
+		return h.options.TSDBStats.TenantStats(statsLimit, statsByLabelName), nil
 	}
 
 	if tenantID == "" {
 		tenantID = h.options.DefaultTenantID
 	}
 
-	return h.options.TSDBStats.TenantStats(statsByLabelName, tenantID), nil
+	return h.options.TSDBStats.TenantStats(statsLimit, statsByLabelName, tenantID), nil
 }
 
 // Close stops the Handler.

@@ -846,7 +846,7 @@ receivers:
 	})), "http")
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2emon.InstrumentedRunnable {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig, indexCacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2emon.InstrumentedRunnable {
 	f := e.Runnable(fmt.Sprintf("store-gw-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
 		Future()
@@ -883,6 +883,10 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 
 	if cacheConfig != "" {
 		args = append(args, "--store.caching-bucket.config", cacheConfig)
+	}
+
+	if indexCacheConfig != "" {
+		args = append(args, "--index-cache.config", indexCacheConfig)
 	}
 
 	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{

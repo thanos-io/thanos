@@ -211,7 +211,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 			},
 		},
 	}
-	b, _ := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
+	b, _ := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	ms := []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
 	}
@@ -259,7 +259,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -1213,9 +1213,6 @@ func benchmarkExpandedPostings(
 
 	for _, c := range cases {
 		t.Run(c.name, func(t testutil.TB) {
-			if c.name != `i=~".*"` {
-				return
-			}
 			b := &bucketBlock{
 				logger:            log.NewNopLogger(),
 				metrics:           newBucketStoreMetrics(nil),
@@ -1530,14 +1527,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b1 = &bucketBlock{
-			indexCache:  indexCache,
-			logger:      logger,
-			metrics:     newBucketStoreMetrics(nil),
-			bkt:         bkt,
-			meta:        meta,
-			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
-			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:   chunkPool,
+			indexCache:             indexCache,
+			logger:                 logger,
+			metrics:                newBucketStoreMetrics(nil),
+			bkt:                    bkt,
+			meta:                   meta,
+			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+			chunkObjs:              []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:              chunkPool,
+			estimatedMaxSeriesSize: EstimatedMaxSeriesSize,
+			estimatedMaxChunkSize:  EstimatedMaxChunkSize,
 		}
 		b1.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b1.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
@@ -1569,14 +1568,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b2 = &bucketBlock{
-			indexCache:  indexCache,
-			logger:      logger,
-			metrics:     newBucketStoreMetrics(nil),
-			bkt:         bkt,
-			meta:        meta,
-			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
-			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:   chunkPool,
+			indexCache:             indexCache,
+			logger:                 logger,
+			metrics:                newBucketStoreMetrics(nil),
+			bkt:                    bkt,
+			meta:                   meta,
+			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+			chunkObjs:              []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:              chunkPool,
+			estimatedMaxSeriesSize: EstimatedMaxSeriesSize,
+			estimatedMaxChunkSize:  EstimatedMaxChunkSize,
 		}
 		b2.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b2.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
@@ -2397,7 +2398,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil)
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
 	testutil.Ok(b, err)
 
 	b.ResetTimer()
@@ -2486,7 +2487,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner)
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
 	testutil.Ok(b, err)
 	return blk, blockMeta
 }

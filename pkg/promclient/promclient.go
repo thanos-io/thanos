@@ -360,6 +360,8 @@ type QueryOptions struct {
 	PartialResponseStrategy storepb.PartialResponseStrategy
 	Method                  string
 	MaxSourceResolution     string
+	Engine                  string
+	Explain                 bool
 }
 
 func (p *QueryOptions) AddTo(values url.Values) error {
@@ -367,6 +369,9 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	if len(p.MaxSourceResolution) > 0 {
 		values.Add("max_source_resolution", p.MaxSourceResolution)
 	}
+
+	values.Add("explain", fmt.Sprintf("%v", p.Explain))
+	values.Add("engine", p.Engine)
 
 	var partialResponseValue string
 	switch p.PartialResponseStrategy {
@@ -384,16 +389,21 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	return nil
 }
 
+type Explanation struct {
+	Name     string         `json:"name"`
+	Children []*Explanation `json:"children,omitempty"`
+}
+
 // QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
-func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
+func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, *Explanation, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
+		return nil, nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
 	}
 	params.Add("query", query)
 	params.Add("time", t.Format(time.RFC3339Nano))
 	if err := opts.AddTo(params); err != nil {
-		return nil, nil, errors.Wrap(err, "add thanos opts query params")
+		return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
 	}
 
 	u := *base
@@ -412,25 +422,26 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 
 	body, _, err := c.req2xx(ctx, &u, method)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "read query instant response")
+		return nil, nil, nil, errors.Wrap(err, "read query instant response")
 	}
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
 	var m struct {
 		Data struct {
-			ResultType string          `json:"resultType"`
-			Result     json.RawMessage `json:"result"`
+			ResultType  string          `json:"resultType"`
+			Result      json.RawMessage `json:"result"`
+			Explanation *Explanation    `json:"explanation,omitempty"`
 		} `json:"data"`
 
 		Error     string `json:"error,omitempty"`
 		ErrorType string `json:"errorType,omitempty"`
-		// Extra field supported by Thanos Querier.
+		// Extra fields supported by Thanos Querier.
 		Warnings []string `json:"warnings"`
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
-		return nil, nil, errors.Wrap(err, "unmarshal query instant response")
+		return nil, nil, nil, errors.Wrap(err, "unmarshal query instant response")
 	}
 
 	var vectorResult model.Vector
@@ -440,29 +451,29 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	switch m.Data.ResultType {
 	case string(parser.ValueTypeVector):
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
-			return nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
+			return nil, nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
 		}
 	case string(parser.ValueTypeScalar):
 		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
+			return nil, nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
 		}
 	default:
 		if m.Warnings != nil {
-			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+			return nil, nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
 		}
 		if m.Error != "" {
-			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+			return nil, nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
 		}
-		return nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
+		return nil, nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
 	}
 
-	return vectorResult, m.Warnings, nil
+	return vectorResult, m.Warnings, m.Data.Explanation, nil
 }
 
 // PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
 func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
-	vectorResult, warnings, err := c.QueryInstant(ctx, base, query, t, opts)
+	vectorResult, warnings, _, err := c.QueryInstant(ctx, base, query, t, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -491,17 +502,17 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 }
 
 // QueryRange performs a range query using a default HTTP client and returns results in model.Matrix type.
-func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime, step int64, opts QueryOptions) (model.Matrix, []string, error) {
+func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime, step int64, opts QueryOptions) (model.Matrix, []string, *Explanation, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
+		return nil, nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
 	}
 	params.Add("query", query)
 	params.Add("start", formatTime(timestamp.Time(startTime)))
 	params.Add("end", formatTime(timestamp.Time(endTime)))
 	params.Add("step", strconv.FormatInt(step, 10))
 	if err := opts.AddTo(params); err != nil {
-		return nil, nil, errors.Wrap(err, "add thanos opts query params")
+		return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
 	}
 
 	u := *base
@@ -515,25 +526,26 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 
 	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "read query range response")
+		return nil, nil, nil, errors.Wrap(err, "read query range response")
 	}
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
 	var m struct {
 		Data struct {
-			ResultType string          `json:"resultType"`
-			Result     json.RawMessage `json:"result"`
+			ResultType  string          `json:"resultType"`
+			Result      json.RawMessage `json:"result"`
+			Explanation *Explanation    `json:"explanation,omitempty"`
 		} `json:"data"`
 
 		Error     string `json:"error,omitempty"`
 		ErrorType string `json:"errorType,omitempty"`
-		// Extra field supported by Thanos Querier.
+		// Extra fields supported by Thanos Querier.
 		Warnings []string `json:"warnings"`
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
-		return nil, nil, errors.Wrap(err, "unmarshal query range response")
+		return nil, nil, nil, errors.Wrap(err, "unmarshal query range response")
 	}
 
 	var matrixResult model.Matrix
@@ -542,19 +554,19 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	switch m.Data.ResultType {
 	case string(parser.ValueTypeMatrix):
 		if err = json.Unmarshal(m.Data.Result, &matrixResult); err != nil {
-			return nil, nil, errors.Wrap(err, "decode result into ValueTypeMatrix")
+			return nil, nil, nil, errors.Wrap(err, "decode result into ValueTypeMatrix")
 		}
 	default:
 		if m.Warnings != nil {
-			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+			return nil, nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
 		}
 		if m.Error != "" {
-			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+			return nil, nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
 		}
 
-		return nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
+		return nil, nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
 	}
-	return matrixResult, m.Warnings, nil
+	return matrixResult, m.Warnings, m.Data.Explanation, nil
 }
 
 // Scalar response consists of array with mixed types so it needs to be
