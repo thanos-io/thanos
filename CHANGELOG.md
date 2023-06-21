@@ -26,6 +26,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6466](https://github.com/thanos-io/thanos/pull/6466) Mixin (Receive): add limits alerting for configuration reload and meta-monitoring.
 
 ### Fixed
+- [#6463](https://github.com/thanos-io/thanos/pull/6463) Store: smaller block size for snappy decoding
 - [#6456](https://github.com/thanos-io/thanos/pull/6456) Store: fix crash when computing set matches from regex pattern
 - [#6427](https://github.com/thanos-io/thanos/pull/6427) Receive: increasing log level for failed uploads to error
 - [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.

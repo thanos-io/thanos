@@ -16,7 +16,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
-	extsnappy "github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 )
 
 // This file implements encoding and decoding of postings using diff (or delta) + varint
@@ -56,6 +55,67 @@ func isDiffVarintSnappyEncodedPostings(input []byte) bool {
 // isDiffVarintSnappyStreamedEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy streamed codec.
 func isDiffVarintSnappyStreamedEncodedPostings(input []byte) bool {
 	return bytes.HasPrefix(input, []byte(codecHeaderStreamedSnappy))
+}
+
+var (
+	readersPool = sync.Pool{
+		New: func() interface{} {
+			return s2.NewReader(nil, s2.ReaderAllocBlock(1<<10), s2.ReaderMaxBlockSize(4<<10))
+		},
+	}
+
+	writersPool = sync.Pool{
+		New: func() interface{} {
+			return s2.NewWriter(nil, s2.WriterSnappyCompat(), s2.WriterBetterCompression(), s2.WriterBlockSize(4<<10))
+		},
+	}
+)
+
+type writeCloser struct {
+	writer *s2.Writer
+	pool   *sync.Pool
+}
+
+func (w writeCloser) Write(p []byte) (n int, err error) {
+	return w.writer.Write(p)
+}
+
+func (w writeCloser) Close() error {
+	defer func() {
+		w.writer.Reset(nil)
+		w.pool.Put(w.writer)
+	}()
+
+	if w.writer != nil {
+		return w.writer.Close()
+	}
+	return nil
+}
+
+func compress(w io.Writer) io.WriteCloser {
+	wr := writersPool.Get().(*s2.Writer)
+	wr.Reset(w)
+	return writeCloser{wr, &writersPool}
+}
+
+type reader struct {
+	reader *s2.Reader
+	pool   *sync.Pool
+}
+
+func (r reader) ReadByte() (n byte, err error) {
+	n, err = r.reader.ReadByte()
+	if err == io.EOF {
+		r.reader.Reset(nil)
+		r.pool.Put(r.reader)
+	}
+	return n, err
+}
+
+func decompressByteReader(r io.Reader) io.ByteReader {
+	dr := readersPool.Get().(*s2.Reader)
+	dr.Reset(r)
+	return reader{dr, &readersPool}
 }
 
 // estimateSnappyStreamSize estimates the number of bytes
@@ -98,10 +158,7 @@ func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error
 
 	uvarintEncodeBuf := make([]byte, binary.MaxVarintLen64)
 
-	sw, err := extsnappy.Compressor.Compress(compressedBuf)
-	if err != nil {
-		return nil, fmt.Errorf("creating snappy compressor: %w", err)
-	}
+	sw := compress(compressedBuf)
 
 	prev := storage.SeriesRef(0)
 	for p.Next() {
@@ -145,11 +202,7 @@ type streamedDiffVarintPostings struct {
 }
 
 func newStreamedDiffVarintPostings(input []byte) (closeablePostings, error) {
-	r, err := extsnappy.Compressor.DecompressByteReader(bytes.NewBuffer(input))
-	if err != nil {
-		return nil, fmt.Errorf("decompressing snappy postings: %w", err)
-	}
-
+	r := decompressByteReader(bytes.NewBuffer(input))
 	return &streamedDiffVarintPostings{sr: r}, nil
 }
 
@@ -348,12 +401,8 @@ func snappyStreamedEncode(postingsLength int, diffVarintPostings []byte) ([]byte
 		return nil, fmt.Errorf("short-write streamed snappy header")
 	}
 
-	sw, err := extsnappy.Compressor.Compress(compressedBuf)
-	if err != nil {
-		return nil, fmt.Errorf("creating snappy compressor: %w", err)
-	}
-
-	_, err = sw.Write(diffVarintPostings)
+	sw := compress(compressedBuf)
+	_, err := sw.Write(diffVarintPostings)
 	if err != nil {
 		return nil, err
 	}

@@ -50,12 +50,6 @@ func (c *compressor) Compress(w io.Writer) (io.WriteCloser, error) {
 	return writeCloser{wr, &c.writersPool}, nil
 }
 
-func (c *compressor) DecompressByteReader(r io.Reader) (io.ByteReader, error) {
-	dr := c.readersPool.Get().(*snappy.Reader)
-	dr.Reset(r)
-	return reader{dr, &c.readersPool}, nil
-}
-
 func (c *compressor) Decompress(r io.Reader) (io.Reader, error) {
 	dr := c.readersPool.Get().(*snappy.Reader)
 	dr.Reset(r)
@@ -95,14 +89,4 @@ func (r reader) Read(p []byte) (n int, err error) {
 		r.pool.Put(r.reader)
 	}
 	return n, err
-}
-
-func (r reader) ReadByte() (n byte, err error) {
-	n, err = r.reader.ReadByte()
-	if err == io.EOF {
-		r.reader.Reset(nil)
-		r.pool.Put(r.reader)
-	}
-	return n, err
-
 }
