@@ -23,6 +23,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6352](https://github.com/thanos-io/thanos/pull/6352) Store: Expose store gateway query stats in series response hints.
 - [#6420](https://github.com/thanos-io/thanos/pull/6420) Index Cache: Cache expanded postings.
 - [#6441](https://github.com/thanos-io/thanos/pull/6441) Compact: Compactor will set `index_stats` in `meta.json` file with max series and chunk size information.
+- [#6466](https://github.com/thanos-io/thanos/pull/6466) Mixin (Receive): add limits alerting for configuration reload and meta-monitoring.
 
 ### Fixed
 - [#6456](https://github.com/thanos-io/thanos/pull/6456) Store: fix crash when computing set matches from regex pattern
@@ -397,7 +398,6 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#4874](https://github.com/thanos-io/thanos/pull/4874) Query: Add `--endpoint-strict` flag to statically configure Thanos API server endpoints. It is similar to `--store-strict` but supports passing any Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI.
 - [#4868](https://github.com/thanos-io/thanos/pull/4868) Rule: Support ruleGroup limit introduced by Prometheus v2.31.0.
 - [#4897](https://github.com/thanos-io/thanos/pull/4897) Query: Add validation for querier address flags.
-- [#6466](https://github.com/thanos-io/thanos/pull/6466) Mixin (Receive): add limits alerting for configuration reload and meta-monitoring.
 
 ### Fixed
 
