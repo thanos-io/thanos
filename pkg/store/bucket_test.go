@@ -1235,6 +1235,38 @@ func benchmarkExpandedPostings(
 	}
 }
 
+func TestExpandedPostingsEmptyPostings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	id := uploadTestBlock(t, tmpDir, bkt, 100)
+
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling)
+	testutil.Ok(t, err)
+	b := &bucketBlock{
+		logger:            log.NewNopLogger(),
+		metrics:           newBucketStoreMetrics(nil),
+		indexHeaderReader: r,
+		indexCache:        noopCache{},
+		bkt:               bkt,
+		meta:              &metadata.Meta{BlockMeta: tsdb.BlockMeta{ULID: id}},
+		partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
+	}
+
+	indexr := newBucketIndexReader(b)
+	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
+	// Match nothing.
+	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
+	ps, err := indexr.ExpandedPostings(context.Background(), []*labels.Matcher{matcher1, matcher2}, NewBytesLimiterFactory(0)(nil))
+	testutil.Ok(t, err)
+	testutil.Equals(t, len(ps), 0)
+	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
+	testutil.Equals(t, 1, indexr.stats.cachedPostingsCompressions)
+}
+
 func TestBucketSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {

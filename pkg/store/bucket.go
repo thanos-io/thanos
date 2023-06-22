@@ -2190,6 +2190,12 @@ func (r *bucketIndexReader) reset() {
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
 func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
+	// Shortcut the case of `len(postingGroups) == 0`. It will only happen when no
+	// matchers specified, and we don't need to fetch expanded postings from cache.
+	if len(ms) == 0 {
+		return nil, nil
+	}
+
 	// Sort matchers to make sure we generate the same cache key.
 	sort.Slice(ms, func(i, j int) bool {
 		if ms[i].Type == ms[j].Type {
@@ -2229,6 +2235,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		// postings would return no postings anyway.
 		// E.g. label="non-existing-value" returns empty group.
 		if !pg.addAll && len(pg.addKeys) == 0 {
+			r.storeExpandedPostingsToCache(ms, index.EmptyPostings(), 0)
 			return nil, nil
 		}
 
@@ -2241,10 +2248,6 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		// We don't have any other way of pairing keys and fetched postings.
 		keys = append(keys, pg.addKeys...)
 		keys = append(keys, pg.removeKeys...)
-	}
-
-	if len(postingGroups) == 0 {
-		return nil, nil
 	}
 
 	// We only need special All postings if there are no other adds. If there are, we can skip fetching
@@ -2301,16 +2304,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
-
-	// Encode postings to cache. We compress and cache postings before adding
-	// 16 bytes padding in order to make compressed size smaller.
-	dataToCache, compressionDuration, compressionErrors, compressedSize := r.encodePostingsToCache(index.NewListPostings(ps), len(ps))
-	r.stats.cachedPostingsCompressions++
-	r.stats.cachedPostingsCompressionErrors += compressionErrors
-	r.stats.CachedPostingsCompressionTimeSum += compressionDuration
-	r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
-	r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(ps) * 4) // Estimate the posting list size.
-	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache)
+	r.storeExpandedPostingsToCache(ms, index.NewListPostings(ps), len(ps))
 
 	if len(ps) > 0 {
 		// As of version two all series entries are 16 byte padded. All references
@@ -2484,6 +2478,18 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 		}
 	}
 	return true, ps, nil
+}
+
+func (r *bucketIndexReader) storeExpandedPostingsToCache(ms []*labels.Matcher, ps index.Postings, length int) {
+	// Encode postings to cache. We compress and cache postings before adding
+	// 16 bytes padding in order to make compressed size smaller.
+	dataToCache, compressionDuration, compressionErrors, compressedSize := r.encodePostingsToCache(ps, length)
+	r.stats.cachedPostingsCompressions++
+	r.stats.cachedPostingsCompressionErrors += compressionErrors
+	r.stats.CachedPostingsCompressionTimeSum += compressionDuration
+	r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
+	r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(length * 4) // Estimate the posting list size.
+	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache)
 }
 
 var bufioReaderPool = sync.Pool{
