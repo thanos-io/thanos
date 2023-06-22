@@ -288,7 +288,7 @@ groups:
       description: Thanos Receive {{$labels.job}} is failing for {{$value | humanize}}% of meta monitoring queries.
       runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivelimitshighmetamonitoringqueriesfailurerate
       summary: Thanos Receive has not been able to update the number of head series.
-    expr: sum by(job) (increase(thanos_receive_metamonitoring_failed_queries_total{job=~".*thanos-receive.*"}[5m])) / 20) * 100 > 20
+    expr: (sum by(job) (increase(thanos_receive_metamonitoring_failed_queries_total{job=~".*thanos-receive.*"}[5m])) / 20) * 100 > 20
     for: 5m
     labels:
       severity: warning
