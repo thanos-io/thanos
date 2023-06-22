@@ -5,6 +5,7 @@
     httpErrorThreshold: 5,
     ingestionThreshold: 50,
     forwardErrorThreshold: 20,
+    metaMonitoringErrorThreshold: 20,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
     dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
@@ -142,6 +143,36 @@
             'for': '3h',
             labels: {
               severity: 'critical',
+            },
+          },
+          {
+            alert: 'ThanosReceiveLimitsConfigReloadFailure',
+            annotations: {
+              description: 'Thanos Receive {{$labels.job}}%s has not been able to reload the limits configuration.' % location,
+              summary: 'Thanos Receive has not been able to reload the limits configuration.',
+            },
+            expr: 'sum by(%(dimensions)s) (increase(thanos_receive_limits_config_reload_err_total{%(selector)s}[5m])) > 0' % thanos.receive,
+            'for': '5m',
+            labels: {
+              severity: 'warning',
+            },
+          },
+          {
+            alert: 'ThanosReceiveLimitsHighMetaMonitoringQueriesFailureRate',
+            annotations: {
+              description: 'Thanos Receive {{$labels.job}}%s is failing for {{$value | humanize}}%% of meta monitoring queries.' % location,
+              summary: 'Thanos Receive has not been able to update the number of head series.',
+            },
+            expr: |||
+              (
+                sum by(%(dimensions)s) (increase(thanos_receive_metamonitoring_failed_queries_total{%(selector)s}[5m])) 
+              / 
+                20
+              ) * 100 > %(metaMonitoringErrorThreshold)s # Values are updated every 15s, 20 times over 5 minutes.'
+            ||| % thanos.receive,
+            'for': '5m',
+            labels: {
+              severity: 'warning',
             },
           },
         ],
