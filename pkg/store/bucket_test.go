@@ -31,6 +31,7 @@ import (
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -1099,20 +1100,27 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	}()
 
 	logger := log.NewNopLogger()
+	ctx := context.Background()
 
-	appendTestData(t, h.Appender(context.Background()), series)
+	appendTestData(t, h.Appender(ctx), series)
 
-	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, "tmp"), os.ModePerm))
-	id := createBlockFromHead(t, filepath.Join(tmpDir, "tmp"), h)
+	dir := filepath.Join(tmpDir, "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+	id := createBlockFromHead(t, dir, h)
+	bdir := filepath.Join(dir, id.String())
+	meta, err := metadata.ReadFromDir(bdir)
+	testutil.Ok(t, err)
+	stats, err := block.GatherIndexHealthStats(logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+	testutil.Ok(t, err)
 
 	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, "tmp", id.String()), metadata.Thanos{
 		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: 0},
 		Source:     metadata.TestSource,
+		IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
 	}, nil)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, logger, bkt, bdir, metadata.NoneFunc))
 
 	return id
 }
@@ -1229,9 +1237,9 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil))
+				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false)
 				testutil.Ok(t, err)
-				testutil.Equals(t, c.expectedLen, len(p))
+				testutil.Equals(t, c.expectedLen, len(p.postings))
 			}
 		})
 	}
@@ -1262,9 +1270,10 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	// Match nothing.
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
-	ps, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil))
+	ctx := context.Background()
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false)
 	testutil.Ok(t, err)
-	testutil.Equals(t, len(ps), 0)
+	testutil.Equals(t, ps, (*lazyExpandedPostings)(nil))
 	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
 	testutil.Equals(t, 1, indexr.stats.cachedPostingsCompressions)
 }
@@ -1272,21 +1281,28 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 func TestBucketSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, chunkenc.ValFloat, false, samplesPerSeries, series, 1)
+		benchBucketSeries(t, chunkenc.ValFloat, false, false, samplesPerSeries, series, 1)
+	})
+}
+
+func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
+	tb := testutil.NewTB(t)
+	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+		benchBucketSeries(t, chunkenc.ValFloat, false, true, samplesPerSeries, series, 1)
 	})
 }
 
 func TestBucketHistogramSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, chunkenc.ValHistogram, false, samplesPerSeries, series, 1)
+		benchBucketSeries(t, chunkenc.ValHistogram, false, false, samplesPerSeries, series, 1)
 	})
 }
 
 func TestBucketSkipChunksSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, chunkenc.ValFloat, true, samplesPerSeries, series, 1)
+		benchBucketSeries(t, chunkenc.ValFloat, true, false, samplesPerSeries, series, 1)
 	})
 }
 
@@ -1294,7 +1310,7 @@ func BenchmarkBucketSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	// 10e6 samples = ~1736 days with 15s scrape
 	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, chunkenc.ValFloat, false, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
+		benchBucketSeries(t, chunkenc.ValFloat, false, false, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
 	})
 }
 
@@ -1302,11 +1318,11 @@ func BenchmarkBucketSkipChunksSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	// 10e6 samples = ~1736 days with 15s scrape
 	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, chunkenc.ValFloat, true, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
+		benchBucketSeries(t, chunkenc.ValFloat, true, false, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
 	})
 }
 
-func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk bool, samplesPerSeries, totalSeries int, requestedRatios ...float64) {
+func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, lazyExpandedPostings bool, samplesPerSeries, totalSeries int, requestedRatios ...float64) {
 	const numOfBlocks = 4
 
 	tmpDir := t.TempDir()
@@ -1322,12 +1338,6 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk b
 	)
 
 	extLset := labels.Labels{{Name: "ext1", Value: "1"}}
-	thanosMeta := metadata.Thanos{
-		Labels:     extLset.Map(),
-		Downsample: metadata.ThanosDownsample{Resolution: 0},
-		Source:     metadata.TestSource,
-	}
-
 	blockDir := filepath.Join(tmpDir, "tmp")
 
 	samplesPerSeriesPerBlock := samplesPerSeries / numOfBlocks
@@ -1355,19 +1365,33 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk b
 		})
 		id := createBlockFromHead(t, blockDir, head)
 		testutil.Ok(t, head.Close())
+		blockIDDir := filepath.Join(blockDir, id.String())
+		meta, err := metadata.ReadFromDir(blockIDDir)
+		testutil.Ok(t, err)
+		stats, err := block.GatherIndexHealthStats(logger, filepath.Join(blockIDDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		testutil.Ok(t, err)
+		thanosMeta := metadata.Thanos{
+			Labels:     extLset.Map(),
+			Downsample: metadata.ThanosDownsample{Resolution: 0},
+			Source:     metadata.TestSource,
+			IndexStats: metadata.IndexStats{
+				SeriesMaxSize: stats.SeriesMaxSize,
+				ChunkMaxSize:  stats.ChunkMaxSize,
+			},
+		}
 
 		// Histogram chunks are represented differently in memory and on disk. In order to
 		// have a precise comparison, we need to use the on-disk representation as the expected value
 		// instead of the in-memory one.
-		diskBlock, err := tsdb.OpenBlock(logger, path.Join(blockDir, id.String()), nil)
+		diskBlock, err := tsdb.OpenBlock(logger, blockIDDir, nil)
 		testutil.Ok(t, err)
 		series = append(series, storetestutil.ReadSeriesFromBlock(t, diskBlock, extLset, skipChunk)...)
 
-		meta, err := metadata.InjectThanos(logger, filepath.Join(blockDir, id.String()), thanosMeta, nil)
+		meta, err = metadata.InjectThanos(logger, blockIDDir, thanosMeta, nil)
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, meta.WriteToDir(logger, filepath.Join(blockDir, id.String())))
-		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
+		testutil.Ok(t, meta.WriteToDir(logger, blockIDDir))
+		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, blockIDDir, metadata.NoneFunc))
 	}
 
 	ibkt := objstore.WithNoopInstr(bkt)
@@ -1393,6 +1417,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk b
 		0,
 		WithLogger(logger),
 		WithChunkPool(chunkPool),
+		WithLazyExpandedPostings(lazyExpandedPostings),
 	)
 	testutil.Ok(t, err)
 
@@ -2702,6 +2727,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	wg := sync.WaitGroup{}
 	wg.Add(concurrency)
 
+	dummyCounter := promauto.NewCounter(prometheus.CounterOpts{})
 	for w := 0; w < concurrency; w++ {
 		go func() {
 			defer wg.Done()
@@ -2736,13 +2762,14 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					req,
 					chunksLimiter,
 					NewBytesLimiterFactory(0)(nil),
+					matchers,
 					nil,
 					false,
 					SeriesBatchSize,
 					dummyHistogram,
 					nil,
 				)
-				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter))
+				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter, false, dummyCounter))
 				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).
@@ -2797,9 +2824,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 				},
 			},
 		},
@@ -2814,9 +2842,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 				},
 			},
 		},
@@ -2834,9 +2863,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 				},
 			},
 		},
@@ -2852,14 +2882,16 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "bar",
-					addAll:  false,
-					addKeys: []string{"baz"},
+					name:     "bar",
+					addAll:   false,
+					addKeys:  []string{"baz"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "bar", "baz")},
 				},
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 				},
 			},
 		},
@@ -2896,9 +2928,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"), labels.MustNewMatcher(labels.MatchNotEqual, "foo", "baz")},
 				},
 			},
 		},
@@ -2923,9 +2956,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"), labels.MustNewMatcher(labels.MatchRegexp, "foo", "b.*")},
 				},
 			},
 		},
@@ -2940,9 +2974,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"), labels.MustNewMatcher(labels.MatchNotEqual, "foo", "")},
 				},
 			},
 		},
@@ -2957,9 +2992,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"), labels.MustNewMatcher(labels.MatchRegexp, "foo", ".+")},
 				},
 			},
 		},
@@ -2974,9 +3010,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    "foo",
-					addAll:  false,
-					addKeys: []string{"bar"},
+					name:     "foo",
+					addAll:   false,
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "foo", "bar|baz"), labels.MustNewMatcher(labels.MatchRegexp, "foo", "bar|buzz")},
 				},
 			},
 		},
@@ -2994,6 +3031,7 @@ func TestMatchersToPostingGroup(t *testing.T) {
 					name:       "foo",
 					addAll:     true,
 					removeKeys: []string{"bar", "baz"},
+					matchers:   []*labels.Matcher{labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"), labels.MustNewMatcher(labels.MatchNotEqual, "foo", "baz")},
 				},
 			},
 		},
@@ -3011,8 +3049,9 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:   labels.MetricName,
-					addAll: true,
+					name:     labels.MetricName,
+					addAll:   true,
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "__name__", ".*")},
 				},
 			},
 		},
@@ -3030,18 +3069,21 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    labels.MetricName,
-					addAll:  false,
-					addKeys: []string{"up"},
+					name:     labels.MetricName,
+					addAll:   false,
+					addKeys:  []string{"up"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 				},
 				{
-					name:    "cluster",
-					addAll:  false,
-					addKeys: []string{"us-east-1", "us-west-2"},
+					name:     "cluster",
+					addAll:   false,
+					addKeys:  []string{"us-east-1", "us-west-2"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchNotEqual, "cluster", "")},
 				},
 				{
-					name:   "job",
-					addAll: true,
+					name:     "job",
+					addAll:   true,
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "job", ".*")},
 				},
 			},
 		},
@@ -3062,19 +3104,22 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:    labels.MetricName,
-					addAll:  false,
-					addKeys: []string{"go_info", "up"},
+					name:     labels.MetricName,
+					addAll:   false,
+					addKeys:  []string{"go_info", "up"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchNotEqual, "__name__", "")},
 				},
 				{
-					name:    "cluster",
-					addAll:  false,
-					addKeys: []string{"us-east-1", "us-west-2"},
+					name:     "cluster",
+					addAll:   false,
+					addKeys:  []string{"us-east-1", "us-west-2"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchNotEqual, "cluster", "")},
 				},
 				{
-					name:    "job",
-					addAll:  false,
-					addKeys: []string{"prometheus", "thanos"},
+					name:     "job",
+					addAll:   false,
+					addKeys:  []string{"prometheus", "thanos"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchNotEqual, "job", "")},
 				},
 			},
 		},
@@ -3209,7 +3254,7 @@ func TestPostingGroupMerge(t *testing.T) {
 				slices.Sort(tc.group2.addKeys)
 				slices.Sort(tc.group2.removeKeys)
 			}
-			res := tc.group1.merge(tc.group2)
+			res := tc.group1.mergeKeys(tc.group2)
 			testutil.Equals(t, tc.expected, res)
 		})
 	}
@@ -3312,16 +3357,16 @@ func TestExpandedPostingsRace(t *testing.T) {
 			i := i
 			bb := bb
 			go func(i int, bb *bucketBlock) {
-				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil))
+				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false)
 				testutil.Ok(t, err)
 				defer wg.Done()
 
 				l.Lock()
 				defer l.Unlock()
 				if previousRefs[i] != nil {
-					testutil.Equals(t, previousRefs[i], refs)
+					testutil.Equals(t, previousRefs[i], refs.postings)
 				} else {
-					previousRefs[i] = refs
+					previousRefs[i] = refs.postings
 				}
 			}(i, bb)
 		}

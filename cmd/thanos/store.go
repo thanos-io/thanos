@@ -88,6 +88,7 @@ type storeConfig struct {
 	reqLogConfig                *extflag.PathOrContent
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
+	lazyExpandedPostingsEnabled bool
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -181,6 +182,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").DurationVar(&sc.lazyIndexReaderIdleTimeout)
+
+	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
+		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
 
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&sc.disableWeb)
 
@@ -382,6 +386,7 @@ func runStore(
 			}
 			return conf.estimatedMaxChunkSize
 		}),
+		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
 	}
 
 	if conf.debugLogging {
