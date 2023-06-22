@@ -163,13 +163,8 @@
               description: 'Thanos Receive {{$labels.job}}%s is failing for {{$value | humanize}}%% of meta monitoring queries.' % location,
               summary: 'Thanos Receive has not been able to update the number of head series.',
             },
-            expr: |||
-              (
-                sum by(%(dimensions)s) (increase(thanos_receive_metamonitoring_failed_queries_total{%(selector)s}[5m])) 
-              / 
-                20
-              ) * 100 > %(metaMonitoringErrorThreshold)s # Values are updated every 15s, 20 times over 5 minutes.'
-            ||| % thanos.receive,
+            // Values are updated every 15s, 20 times over 5 minutes.
+            expr: '(sum by(%(dimensions)s) (increase(thanos_receive_metamonitoring_failed_queries_total{%(selector)s}[5m])) / 20) * 100 > %(metaMonitoringErrorThreshold)s' % thanos.receive,
             'for': '5m',
             labels: {
               severity: 'warning',
