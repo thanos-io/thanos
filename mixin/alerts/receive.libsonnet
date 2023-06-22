@@ -170,6 +170,18 @@
               severity: 'warning',
             },
           },
+          {
+            alert: 'ThanosReceiveTenantLimitedByHeadSeries',
+            annotations: {
+              description: 'Thanos Receive tenant {{$labels.tenant}}%s is limited by head series.' % location,
+              summary: 'A Thanos Receive tenant is limited by head series.',
+            },
+            expr: 'sum by(%(dimensions)s, tenant) (increase(thanos_receive_head_series_limited_requests_total{%(selector)s}[5m])) > 0' % thanos.receive,
+            'for': '5m',
+            labels: {
+              severity: 'warning',
+            },
+          },
         ],
       },
     ],
