@@ -92,6 +92,6 @@ Additionally, we allowed unlimited retention of metrics since the cost of object
 
 ## Wrapping up and next steps
 
-[Michael Hoffmann](https://github.com/MichaHoffmann) is working on other optimizations in the query engine that we will be contributing upstream. You can follow some of this work on the query engine (https://github.com/thanos-io/promql-engine).
+[Michael Hoffmann](https://github.com/MichaHoffmann) is working on other optimizations in the query engine that we will be contributing upstream. You can follow some of this work on the [query engine](https://github.com/thanos-io/promql-engine).
 
 With such remarkable results, we are excited about the next steps, which is to be the first Thanos service. We will also continue to contribute to Thanos, and hope to have dedicated members of our OSPO in the future working in the Thanos community. A very vibrant and helpful community, we have already made contributions to. We will start on the productization work later this year, so stay tuned for our public beta next year. Furthermore, we are also seeking private beta testers who are interested in a cost-effective, truly open source Prometheus service which can run across 11 clouds and over 160+ regions, please reach out to me. 
