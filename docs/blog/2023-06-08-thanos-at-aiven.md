@@ -95,7 +95,7 @@ We are also paying roughly 25% for the storage costs. M3DB has a total of 54TB o
 * Thanos with 2 years retention: $27,955
 * Thanos with 3 years retention: $33,423
 
-As you can see, the cost savings are significant here. [Alexander Rickardsson](https://github.com/alxric) implemented AZ awareness in Thanos upstream now, which reduced our replication factor from 3 to 2 on Google Cloud Platform. https://github.com/thanos-io/thanos/pull/6369#event-9357572391 
+As you can see, the cost savings are significant here. Plus, there is ongoing work for further cost optimizations in Thanos. For example, [Alexander Rickardsson](https://github.com/alxric) implemented AZ awareness in Thanos upstream now, which reduced our replication factor from 3 to 2 on Google Cloud Platform. https://github.com/thanos-io/thanos/pull/6369#event-9357572391 
 
 ## Performance Gains
 
