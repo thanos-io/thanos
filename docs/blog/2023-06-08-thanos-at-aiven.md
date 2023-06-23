@@ -86,7 +86,7 @@ THANOS TOTAL | | $14,942.68
 
 We are also paying roughly 25% for the storage costs. M3DB has a total of 54TB of storage provisioned today, at a cost of $4320 per month. We could house 216TB of storage for the same cost with Thanos. We are currently generating about 750GB per day, which means we can keep almost a year of metrics for the same cost as M3DB. Additionally, we are backing up M3DB which is using 33TB of object storage at a cost of $1,320 per month. With object storage, we have the added cost for the networking, this is around $1800 per month in additional costs. Here are our estimated costs:
 
-* M3: $38480
+* M3 with 30 days of retention: $38480
 
 * Thanos without any historical data in storage: $16,939
 * Thanos with one month retention in object storage: $17,368
