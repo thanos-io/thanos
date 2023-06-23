@@ -28,28 +28,11 @@ With these options, we had to discount Mimir even though it’s great technology
 
 We began the process with creating a plan on how we would test the solution to see how it met our needs. This would be a Proof of Concept (POC) to see if it were feasible. Here was our basic setup today
 
-  ```mermaid
----
-title: "Aiven Thanos Current Architecture"
----
-flowchart
-	1[("Customer Databases")] -->|"Telegraf"| 2((("Kafka")))
-	style 1 stroke-width: 2px
-	2 -->|"Telegraf"| 3(["Thanos Routing Reciever"])
-	3 ==>|"AZ-aware ketama hashring"| 4(["Thanos Ingesting Receiver"])
-	113702["Thanos Compactor"] --> 141231[("Google Cloud Storage (Object Store)")]
-	4 --> 141231
-	596267{{"Grafana"}} --> 156003(["Thanos Query Frontend"])
-	814016["VMAlert"] --> 156003
-	814016 --> 812224["Alertmanager"]
-	156003 --> 907649["Thanos Query"]
-	907649 --> 209978["Thanos Store"]
-	907649 --> 4
-	209978 --> 141231
 
-%% Mermaid Flow Diagram 
-```
+
 This is the high level overview of our current Thanos architecture. 
+
+![Aiven Thanos Architecture](img/aiven-thanos-architecture.png)
 
 As you can see in our architecture, we are using Telegraf since it supports monitoring the many technologies which Aiven provides in a smaller footprint. Although we support Prometheus scraping for our users, internally we push metrics to M3DB via influx line protocol. We use additional technologies together, as you can also see. We had several options where we could introduce Thanos into the mix. Furthermore, we decided to continue using Telegraf, but sending directly via remote write, versus using the Influx protocol. This created one of our first challenges, which is that some of our metrics are delayed due to the number of clouds we support. When a metric is written in the future, the ingesters would crash. It just so happened someone was just fixing this upstream (https://github.com/thanos-io/thanos/pull/6195). 
 
