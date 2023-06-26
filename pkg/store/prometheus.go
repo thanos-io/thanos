@@ -30,17 +30,19 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
@@ -259,13 +261,13 @@ func (p *PrometheusStore) queryPrometheus(
 	opts := promclient.QueryOptions{}
 	step := r.QueryHints.StepMillis / 1000
 	if step != 0 {
-		result, _, err := p.client.QueryRange(s.Context(), p.base, r.ToPromQL(), r.MinTime, r.MaxTime, step, opts)
+		result, _, _, err := p.client.QueryRange(s.Context(), p.base, r.ToPromQL(), r.MinTime, r.MaxTime, step, opts)
 		if err != nil {
 			return err
 		}
 		matrix = result
 	} else {
-		vector, _, err := p.client.QueryInstant(s.Context(), p.base, r.ToPromQL(), timestamp.Time(r.MaxTime), opts)
+		vector, _, _, err := p.client.QueryInstant(s.Context(), p.base, r.ToPromQL(), timestamp.Time(r.MaxTime), opts)
 		if err != nil {
 			return err
 		}
@@ -753,6 +755,24 @@ func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
 	}
 
 	return labelset
+}
+
+func (p *PrometheusStore) TSDBInfos() []infopb.TSDBInfo {
+	labels := p.LabelSet()
+	if len(labels) == 0 {
+		return []infopb.TSDBInfo{}
+	}
+
+	mint, maxt := p.Timestamps()
+	return []infopb.TSDBInfo{
+		{
+			Labels: labelpb.ZLabelSet{
+				Labels: labels[0].Labels,
+			},
+			MinTime: mint,
+			MaxTime: maxt,
+		},
+	}
 }
 
 func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {

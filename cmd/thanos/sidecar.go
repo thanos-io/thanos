@@ -272,6 +272,7 @@ func runSidecar(
 						MaxTime:                      maxt,
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
+						TsdbInfos:                    promStore.TSDBInfos(),
 					}
 				}
 				return nil

@@ -25,9 +25,19 @@ func init() {
 // Copied from Prometheus querier.go, removed check for Prometheus wrapper.
 // Returns list of values that can regex matches.
 func findSetMatches(pattern string) []string {
+	if len(pattern) == 0 {
+		return nil
+	}
 	escaped := false
 	sets := []*strings.Builder{{}}
-	for i := 0; i < len(pattern); i++ {
+	init := 0
+	end := len(pattern)
+	// If the regex is wrapped in a group we can remove the first and last parentheses
+	if pattern[init] == '(' && pattern[end-1] == ')' {
+		init++
+		end--
+	}
+	for i := init; i < end; i++ {
 		if escaped {
 			switch {
 			case isRegexMetaCharacter(pattern[i]):

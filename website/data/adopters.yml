@@ -1,5 +1,8 @@
 ---
 adopters:
+- name: Aiven
+  url: https://aiven.io
+  logo: aivenlogo.png
 - name: Infinite Devices
   url: https://infinimesh.io
   logo: infdevlogo.png
@@ -219,3 +222,6 @@ adopters:
 - name: CarTrade Tech
   url: https://www.cartradetech.com
   logo: cartradetech.png
+- name: DE-CIX
+  url: https://www.de-cix.net
+  logo: de-cix.png

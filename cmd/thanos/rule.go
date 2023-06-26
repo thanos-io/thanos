@@ -632,6 +632,7 @@ func runRule(
 						MaxTime:                      maxt,
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
+						TsdbInfos:                    tsdbStore.TSDBInfos(),
 					}
 				}
 				return nil

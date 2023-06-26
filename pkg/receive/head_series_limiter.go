@@ -106,7 +106,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 func (h *headSeriesLimit) QueryMetaMonitoring(ctx context.Context) error {
 	c := promclient.NewWithTracingClient(h.logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
 
-	vectorRes, _, err := c.QueryInstant(ctx, h.metaMonitoringURL, h.metaMonitoringQuery, time.Now(), promclient.QueryOptions{Deduplicate: true})
+	vectorRes, _, _, err := c.QueryInstant(ctx, h.metaMonitoringURL, h.metaMonitoringQuery, time.Now(), promclient.QueryOptions{Deduplicate: true})
 	if err != nil {
 		h.metaMonitoringErr.Inc()
 		return err
@@ -153,6 +153,11 @@ func (h *headSeriesLimit) isUnderLimit(tenant string) (bool, error) {
 	if !ok {
 		// Tenant has not been defined in config, so fallback to default.
 		limit = h.defaultLimit
+	}
+
+	// If tenant limit is 0 we treat it as unlimited.
+	if limit == 0 {
+		return true, nil
 	}
 
 	if v >= float64(limit) {

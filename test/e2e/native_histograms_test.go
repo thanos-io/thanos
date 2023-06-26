@@ -90,7 +90,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 
 	t.Run("query histogram rate and compare to Prometheus result", func(t *testing.T) {
 		query := func() string { return fmt.Sprintf("rate(%v[1m])", testHistogramMetricName) }
-		expected := instantQuery(t, ctx, prom1.Endpoint("http"), query, ts, promclient.QueryOptions{}, 1)
+		expected, _ := instantQuery(t, ctx, prom1.Endpoint("http"), query, ts, promclient.QueryOptions{}, 1)
 		expected[0].Metric["prometheus"] = "prom-ha"
 		expected[0].Timestamp = 0
 		queryAndAssert(t, ctx, querier.Endpoint("http"), query, ts, promclient.QueryOptions{Deduplicate: true}, expected)
@@ -106,9 +106,9 @@ func TestWriteNativeHistograms(t *testing.T) {
 	ingestor1 := e2ethanos.NewReceiveBuilder(e, "ingestor1").WithIngestionEnabled().WithNativeHistograms().Init()
 
 	h := receive.HashringConfig{
-		Endpoints: []string{
-			ingestor0.InternalEndpoint("grpc"),
-			ingestor1.InternalEndpoint("grpc"),
+		Endpoints: []receive.Endpoint{
+			{Address: ingestor0.InternalEndpoint("grpc")},
+			{Address: ingestor1.InternalEndpoint("grpc")},
 		},
 	}
 

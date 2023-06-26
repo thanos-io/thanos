@@ -48,6 +48,7 @@ func TestInfo(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
+		"",
 		nil,
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(store))

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/status"
 	"github.com/oklog/ulid"
@@ -63,6 +64,14 @@ func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []by
 
 func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
+}
+
+func (c *swappableCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte) {
+	c.ptr.StoreExpandedPostings(blockID, matchers, v)
+}
+
+func (c *swappableCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
+	return c.ptr.FetchExpandedPostings(ctx, blockID, matchers)
 }
 
 func (c *swappableCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
@@ -602,6 +611,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 	cases := map[string]struct {
 		maxChunksLimit uint64
 		maxSeriesLimit uint64
+		maxBytesLimit  int64
 		expectedErr    string
 		code           codes.Code
 	}{
@@ -619,6 +629,13 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			maxSeriesLimit: 1,
 			code:           codes.ResourceExhausted,
 		},
+		"should fail if the max bytes limit is exceeded - ResourceExhausted": {
+			maxChunksLimit: expectedChunks,
+			expectedErr:    "exceeded bytes limit",
+			maxSeriesLimit: 2,
+			maxBytesLimit:  1,
+			code:           codes.ResourceExhausted,
+		},
 	}
 
 	for testName, testData := range cases {
@@ -629,7 +646,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 			dir := t.TempDir()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(units.Base2Bytes(testData.maxBytesLimit)), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{

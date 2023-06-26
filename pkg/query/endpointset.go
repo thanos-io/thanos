@@ -527,9 +527,8 @@ func (e *EndpointSet) GetQueryAPIClients() []Client {
 	queryClients := make([]Client, 0, len(endpoints))
 	for _, er := range endpoints {
 		if er.HasQueryAPI() {
-			mint, maxt := er.timeRange()
 			client := querypb.NewQueryClient(er.cc)
-			queryClients = append(queryClients, NewClient(client, er.addr, mint, maxt, er.labelSets()))
+			queryClients = append(queryClients, NewClient(client, er.addr, er.TSDBInfos()))
 		}
 	}
 	return queryClients
@@ -637,6 +636,11 @@ type endpointRef struct {
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec) (*endpointRef, error) {
 	dialOpts := append(e.dialOpts, spec.dialOpts...)
+	// By default DialContext is non-blocking which means that any connection
+	// failure won't be reported/logged. Instead block until the connection is
+	// successfully established and return the details of the connection error
+	// if any.
+	dialOpts = append(dialOpts, grpc.WithReturnConnectionError())
 	conn, err := grpc.DialContext(ctx, spec.Addr(), dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
@@ -794,6 +798,18 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	defer er.mtx.RUnlock()
 
 	return er.timeRange()
+}
+
+func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return nil
+	}
+
+	// Currently, min/max time of only StoreAPI is being updated by all components.
+	return er.metadata.Store.TsdbInfos
 }
 
 func (er *endpointRef) timeRange() (int64, int64) {

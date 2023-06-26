@@ -11,8 +11,8 @@ Example command to run Querier:
 ```bash
 thanos query \
     --http-address     "0.0.0.0:9090" \
-    --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>"
+    --endpoint         "<store-api>:<grpc-port>" \
+    --endpoint         "<store-api2>:<grpc-port>"
 ```
 
 ## Querier use cases, why do I need this component?
@@ -71,8 +71,8 @@ If we configure Querier like this:
 thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --endpoint            "<store-api>:<grpc-port>" \
+    --endpoint            "<store-api2>:<grpc-port>" \
 ```
 
 And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
@@ -97,8 +97,8 @@ thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --query.replica-label "replicaX" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --endpoint            "<store-api>:<grpc-port>" \
+    --endpoint            "<store-api2>:<grpc-port>" \
 ```
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
@@ -513,6 +513,8 @@ Thanos Query also exports metrics about its own performance. You can find a list
 
 **Disclaimer**: this list is incomplete. The remaining metrics will be added over time.
 
-| Name                                    | Type      | Labels                | Description                                                                                                       |
-|-----------------------------------------|-----------|-----------------------|-------------------------------------------------------------------------------------------------------------------|
-| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
+| Name                                    | Type      | Labels                                          | Description                                                                                                       |
+|-----------------------------------------|-----------|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| grpc_client_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC client requests handled by this query instance (including errors)                                  |
+| grpc_server_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC server requests handled by this query instance (including errors)                                  |
+| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le                           | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
