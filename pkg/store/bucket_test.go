@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/prometheus/prometheus/tsdb/index"
 	"io"
 	"math"
 	"math/rand"
@@ -39,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/objstore"
