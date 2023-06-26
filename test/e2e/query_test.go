@@ -74,6 +74,127 @@ func sortResults(res model.Vector) {
 	})
 }
 
+func TestQueryServiceAttribute(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("queryserviceattr")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	newJaegerRunnable := e.Runnable("jaeger").
+		WithPorts(
+			map[string]int{
+				"http":                      16686,
+				"http.admin":                14269,
+				"jaeger.thrift-model.proto": 14250,
+				"jaeger.thrift":             14268,
+			}).
+		Init(e2e.StartOptions{
+			Image:     "jaegertracing/all-in-one:1.33",
+			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
+		})
+	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
+
+	otelcolConfig := fmt.Sprintf(`---
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
+exporters:
+  logging:
+    loglevel: debug
+  jaeger:
+    endpoint: %s
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+  pprof:
+  zpages:
+
+service:
+  extensions: [health_check,pprof,zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging, jaeger]`, newJaeger.InternalEndpoint("jaeger.thrift-model.proto"))
+
+	t.Log(otelcolConfig)
+
+	otelcol := e.Runnable("otelcol").WithPorts(map[string]int{
+		"grpc": 4317,
+		"http": 4318,
+	})
+
+	otelcolFuture := otelcol.Future()
+
+	testutil.Ok(t, os.WriteFile(filepath.Join(e.SharedDir(), "otelcol.yml"), []byte(otelcolConfig), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(filepath.Join(e.SharedDir(), "spans.json"), []byte(``), os.ModePerm))
+
+	otelcolRunnable := otelcolFuture.Init(e2e.StartOptions{
+		Image: "otel/opentelemetry-collector-contrib:0.80.0",
+		Volumes: []string{
+			fmt.Sprintf("%s:/otelcol.yml:ro", filepath.Join(e.SharedDir(), "otelcol.yml")),
+		},
+		Command: e2e.NewCommandWithoutEntrypoint("/otelcol-contrib", "--config", "/otelcol.yml"),
+	})
+
+	testutil.Ok(t, e2e.StartAndWaitReady(otelcolRunnable))
+
+	q := e2ethanos.NewQuerierBuilder(e, "queriertester").WithTracingConfig(fmt.Sprintf(`type: OTLP
+config:
+  client_type: grpc
+  insecure: true
+  endpoint: %s`, otelcolRunnable.InternalEndpoint("grpc"))).WithEnvVars(map[string]string{
+		"OTEL_RESOURCE_ATTRIBUTES": "service.name=thanos-query",
+	}).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	instantQuery(t,
+		context.Background(),
+		q.Endpoint("http"),
+		func() string { return "time()" },
+		time.Now,
+		promclient.QueryOptions{},
+		1)
+
+	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query")
+	request, err := http.NewRequest("GET", url, nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, runutil.Retry(1*time.Second, make(<-chan struct{}), func() error {
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return err
+		}
+
+		if response.StatusCode != http.StatusOK {
+			return errors.New("status code not OK")
+		}
+
+		defer response.Body.Close()
+
+		body, err := io.ReadAll(response.Body)
+		testutil.Ok(t, err)
+
+		resp := string(body)
+		if strings.Contains(resp, `"data":[]`) {
+			return errors.New("no data returned")
+		}
+
+		testutil.Assert(t, strings.Contains(resp, `"serviceName":"thanos-query"`))
+		return nil
+	}))
+}
+
 func TestSidecarNotReady(t *testing.T) {
 	t.Parallel()
 
