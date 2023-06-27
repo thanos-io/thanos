@@ -38,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/objstore"
@@ -2600,4 +2601,15 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 			})
 		}
 	}
+}
+
+func TestExpandPostingsWithContextCancel(t *testing.T) {
+	p := index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cancel()
+	res, err := ExpandPostingsWithContext(ctx, p)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, context.Canceled, err)
+	testutil.Equals(t, []storage.SeriesRef(nil), res)
 }

@@ -20,11 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weaveworks/common/httpgrpc"
-
-	"github.com/cespare/xxhash"
-
 	"github.com/alecthomas/units"
+	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
@@ -38,14 +35,13 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/weaveworks/common/httpgrpc"
 	"golang.org/x/sync/errgroup"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/objstore"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -2296,11 +2292,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	}
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
-
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	ps, err := index.ExpandPostings(result)
+	ps, err := ExpandPostingsWithContext(ctx, result)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
@@ -2320,6 +2312,17 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		}
 	}
 	return ps, nil
+}
+
+// ExpandPostingsWithContext returns the postings expanded as a slice and considers context.
+func ExpandPostingsWithContext(ctx context.Context, p index.Postings) (res []storage.SeriesRef, err error) {
+	for p.Next() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		res = append(res, p.At())
+	}
+	return res, p.Err()
 }
 
 // postingGroup keeps posting keys for single matcher. Logical result of the group is:
@@ -2458,7 +2461,7 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 		return false, nil, nil
 	}
 
-	ps, err := index.ExpandPostings(p)
+	ps, err := ExpandPostingsWithContext(ctx, p)
 	if err != nil {
 		level.Error(r.block.logger).Log("msg", "failed to expand cached expanded postings, refetch postings", "id", r.block.meta.ULID.String())
 		return false, nil, nil
