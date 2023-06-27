@@ -10,31 +10,40 @@ import (
 
 type defaultMetrics struct {
 	requestDuration      *prometheus.HistogramVec
-	requestSize          *prometheus.SummaryVec
+	requestSize          *prometheus.HistogramVec
 	requestsTotal        *prometheus.CounterVec
-	responseSize         *prometheus.SummaryVec
+	responseSize         *prometheus.HistogramVec
 	inflightHTTPRequests *prometheus.GaugeVec
 }
 
-func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels []string) *defaultMetrics {
-	if buckets == nil {
-		buckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
+func newDefaultMetrics(reg prometheus.Registerer, durationBuckets []float64, extraLabels []string) *defaultMetrics {
+	if durationBuckets == nil {
+		durationBuckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
 	}
+
+	bytesBuckets := prometheus.ExponentialBuckets(64, 2, 10)
+	bucketFactor := 1.1
+	maxBuckets := uint32(100)
 
 	return &defaultMetrics{
 		requestDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "http_request_duration_seconds",
-				Help:    "Tracks the latencies for HTTP requests.",
-				Buckets: buckets,
+				Name:                           "http_request_duration_seconds",
+				Help:                           "Tracks the latencies for HTTP requests.",
+				Buckets:                        durationBuckets,
+				NativeHistogramBucketFactor:    bucketFactor,
+				NativeHistogramMaxBucketNumber: maxBuckets,
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
 
-		requestSize: promauto.With(reg).NewSummaryVec(
-			prometheus.SummaryOpts{
-				Name: "http_request_size_bytes",
-				Help: "Tracks the size of HTTP requests.",
+		requestSize: promauto.With(reg).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:                           "http_request_size_bytes",
+				Help:                           "Tracks the size of HTTP requests.",
+				Buckets:                        bytesBuckets,
+				NativeHistogramBucketFactor:    bucketFactor,
+				NativeHistogramMaxBucketNumber: maxBuckets,
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
@@ -47,10 +56,13 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
 
-		responseSize: promauto.With(reg).NewSummaryVec(
-			prometheus.SummaryOpts{
-				Name: "http_response_size_bytes",
-				Help: "Tracks the size of HTTP responses.",
+		responseSize: promauto.With(reg).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:                           "http_response_size_bytes",
+				Help:                           "Tracks the size of HTTP responses.",
+				Buckets:                        bytesBuckets,
+				NativeHistogramBucketFactor:    bucketFactor,
+				NativeHistogramMaxBucketNumber: maxBuckets,
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),

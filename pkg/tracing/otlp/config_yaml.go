@@ -31,6 +31,8 @@ type Config struct {
 	RetryConfig        retryConfig       `yaml:"retry_config"`
 	Headers            map[string]string `yaml:"headers"`
 	TLSConfig          exthttp.TLSConfig `yaml:"tls_config"`
+	SamplerType        string            `yaml:"sampler_type"`
+	SamplerParam       string            `yaml:"sampler_param"`
 }
 
 func traceGRPCOptions(config Config) []otlptracegrpc.Option {

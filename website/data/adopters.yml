@@ -213,3 +213,12 @@ adopters:
 - name: Open Systems
   url: https://www.open-systems.com
   logo: open-systems.png
+- name: Deno
+  url: https://deno.com/deploy
+  logo: deno.png
+- name: CarTrade Tech
+  url: https://www.cartradetech.com
+  logo: cartradetech.png
+- name: DE-CIX
+  url: https://www.de-cix.net
+  logo: de-cix.png

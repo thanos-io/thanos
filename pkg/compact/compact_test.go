@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +24,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -594,4 +596,80 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			return
 		}
 	}
+}
+
+func TestNoMarkFilterAtomic(t *testing.T) {
+	ctx := context.TODO()
+	logger := log.NewLogfmtLogger(io.Discard)
+
+	m := extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"state"})
+
+	blocksNum := 200
+	bkt := objstore.NewInMemBucket()
+
+	metas := make(map[ulid.ULID]*metadata.Meta, blocksNum)
+
+	noMarkCounter := promauto.NewCounter(prometheus.CounterOpts{
+		Name: "coolcounter",
+	})
+
+	for i := 0; i < blocksNum; i++ {
+		var meta metadata.Meta
+		meta.Version = 1
+		meta.ULID = ulid.MustNew(uint64(i), nil)
+		metas[meta.ULID] = &meta
+
+		var buf bytes.Buffer
+		testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+		testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+		if i%2 == 0 {
+			testutil.Ok(
+				t,
+				block.MarkForNoCompact(ctx, logger, bkt, meta.ULID, metadata.NoCompactReason("test"), "nodetails", noMarkCounter),
+			)
+		}
+	}
+
+	slowBucket := objstore.WithNoopInstr(objstore.WithDelay(bkt, time.Millisecond*200))
+	f := NewGatherNoCompactionMarkFilter(logger, slowBucket, 10)
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	g := &run.Group{}
+
+	// Fill the map initially.
+	testutil.Ok(t, f.Filter(ctx, metas, m, nil))
+	testutil.Assert(t, len(f.NoCompactMarkedBlocks()) > 0, "expected to always have not compacted blocks")
+
+	g.Add(func() error {
+		for {
+			if ctx.Err() != nil {
+				return nil
+			}
+			if err := f.Filter(ctx, metas, m, nil); err != nil && !errors.Is(err, context.Canceled) {
+				testutil.Ok(t, err)
+			}
+		}
+	}, func(err error) {
+		cancel()
+	})
+
+	g.Add(func() error {
+		for {
+			if ctx.Err() != nil {
+				return nil
+			}
+
+			if len(f.NoCompactMarkedBlocks()) == 0 {
+				return fmt.Errorf("expected to always have not compacted blocks")
+			}
+		}
+	}, func(err error) {
+		cancel()
+	})
+
+	time.AfterFunc(10*time.Second, func() {
+		cancel()
+	})
+	testutil.Ok(t, g.Run())
 }

@@ -6,6 +6,7 @@ package query
 import (
 	"context"
 	"io"
+	"math"
 	"time"
 
 	"github.com/go-kit/log"
@@ -15,9 +16,10 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/util/stats"
-	"github.com/thanos-community/promql-engine/api"
+	"github.com/thanos-io/promql-engine/api"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -34,20 +36,23 @@ type Opts struct {
 type Client struct {
 	querypb.QueryClient
 	address   string
-	maxt      int64
-	labelSets []labels.Labels
+	tsdbInfos infopb.TSDBInfos
 }
 
 // NewClient creates a new Client.
-func NewClient(queryClient querypb.QueryClient, address string, maxt int64, labelSets []labels.Labels) Client {
-	return Client{QueryClient: queryClient, address: address, maxt: maxt, labelSets: labelSets}
+func NewClient(queryClient querypb.QueryClient, address string, tsdbInfos infopb.TSDBInfos) Client {
+	return Client{
+		QueryClient: queryClient,
+		address:     address,
+		tsdbInfos:   tsdbInfos,
+	}
 }
 
-func (q Client) MaxT() int64 { return q.maxt }
+func (c Client) GetAddress() string { return c.address }
 
-func (q Client) LabelSets() []labels.Labels { return q.labelSets }
-
-func (q Client) GetAddress() string { return q.address }
+func (c Client) LabelSets() []labels.Labels {
+	return c.tsdbInfos.LabelSets()
+}
 
 type remoteEndpoints struct {
 	logger     log.Logger
@@ -73,46 +78,93 @@ func (r remoteEndpoints) Engines() []api.RemoteEngine {
 }
 
 type remoteEngine struct {
-	Client
 	opts   Opts
 	logger log.Logger
+
+	client Client
 }
 
 func newRemoteEngine(logger log.Logger, queryClient Client, opts Opts) api.RemoteEngine {
 	return &remoteEngine{
 		logger: logger,
-		Client: queryClient,
+		client: queryClient,
 		opts:   opts,
 	}
 }
 
+// MinT returns the minimum timestamp that is safe to query in the remote engine.
+// In order to calculate it, we find the highest min time for each label set, and we return
+// the lowest of those values.
+// Calculating the MinT this way makes remote queries resilient to cases where one tsdb replica would delete
+// a block due to retention before other replicas did the same.
+// See https://github.com/thanos-io/promql-engine/issues/187.
+func (r remoteEngine) MinT() int64 {
+	var (
+		hashBuf               = make([]byte, 0, 128)
+		highestMintByLabelSet = make(map[uint64]int64)
+	)
+	for _, lset := range r.infosWithoutReplicaLabels() {
+		key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+		lsetMinT, ok := highestMintByLabelSet[key]
+		if !ok {
+			highestMintByLabelSet[key] = lset.MinTime
+			continue
+		}
+
+		if lset.MinTime > lsetMinT {
+			highestMintByLabelSet[key] = lset.MinTime
+		}
+	}
+
+	var mint int64 = math.MaxInt64
+	for _, m := range highestMintByLabelSet {
+		if m < mint {
+			mint = m
+		}
+	}
+
+	return mint
+}
+
+func (r remoteEngine) MaxT() int64 {
+	return r.client.tsdbInfos.MaxT()
+}
+
 func (r remoteEngine) LabelSets() []labels.Labels {
+	return r.infosWithoutReplicaLabels().LabelSets()
+}
+
+func (r remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 	replicaLabelSet := make(map[string]struct{})
 	for _, lbl := range r.opts.ReplicaLabels {
 		replicaLabelSet[lbl] = struct{}{}
 	}
 
 	// Strip replica labels from the result.
-	labelSets := r.Client.LabelSets()
-	result := make([]labels.Labels, 0, len(labelSets))
-	for _, labelSet := range labelSets {
-		var builder labels.ScratchBuilder
-		for _, lbl := range labelSet {
+	infos := make(infopb.TSDBInfos, 0, len(r.client.tsdbInfos))
+	var builder labels.ScratchBuilder
+	for _, info := range r.client.tsdbInfos {
+		builder.Reset()
+		for _, lbl := range info.Labels.Labels {
 			if _, ok := replicaLabelSet[lbl.Name]; ok {
 				continue
 			}
 			builder.Add(lbl.Name, lbl.Value)
 		}
-		result = append(result, builder.Labels())
+		infos = append(infos, infopb.NewTSDBInfo(
+			info.MinTime,
+			info.MaxTime,
+			labelpb.ZLabelsFromPromLabels(builder.Labels())),
+		)
 	}
 
-	return result
+	return infos
 }
 
-func (r remoteEngine) NewRangeQuery(opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (r remoteEngine) NewRangeQuery(_ context.Context, opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
-		client: r.Client,
+		client: r.client,
 		opts:   r.opts,
 
 		qs:       qs,
@@ -184,17 +236,18 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			continue
 		}
 		series := promql.Series{
-			Metric: labelpb.ZLabelsToPromLabels(ts.Labels),
-			Points: make([]promql.Point, 0, len(ts.Samples)),
+			Metric:     labelpb.ZLabelsToPromLabels(ts.Labels),
+			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
+			Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
 		}
 		for _, s := range ts.Samples {
-			series.Points = append(series.Points, promql.Point{
+			series.Floats = append(series.Floats, promql.FPoint{
 				T: s.Timestamp,
-				V: s.Value,
+				F: s.Value,
 			})
 		}
 		for _, h := range ts.Histograms {
-			series.Points = append(series.Points, promql.Point{
+			series.Histograms = append(series.Histograms, promql.HPoint{
 				T: h.Timestamp,
 				H: prompb.HistogramProtoToFloatHistogram(h),
 			})
@@ -206,24 +259,16 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	return &promql.Result{Value: result}
 }
 
-func (r *remoteQuery) Close() {
-	r.Cancel()
-}
+func (r *remoteQuery) Close() { r.Cancel() }
 
-func (r *remoteQuery) Statement() parser.Statement {
-	return nil
-}
+func (r *remoteQuery) Statement() parser.Statement { return nil }
 
-func (r *remoteQuery) Stats() *stats.Statistics {
-	return nil
-}
+func (r *remoteQuery) Stats() *stats.Statistics { return nil }
+
+func (r *remoteQuery) String() string { return r.qs }
 
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {
 		r.cancel()
 	}
-}
-
-func (r *remoteQuery) String() string {
-	return r.qs
 }

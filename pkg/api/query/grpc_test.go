@@ -47,7 +47,10 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		api := NewGRPCAPI(time.Now, nil, queryableCreator, test.engine, lookbackDeltaFunc, 0)
+		engineFactory := &QueryEngineFactory{
+			prometheusEngine: test.engine,
+		}
+		api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
 		t.Run("range_query", func(t *testing.T) {
 			rangeRequest := &querypb.QueryRangeRequest{
 				Query:            "metric",
@@ -97,11 +100,11 @@ type engineStub struct {
 	warns []error
 }
 
-func (e engineStub) NewInstantQuery(q storage.Queryable, opts *promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+func (e engineStub) NewInstantQuery(_ context.Context, q storage.Queryable, opts *promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
-func (e engineStub) NewRangeQuery(q storage.Queryable, opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 

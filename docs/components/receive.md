@@ -95,6 +95,47 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
+### AZ-aware Ketama hashring (experimental)
+
+In order to ensure even spread for replication over nodes in different availability-zones, you can choose to include az definition in your hashring config. If we for example have a 6 node cluster, spread over 3 different availability zones; A, B and C, we could use the following example `hashring.json`:
+
+```json
+[
+    {
+        "endpoints": [
+          {
+            "address": "127.0.0.1:10907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:11907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:12907",
+            "az": "C"
+          },
+          {
+            "address": "127.0.0.1:13907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:14907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:15907",
+            "az": "C"
+          }
+        ]
+    }
+]
+```
+
+This is only supported for the Ketama algorithm.
+
+**NOTE:** This feature is made available from v0.32 onwards. Receive can still operate with `endpoints` set to an array of IP strings in ketama mode. But to use AZ-aware hashring, you would need to migrate your existing hashring (and surrounding automation) to the new JSON structure mentioned above.
+
 ## Limits & gates (experimental)
 
 Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:
@@ -396,6 +437,14 @@ Flags:
                                  refer to the Tenant lifecycle management
                                  section in the Receive documentation:
                                  https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
+      --tsdb.too-far-in-future.time-window=0s
+                                 [EXPERIMENTAL] Configures the allowed time
+                                 window for ingesting samples too far in the
+                                 future. Disabled (0s) by defaultPlease note
+                                 enable this flag will reject samples in the
+                                 future of receive local NTP time + configured
+                                 duration due to clock skew in remote write
+                                 clients.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --version                  Show application version.
 

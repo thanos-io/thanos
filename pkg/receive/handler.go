@@ -98,6 +98,7 @@ type Options struct {
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
+	MaxBackoff        time.Duration
 	RelabelConfigs    []*relabel.Config
 	TSDBStats         TSDBStats
 	Limiter           *Limiter
@@ -148,7 +149,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
-			Max:    30 * time.Second,
+			Max:    o.MaxBackoff,
 			Jitter: true,
 		},
 		Limiter: o.Limiter,
