@@ -11,6 +11,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 
@@ -218,7 +219,13 @@ func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 // truncateExtLabels truncates the stringify external labels with the format of {labels..}.
 func truncateExtLabels(s string, threshold int) string {
 	if len(s) > threshold {
-		return fmt.Sprintf("%s}", s[:threshold-1])
+		for cut := 1; cut < 4; cut++ {
+			for cap := 1; cap < 4; cap++ {
+				if utf8.ValidString(s[threshold-cut-cap : threshold-cut]) {
+					return fmt.Sprintf("%s}", s[:threshold-cut])
+				}
+			}
+		}
 	}
 	return s
 }
@@ -520,9 +527,8 @@ func (e *EndpointSet) GetQueryAPIClients() []Client {
 	queryClients := make([]Client, 0, len(endpoints))
 	for _, er := range endpoints {
 		if er.HasQueryAPI() {
-			_, maxt := er.timeRange()
 			client := querypb.NewQueryClient(er.cc)
-			queryClients = append(queryClients, NewClient(client, er.addr, maxt, er.labelSets()))
+			queryClients = append(queryClients, NewClient(client, er.addr, er.TSDBInfos()))
 		}
 	}
 	return queryClients
@@ -787,6 +793,18 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	defer er.mtx.RUnlock()
 
 	return er.timeRange()
+}
+
+func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return nil
+	}
+
+	// Currently, min/max time of only StoreAPI is being updated by all components.
+	return er.metadata.Store.TsdbInfos
 }
 
 func (er *endpointRef) timeRange() (int64, int64) {

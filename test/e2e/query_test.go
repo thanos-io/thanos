@@ -598,7 +598,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
 	testutil.Ok(t, err)
 
-	// Preparing 2 different blocks for the tests.
+	// Preparing 3 different blocks for the tests.
 	{
 		blockSizes := []struct {
 			samples int
@@ -607,6 +607,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		}{
 			{samples: 10, series: 1, name: "one_series"},
 			{samples: 10, series: 1001, name: "thousand_one_series"},
+			{samples: 10, series: 10001, name: "inf_series"},
 		}
 		now := time.Now()
 		externalLabels := labels.FromStrings("prometheus", "p1", "replica", "0")
@@ -644,9 +645,12 @@ func TestQueryStoreMetrics(t *testing.T) {
 		"",
 		nil,
 	)
-	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).Init()
+
+	sampleBuckets := []float64{100, 1000, 10000, 100000}
+	seriesBuckets := []float64{10, 100, 1000, 10000}
+	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).WithTelemetryQuantiles(nil, sampleBuckets, seriesBuckets).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querier))
-	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(3), "thanos_blocks_meta_synced"))
 
 	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
 	{
@@ -662,6 +666,13 @@ func TestQueryStoreMetrics(t *testing.T) {
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, 1001)
+		testutil.Ok(t, err)
+
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+			return "max_over_time(inf_series[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 10001)
 		testutil.Ok(t, err)
 	}
 
@@ -701,6 +712,24 @@ func TestQueryStoreMetrics(t *testing.T) {
 			Value: model.SampleValue(1),
 		},
 	})
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='+Inf',series_le='+Inf'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "storemetrics01-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "+Inf",
+				"series_le":  "+Inf",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/5033.

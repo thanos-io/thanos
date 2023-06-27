@@ -136,10 +136,10 @@ func TestReceive(t *testing.T) {
 		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().Init()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{
-				i1.InternalEndpoint("grpc"),
-				i2.InternalEndpoint("grpc"),
-				i3.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: i1.InternalEndpoint("grpc")},
+				{Address: i2.InternalEndpoint("grpc")},
+				{Address: i3.InternalEndpoint("grpc")},
 			},
 		}
 
@@ -236,15 +236,15 @@ func TestReceive(t *testing.T) {
 
 		// Setup distributors
 		r2 := e2ethanos.NewReceiveBuilder(e, "r2").WithRouting(2, receive.HashringConfig{
-			Endpoints: []string{
-				i2.InternalEndpoint("grpc"),
-				i3.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: i2.InternalEndpoint("grpc")},
+				{Address: i3.InternalEndpoint("grpc")},
 			},
 		}).Init()
 		r1 := e2ethanos.NewReceiveBuilder(e, "r1").WithRouting(2, receive.HashringConfig{
-			Endpoints: []string{
-				i1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: i1.InternalEndpoint("grpc")},
+				{Address: r2.InternalEndpoint("grpc")},
 			},
 		}).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1, r2))
@@ -330,10 +330,10 @@ func TestReceive(t *testing.T) {
 		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: r1.InternalEndpoint("grpc")},
+				{Address: r2.InternalEndpoint("grpc")},
+				{Address: r3.InternalEndpoint("grpc")},
 			},
 		}
 
@@ -402,10 +402,10 @@ func TestReceive(t *testing.T) {
 		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: r1.InternalEndpoint("grpc")},
+				{Address: r2.InternalEndpoint("grpc")},
+				{Address: r3.InternalEndpoint("grpc")},
 			},
 		}
 
@@ -469,10 +469,10 @@ func TestReceive(t *testing.T) {
 		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: r1.InternalEndpoint("grpc")},
+				{Address: r2.InternalEndpoint("grpc")},
+				{Address: r3.InternalEndpoint("grpc")},
 			},
 		}
 
@@ -522,8 +522,8 @@ func TestReceive(t *testing.T) {
 		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: r1.InternalEndpoint("grpc")},
 			},
 		}
 
@@ -659,10 +659,10 @@ func TestReceive(t *testing.T) {
 		ingestor3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{
-				ingestor1.InternalEndpoint("grpc"),
-				ingestor2.InternalEndpoint("grpc"),
-				ingestor3.InternalEndpoint("grpc"),
+			Endpoints: []receive.Endpoint{
+				{Address: ingestor1.InternalEndpoint("grpc")},
+				{Address: ingestor2.InternalEndpoint("grpc")},
+				{Address: ingestor3.InternalEndpoint("grpc")},
 			},
 		}
 

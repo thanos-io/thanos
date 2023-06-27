@@ -116,6 +116,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	st := ptm("0")
 	ed := ptm("0.2")
 	qry, err := engine.NewRangeQuery(
+		context.Background(),
 		q,
 		&promql.QueryOpts{},
 		"sum(a) by (zzz)",
@@ -136,11 +137,11 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	exp := []promql.Series{
 		{
 			Metric: labels.FromStrings("zzz", "a"),
-			Points: []promql.Point{{T: 100, V: 1}, {T: 200, V: 5}},
+			Floats: []promql.FPoint{{T: 100, F: 1}, {T: 200, F: 5}},
 		},
 		{
 			Metric: labels.FromStrings("zzz", "b"),
-			Points: []promql.Point{{T: 100, V: 3}, {T: 200, V: 8}},
+			Floats: []promql.FPoint{{T: 100, F: 3}, {T: 200, F: 8}},
 		},
 		{
 			Metric: labels.FromStrings("zzz", "c"),
@@ -149,13 +150,13 @@ func TestQuerier_DownsampledData(t *testing.T) {
 			// Prometheus engine code only takes the latest sample in each time window of
 			// the retrieved data. Since we were operating in pre-aggregated data here, it lead
 			// to overinflated values.
-			Points: []promql.Point{{T: 100, V: 128}, {T: 200, V: 30}},
+			Floats: []promql.FPoint{{T: 100, F: 128}, {T: 200, F: 30}},
 		},
 		{
 			Metric: labels.FromStrings("zzz", "d"),
 			// Test case: Prometheus engine in each time window selects the sample
 			// which is closest to the boundaries and adds up the different dimensions.
-			Points: []promql.Point{{T: 100, V: 16}, {T: 200, V: 30}},
+			Floats: []promql.FPoint{{T: 100, F: 16}, {T: 200, F: 30}},
 		},
 	}
 
@@ -398,7 +399,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						t.Cleanup(func() {
 							testutil.Ok(t, mq.Close())
 						})
-						q, err := e.NewRangeQuery(mq, &promql.QueryOpts{}, tcase.equivalentQuery, timestamp.Time(tcase.hints.Start), timestamp.Time(tcase.hints.End), resolution)
+						q, err := e.NewRangeQuery(context.Background(), mq, &promql.QueryOpts{}, tcase.equivalentQuery, timestamp.Time(tcase.hints.Start), timestamp.Time(tcase.hints.End), resolution)
 						testutil.Ok(t, err)
 						t.Cleanup(q.Close)
 						res := q.Exec(context.Background())
@@ -804,7 +805,7 @@ func TestQuerier_Select(t *testing.T) {
 					// Integration test: Make sure the PromQL would select exactly the same.
 					t.Run("through PromQL with 100s step", func(t *testing.T) {
 						catcher := &querierResponseCatcher{t: t, Querier: q}
-						q, err := e.NewRangeQuery(&mockedQueryable{querier: catcher}, &promql.QueryOpts{}, tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
+						q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: catcher}, &promql.QueryOpts{}, tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
 						testutil.Ok(t, err)
 						t.Cleanup(q.Close)
 
@@ -950,8 +951,8 @@ func promqlResToSeries(res *promql.Result) []series {
 
 	for i, ser := range matrix {
 		series[i].lset = ser.Metric
-		for _, point := range ser.Points {
-			series[i].samples = append(series[i].samples, sample{t: point.T, v: point.V})
+		for _, point := range ser.Floats {
+			series[i].samples = append(series[i].samples, sample{t: point.T, v: point.F})
 		}
 	}
 	return series
@@ -1089,7 +1090,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1099,26 +1100,26 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset1, Points: []promql.Point{
-					{T: 1587690300000, V: 13.652631578947368}, {T: 1587690400000, V: 14.049122807017543}, {T: 1587690500000, V: 13.961403508771928}, {T: 1587690600000, V: 13.617543859649121}, {T: 1587690700000, V: 14.568421052631578}, {T: 1587690800000, V: 14.989473684210525},
-					{T: 1587690900000, V: 16.2}, {T: 1587691000000, V: 16.052631578947366}, {T: 1587691100000, V: 15.831578947368419}, {T: 1587691200000, V: 15.659649122807016}, {T: 1587691300000, V: 14.842105263157894}, {T: 1587691400000, V: 14.003508771929823},
-					{T: 1587691500000, V: 13.782456140350876}, {T: 1587691600000, V: 13.86315789473684}, {T: 1587691700000, V: 15.270282598474376}, {T: 1587691800000, V: 14.343859649122805}, {T: 1587691900000, V: 13.975438596491227}, {T: 1587692000000, V: 13.399999999999999},
-					{T: 1587692100000, V: 14.087719298245613}, {T: 1587692200000, V: 14.392982456140349}, {T: 1587692300000, V: 15.02456140350877}, {T: 1587692400000, V: 14.073684210526315}, {T: 1587692500000, V: 9.3772165751634}, {T: 1587692600000, V: 6.378947368421052},
-					{T: 1587692700000, V: 8.19298245614035}, {T: 1587692800000, V: 11.91870302641626}, {T: 1587692900000, V: 13.75813610765101}, {T: 1587693000000, V: 13.087719298245613}, {T: 1587693100000, V: 13.466666666666665}, {T: 1587693200000, V: 14.028070175438595},
-					{T: 1587693300000, V: 14.23859649122807}, {T: 1587693400000, V: 15.407017543859647}, {T: 1587693500000, V: 15.915789473684208}, {T: 1587693600000, V: 15.712280701754384},
+				{Metric: expectedLset1, Floats: []promql.FPoint{
+					{T: 1587690300000, F: 13.652631578947368}, {T: 1587690400000, F: 14.049122807017543}, {T: 1587690500000, F: 13.961403508771928}, {T: 1587690600000, F: 13.617543859649121}, {T: 1587690700000, F: 14.568421052631578}, {T: 1587690800000, F: 14.989473684210525},
+					{T: 1587690900000, F: 16.2}, {T: 1587691000000, F: 16.052631578947366}, {T: 1587691100000, F: 15.831578947368419}, {T: 1587691200000, F: 15.659649122807016}, {T: 1587691300000, F: 14.842105263157894}, {T: 1587691400000, F: 14.003508771929823},
+					{T: 1587691500000, F: 13.782456140350876}, {T: 1587691600000, F: 13.86315789473684}, {T: 1587691700000, F: 15.270282598474376}, {T: 1587691800000, F: 14.343859649122805}, {T: 1587691900000, F: 13.975438596491227}, {T: 1587692000000, F: 13.399999999999999},
+					{T: 1587692100000, F: 14.087719298245613}, {T: 1587692200000, F: 14.392982456140349}, {T: 1587692300000, F: 15.02456140350877}, {T: 1587692400000, F: 14.073684210526315}, {T: 1587692500000, F: 9.3772165751634}, {T: 1587692600000, F: 6.378947368421052},
+					{T: 1587692700000, F: 8.19298245614035}, {T: 1587692800000, F: 11.91870302641626}, {T: 1587692900000, F: 13.75813610765101}, {T: 1587693000000, F: 13.087719298245613}, {T: 1587693100000, F: 13.466666666666665}, {T: 1587693200000, F: 14.028070175438595},
+					{T: 1587693300000, F: 14.23859649122807}, {T: 1587693400000, F: 15.407017543859647}, {T: 1587693500000, F: 15.915789473684208}, {T: 1587693600000, F: 15.712280701754384},
 				}},
-				{Metric: expectedLset2, Points: []promql.Point{
-					{T: 1587690300000, V: 13.691228070175438}, {T: 1587690400000, V: 14.098245614035086}, {T: 1587690500000, V: 13.905263157894735}, {T: 1587690600000, V: 13.617543859649121}, {T: 1587690700000, V: 14.350877192982455}, {T: 1587690800000, V: 15.003508771929823},
-					{T: 1587690900000, V: 16.12280701754386}, {T: 1587691000000, V: 16.049122807017543}, {T: 1587691100000, V: 15.922807017543859}, {T: 1587691200000, V: 15.63157894736842}, {T: 1587691300000, V: 14.982456140350875}, {T: 1587691400000, V: 14.187259188557553},
-					{T: 1587691500000, V: 13.828070175438596}, {T: 1587691600000, V: 13.971929824561402}, {T: 1587691700000, V: 15.31994329585807}, {T: 1587691800000, V: 14.30877192982456}, {T: 1587691900000, V: 13.915789473684208}, {T: 1587692000000, V: 13.312280701754384},
-					{T: 1587692100000, V: 14.136842105263156}, {T: 1587692200000, V: 14.392982456140349}, {T: 1587692300000, V: 15.014035087719297}, {T: 1587692400000, V: 14.112280701754385}, {T: 1587692500000, V: 9.421065148148148}, {T: 1587692600000, V: 6.421368067203301},
-					{T: 1587692700000, V: 8.252631578947367}, {T: 1587692800000, V: 11.721237543747266}, {T: 1587692900000, V: 13.842105263157894}, {T: 1587693000000, V: 13.153509064307993}, {T: 1587693100000, V: 13.378947368421052}, {T: 1587693200000, V: 14.03157894736842},
-					{T: 1587693300000, V: 14.14736842105263}, {T: 1587693400000, V: 15.343159785693986}, {T: 1587693500000, V: 15.90877192982456}, {T: 1587693600000, V: 15.761403508771927},
+				{Metric: expectedLset2, Floats: []promql.FPoint{
+					{T: 1587690300000, F: 13.691228070175438}, {T: 1587690400000, F: 14.098245614035086}, {T: 1587690500000, F: 13.905263157894735}, {T: 1587690600000, F: 13.617543859649121}, {T: 1587690700000, F: 14.350877192982455}, {T: 1587690800000, F: 15.003508771929823},
+					{T: 1587690900000, F: 16.12280701754386}, {T: 1587691000000, F: 16.049122807017543}, {T: 1587691100000, F: 15.922807017543859}, {T: 1587691200000, F: 15.63157894736842}, {T: 1587691300000, F: 14.982456140350875}, {T: 1587691400000, F: 14.187259188557553},
+					{T: 1587691500000, F: 13.828070175438596}, {T: 1587691600000, F: 13.971929824561402}, {T: 1587691700000, F: 15.31994329585807}, {T: 1587691800000, F: 14.30877192982456}, {T: 1587691900000, F: 13.915789473684208}, {T: 1587692000000, F: 13.312280701754384},
+					{T: 1587692100000, F: 14.136842105263156}, {T: 1587692200000, F: 14.392982456140349}, {T: 1587692300000, F: 15.014035087719297}, {T: 1587692400000, F: 14.112280701754385}, {T: 1587692500000, F: 9.421065148148148}, {T: 1587692600000, F: 6.421368067203301},
+					{T: 1587692700000, F: 8.252631578947367}, {T: 1587692800000, F: 11.721237543747266}, {T: 1587692900000, F: 13.842105263157894}, {T: 1587693000000, F: 13.153509064307993}, {T: 1587693100000, F: 13.378947368421052}, {T: 1587693200000, F: 14.03157894736842},
+					{T: 1587693300000, F: 14.14736842105263}, {T: 1587693400000, F: 15.343159785693986}, {T: 1587693500000, F: 15.90877192982456}, {T: 1587693600000, F: 15.761403508771927},
 				}},
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1128,11 +1129,11 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset1, Points: []promql.Point{
-					{T: 1587691800000, V: 14.457142857142856}, {T: 1587692300000, V: 14.761904761904761}, {T: 1587692800000, V: 13.127170868347338}, {T: 1587693300000, V: 12.93501400560224},
+				{Metric: expectedLset1, Floats: []promql.FPoint{
+					{T: 1587691800000, F: 14.457142857142856}, {T: 1587692300000, F: 14.761904761904761}, {T: 1587692800000, F: 13.127170868347338}, {T: 1587693300000, F: 12.93501400560224},
 				}},
-				{Metric: expectedLset2, Points: []promql.Point{
-					{T: 1587691800000, V: 14.464425770308122}, {T: 1587692300000, V: 14.763025210084033}, {T: 1587692800000, V: 13.148909112808576}, {T: 1587693300000, V: 12.92829131652661},
+				{Metric: expectedLset2, Floats: []promql.FPoint{
+					{T: 1587691800000, F: 14.464425770308122}, {T: 1587692300000, F: 14.763025210084033}, {T: 1587692800000, F: 13.148909112808576}, {T: 1587693300000, F: 12.92829131652661},
 				}},
 			}, vec)
 		})
@@ -1159,7 +1160,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1169,21 +1170,21 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset, Points: []promql.Point{
-					{T: 1587690300000, V: 13.691228070175438}, {T: 1587690400000, V: 14.098245614035086}, {T: 1587690500000, V: 13.905263157894735}, {T: 1587690600000, V: 13.617543859649121},
-					{T: 1587690700000, V: 14.350877192982455}, {T: 1587690800000, V: 15.003508771929823}, {T: 1587690900000, V: 16.12280701754386}, {T: 1587691000000, V: 16.049122807017543},
-					{T: 1587691100000, V: 15.922807017543859}, {T: 1587691200000, V: 15.63157894736842}, {T: 1587691300000, V: 14.982456140350875}, {T: 1587691400000, V: 14.187259188557553},
-					{T: 1587691500000, V: 13.828070175438596}, {T: 1587691600000, V: 13.971929824561402}, {T: 1587691700000, V: 15.31994329585807}, {T: 1587691800000, V: 14.30877192982456},
-					{T: 1587691900000, V: 13.915789473684208}, {T: 1587692000000, V: 13.312280701754384}, {T: 1587692100000, V: 14.136842105263156}, {T: 1587692200000, V: 14.392982456140349},
-					{T: 1587692300000, V: 15.014035087719297}, {T: 1587692400000, V: 14.112280701754385}, {T: 1587692500000, V: 9.421065148148148}, {T: 1587692600000, V: 6.3736754978451735},
-					{T: 1587692700000, V: 8.19632056099571}, {T: 1587692800000, V: 11.91870302641626}, {T: 1587692900000, V: 13.75813610765101}, {T: 1587693000000, V: 13.087719298245613},
-					{T: 1587693100000, V: 13.466666666666665}, {T: 1587693200000, V: 14.028070175438595}, {T: 1587693300000, V: 14.23859649122807}, {T: 1587693400000, V: 15.407017543859647},
-					{T: 1587693500000, V: 15.915789473684208}, {T: 1587693600000, V: 15.712280701754384},
+				{Metric: expectedLset, Floats: []promql.FPoint{
+					{T: 1587690300000, F: 13.691228070175438}, {T: 1587690400000, F: 14.098245614035086}, {T: 1587690500000, F: 13.905263157894735}, {T: 1587690600000, F: 13.617543859649121},
+					{T: 1587690700000, F: 14.350877192982455}, {T: 1587690800000, F: 15.003508771929823}, {T: 1587690900000, F: 16.12280701754386}, {T: 1587691000000, F: 16.049122807017543},
+					{T: 1587691100000, F: 15.922807017543859}, {T: 1587691200000, F: 15.63157894736842}, {T: 1587691300000, F: 14.982456140350875}, {T: 1587691400000, F: 14.187259188557553},
+					{T: 1587691500000, F: 13.828070175438596}, {T: 1587691600000, F: 13.971929824561402}, {T: 1587691700000, F: 15.31994329585807}, {T: 1587691800000, F: 14.30877192982456},
+					{T: 1587691900000, F: 13.915789473684208}, {T: 1587692000000, F: 13.312280701754384}, {T: 1587692100000, F: 14.136842105263156}, {T: 1587692200000, F: 14.392982456140349},
+					{T: 1587692300000, F: 15.014035087719297}, {T: 1587692400000, F: 14.112280701754385}, {T: 1587692500000, F: 9.421065148148148}, {T: 1587692600000, F: 6.3736754978451735},
+					{T: 1587692700000, F: 8.19632056099571}, {T: 1587692800000, F: 11.91870302641626}, {T: 1587692900000, F: 13.75813610765101}, {T: 1587693000000, F: 13.087719298245613},
+					{T: 1587693100000, F: 13.466666666666665}, {T: 1587693200000, F: 14.028070175438595}, {T: 1587693300000, F: 14.23859649122807}, {T: 1587693400000, F: 15.407017543859647},
+					{T: 1587693500000, F: 15.915789473684208}, {T: 1587693600000, F: 15.712280701754384},
 				}},
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, &promql.QueryOpts{}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1193,11 +1194,11 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset, Points: []promql.Point{
-					{T: 1587691800000, V: 14.464425770308122},
-					{T: 1587692300000, V: 14.763025210084033},
-					{T: 1587692800000, V: 13.143575607888273},
-					{T: 1587693300000, V: 12.930291298224088},
+				{Metric: expectedLset, Floats: []promql.FPoint{
+					{T: 1587691800000, F: 14.464425770308122},
+					{T: 1587692300000, F: 14.763025210084033},
+					{T: 1587692800000, F: 13.143575607888273},
+					{T: 1587693300000, F: 12.930291298224088},
 				}},
 			}, vec)
 		})

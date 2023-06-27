@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/status"
 	"github.com/oklog/ulid"
@@ -601,6 +603,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 	cases := map[string]struct {
 		maxChunksLimit uint64
 		maxSeriesLimit uint64
+		maxBytesLimit  int64
 		expectedErr    string
 		code           codes.Code
 	}{
@@ -618,6 +621,13 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			maxSeriesLimit: 1,
 			code:           codes.ResourceExhausted,
 		},
+		"should fail if the max bytes limit is exceeded - ResourceExhausted": {
+			maxChunksLimit: expectedChunks,
+			expectedErr:    "exceeded bytes limit",
+			maxSeriesLimit: 2,
+			maxBytesLimit:  1,
+			code:           codes.ResourceExhausted,
+		},
 	}
 
 	for testName, testData := range cases {
@@ -628,7 +638,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 			dir := t.TempDir()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(units.Base2Bytes(testData.maxBytesLimit)), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{
@@ -760,6 +770,57 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 	})
 }
 
+func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
+	cases := map[string]struct {
+		maxSeriesLimit uint64
+		expectedErr    string
+		code           codes.Code
+	}{
+		"should succeed if the max series limit is not exceeded": {
+			maxSeriesLimit: math.MaxUint64,
+		},
+		"should fail if the max series limit is exceeded - ResourceExhausted": {
+			expectedErr:    "exceeded series limit",
+			maxSeriesLimit: 1,
+			code:           codes.ResourceExhausted,
+		},
+	}
+
+	for testName, testData := range cases {
+		t.Run(testName, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			bkt := objstore.NewInMemBucket()
+			dir := t.TempDir()
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			testutil.Ok(t, s.store.SyncBlocks(ctx))
+			req := &storepb.LabelNamesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				},
+				Start: minTimeDuration.PrometheusTimestamp(),
+				End:   maxTimeDuration.PrometheusTimestamp(),
+			}
+
+			s.cache.SwapWith(noopCache{})
+
+			_, err := s.store.LabelNames(context.Background(), req)
+
+			if testData.expectedErr == "" {
+				testutil.Ok(t, err)
+			} else {
+				testutil.NotOk(t, err)
+				testutil.Assert(t, strings.Contains(err.Error(), testData.expectedErr))
+
+				status, ok := status.FromError(err)
+				testutil.Equals(t, true, ok)
+				testutil.Equals(t, testData.code, status.Code())
+			}
+		})
+	}
+}
+
 func TestBucketStore_LabelValues_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -865,6 +926,64 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
+	cases := map[string]struct {
+		maxSeriesLimit uint64
+		expectedErr    string
+		code           codes.Code
+	}{
+		"should succeed if the max chunks limit is not exceeded": {
+			maxSeriesLimit: math.MaxUint64,
+		},
+		"should fail if the max series limit is exceeded - ResourceExhausted": {
+			expectedErr:    "exceeded series limit",
+			maxSeriesLimit: 1,
+			code:           codes.ResourceExhausted,
+		},
+	}
+
+	for testName, testData := range cases {
+		t.Run(testName, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			bkt := objstore.NewInMemBucket()
+
+			dir := t.TempDir()
+
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			testutil.Ok(t, s.store.SyncBlocks(ctx))
+
+			req := &storepb.LabelValuesRequest{
+				Label: "a",
+				Start: minTimeDuration.PrometheusTimestamp(),
+				End:   maxTimeDuration.PrometheusTimestamp(),
+				Matchers: []storepb.LabelMatcher{
+					{
+						Type:  storepb.LabelMatcher_EQ,
+						Name:  "a",
+						Value: "1",
+					},
+				},
+			}
+
+			s.cache.SwapWith(noopCache{})
+
+			_, err := s.store.LabelValues(context.Background(), req)
+
+			if testData.expectedErr == "" {
+				testutil.Ok(t, err)
+			} else {
+				testutil.NotOk(t, err)
+				testutil.Assert(t, strings.Contains(err.Error(), testData.expectedErr))
+
+				status, ok := status.FromError(err)
+				testutil.Equals(t, true, ok)
+				testutil.Equals(t, testData.code, status.Code())
+			}
+		})
+	}
 }
 
 func emptyToNil(values []string) []string {

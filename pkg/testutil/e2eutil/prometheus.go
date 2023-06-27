@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -485,6 +486,7 @@ func createBlock(
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)
 	var batchSize = len(series) / runtime.GOMAXPROCS(0)
 	r := rand.New(rand.NewSource(int64(numSamples)))
+	var randMutex sync.Mutex
 
 	for len(series) > 0 {
 		l := batchSize
@@ -507,7 +509,9 @@ func createBlock(
 
 					var err error
 					if sampleType == chunkenc.ValFloat {
+						randMutex.Lock()
 						_, err = app.Append(0, lset, t, r.Float64())
+						randMutex.Unlock()
 					} else if sampleType == chunkenc.ValHistogram {
 						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
 					}
