@@ -34,7 +34,7 @@ const (
 )
 
 func decodePostings(input []byte) (closeablePostings, error) {
-	var df func([]byte) (closeablePostings, error)
+	var df func([]byte, bool) (closeablePostings, error)
 
 	switch {
 	case isDiffVarintSnappyEncodedPostings(input):
@@ -45,7 +45,7 @@ func decodePostings(input []byte) (closeablePostings, error) {
 		return nil, fmt.Errorf("unrecognize postings format")
 	}
 
-	return df(input)
+	return df(input, false)
 }
 
 // isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy codec.
@@ -129,12 +129,12 @@ func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error
 	return compressedBuf.Bytes(), nil
 }
 
-func diffVarintSnappyStreamedDecode(input []byte) (closeablePostings, error) {
+func diffVarintSnappyStreamedDecode(input []byte, disablePooling bool) (closeablePostings, error) {
 	if !isDiffVarintSnappyStreamedEncodedPostings(input) {
 		return nil, errors.New("header not found")
 	}
 
-	return newStreamedDiffVarintPostings(input[len(codecHeaderStreamedSnappy):])
+	return newStreamedDiffVarintPostings(input[len(codecHeaderStreamedSnappy):], disablePooling)
 }
 
 type streamedDiffVarintPostings struct {
@@ -144,7 +144,10 @@ type streamedDiffVarintPostings struct {
 	err error
 }
 
-func newStreamedDiffVarintPostings(input []byte) (closeablePostings, error) {
+func newStreamedDiffVarintPostings(input []byte, disablePooling bool) (closeablePostings, error) {
+	if disablePooling {
+		return &streamedDiffVarintPostings{sr: s2.NewReader(bytes.NewBuffer(input))}, nil
+	}
 	r, err := extsnappy.Compressor.DecompressByteReader(bytes.NewBuffer(input))
 	if err != nil {
 		return nil, fmt.Errorf("decompressing snappy postings: %w", err)
@@ -259,7 +262,7 @@ func alias(x, y []byte) bool {
 }
 
 // TODO(GiedriusS): remove for v1.0.
-func diffVarintSnappyDecode(input []byte) (closeablePostings, error) {
+func diffVarintSnappyDecode(input []byte, disablePooling bool) (closeablePostings, error) {
 	if !isDiffVarintSnappyEncodedPostings(input) {
 		return nil, errors.New("header not found")
 	}
@@ -267,10 +270,12 @@ func diffVarintSnappyDecode(input []byte) (closeablePostings, error) {
 	toFree := make([][]byte, 0, 2)
 
 	var dstBuf []byte
-	decodeBuf := snappyDecodePool.Get()
-	if decodeBuf != nil {
-		dstBuf = *(decodeBuf.(*[]byte))
-		toFree = append(toFree, dstBuf)
+	if !disablePooling {
+		decodeBuf := snappyDecodePool.Get()
+		if decodeBuf != nil {
+			dstBuf = *(decodeBuf.(*[]byte))
+			toFree = append(toFree, dstBuf)
+		}
 	}
 
 	raw, err := s2.Decode(dstBuf, input[len(codecHeaderSnappy):])
@@ -278,7 +283,7 @@ func diffVarintSnappyDecode(input []byte) (closeablePostings, error) {
 		return nil, errors.Wrap(err, "snappy decode")
 	}
 
-	if !alias(raw, dstBuf) {
+	if !alias(raw, dstBuf) && !disablePooling {
 		toFree = append(toFree, raw)
 	}
 
