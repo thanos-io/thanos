@@ -1,7 +1,7 @@
 ---
 title: Aiven’s Journey to Thanos from M3DB
 date: "2023-06-27"
-authors: Jonah Kowall, Michael Hoffmann, Alexander Rickardsson
+author: Jonah Kowall (https://github.com/jkowall) , Michael Hoffmann https://github.com/MichaHoffmann , Alexander Rickardsson https://github.com/alxric
 ---
 
 ## About Aiven
