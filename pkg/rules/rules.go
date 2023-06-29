@@ -151,39 +151,41 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 		})
 	}
 
-	// Sort rules globally.
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Compare(rules[j]) < 0
-	})
+	seenRules := make(map[string]*rulespb.Rule)
+	uniqueRules := make([]*rulespb.Rule, 0, len(rules))
 
-	// Remove rules based on synthesized deduplication labels.
-	i := 0
-	for j := 1; j < len(rules); j++ {
-		if rules[i].Compare(rules[j]) != 0 {
-			// Effectively retain rules[j] in the resulting slice.
-			i++
-			rules[i] = rules[j]
-			continue
+	for _, r := range rules {
+		if existingRule, ok := seenRules[r.String()]; ok {
+			// Check the type of the existing rule and the current rule
+			existingRecording := existingRule.GetRecording()
+			existingAlert := existingRule.GetAlert()
+			currentRecording := r.GetRecording()
+			currentAlert := r.GetAlert()
+
+			if existingRecording != nil && currentRecording != nil {
+				if existingRecording.Compare(currentRecording) != 0 {
+					uniqueRules = append(uniqueRules, r)
+					continue
+				}
+			}
+			
+			if existingAlert != nil && currentAlert != nil {
+				if existingAlert.Compare(currentAlert) != 0 {
+					uniqueRules = append(uniqueRules, r)
+					continue
+				}
+			}
+
+			seenRules[r.String()] = r
+		} else {
+
+			seenRules[r.String()] = r
 		}
 
-		// If rules are the same, ordering is still determined depending on type.
-		switch {
-		case rules[i].GetRecording() != nil && rules[j].GetRecording() != nil:
-			if rules[i].GetRecording().Compare(rules[j].GetRecording()) <= 0 {
-				continue
-			}
-		case rules[i].GetAlert() != nil && rules[j].GetAlert() != nil:
-			if rules[i].GetAlert().Compare(rules[j].GetAlert()) <= 0 {
-				continue
-			}
-		default:
-			continue
-		}
-
-		// Swap if we found a younger recording rule or a younger firing alerting rule.
-		rules[i] = rules[j]
+		uniqueRules = append(uniqueRules, r)
 	}
-	return rules[:i+1]
+
+	return uniqueRules
 }
 
 func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
@@ -202,19 +204,21 @@ func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
 		return nil
 	}
 
-	// Sort groups such that they appear next to each other.
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Compare(groups[j]) < 0 })
+	seenGroups := make(map[string]*rulespb.RuleGroup)
+	uniqueGroups := []*rulespb.RuleGroup{}
 
-	i := 0
-	for _, g := range groups[1:] {
-		if g.Compare(groups[i]) == 0 {
-			groups[i].Rules = append(groups[i].Rules, g.Rules...)
+	for _, g := range groups {
+		if existingGroup, ok := seenGroups[g.Name]; ok {
+			// Append the rules of the current group to the existing group
+			existingGroup.Rules = append(existingGroup.Rules, g.Rules...)
 		} else {
-			i++
-			groups[i] = g
+			// Add the group to the uniqueGroups slice and mark it as seen
+			uniqueGroups = append(uniqueGroups, g)
+			seenGroups[g.Name] = g
 		}
 	}
-	return groups[:i+1]
+
+	return uniqueGroups
 }
 
 type rulesServer struct {
