@@ -168,7 +168,7 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 					continue
 				}
 			}
-			
+
 			if existingAlert != nil && currentAlert != nil {
 				if existingAlert.Compare(currentAlert) != 0 {
 					uniqueRules = append(uniqueRules, r)
