@@ -13,7 +13,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"path"
 	"sort"
 	"strconv"
 	"sync"
@@ -47,18 +46,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
-	// DefaultTenantHeader is the default header used to designate the tenant making a write request.
-	DefaultTenantHeader = "THANOS-TENANT"
-	// DefaultTenant is the default value used for when no tenant is passed via the tenant header.
-	DefaultTenant = "default-tenant"
 	// DefaultStatsLimit is the default value used for limiting tenant stats.
 	DefaultStatsLimit = 10
-	// DefaultTenantLabel is the default label-name used for when no tenant is passed via the tenant header.
-	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
 	// AllTenantsQueryParam is the query parameter for getting TSDB stats for all tenants.
@@ -430,35 +424,14 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	return h.forward(ctx, tenant, r, wreq)
 }
 
-func (h *Handler) isTenantValid(tenant string) error {
-	if tenant != path.Base(tenant) {
-		return errors.New("Tenant name not valid")
-	}
-	return nil
-}
-
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
-	tenant := r.Header.Get(h.options.TenantHeader)
-	if tenant == "" {
-		tenant = h.options.DefaultTenantID
-	}
-
-	if h.options.TenantField != "" {
-		tenant, err = h.getTenantFromCertificate(r)
-		if err != nil {
-			// This must hard fail to ensure hard tenancy when feature is enabled.
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-
-	err = h.isTenantValid(tenant)
+	tenant, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
 	if err != nil {
-		level.Error(h.logger).Log("msg", "tenant name not valid", "tenant", tenant)
+		level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1173,43 +1146,4 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
-}
-
-// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
-// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
-func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
-	var tenant string
-
-	if len(r.TLS.PeerCertificates) == 0 {
-		return "", errors.New("could not get required certificate field from client cert")
-	}
-
-	// First cert is the leaf authenticated against.
-	cert := r.TLS.PeerCertificates[0]
-
-	switch h.options.TenantField {
-
-	case CertificateFieldOrganization:
-		if len(cert.Subject.Organization) == 0 {
-			return "", errors.New("could not get organization field from client cert")
-		}
-		tenant = cert.Subject.Organization[0]
-
-	case CertificateFieldOrganizationalUnit:
-		if len(cert.Subject.OrganizationalUnit) == 0 {
-			return "", errors.New("could not get organizationalUnit field from client cert")
-		}
-		tenant = cert.Subject.OrganizationalUnit[0]
-
-	case CertificateFieldCommonName:
-		if cert.Subject.CommonName == "" {
-			return "", errors.New("could not get commonName field from client cert")
-		}
-		tenant = cert.Subject.CommonName
-
-	default:
-		return "", errors.New("tls client cert field requested is not supported")
-	}
-
-	return tenant, nil
 }
