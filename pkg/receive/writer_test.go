@@ -25,6 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 func TestWriter(t *testing.T) {
@@ -329,7 +330,7 @@ func TestWriter(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			app, err := m.TenantAppendable(DefaultTenant)
+			app, err := m.TenantAppendable(tenancy.DefaultTenant)
 			testutil.Ok(t, err)
 
 			testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
@@ -340,7 +341,7 @@ func TestWriter(t *testing.T) {
 			w := NewWriter(logger, m, testData.opts)
 
 			for idx, req := range testData.reqs {
-				err = w.Write(context.Background(), DefaultTenant, req)
+				err = w.Write(context.Background(), tenancy.DefaultTenant, req)
 
 				// We expect no error on any request except the last one
 				// which may error (and in that case we assert on it).
