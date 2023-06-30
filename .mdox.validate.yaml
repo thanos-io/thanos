@@ -29,3 +29,6 @@ validators:
   # 403 when curl-ed from GitHub actions, though not from a developer machine. Likely due to secondary rate limits.
   - regex: 'docs\.github\.com'
     type: 'ignore'
+  # 403 when requested my mdox in GH actions.
+  - regex: 'nginx\.com'
+    type: 'ignore'
