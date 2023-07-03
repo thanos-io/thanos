@@ -4,13 +4,16 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	crand "crypto/rand"
 	"math"
 	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
 
+	"github.com/klauspost/compress/s2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -19,6 +22,50 @@ import (
 	"github.com/efficientgo/core/testutil"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
+
+func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
+	t.Run("compressed", func(t *testing.T) {
+		b := make([]byte, 100)
+		for i := 0; i < 100; i++ {
+			b[i] = 0x42
+		}
+
+		snappyEncoded := &bytes.Buffer{}
+
+		sw := s2.NewWriter(snappyEncoded, s2.WriterSnappyCompat(), s2.WriterBestCompression())
+
+		_, err := sw.Write(b)
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, sw.Close())
+
+		maxLen, err := maximumDecodedLenSnappyStreamed(snappyEncoded.Bytes())
+		testutil.Ok(t, err)
+		t.Log(maxLen)
+		testutil.Assert(t, maxLen == 100)
+	})
+	t.Run("random", func(t *testing.T) {
+		for i := 10000; i < 30000; i++ {
+			b := make([]byte, i)
+			_, err := crand.Read(b)
+			testutil.Ok(t, err)
+
+			snappyEncoded := &bytes.Buffer{}
+
+			sw := s2.NewWriter(snappyEncoded, s2.WriterSnappyCompat())
+
+			_, err = sw.Write(b)
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, sw.Close())
+
+			maxLen, err := maximumDecodedLenSnappyStreamed(snappyEncoded.Bytes())
+			testutil.Ok(t, err)
+			testutil.Assert(t, maxLen > 100)
+			testutil.Assert(t, maxLen < 30000)
+		}
+	})
+}
 
 func TestDiffVarintCodec(t *testing.T) {
 	chunksDir := t.TempDir()
@@ -225,8 +272,8 @@ func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 	b.ReportAllocs()
 
 	for _, count := range []int{10000, 100000, 1000000} {
-		for codecName, codecFns := range codecs {
-			b.Run(strconv.Itoa(count), func(b *testing.B) {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			for codecName, codecFns := range codecs {
 				b.Run(codecName, func(b *testing.B) {
 					b.Run("encode", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
@@ -259,10 +306,9 @@ func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 							testutil.Ok(b, decoded.Err())
 						}
 					})
-
 				})
-			})
-		}
+			}
+		})
 	}
 }
 
