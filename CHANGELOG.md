@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6420](https://github.com/thanos-io/thanos/pull/6420) Index Cache: Cache expanded postings.
 
 ### Fixed
+- [#6496](https://github.com/thanos-io/thanos/pull/6496): *: Remove unnecessary configuration reload from `ContentPathReloader` and improve its tests.
 - [#6427](https://github.com/thanos-io/thanos/pull/6427) Receive: increasing log level for failed uploads to error
 - [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.
 - [#6171](https://github.com/thanos-io/thanos/pull/6171) Store: fix error handling on limits.
