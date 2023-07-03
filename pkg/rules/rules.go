@@ -178,11 +178,10 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 
 			seenRules[r.String()] = r
 		} else {
-
 			seenRules[r.String()] = r
+			uniqueRules = append(uniqueRules, r)
 		}
 
-		uniqueRules = append(uniqueRules, r)
 	}
 
 	return uniqueRules
