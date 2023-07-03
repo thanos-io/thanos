@@ -366,10 +366,18 @@ func runStore(
 		store.WithFilterConfig(conf.filterConf),
 		store.WithChunkHashCalculation(true),
 		store.WithSeriesBatchSize(conf.seriesBatchSize),
-		store.WithBlockEstimatedMaxSeriesFunc(func(_ metadata.Meta) uint64 {
+		store.WithBlockEstimatedMaxSeriesFunc(func(m metadata.Meta) uint64 {
+			if m.Thanos.IndexStats.SeriesMaxSize > 0 &&
+				uint64(m.Thanos.IndexStats.SeriesMaxSize) < conf.estimatedMaxSeriesSize {
+				return uint64(m.Thanos.IndexStats.SeriesMaxSize)
+			}
 			return conf.estimatedMaxSeriesSize
 		}),
-		store.WithBlockEstimatedMaxChunkFunc(func(_ metadata.Meta) uint64 {
+		store.WithBlockEstimatedMaxChunkFunc(func(m metadata.Meta) uint64 {
+			if m.Thanos.IndexStats.ChunkMaxSize > 0 &&
+				uint64(m.Thanos.IndexStats.ChunkMaxSize) < conf.estimatedMaxChunkSize {
+				return uint64(m.Thanos.IndexStats.ChunkMaxSize)
+			}
 			return conf.estimatedMaxChunkSize
 		}),
 	}

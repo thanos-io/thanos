@@ -45,7 +45,6 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -72,6 +71,127 @@ func sortResults(res model.Vector) {
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].String() < res[j].String()
 	})
+}
+
+func TestQueryServiceAttribute(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("queryserviceattr")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	newJaegerRunnable := e.Runnable("jaeger").
+		WithPorts(
+			map[string]int{
+				"http":                      16686,
+				"http.admin":                14269,
+				"jaeger.thrift-model.proto": 14250,
+				"jaeger.thrift":             14268,
+			}).
+		Init(e2e.StartOptions{
+			Image:     "jaegertracing/all-in-one:1.33",
+			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
+		})
+	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
+
+	otelcolConfig := fmt.Sprintf(`---
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
+exporters:
+  logging:
+    loglevel: debug
+  jaeger:
+    endpoint: %s
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+  pprof:
+  zpages:
+
+service:
+  extensions: [health_check,pprof,zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging, jaeger]`, newJaeger.InternalEndpoint("jaeger.thrift-model.proto"))
+
+	t.Log(otelcolConfig)
+
+	otelcol := e.Runnable("otelcol").WithPorts(map[string]int{
+		"grpc": 4317,
+		"http": 4318,
+	})
+
+	otelcolFuture := otelcol.Future()
+
+	testutil.Ok(t, os.WriteFile(filepath.Join(e.SharedDir(), "otelcol.yml"), []byte(otelcolConfig), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(filepath.Join(e.SharedDir(), "spans.json"), []byte(``), os.ModePerm))
+
+	otelcolRunnable := otelcolFuture.Init(e2e.StartOptions{
+		Image: "otel/opentelemetry-collector-contrib:0.80.0",
+		Volumes: []string{
+			fmt.Sprintf("%s:/otelcol.yml:ro", filepath.Join(e.SharedDir(), "otelcol.yml")),
+		},
+		Command: e2e.NewCommandWithoutEntrypoint("/otelcol-contrib", "--config", "/otelcol.yml"),
+	})
+
+	testutil.Ok(t, e2e.StartAndWaitReady(otelcolRunnable))
+
+	q := e2ethanos.NewQuerierBuilder(e, "queriertester").WithTracingConfig(fmt.Sprintf(`type: OTLP
+config:
+  client_type: grpc
+  insecure: true
+  endpoint: %s`, otelcolRunnable.InternalEndpoint("grpc"))).WithEnvVars(map[string]string{
+		"OTEL_RESOURCE_ATTRIBUTES": "service.name=thanos-query",
+	}).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	instantQuery(t,
+		context.Background(),
+		q.Endpoint("http"),
+		func() string { return "time()" },
+		time.Now,
+		promclient.QueryOptions{},
+		1)
+
+	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query")
+	request, err := http.NewRequest("GET", url, nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, runutil.Retry(1*time.Second, make(<-chan struct{}), func() error {
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return err
+		}
+
+		if response.StatusCode != http.StatusOK {
+			return errors.New("status code not OK")
+		}
+
+		defer response.Body.Close()
+
+		body, err := io.ReadAll(response.Body)
+		testutil.Ok(t, err)
+
+		resp := string(body)
+		if strings.Contains(resp, `"data":[]`) {
+			return errors.New("no data returned")
+		}
+
+		testutil.Assert(t, strings.Contains(resp, `"serviceName":"thanos-query"`))
+		return nil
+	}))
 }
 
 func TestSidecarNotReady(t *testing.T) {
@@ -1367,7 +1487,7 @@ func urlParse(t testing.TB, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *queryrange.Explanation) {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation) {
 	t.Helper()
 
 	var result model.Vector
@@ -1379,7 +1499,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 
-	var explanation *queryrange.Explanation
+	var explanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
 		res, rexplanation, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
@@ -1393,7 +1513,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result, explanation
 }
 
-func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *queryrange.Explanation, error) {
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
 	res, warnings, explanation, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
 		return nil, nil, err
@@ -1527,12 +1647,12 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) *queryrange.Explanation {
+func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) *promclient.Explanation {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	var retExplanation *queryrange.Explanation
+	var retExplanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, warnings, explanation, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q(), start, end, step, opts)
 		if err != nil {

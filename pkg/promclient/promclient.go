@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"gopkg.in/yaml.v2"
 
-	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
@@ -390,8 +389,13 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	return nil
 }
 
+type Explanation struct {
+	Name     string         `json:"name"`
+	Children []*Explanation `json:"children,omitempty"`
+}
+
 // QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
-func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, *queryrange.Explanation, error) {
+func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, *Explanation, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
 		return nil, nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
@@ -425,9 +429,9 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	// structure of the Result yet.
 	var m struct {
 		Data struct {
-			ResultType  string                  `json:"resultType"`
-			Result      json.RawMessage         `json:"result"`
-			Explanation *queryrange.Explanation `json:"explanation"`
+			ResultType  string          `json:"resultType"`
+			Result      json.RawMessage `json:"result"`
+			Explanation *Explanation    `json:"explanation,omitempty"`
 		} `json:"data"`
 
 		Error     string `json:"error,omitempty"`
@@ -498,7 +502,7 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 }
 
 // QueryRange performs a range query using a default HTTP client and returns results in model.Matrix type.
-func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime, step int64, opts QueryOptions) (model.Matrix, []string, *queryrange.Explanation, error) {
+func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime, step int64, opts QueryOptions) (model.Matrix, []string, *Explanation, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
 		return nil, nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
@@ -529,9 +533,9 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	// structure of the Result yet.
 	var m struct {
 		Data struct {
-			ResultType  string                  `json:"resultType"`
-			Result      json.RawMessage         `json:"result"`
-			Explanation *queryrange.Explanation `json:"explanation"`
+			ResultType  string          `json:"resultType"`
+			Result      json.RawMessage `json:"result"`
+			Explanation *Explanation    `json:"explanation,omitempty"`
 		} `json:"data"`
 
 		Error     string `json:"error,omitempty"`

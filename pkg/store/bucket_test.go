@@ -38,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/objstore"
@@ -1233,6 +1234,38 @@ func benchmarkExpandedPostings(
 			}
 		})
 	}
+}
+
+func TestExpandedPostingsEmptyPostings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	id := uploadTestBlock(t, tmpDir, bkt, 100)
+
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling)
+	testutil.Ok(t, err)
+	b := &bucketBlock{
+		logger:            log.NewNopLogger(),
+		metrics:           newBucketStoreMetrics(nil),
+		indexHeaderReader: r,
+		indexCache:        noopCache{},
+		bkt:               bkt,
+		meta:              &metadata.Meta{BlockMeta: tsdb.BlockMeta{ULID: id}},
+		partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
+	}
+
+	indexr := newBucketIndexReader(b)
+	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
+	// Match nothing.
+	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
+	ps, err := indexr.ExpandedPostings(context.Background(), []*labels.Matcher{matcher1, matcher2}, NewBytesLimiterFactory(0)(nil))
+	testutil.Ok(t, err)
+	testutil.Equals(t, len(ps), 0)
+	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
+	testutil.Equals(t, 1, indexr.stats.cachedPostingsCompressions)
 }
 
 func TestBucketSeries(t *testing.T) {
@@ -2568,4 +2601,15 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 			})
 		}
 	}
+}
+
+func TestExpandPostingsWithContextCancel(t *testing.T) {
+	p := index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cancel()
+	res, err := ExpandPostingsWithContext(ctx, p)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, context.Canceled, err)
+	testutil.Equals(t, []storage.SeriesRef(nil), res)
 }

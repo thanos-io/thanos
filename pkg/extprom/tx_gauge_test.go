@@ -27,8 +27,8 @@ func TestTxGaugeVec(t *testing.T) {
 			name:  "nothing",
 			txUse: func() {},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 0,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 		{
@@ -38,8 +38,8 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a1", "b1").Add(0.3)
 			},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1.3,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 1.3,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 		{
@@ -50,8 +50,8 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a1", "b1").Add(10.3)
 			},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1.3000000000000007, // Say hi to float comparisons.
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 1.3000000000000007, // Say hi to float comparisons.
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 		{
@@ -62,16 +62,16 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a1", "b1").Set(1.3)
 			},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1.3,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 1.3,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 		{
 			name:  "nothing again",
 			txUse: func() {},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 0,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 		{
@@ -80,9 +80,9 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("aX", "b1").Set(500.2)
 			},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
-				"name:\"a\" value:\"aX\" ,name:\"b\" value:\"b1\" ": 500.2,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 0,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
+				"name:\"a\"  value:\"aX\",name:\"b\"  value:\"b1\"": 500.2,
 			},
 		},
 		{
@@ -91,17 +91,17 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("aX", "b1").Set(500.2)
 			},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
-				"name:\"a\" value:\"aX\" ,name:\"b\" value:\"b1\" ": 500.2,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 0,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
+				"name:\"a\"  value:\"aX\",name:\"b\"  value:\"b1\"": 500.2,
 			},
 		},
 		{
 			name:  "nothing again",
 			txUse: func() {},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 0,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 		{
@@ -112,17 +112,17 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a3", "b3").Set(1.1)
 			},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": -2,
-				"name:\"a\" value:\"a3\" ,name:\"b\" value:\"b3\" ": 1.1,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 1,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": -2,
+				"name:\"a\"  value:\"a3\",name:\"b\"  value:\"b3\"": 1.1,
 			},
 		},
 		{
 			name:  "nothing again",
 			txUse: func() {},
 			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+				"name:\"a\"  value:\"a1\",name:\"b\"  value:\"b1\"": 0,
+				"name:\"a\"  value:\"a2\",name:\"b\"  value:\"b2\"": 0,
 			},
 		},
 	} {

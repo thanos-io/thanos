@@ -57,6 +57,11 @@ func TestFindSetMatches(t *testing.T) {
 				"foo|bar|baz",
 			},
 		},
+		// empty pattern
+		{
+			pattern: "",
+			exp:     nil,
+		},
 	}
 
 	for _, c := range cases {

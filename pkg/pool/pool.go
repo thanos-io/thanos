@@ -40,6 +40,16 @@ type BucketedBytes struct {
 	new func(s int) *[]byte
 }
 
+// MustNewBucketedBytes is like NewBucketedBytes but panics if construction fails.
+// Useful for package internal pools.
+func MustNewBucketedBytes(minSize, maxSize int, factor float64, maxTotal uint64) *BucketedBytes {
+	pool, err := NewBucketedBytes(minSize, maxSize, factor, maxTotal)
+	if err != nil {
+		panic(err)
+	}
+	return pool
+}
+
 // NewBucketedBytes returns a new Bytes with size buckets for minSize to maxSize
 // increasing by the given factor and maximum number of used bytes.
 // No more than maxTotal bytes can be used at any given time unless maxTotal is set to 0.
