@@ -19,7 +19,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/weaveworks/common/httpgrpc"
 
-	"github.com/prometheus/prometheus/promql/parser"
 	promqlparser "github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
@@ -367,7 +366,7 @@ func sortPlanForQuery(q string) (sortPlan, error) {
 		return 0, err
 	}
 	// Check if the root expression is topk or bottomk
-	if aggr, ok := expr.(*parser.AggregateExpr); ok {
+	if aggr, ok := expr.(*promqlparser.AggregateExpr); ok {
 		if aggr.Op == promqlparser.TOPK || aggr.Op == promqlparser.BOTTOMK {
 			return mergeOnly, nil
 		}
@@ -394,7 +393,7 @@ func sortPlanForQuery(q string) (sortPlan, error) {
 	}
 
 	// If the root expression is a binary expression, check the LHS and RHS for sort
-	if bin, ok := expr.(*parser.BinaryExpr); ok {
+	if bin, ok := expr.(*promqlparser.BinaryExpr); ok {
 		if sortAsc, sortDesc := checkForSort(bin.LHS); sortAsc || sortDesc {
 			if sortAsc {
 				return sortByValuesAsc, nil
