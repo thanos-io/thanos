@@ -103,7 +103,7 @@ func TestPathContentReloader(t *testing.T) {
 
 			tt.args.runSteps(t, testFile, pathContent)
 			if tt.wantReloads == 0 {
-				// Give things a little time to async. The fs watcher events are heavily async and could be delayed.
+				// Give things a little time to sync. The fs watcher events are heavily async and could be delayed.
 				time.Sleep(1 * time.Second)
 			}
 			wg.Wait()
