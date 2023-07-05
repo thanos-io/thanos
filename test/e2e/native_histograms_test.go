@@ -190,8 +190,10 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 		},
 	})
 
-	vals, err := querier.SumMetrics([]string{"http_requests_total"})
-	e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query"))
+	vals, err := querier.SumMetrics(
+		[]string{"http_requests_total"},
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query")),
+	)
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, len(vals))
@@ -348,9 +350,9 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 	})
 }
 
-func expectedHistogramModelVector(name string, histogram *histogram.Histogram, floatHistogram *histogram.FloatHistogram, externalLabels map[string]string) model.Vector {
+func expectedHistogramModelVector(metricName string, histogram *histogram.Histogram, floatHistogram *histogram.FloatHistogram, externalLabels map[string]string) model.Vector {
 	metrics := model.Metric{
-		"__name__": model.LabelValue(name),
+		"__name__": model.LabelValue(metricName),
 		"foo":      "bar",
 	}
 	for labelKey, labelValue := range externalLabels {
@@ -373,9 +375,9 @@ func expectedHistogramModelVector(name string, histogram *histogram.Histogram, f
 	}
 }
 
-func expectedHistogramModelMatrix(name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, startTime time.Time, externalLabels map[string]string) model.Matrix {
+func expectedHistogramModelMatrix(metricName string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, startTime time.Time, externalLabels map[string]string) model.Matrix {
 	metrics := model.Metric{
-		"__name__": model.LabelValue(name),
+		"__name__": model.LabelValue(metricName),
 		"foo":      "bar",
 	}
 	for labelKey, labelValue := range externalLabels {
