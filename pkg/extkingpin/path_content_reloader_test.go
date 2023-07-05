@@ -6,12 +6,13 @@ package extkingpin
 import (
 	"context"
 	"errors"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"os"
 	"path"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/runutil"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
