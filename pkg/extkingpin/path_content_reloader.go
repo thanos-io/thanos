@@ -46,7 +46,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	}
 	var engine reloaderEngine
 	if filePathStat.Mode()&os.ModeSymlink != 0 || parentFolderStat.Mode()&os.ModeSymlink != 0 {
-		level.Debug(logger).Log("msg", "file is a symlink, using polling approach", "file", filePath)
+		level.Debug(logger).Log("msg", "file and/or its parent folder are symlink, using polling approach", "file", filePath)
 		engine = &pollingEngine{
 			filePath:   filePath,
 			logger:     logger,
