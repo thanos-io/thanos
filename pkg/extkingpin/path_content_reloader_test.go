@@ -5,6 +5,8 @@ package extkingpin
 
 import (
 	"context"
+	"errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"os"
 	"path"
 	"sync"
@@ -96,10 +98,11 @@ func TestPathContentReloader(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			reloadCount := 0
+			debounceTime := 500 * time.Millisecond
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
 				reloadCount++
 				wg.Done()
-			}, 100*time.Millisecond)
+			}, debounceTime)
 			testutil.Ok(t, err)
 
 			tt.args.runSteps(t, testFile, pathContent)
@@ -108,7 +111,13 @@ func TestPathContentReloader(t *testing.T) {
 				time.Sleep(1 * time.Second)
 			}
 			wg.Wait()
-			testutil.Equals(t, tt.wantReloads, reloadCount)
+
+			runutil.Repeat(2*debounceTime, ctx.Done(), func() error {
+				if reloadCount != tt.wantReloads {
+					return nil
+				}
+				return errors.New("reload count matched")
+			})
 		})
 	}
 }
@@ -185,18 +194,25 @@ func TestPathContentReloader_Symlink(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			reloadCount := 0
+			configReloadTime := 500 * time.Millisecond
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
 				reloadCount++
 				wg.Done()
-			}, 500*time.Millisecond)
+			}, configReloadTime)
+			// wait for the initial reload
+			runutil.Repeat(configReloadTime, ctx.Done(), func() error {
+				if reloadCount != 1 {
+					return nil
+				}
+				return errors.New("reload count matched")
+			})
 			testutil.Ok(t, err)
-			time.Sleep(1 * time.Second)
 
 			tt.args.runSteps(t, testFile, pathContent)
-			if tt.wantReloads == 0 {
-				time.Sleep(1 * time.Second)
-			}
+			// wait for the final reload
+			time.Sleep(2 * configReloadTime)
 			wg.Wait()
+
 			testutil.Equals(t, tt.wantReloads, reloadCount)
 		})
 	}
