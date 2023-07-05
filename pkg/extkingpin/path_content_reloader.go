@@ -4,7 +4,6 @@
 package extkingpin
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -80,49 +79,37 @@ type pollingEngine struct {
 	logger           log.Logger
 	debounce         time.Duration
 	reloadFunc       func()
-	previousChecksum []byte
+	previousChecksum [sha256.Size]byte
 }
 
 func (p *pollingEngine) Start(ctx context.Context) error {
-	go func() {
-		var reReadTimer *time.Timer
-		reReadTimer = time.AfterFunc(p.debounce, func() {
-			// check if file still exists
-			if _, err := os.Stat(p.filePath); os.IsNotExist(err) {
-				level.Error(p.logger).Log("msg", "file does not exist", "error", err)
-				reReadTimer.Reset(p.debounce)
-				return
-			}
-			file, err := os.ReadFile(p.filePath)
-			if err != nil {
-				level.Error(p.logger).Log("msg", "error opening file", "error", err)
-				reReadTimer.Reset(p.debounce)
-				return
-			}
-			hash := sha256.New()
-			if _, err := hash.Write(file); err != nil {
-				level.Error(p.logger).Log("msg", "error hashing file", "error", err)
-				reReadTimer.Reset(p.debounce)
-				return
-			}
-			checksum := hash.Sum(nil)
-			if checksum == nil || bytes.Equal(checksum, p.previousChecksum) {
-				reReadTimer.Reset(p.debounce)
-				return
-			}
-			p.reloadFunc()
-			p.previousChecksum = checksum
-			level.Debug(p.logger).Log("msg", "configuration reloaded")
-			reReadTimer.Reset(p.debounce)
+	configReader := func() {
+		// check if file still exists
+		if _, err := os.Stat(p.filePath); os.IsNotExist(err) {
+			level.Error(p.logger).Log("msg", "file does not exist", "error", err)
 			return
-		})
+		}
+		file, err := os.ReadFile(p.filePath)
+		if err != nil {
+			level.Error(p.logger).Log("msg", "error opening file", "error", err)
+			return
+		}
+		checksum := sha256.Sum256(file)
+		if checksum == p.previousChecksum {
+			return
+		}
+		p.reloadFunc()
+		p.previousChecksum = checksum
+		level.Debug(p.logger).Log("msg", "configuration reloaded")
+		return
+	}
+	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				if reReadTimer != nil {
-					reReadTimer.Stop()
-				}
 				return
+			case <-time.After(p.debounce):
+				configReader()
 			}
 		}
 	}()
