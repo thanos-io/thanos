@@ -112,12 +112,12 @@ func TestPathContentReloader(t *testing.T) {
 			}
 			wg.Wait()
 
-			runutil.Repeat(2*debounceTime, ctx.Done(), func() error {
+			testutil.NotOk(t, runutil.Repeat(2*debounceTime, ctx.Done(), func() error {
 				if reloadCount != tt.wantReloads {
 					return nil
 				}
 				return errors.New("reload count matched")
-			})
+			}))
 		})
 	}
 }
@@ -199,21 +199,25 @@ func TestPathContentReloader_Symlink(t *testing.T) {
 				reloadCount++
 				wg.Done()
 			}, configReloadTime)
+			testutil.Ok(t, err)
 			// wait for the initial reload
-			runutil.Repeat(configReloadTime, ctx.Done(), func() error {
+			testutil.NotOk(t, runutil.Repeat(configReloadTime, ctx.Done(), func() error {
 				if reloadCount != 1 {
 					return nil
 				}
 				return errors.New("reload count matched")
-			})
-			testutil.Ok(t, err)
+			}))
 
 			tt.args.runSteps(t, testFile, pathContent)
-			// wait for the final reload
-			time.Sleep(2 * configReloadTime)
 			wg.Wait()
 
-			testutil.Equals(t, tt.wantReloads, reloadCount)
+			// wait for final reload
+			testutil.NotOk(t, runutil.Repeat(2*configReloadTime, ctx.Done(), func() error {
+				if reloadCount != tt.wantReloads {
+					return nil
+				}
+				return errors.New("reload count matched")
+			}))
 		})
 	}
 }
