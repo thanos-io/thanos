@@ -5,12 +5,13 @@ package extkingpin
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 
