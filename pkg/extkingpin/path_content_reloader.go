@@ -4,7 +4,9 @@
 package extkingpin
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path"
@@ -34,20 +36,117 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	if err != nil {
 		return errors.Wrap(err, "getting absolute file path")
 	}
-
-	watcher, err := fsnotify.NewWatcher()
 	if filePath == "" {
 		level.Debug(logger).Log("msg", "no path detected for config reload")
 	}
+
+	// Check if filePath is symlink
+	filePathStat, err := os.Lstat(filePath)
+	if err != nil {
+		return errors.Wrap(err, "getting file info")
+	}
+	// Check if filePath's parent folder is symlink
+	parentFolder := path.Dir(filePath)
+	parentFolderStat, err := os.Lstat(parentFolder)
+	if err != nil {
+		return errors.Wrap(err, "getting parent folder info")
+	}
+	var engine reloaderEngine
+	if filePathStat.Mode()&os.ModeSymlink != 0 || parentFolderStat.Mode()&os.ModeSymlink != 0 {
+		level.Debug(logger).Log("msg", "file is a symlink, using polling approach", "file", filePath)
+		engine = &pollingEngine{
+			filePath:   filePath,
+			logger:     logger,
+			debounce:   debounceTime,
+			reloadFunc: reloadFunc,
+		}
+	} else {
+		engine = &fsNotifyEngine{
+			filePath:   filePath,
+			logger:     logger,
+			debounce:   debounceTime,
+			reloadFunc: reloadFunc,
+		}
+	}
+	return engine.Start(ctx)
+}
+
+type reloaderEngine interface {
+	Start(ctx context.Context) error
+}
+
+type pollingEngine struct {
+	filePath         string
+	logger           log.Logger
+	debounce         time.Duration
+	reloadFunc       func()
+	previousChecksum []byte
+}
+
+func (p *pollingEngine) Start(ctx context.Context) error {
+	go func() {
+		var reReadTimer *time.Timer
+		reReadTimer = time.AfterFunc(p.debounce, func() {
+			// check if file still exists
+			if _, err := os.Stat(p.filePath); os.IsNotExist(err) {
+				level.Error(p.logger).Log("msg", "file does not exist", "error", err)
+				reReadTimer.Reset(p.debounce)
+				return
+			}
+			file, err := os.ReadFile(p.filePath)
+			if err != nil {
+				level.Error(p.logger).Log("msg", "error opening file", "error", err)
+				reReadTimer.Reset(p.debounce)
+				return
+			}
+			hash := sha256.New()
+			if _, err := hash.Write(file); err != nil {
+				level.Error(p.logger).Log("msg", "error hashing file", "error", err)
+				reReadTimer.Reset(p.debounce)
+				return
+			}
+			checksum := hash.Sum(nil)
+			if checksum == nil || bytes.Equal(checksum, p.previousChecksum) {
+				reReadTimer.Reset(p.debounce)
+				return
+			}
+			p.reloadFunc()
+			p.previousChecksum = checksum
+			level.Debug(p.logger).Log("msg", "configuration reloaded")
+			reReadTimer.Reset(p.debounce)
+			return
+		})
+		for {
+			select {
+			case <-ctx.Done():
+				if reReadTimer != nil {
+					reReadTimer.Stop()
+				}
+				return
+			}
+		}
+	}()
+	return nil
+}
+
+type fsNotifyEngine struct {
+	filePath   string
+	logger     log.Logger
+	debounce   time.Duration
+	reloadFunc func()
+}
+
+func (f *fsNotifyEngine) Start(ctx context.Context) error {
+	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return errors.Wrap(err, "creating file watcher")
 	}
 	go func() {
 		var reloadTimer *time.Timer
-		if debounceTime != 0 {
-			reloadTimer = time.AfterFunc(debounceTime, func() {
-				reloadFunc()
-				level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
+		if f.debounce != 0 {
+			reloadTimer = time.AfterFunc(f.debounce, func() {
+				f.reloadFunc()
+				level.Debug(f.logger).Log("msg", "configuration reloaded after debouncing")
 			})
 			reloadTimer.Stop()
 		}
@@ -67,7 +166,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				}
 				// We are watching the file's parent folder (more details on this is done can be found below), but are
 				// only interested in changed to the target file. Discard every other file as quickly as possible.
-				if event.Name != filePath {
+				if event.Name != f.filePath {
 					break
 				}
 				// We only react to files being written or created.
@@ -76,19 +175,19 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 {
 					break
 				}
-				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
+				level.Debug(f.logger).Log("msg", fmt.Sprintf("change detected for %s", f.filePath), "eventName", event.Name, "eventOp", event.Op)
 				if reloadTimer != nil {
-					reloadTimer.Reset(debounceTime)
+					reloadTimer.Reset(f.debounce)
 				}
 			case err := <-watcher.Errors:
-				level.Error(logger).Log("msg", "watcher error", "error", err)
+				level.Error(f.logger).Log("msg", "watcher error", "error", err)
 			}
 		}
 	}()
 	// We watch the file's parent folder and not the file itself to better handle DELETE and RENAME events. Check
 	// https://github.com/fsnotify/fsnotify/issues/214 for more details.
-	if err := watcher.Add(path.Dir(filePath)); err != nil {
-		return errors.Wrapf(err, "adding path %s to file watcher", filePath)
+	if err := watcher.Add(path.Dir(f.filePath)); err != nil {
+		return errors.Wrapf(err, "adding path %s to file watcher", f.filePath)
 	}
 	return nil
 }

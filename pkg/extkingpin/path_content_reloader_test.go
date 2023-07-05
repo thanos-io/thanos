@@ -16,6 +16,7 @@ import (
 )
 
 func TestPathContentReloader(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		runSteps func(t *testing.T, testFile string, pathContent *staticPathContent)
 	}
@@ -92,7 +93,7 @@ func TestPathContentReloader(t *testing.T) {
 			wg := &sync.WaitGroup{}
 			wg.Add(tt.wantReloads)
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			reloadCount := 0
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
@@ -104,6 +105,95 @@ func TestPathContentReloader(t *testing.T) {
 			tt.args.runSteps(t, testFile, pathContent)
 			if tt.wantReloads == 0 {
 				// Give things a little time to sync. The fs watcher events are heavily async and could be delayed.
+				time.Sleep(1 * time.Second)
+			}
+			wg.Wait()
+			testutil.Equals(t, tt.wantReloads, reloadCount)
+		})
+	}
+}
+
+func TestPathContentReloader_Symlink(t *testing.T) {
+	t.Parallel()
+	type args struct {
+		runSteps func(t *testing.T, testFile string, pathContent *staticPathContent)
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantReloads int
+	}{
+		{
+			name: "Many operations, only rewrite triggers one reload + plus the initial reload",
+			args: args{
+				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+					testutil.Ok(t, os.Remove(testFile))
+					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
+				},
+			},
+			wantReloads: 2,
+		},
+		{
+			name: "Many operations, two rewrites trigger two reloads + the initial reload",
+			args: args{
+				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+					testutil.Ok(t, os.Remove(testFile))
+					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
+					time.Sleep(1 * time.Second)
+					testutil.Ok(t, pathContent.Rewrite([]byte("test modified again")))
+				},
+			},
+			wantReloads: 3,
+		},
+		{
+			name: "Chmod doesn't trigger reload, we have only the initial reload",
+			args: args{
+				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+					testutil.Ok(t, os.Chmod(testFile, 0666))
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+				},
+			},
+			wantReloads: 1,
+		},
+		{
+			name: "Remove doesn't trigger reload, we have only the initial reload",
+			args: args{
+				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+					testutil.Ok(t, os.Remove(testFile))
+				},
+			},
+			wantReloads: 1,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			testFile := path.Join(t.TempDir(), "test")
+			testutil.Ok(t, os.WriteFile(testFile, []byte("test"), 0666))
+			testutil.Ok(t, os.Symlink(testFile, testFile+"-symlink"))
+
+			pathContent, err := NewStaticPathContent(testFile + "-symlink")
+			testutil.Ok(t, err)
+
+			wg := &sync.WaitGroup{}
+			wg.Add(tt.wantReloads)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			reloadCount := 0
+			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
+				reloadCount++
+				wg.Done()
+			}, 500*time.Millisecond)
+			testutil.Ok(t, err)
+			time.Sleep(1 * time.Second)
+
+			tt.args.runSteps(t, testFile, pathContent)
+			if tt.wantReloads == 0 {
 				time.Sleep(1 * time.Second)
 			}
 			wg.Wait()
