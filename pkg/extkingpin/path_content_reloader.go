@@ -70,10 +70,13 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	return engine.Start(ctx)
 }
 
+// reloaderEngine is an interface that abstracts different underlying logics for reloading a `fileContent`.
 type reloaderEngine interface {
 	Start(ctx context.Context) error
 }
 
+// pollingEngine is an implementation of reloaderEngine that keeps rereading the contents at filePath and when the
+// checksum changes it runs the reloadFunc.
 type pollingEngine struct {
 	filePath         string
 	logger           log.Logger
@@ -81,6 +84,8 @@ type pollingEngine struct {
 	reloadFunc       func()
 	previousChecksum [sha256.Size]byte
 }
+
+var _ reloaderEngine = &pollingEngine{}
 
 func (p *pollingEngine) Start(ctx context.Context) error {
 	configReader := func() {
@@ -116,12 +121,16 @@ func (p *pollingEngine) Start(ctx context.Context) error {
 	return nil
 }
 
+// fsNotifyEngine is an implementation of reloaderEngine that uses fsnotify to watch for changes to a file and then
+// runs the reloadFunc.
 type fsNotifyEngine struct {
 	filePath   string
 	logger     log.Logger
 	debounce   time.Duration
 	reloadFunc func()
 }
+
+var _ reloaderEngine = &fsNotifyEngine{}
 
 func (f *fsNotifyEngine) Start(ctx context.Context) error {
 	watcher, err := fsnotify.NewWatcher()
