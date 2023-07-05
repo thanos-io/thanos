@@ -49,6 +49,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				reloadFunc()
 				level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
 			})
+			reloadTimer.Stop()
 		}
 		defer watcher.Close()
 		for {
