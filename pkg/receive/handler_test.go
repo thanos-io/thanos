@@ -183,7 +183,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 	}
 
 	ag := addrGen{}
-	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger())
+	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
 			TenantHeader:      tenancy.DefaultTenantHeader,
@@ -741,7 +741,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			testutil.Ok(t, os.WriteFile(tmpLimitsPath, tenantConfig, 0666))
 			limitConfig, _ := extkingpin.NewStaticPathContent(tmpLimitsPath)
 			handler.Limiter, _ = NewLimiter(
-				limitConfig, nil, RouterIngestor, log.NewNopLogger(),
+				limitConfig, nil, RouterIngestor, log.NewNopLogger(), 1*time.Second,
 			)
 
 			wreq := &prompb.WriteRequest{
