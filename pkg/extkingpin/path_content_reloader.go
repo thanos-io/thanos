@@ -23,13 +23,7 @@ type fileContent interface {
 	Path() string
 }
 
-// PathContentReloader starts a file watcher that monitors the file indicated by fileContent.Path() and runs
-// reloadFunc whenever a change is detected.
-// A debounce timer can be configured via opts to handle situations where many "write" events are received together or
-// a "create" event is followed up by a "write" event, for example. Files will be effectively reloaded at the latest
-// after 2 times the debounce timer. By default the debouncer timer is 1 second.
-// To ensure renames and deletes are properly handled, the file watcher is put at the file's parent folder. See
-// https://github.com/fsnotify/fsnotify/issues/214 for more details.
+// PathContentReloader runs the reloadFunc when it detects that the contents of fileContent have changed.
 func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), debounceTime time.Duration) error {
 	filePath, err := filepath.Abs(fileContent.Path())
 	if err != nil {
@@ -123,6 +117,11 @@ func (p *pollingEngine) Start(ctx context.Context) error {
 
 // fsNotifyEngine is an implementation of reloaderEngine that uses fsnotify to watch for changes to a file and then
 // runs the reloadFunc.
+// A debounce timer can be configured via opts to handle situations where many "write" events are received together or
+// a "create" event is followed up by a "write" event, for example. Files will be effectively reloaded at the latest
+// after 2 times the debounce timer. By default the debouncer timer is 1 second.
+// To ensure renames and deletes are properly handled, the file watcher is put at the file's parent folder. See
+// https://github.com/fsnotify/fsnotify/issues/214 for more details.
 type fsNotifyEngine struct {
 	filePath   string
 	logger     log.Logger
