@@ -300,10 +300,14 @@ func newBinaryWriter(id ulid.ULID, cacheFilename string, buf []byte) (w *binaryW
 	return w, w.writer.Write(w.buf.Get())
 }
 
+type PosWriterWithBuffer interface {
+	PosWriter
+	Buffer() []byte
+}
+
 type PosWriter interface {
 	Pos() uint64
 	Write(bufs ...[]byte) error
-	Buffer() []byte
 	Flush() error
 	Sync() error
 	Close() error
@@ -404,11 +408,6 @@ func (fw *FileWriter) Write(bufs ...[]byte) error {
 	return nil
 }
 
-// Buffer is not used at all for FileWriter.
-func (fw *FileWriter) Buffer() []byte {
-	return nil
-}
-
 func (fw *FileWriter) Flush() error {
 	return fw.fileWriter.Flush()
 }
@@ -466,7 +465,11 @@ func (w *binaryWriter) Write(p []byte) (int, error) {
 }
 
 func (w *binaryWriter) Buffer() []byte {
-	return w.writer.Buffer()
+	pwb, ok := w.writer.(PosWriterWithBuffer)
+	if ok {
+		return pwb.Buffer()
+	}
+	return nil
 }
 
 func (w *binaryWriter) Close() error {
