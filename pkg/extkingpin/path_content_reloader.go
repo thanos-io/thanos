@@ -33,19 +33,13 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 		level.Debug(logger).Log("msg", "no path detected for config reload")
 	}
 
-	// Check if filePath is symlink
-	filePathStat, err := os.Lstat(filePath)
+	isSymlinkScenario, err := isSymlinkScenario(filePath)
 	if err != nil {
-		return errors.Wrap(err, "getting file info")
+		return errors.Wrap(err, "checking if file and/or its parent folder are symlink")
 	}
-	// Check if filePath's parent folder is symlink
-	parentFolder := path.Dir(filePath)
-	parentFolderStat, err := os.Lstat(parentFolder)
-	if err != nil {
-		return errors.Wrap(err, "getting parent folder info")
-	}
+
 	var engine reloaderEngine
-	if filePathStat.Mode()&os.ModeSymlink != 0 || parentFolderStat.Mode()&os.ModeSymlink != 0 {
+	if isSymlinkScenario {
 		level.Debug(logger).Log("msg", "file and/or its parent folder are symlink, using polling approach", "file", filePath)
 		engine = &pollingEngine{
 			filePath:   filePath,
@@ -62,6 +56,23 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 		}
 	}
 	return engine.Start(ctx)
+}
+
+// isSymlinkScenario identifies if the file in filePath or its parent folder are a symlink
+func isSymlinkScenario(filePath string) (bool, error) {
+	// Check if filePath is symlink
+	filePathStat, err := os.Lstat(filePath)
+	if err != nil {
+		return false, errors.Wrap(err, "getting file info")
+	}
+	// Check if filePath's parent folder is symlink
+	parentFolder := path.Dir(filePath)
+	parentFolderStat, err := os.Lstat(parentFolder)
+	if err != nil {
+		return false, errors.Wrap(err, "getting parent folder info")
+	}
+	isSymlinkScenario := filePathStat.Mode()&os.ModeSymlink != 0 || parentFolderStat.Mode()&os.ModeSymlink != 0
+	return isSymlinkScenario, nil
 }
 
 // reloaderEngine is an interface that abstracts different underlying logics for reloading a `fileContent`.
