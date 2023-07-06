@@ -58,7 +58,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	return engine.Start(ctx)
 }
 
-// isSymlinkScenario identifies if the file in filePath or its parent folder are a symlink
+// isSymlinkScenario identifies if the file in filePath or its parent folder are a symlink.
 func isSymlinkScenario(filePath string) (bool, error) {
 	// Check if filePath is symlink
 	filePathStat, err := os.Lstat(filePath)
