@@ -27,7 +27,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6467](https://github.com/thanos-io/thanos/pull/6467) Mixin (Receive): add alert for tenant reaching head series limit.
 
 ### Fixed
-- [#6496](https://github.com/thanos-io/thanos/pull/6496): *: Remove unnecessary configuration reload from `ContentPathReloader` and improve its tests.
+- [#6503](https://github.com/thanos-io/thanos/pull/6503) *: Fix `ContentPathReloader` to properly work when the file or its parent folder are symlinks. This effectively fixes this configuration reload when used with Kubernetes ConfigMaps, Secrets, or other volume mounts.
+- [#6496](https://github.com/thanos-io/thanos/pull/6496) *: Remove unnecessary configuration reload from `ContentPathReloader` and improve its tests.
 - [#6456](https://github.com/thanos-io/thanos/pull/6456) Store: fix crash when computing set matches from regex pattern
 - [#6427](https://github.com/thanos-io/thanos/pull/6427) Receive: increasing log level for failed uploads to error
 - [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.
