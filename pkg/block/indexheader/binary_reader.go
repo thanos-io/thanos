@@ -322,7 +322,7 @@ type MemoryWriter struct {
 func NewMemoryWriter(id ulid.ULID, size int) *MemoryWriter {
 	return &MemoryWriter{
 		id:  id,
-		buf: bytes.NewBuffer(make([]byte, size)),
+		buf: bytes.NewBuffer(make([]byte, 0, size)),
 		pos: 0,
 	}
 }
