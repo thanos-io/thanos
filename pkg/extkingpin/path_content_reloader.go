@@ -26,9 +26,6 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	if err != nil {
 		return errors.Wrap(err, "getting absolute file path")
 	}
-	if filePath == "" {
-		level.Debug(logger).Log("msg", "no path detected for config reload")
-	}
 
 	engine := &pollingEngine{
 		filePath:   filePath,
