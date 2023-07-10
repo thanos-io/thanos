@@ -36,8 +36,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	return engine.start(ctx)
 }
 
-// pollingEngine is an implementation of reloaderEngine that keeps rereading the contents at filePath and when the
-// checksum changes it runs the reloadFunc.
+// pollingEngine keeps rereading the contents at filePath and when its checksum changes it runs the reloadFunc.
 type pollingEngine struct {
 	filePath         string
 	logger           log.Logger
