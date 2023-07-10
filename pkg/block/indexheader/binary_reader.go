@@ -271,7 +271,6 @@ func newBinaryWriter(id ulid.ULID, cacheFilename string, buf []byte) (w *binaryW
 			return nil, errors.Wrap(err, "remove any existing index at path")
 		}
 
-		// We use file writer for buffers not larger than reused one.
 		var fileWriter *FileWriter
 		fileWriter, err = NewFileWriter(cacheFilename, len(buf))
 		if err != nil {
