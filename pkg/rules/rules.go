@@ -152,10 +152,10 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 	}
 
 	seenRules := make(map[string]*rulespb.Rule)
-	uniqueRules := make([]*rulespb.Rule, 0, len(rules))
+	uniqueRules := []*rulespb.Rule{}
 
 	for _, r := range rules {
-		if existingRule, ok := seenRules[r.String()]; ok {
+		if existingRule, ok := seenRules[r.RuleKey()]; ok {
 			// Check the type of the existing rule and the current rule
 			existingRecording := existingRule.GetRecording()
 			existingAlert := existingRule.GetAlert()
@@ -163,25 +163,23 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 			currentAlert := r.GetAlert()
 
 			if existingRecording != nil && currentRecording != nil {
-				if existingRecording.Compare(currentRecording) != 0 {
-					uniqueRules = append(uniqueRules, r)
+				if existingRecording.Compare(currentRecording) > 0 {
+					// If the current rule has a newer evaluation time, update the existing rule
+					existingRecording.LastEvaluation = r.GetLastEvaluation()
 					continue
 				}
 			}
-
 			if existingAlert != nil && currentAlert != nil {
-				if existingAlert.Compare(currentAlert) != 0 {
-					uniqueRules = append(uniqueRules, r)
+				if existingAlert.Compare(currentAlert) > 0 {
+					existingAlert.State = currentAlert.State
+					existingAlert.LastEvaluation = r.GetLastEvaluation()
 					continue
 				}
 			}
-
-			seenRules[r.String()] = r
 		} else {
-			seenRules[r.String()] = r
+			seenRules[r.RuleKey()] = r
 			uniqueRules = append(uniqueRules, r)
 		}
-
 	}
 
 	return uniqueRules
@@ -207,16 +205,15 @@ func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
 	uniqueGroups := []*rulespb.RuleGroup{}
 
 	for _, g := range groups {
-		if existingGroup, ok := seenGroups[g.Name]; ok {
+		if existingGroup, ok := seenGroups[g.Key()]; ok {
 			// Append the rules of the current group to the existing group
 			existingGroup.Rules = append(existingGroup.Rules, g.Rules...)
 		} else {
 			// Add the group to the uniqueGroups slice and mark it as seen
 			uniqueGroups = append(uniqueGroups, g)
-			seenGroups[g.Name] = g
+			seenGroups[g.Key()] = g
 		}
 	}
-
 	return uniqueGroups
 }
 

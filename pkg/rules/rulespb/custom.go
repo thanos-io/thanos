@@ -177,6 +177,14 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 	return 0
 }
 
+//func createHash(r *Rule) []byte {
+//	h := sha256.New()
+//	h.Write([]byte(r.GetName()))
+//	h.Write([]byte(r.GetQuery()))
+//	h.Write([]byte(r.GetLabels().String()))
+//	return h.Sum(nil)
+//}
+
 func (r *RuleGroups) MarshalJSON() ([]byte, error) {
 	if r.Groups == nil {
 		// Ensure that empty slices are marshaled as '[]' and not 'null'.
@@ -202,7 +210,27 @@ func (r *RuleGroup) Key() string {
 		return ""
 	}
 
-	return r.File + ";" + r.Name
+	return r.File + "a" + r.Name
+}
+
+func (r *Rule) RuleKey() string {
+	var d *big.Float
+	if r == nil {
+		return ""
+	}
+	var t string
+	if r.GetAlert() != nil {
+		t = "alert"
+	}
+	if r.GetRecording() != nil {
+		t = "recording"
+	}
+	if r.GetAlert() != nil {
+		if d = big.NewFloat(r.GetAlert().DurationSeconds); d != nil {
+			return t + r.GetName() + ";" + r.GetName() + ";" + r.GetQuery() + ";" + r.GetLabels().String() + ";" + d.String()
+		}
+	}
+	return t + r.GetName() + ";" + r.GetName() + ";" + r.GetQuery() + ";" + r.GetLabels().String()
 }
 
 func (m *Rule) UnmarshalJSON(entry []byte) error {
