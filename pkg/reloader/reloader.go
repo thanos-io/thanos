@@ -202,13 +202,14 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	}
 
 	defer runutil.CloseWithLogOnErr(r.logger, r.watcher, "config watcher close")
+	applyCtx, applyCancel := context.WithTimeout(ctx, r.watchInterval)
 
 	if r.cfgFile != "" {
 		if err := r.watcher.addFile(r.cfgFile); err != nil {
 			return errors.Wrapf(err, "add config file %s to watcher", r.cfgFile)
 		}
 
-		if err := r.apply(ctx); err != nil {
+		if err := r.apply(applyCtx); err != nil {
 			return err
 		}
 	}
@@ -238,7 +239,9 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		"out", r.cfgOutputFile,
 		"dirs", strings.Join(r.watchedDirs, ","))
 
-	applyCtx, applyCancel := context.WithTimeout(ctx, r.watchInterval)
+	// Reset the watch timeout.
+	applyCancel()
+	applyCtx, applyCancel = context.WithTimeout(ctx, r.watchInterval)
 
 	for {
 		select {
