@@ -63,7 +63,7 @@ func (p *pollingEngine) start(ctx context.Context) error {
 		}
 		p.reloadFunc()
 		p.previousChecksum = checksum
-		level.Debug(p.logger).Log("msg", "configuration reloaded")
+		level.Debug(p.logger).Log("msg", "configuration reloaded", "path", p.filePath)
 	}
 	go func() {
 		for {
