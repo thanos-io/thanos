@@ -33,7 +33,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 		debounce:   debounceTime,
 		reloadFunc: reloadFunc,
 	}
-	return engine.Start(ctx)
+	return engine.start(ctx)
 }
 
 // pollingEngine is an implementation of reloaderEngine that keeps rereading the contents at filePath and when the
@@ -46,7 +46,7 @@ type pollingEngine struct {
 	previousChecksum [sha256.Size]byte
 }
 
-func (p *pollingEngine) Start(ctx context.Context) error {
+func (p *pollingEngine) start(ctx context.Context) error {
 	configReader := func() {
 		// check if file still exists
 		if _, err := os.Stat(p.filePath); os.IsNotExist(err) {
