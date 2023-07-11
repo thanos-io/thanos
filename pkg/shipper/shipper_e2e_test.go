@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extprom"
+
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,7 +39,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		// TODO(GiedriusS): consider switching to BucketWithMetrics() everywhere?
 		metrics := prometheus.NewRegistry()
-		metricsBucket := objstore.BucketWithMetrics("test", bkt, metrics)
+		metricsBucket := objstore.BucketWithMetrics("test", bkt, extprom.WrapRegistererWithPrefix("thanos_", metrics))
 
 		dir := t.TempDir()
 

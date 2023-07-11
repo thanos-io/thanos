@@ -299,7 +299,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -380,7 +380,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -594,7 +594,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Bucket.String())
 		if err != nil {
 			return errors.Wrap(err, "bucket client")
 		}
@@ -779,7 +779,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Cleanup.String())
 		if err != nil {
 			return err
 		}
@@ -1034,7 +1034,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Mark.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Mark.String())
 		if err != nil {
 			return err
 		}
@@ -1113,7 +1113,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rewrite.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Rewrite.String())
 		if err != nil {
 			return err
 		}
@@ -1320,7 +1320,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Retention.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Retention.String())
 		if err != nil {
 			return err
 		}
