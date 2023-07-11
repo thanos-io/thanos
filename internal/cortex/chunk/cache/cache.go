@@ -5,9 +5,10 @@ package cache
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -101,7 +102,11 @@ func New(cfg Config, reg prometheus.Registerer, logger log.Logger) (Cache, error
 			cfg.Redis.Expiration = cfg.DefaultValidity
 		}
 		cacheName := cfg.Prefix + "redis"
-		cache := NewRedisCache(cacheName, NewRedisClient(&cfg.Redis), reg, logger)
+		redisClient, err := NewRedisClient(&cfg.Redis)
+		if err != nil {
+			return nil, errors.Errorf("creating redis client: %w", err)
+		}
+		cache := NewRedisCache(cacheName, redisClient, reg, logger)
 		caches = append(caches, NewBackground(cacheName, cfg.Background, Instrument(cacheName, cache, reg), reg))
 	}
 
