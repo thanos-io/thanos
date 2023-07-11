@@ -18,7 +18,7 @@ jobs:
   test:
     executor: golang-test
     environment:
-      GO111MODULE: 'on'
+      GO111MODULE: "on"
     steps:
       - git-shallow-clone/checkout
       - go/mod-download-cached
