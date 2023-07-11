@@ -269,6 +269,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 			"resolution": 123144
 		},
 		"source": "receive",
+		"index_stats": {},
 		"extensions": {
 			"field1": 1,
 			"field2": "test_string"
@@ -327,7 +328,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"downsample": {
 			"resolution": 123144
 		},
-		"source": "receive"
+		"source": "receive",
+		"index_stats": {}
 	}
 }
 `, b.String())
