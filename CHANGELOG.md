@@ -105,6 +105,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.42.0.
 - [#5999](https://github.com/thanos-io/thanos/pull/5999) *: Upgrade Alertmanager dependency to v0.25.0.
+- [#6520](https://github.com/thanos-io/thanos/pull/6520): Switch query-frontend to use [Rueidis](https://github.com/redis/rueidis) client. Deleted `idle_timeout`, `max_conn_age`, `pool_size`, `min_idle_conns` fields as they are not used anymore.
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
 - [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
 - [#6126](https://github.com/thanos-io/thanos/pull/6126) Build with Go 1.20

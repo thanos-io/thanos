@@ -10,7 +10,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-kit/log"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/rueidis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,14 +57,18 @@ func mockRedisCache() (*RedisCache, error) {
 	redisServer, err := miniredis.Run()
 	if err != nil {
 		return nil, err
-
+	}
+	cl, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress:  []string{redisServer.Addr()},
+		DisableCache: true,
+	})
+	if err != nil {
+		return nil, err
 	}
 	redisClient := &RedisClient{
 		expiration: time.Minute,
 		timeout:    100 * time.Millisecond,
-		rdb: redis.NewUniversalClient(&redis.UniversalOptions{
-			Addrs: []string{redisServer.Addr()},
-		}),
+		rdb:        cl,
 	}
 	return NewRedisCache("mock", redisClient, nil, log.NewNopLogger()), nil
 }
