@@ -36,7 +36,7 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
-            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI
+            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OCS
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
             OS_PASSWORD: s3cr3t
