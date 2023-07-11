@@ -312,7 +312,7 @@ test: check-git install-tool-deps
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
-test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI
+test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 test-local:
 	$(MAKE) test
 
@@ -333,7 +333,7 @@ test-e2e: docker $(GOTESPLIT)
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
-test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI
+test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 test-e2e-local:
 	$(MAKE) test-e2e
 
