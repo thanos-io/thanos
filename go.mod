@@ -65,7 +65,7 @@ require (
 	github.com/prometheus/prometheus v0.44.1-0.20230524110021-37e5249e33e4
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.2
-	github.com/thanos-io/objstore v0.0.0-20230201072718-11ffbc490204
+	github.com/thanos-io/objstore v0.0.0-20230710163637-47c0118da0ca
 	github.com/thanos-io/promql-engine v0.0.0-20230524050847-9a1a33217cf2
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -124,6 +124,7 @@ require (
 )
 
 require (
+	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230209150437-ee73d164e760 // indirect
 )

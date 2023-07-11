@@ -716,7 +716,7 @@ func runRule(
 	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Rule.String())
 		if err != nil {
 			return err
 		}

@@ -202,7 +202,7 @@ func runCompact(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.String())
 	if err != nil {
 		return err
 	}
