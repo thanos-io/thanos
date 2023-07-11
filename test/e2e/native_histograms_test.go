@@ -199,8 +199,8 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	// doesn't need to retry when we send queries to the frontend later.
 	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), func() string { return testHistogramMetricName }, time.Now, promclient.QueryOptions{Deduplicate: true}, []model.Metric{
 		{
-			"__name__":   testHistogramMetricName,
-			"prometheus": "prom-ha",
+			model.MetricNameLabel: testHistogramMetricName,
+			"prometheus":          "prom-ha",
 		},
 	})
 
@@ -412,7 +412,7 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 
 	timeSeriespb := prompb.TimeSeries{
 		Labels: append([]prompb.Label{
-			{Name: "__name__", Value: name},
+			{Name: model.MetricNameLabel, Value: name},
 		}, labels...),
 		Histograms: prompbHistograms,
 	}
@@ -424,8 +424,7 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 
 func expectedHistogramModelVector(metricName string, histogram *histogram.Histogram, floatHistogram *histogram.FloatHistogram, externalLabels map[string]string) model.Vector {
 	metrics := model.Metric{
-		"__name__": model.LabelValue(metricName),
-		"foo":      "bar",
+		model.MetricNameLabel: model.LabelValue(metricName),
 	}
 	for labelKey, labelValue := range externalLabels {
 		metrics[model.LabelName(labelKey)] = model.LabelValue(labelValue)
@@ -449,8 +448,7 @@ func expectedHistogramModelVector(metricName string, histogram *histogram.Histog
 
 func expectedHistogramModelMatrix(metricName string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, startTime time.Time, externalLabels map[string]string) model.Matrix {
 	metrics := model.Metric{
-		"__name__": model.LabelValue(metricName),
-		"foo":      "bar",
+		model.MetricNameLabel: model.LabelValue(metricName),
 	}
 	for labelKey, labelValue := range externalLabels {
 		metrics[model.LabelName(labelKey)] = model.LabelValue(labelValue)
