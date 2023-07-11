@@ -47,7 +47,7 @@ type Config struct {
 }
 
 // RegisterFlagsWithPrefix adds the flags required to config this to the given FlagSet
-func (cfg *Config) RegisterFlagsWithPrefix(prefix string, description string, f *flag.FlagSet) {
+func (cfg *Config) RegisterFlagsWithPrefix(prefix, description string, f *flag.FlagSet) {
 	cfg.Background.RegisterFlagsWithPrefix(prefix, description, f)
 	cfg.Memcache.RegisterFlagsWithPrefix(prefix, description, f)
 	cfg.MemcacheClient.RegisterFlagsWithPrefix(prefix, description, f)
@@ -59,6 +59,7 @@ func (cfg *Config) RegisterFlagsWithPrefix(prefix string, description string, f 
 
 	cfg.Prefix = prefix
 }
+
 func (cfg *Config) Validate() error {
 	return cfg.Fifocache.Validate()
 }
@@ -104,7 +105,7 @@ func New(cfg Config, reg prometheus.Registerer, logger log.Logger) (Cache, error
 		cacheName := cfg.Prefix + "redis"
 		redisClient, err := NewRedisClient(&cfg.Redis)
 		if err != nil {
-			return nil, errors.Errorf("creating redis client: %w", err)
+			return nil, errors.Errorf("creating redis client: %v", err)
 		}
 		cache := NewRedisCache(cacheName, redisClient, reg, logger)
 		caches = append(caches, NewBackground(cacheName, cfg.Background, Instrument(cacheName, cache, reg), reg))
