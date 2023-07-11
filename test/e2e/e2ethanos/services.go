@@ -248,6 +248,7 @@ type QuerierBuilder struct {
 	fileSDStoreAddresses    []string
 	ruleAddresses           []string
 	metadataAddresses       []string
+	envVars                 map[string]string
 	targetAddresses         []string
 	exemplarAddresses       []string
 	enableFeatures          []string
@@ -373,6 +374,11 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithEnvVars(envVars map[string]string) *QuerierBuilder {
+	q.envVars = envVars
+	return q
+}
+
 func (q *QuerierBuilder) WithTelemetryQuantiles(duration []float64, samples []float64, series []float64) *QuerierBuilder {
 	q.telemetryDurationQuantiles = duration
 	q.telemetrySamplesQuantiles = samples
@@ -390,6 +396,7 @@ func (q *QuerierBuilder) Init() *e2emon.InstrumentedRunnable {
 		Image:     q.image,
 		Command:   e2e.NewCommand("query", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		EnvVars:   q.envVars,
 	})), "http")
 }
 

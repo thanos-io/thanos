@@ -22,7 +22,6 @@ import (
 	"github.com/efficientgo/e2e/monitoring/promconfig/discovery/targetgroup"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	common_cfg "github.com/prometheus/common/config"
-	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 
@@ -80,7 +79,7 @@ func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy st
 		},
 		RemoteWriteConfigs: []*promconfig.RemoteWriteConfig{
 			{
-				URL: &config_util.URL{URL: rwURL},
+				URL: &common_cfg.URL{URL: rwURL},
 			},
 		},
 		ScrapeConfigs: []*promconfig.ScrapeConfig{

@@ -295,6 +295,10 @@ func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, i
 	return m, nil
 }
 
+func IsBlockMetaFile(path string) bool {
+	return filepath.Base(path) == MetaFilename
+}
+
 func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	id, err := ulid.Parse(filepath.Base(path))
 	return id, err == nil

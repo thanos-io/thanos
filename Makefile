@@ -326,6 +326,9 @@ test-e2e: docker $(GOTESPLIT)
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 (Wiard note: to the GOTEST_OPTS arg) to limit to single CPU to reproduce small 1CPU machine.
+	# NOTE(GiedriusS):
+	# * If you want to limit CPU time available in e2e tests then pass E2E_DOCKER_CPUS environment variable. For example, E2E_DOCKER_CPUS=0.05 limits CPU time available
+	#   to spawned Docker containers to 0.05 cores.
 	@$(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
 
 .PHONY: test-e2e-local

@@ -20,7 +20,6 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/prometheus/prometheus/promql/parser"
-	promqlparser "github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
@@ -362,18 +361,18 @@ const (
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
-	expr, err := promqlparser.ParseExpr(q)
+	expr, err := parser.ParseExpr(q)
 	if err != nil {
 		return 0, err
 	}
 	// Check if the root expression is topk or bottomk
 	if aggr, ok := expr.(*parser.AggregateExpr); ok {
-		if aggr.Op == promqlparser.TOPK || aggr.Op == promqlparser.BOTTOMK {
+		if aggr.Op == parser.TOPK || aggr.Op == parser.BOTTOMK {
 			return mergeOnly, nil
 		}
 	}
-	checkForSort := func(expr promqlparser.Expr) (sortAsc, sortDesc bool) {
-		if n, ok := expr.(*promqlparser.Call); ok {
+	checkForSort := func(expr parser.Expr) (sortAsc, sortDesc bool) {
+		if n, ok := expr.(*parser.Call); ok {
 			if n.Func != nil {
 				if n.Func.Name == "sort" {
 					sortAsc = true

@@ -20,11 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weaveworks/common/httpgrpc"
-
-	"github.com/cespare/xxhash"
-
 	"github.com/alecthomas/units"
+	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
@@ -38,14 +35,13 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/weaveworks/common/httpgrpc"
 	"golang.org/x/sync/errgroup"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/objstore"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -275,13 +271,13 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.seriesFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_cached_series_fetch_duration_seconds",
+		Name:    "thanos_bucket_store_series_fetch_duration_seconds",
 		Help:    "The time it takes to fetch series to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
 	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_cached_postings_fetch_duration_seconds",
+		Name:    "thanos_bucket_store_postings_fetch_duration_seconds",
 		Help:    "The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
@@ -2296,11 +2292,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	}
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
-
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	ps, err := index.ExpandPostings(result)
+	ps, err := ExpandPostingsWithContext(ctx, result)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
@@ -2320,6 +2312,17 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		}
 	}
 	return ps, nil
+}
+
+// ExpandPostingsWithContext returns the postings expanded as a slice and considers context.
+func ExpandPostingsWithContext(ctx context.Context, p index.Postings) (res []storage.SeriesRef, err error) {
+	for p.Next() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		res = append(res, p.At())
+	}
+	return res, p.Err()
 }
 
 // postingGroup keeps posting keys for single matcher. Logical result of the group is:
@@ -2454,13 +2457,13 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	}()
 	// If failed to decode or expand cached postings, return and expand postings again.
 	if err != nil {
-		level.Error(r.block.logger).Log("msg", "failed to decode cached expanded postings, refetch postings", "id", r.block.meta.ULID.String())
+		level.Error(r.block.logger).Log("msg", "failed to decode cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
 		return false, nil, nil
 	}
 
-	ps, err := index.ExpandPostings(p)
+	ps, err := ExpandPostingsWithContext(ctx, p)
 	if err != nil {
-		level.Error(r.block.logger).Log("msg", "failed to expand cached expanded postings, refetch postings", "id", r.block.meta.ULID.String())
+		level.Error(r.block.logger).Log("msg", "failed to expand cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
 		return false, nil, nil
 	}
 
@@ -2524,6 +2527,9 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
 	// Overlaps are well handled by partitioner, so we don't need to deduplicate keys.
 	for ix, key := range keys {
+		if err := ctx.Err(); err != nil {
+			return nil, closeFns, err
+		}
 		// Get postings for the given key from cache first.
 		if b, ok := fromCache[key]; ok {
 			r.stats.postingsTouched++
