@@ -31,7 +31,6 @@ var (
 		DialTimeout:            time.Second * 5,
 		ReadTimeout:            time.Second * 3,
 		WriteTimeout:           time.Second * 3,
-		MinIdleConns:           10,
 		MaxGetMultiConcurrency: 100,
 		GetMultiBatchSize:      100,
 		MaxSetMultiConcurrency: 100,
@@ -81,10 +80,6 @@ type RedisClientConfig struct {
 
 	// WriteTimeout specifies the client write timeout.
 	WriteTimeout time.Duration `yaml:"write_timeout"`
-
-	// MinIdleConns specifies the minimum number of idle connections which is useful when establishing
-	// new connection is slow.
-	MinIdleConns int `yaml:"min_idle_conns"`
 
 	// MaxGetMultiConcurrency specifies the maximum number of concurrent GetMulti() operations.
 	// If set to 0, concurrency is unlimited.
