@@ -43,13 +43,13 @@ type InMemoryIndexCache struct {
 	curSize uint64
 
 	evicted          *prometheus.CounterVec
-	requests         *prometheus.CounterVec
-	hits             *prometheus.CounterVec
 	added            *prometheus.CounterVec
 	current          *prometheus.GaugeVec
 	currentSize      *prometheus.GaugeVec
 	totalCurrentSize *prometheus.GaugeVec
 	overflow         *prometheus.CounterVec
+
+	commonMetrics *commonMetrics
 }
 
 // InMemoryIndexCacheConfig holds the in-memory index cache config.
@@ -72,26 +72,31 @@ func parseInMemoryIndexCacheConfig(conf []byte) (InMemoryIndexCacheConfig, error
 
 // NewInMemoryIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
 // size approximately does not exceed maxBytes.
-func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, conf []byte) (*InMemoryIndexCache, error) {
+func NewInMemoryIndexCache(logger log.Logger, commonMetrics *commonMetrics, reg prometheus.Registerer, conf []byte) (*InMemoryIndexCache, error) {
 	config, err := parseInMemoryIndexCacheConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewInMemoryIndexCacheWithConfig(logger, reg, config)
+	return NewInMemoryIndexCacheWithConfig(logger, commonMetrics, reg, config)
 }
 
 // NewInMemoryIndexCacheWithConfig creates a new thread-safe LRU cache for index entries and ensures the total cache
 // size approximately does not exceed maxBytes.
-func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
+func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMetrics, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
 	if config.MaxItemSize > config.MaxSize {
 		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
+	}
+
+	if commonMetrics == nil {
+		commonMetrics = newCommonMetrics(reg)
 	}
 
 	c := &InMemoryIndexCache{
 		logger:           logger,
 		maxSizeBytes:     uint64(config.MaxSize),
 		maxItemSizeBytes: uint64(config.MaxItemSize),
+		commonMetrics:    commonMetrics,
 	}
 
 	c.evicted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -110,13 +115,9 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 	c.added.WithLabelValues(cacheTypeSeries)
 	c.added.WithLabelValues(cacheTypeExpandedPostings)
 
-	c.requests = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_store_index_cache_requests_total",
-		Help: "Total number of requests to the cache.",
-	}, []string{"item_type"})
-	c.requests.WithLabelValues(cacheTypePostings)
-	c.requests.WithLabelValues(cacheTypeSeries)
-	c.requests.WithLabelValues(cacheTypeExpandedPostings)
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings)
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries)
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeExpandedPostings)
 
 	c.overflow = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_overflowed_total",
@@ -126,13 +127,9 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 	c.overflow.WithLabelValues(cacheTypeSeries)
 	c.overflow.WithLabelValues(cacheTypeExpandedPostings)
 
-	c.hits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_store_index_cache_hits_total",
-		Help: "Total number of requests to the cache that were a hit.",
-	}, []string{"item_type"})
-	c.hits.WithLabelValues(cacheTypePostings)
-	c.hits.WithLabelValues(cacheTypeSeries)
-	c.hits.WithLabelValues(cacheTypeExpandedPostings)
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings)
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries)
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings)
 
 	c.current = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_items",
@@ -201,7 +198,7 @@ func (c *InMemoryIndexCache) onEvict(key, val interface{}) {
 }
 
 func (c *InMemoryIndexCache) get(typ string, key cacheKey) ([]byte, bool) {
-	c.requests.WithLabelValues(typ).Inc()
+	c.commonMetrics.requestTotal.WithLabelValues(typ).Inc()
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -210,7 +207,7 @@ func (c *InMemoryIndexCache) get(typ string, key cacheKey) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	c.hits.WithLabelValues(typ).Inc()
+	c.commonMetrics.hitsTotal.WithLabelValues(typ).Inc()
 	return v.([]byte), true
 }
 
