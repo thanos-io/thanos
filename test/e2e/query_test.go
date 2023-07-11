@@ -73,6 +73,127 @@ func sortResults(res model.Vector) {
 	})
 }
 
+func TestQueryServiceAttribute(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("queryserviceattr")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	newJaegerRunnable := e.Runnable("jaeger").
+		WithPorts(
+			map[string]int{
+				"http":                      16686,
+				"http.admin":                14269,
+				"jaeger.thrift-model.proto": 14250,
+				"jaeger.thrift":             14268,
+			}).
+		Init(e2e.StartOptions{
+			Image:     "jaegertracing/all-in-one:1.33",
+			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
+		})
+	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
+
+	otelcolConfig := fmt.Sprintf(`---
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
+exporters:
+  logging:
+    loglevel: debug
+  jaeger:
+    endpoint: %s
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+  pprof:
+  zpages:
+
+service:
+  extensions: [health_check,pprof,zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging, jaeger]`, newJaeger.InternalEndpoint("jaeger.thrift-model.proto"))
+
+	t.Log(otelcolConfig)
+
+	otelcol := e.Runnable("otelcol").WithPorts(map[string]int{
+		"grpc": 4317,
+		"http": 4318,
+	})
+
+	otelcolFuture := otelcol.Future()
+
+	testutil.Ok(t, os.WriteFile(filepath.Join(e.SharedDir(), "otelcol.yml"), []byte(otelcolConfig), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(filepath.Join(e.SharedDir(), "spans.json"), []byte(``), os.ModePerm))
+
+	otelcolRunnable := otelcolFuture.Init(e2e.StartOptions{
+		Image: "otel/opentelemetry-collector-contrib:0.80.0",
+		Volumes: []string{
+			fmt.Sprintf("%s:/otelcol.yml:ro", filepath.Join(e.SharedDir(), "otelcol.yml")),
+		},
+		Command: e2e.NewCommandWithoutEntrypoint("/otelcol-contrib", "--config", "/otelcol.yml"),
+	})
+
+	testutil.Ok(t, e2e.StartAndWaitReady(otelcolRunnable))
+
+	q := e2ethanos.NewQuerierBuilder(e, "queriertester").WithTracingConfig(fmt.Sprintf(`type: OTLP
+config:
+  client_type: grpc
+  insecure: true
+  endpoint: %s`, otelcolRunnable.InternalEndpoint("grpc"))).WithEnvVars(map[string]string{
+		"OTEL_RESOURCE_ATTRIBUTES": "service.name=thanos-query",
+	}).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	instantQuery(t,
+		context.Background(),
+		q.Endpoint("http"),
+		func() string { return "time()" },
+		time.Now,
+		promclient.QueryOptions{},
+		1)
+
+	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query")
+	request, err := http.NewRequest("GET", url, nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, runutil.Retry(1*time.Second, make(<-chan struct{}), func() error {
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return err
+		}
+
+		if response.StatusCode != http.StatusOK {
+			return errors.New("status code not OK")
+		}
+
+		defer response.Body.Close()
+
+		body, err := io.ReadAll(response.Body)
+		testutil.Ok(t, err)
+
+		resp := string(body)
+		if strings.Contains(resp, `"data":[]`) {
+			return errors.New("no data returned")
+		}
+
+		testutil.Assert(t, strings.Contains(resp, `"serviceName":"thanos-query"`))
+		return nil
+	}))
+}
+
 func TestSidecarNotReady(t *testing.T) {
 	t.Parallel()
 
@@ -644,6 +765,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
+		"",
 		nil,
 	)
 
@@ -778,6 +900,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
+		"",
 		nil,
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
@@ -880,6 +1003,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
+		"",
 		"",
 		nil,
 	)
@@ -1363,7 +1487,7 @@ func urlParse(t testing.TB, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation) {
 	t.Helper()
 
 	var result model.Vector
@@ -1374,34 +1498,37 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"caller", "instantQuery",
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
+
+	var explanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
+		res, rexplanation, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
 		}
 		result = res
+		explanation = rexplanation
 		return nil
 	}))
 	sortResults(result)
-	return result
+	return result, explanation
 }
 
-func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, error) {
-	res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
+	res, warnings, explanation, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(warnings) > 0 {
-		return nil, errors.Errorf("unexpected warnings %s", warnings)
+		return nil, nil, errors.Errorf("unexpected warnings %s", warnings)
 	}
 
 	if len(res) != expectedSeriesLen {
-		return nil, errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
+		return nil, nil, errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
 	}
 
 	sortResults(res)
-	return res, nil
+	return res, explanation, nil
 }
 
 func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
@@ -1416,7 +1543,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", len(expected), q()),
 	)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		res, warnings, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
 		}
@@ -1447,7 +1574,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
-	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
+	result, _ := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -1457,7 +1584,7 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() str
 	t.Helper()
 
 	sortResults(expected)
-	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
+	result, _ := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for _, r := range result {
 		r.Timestamp = 0 // Does not matter for us.
 	}
@@ -1520,13 +1647,14 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) {
+func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) *promclient.Explanation {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	var retExplanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q(), start, end, step, opts)
+		res, warnings, explanation, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q(), start, end, step, opts)
 		if err != nil {
 			return err
 		}
@@ -1539,8 +1667,12 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 			return errors.Wrap(err, "result check failed")
 		}
 
+		retExplanation = explanation
+
 		return nil
 	}))
+
+	return retExplanation
 }
 
 func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) error) {
@@ -1837,7 +1969,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 
 	var expectedRes model.Matrix
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery(),
+		res, warnings, _, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery(),
 			timestamp.FromTime(now.Add(time.Duration(-7*24)*time.Hour)),
 			timestamp.FromTime(now),
 			2419, // Taken from UI.
@@ -2099,7 +2231,7 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
 	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+	result, _ := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(up)"
 	}, time.Now, promclient.QueryOptions{}, 1)
 	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)

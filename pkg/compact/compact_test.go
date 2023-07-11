@@ -214,8 +214,6 @@ func TestRetentionProgressCalculate(t *testing.T) {
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
 	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
 
-	type groupedResult map[string]float64
-
 	type retInput struct {
 		meta   []*metadata.Meta
 		resMap map[ResolutionLevel]time.Duration
@@ -238,7 +236,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 	for _, tcase := range []struct {
 		testName string
 		input    retInput
-		expected groupedResult
+		expected float64
 	}{
 		{
 			// In this test case, blocks belonging to multiple groups are tested. All blocks in the first group and the first block in the second group are beyond their retention period. In the second group, the second block still has some time before its retention period and hence, is not marked to be deleted.
@@ -257,11 +255,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 					ResolutionLevel(downsample.ResLevel2): 6 * 30 * 24 * time.Hour, // 6 months retention.
 				},
 			},
-			expected: groupedResult{
-				keys[0]: 2.0,
-				keys[1]: 1.0,
-				keys[2]: 0.0,
-			},
+			expected: 3.0,
 		}, {
 			// In this test case, all the blocks are retained since they have not yet crossed their retention period.
 			testName: "retain_test",
@@ -277,11 +271,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 					ResolutionLevel(downsample.ResLevel2): 16 * 30 * 24 * time.Hour, // 6 months retention.
 				},
 			},
-			expected: groupedResult{
-				keys[0]: 0,
-				keys[1]: 0,
-				keys[2]: 0,
-			},
+			expected: 0.0,
 		},
 		{
 			// In this test case, all the blocks are deleted since they are past their retention period.
@@ -298,11 +288,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 					ResolutionLevel(downsample.ResLevel2): 6 * 30 * 24 * time.Hour, // 6 months retention.
 				},
 			},
-			expected: groupedResult{
-				keys[0]: 1,
-				keys[1]: 1,
-				keys[2]: 1,
-			},
+			expected: 3.0,
 		},
 		{
 			// In this test case, none of the blocks are marked for deletion since the retention period is 0d i.e. indefinitely long retention.
@@ -319,11 +305,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 					ResolutionLevel(downsample.ResLevel2): 0,
 				},
 			},
-			expected: groupedResult{
-				keys[0]: 0,
-				keys[1]: 0,
-				keys[2]: 0,
-			},
+			expected: 0.0,
 		},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
@@ -338,11 +320,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 			testutil.Ok(t, err)
 			metrics := ps.RetentionProgressMetrics
 			testutil.Ok(t, err)
-			for key := range tcase.expected {
-				a, err := metrics.NumberOfBlocksToDelete.GetMetricWithLabelValues(key)
-				testutil.Ok(t, err)
-				testutil.Equals(t, tcase.expected[key], promtestutil.ToFloat64(a))
-			}
+			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(metrics.NumberOfBlocksToDelete))
 		}); !ok {
 			return
 		}
@@ -353,7 +331,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
 	}
-	type groupedResult map[string]planResult
 
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
@@ -383,7 +360,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 	for _, tcase := range []struct {
 		testName string
 		input    []*metadata.Meta
-		expected groupedResult
+		expected planResult
 	}{
 		{
 			// This test has a single compaction run with two blocks from the second group compacted.
@@ -398,19 +375,9 @@ func TestCompactProgressCalculate(t *testing.T) {
 				createBlockMeta(6, int64(time.Duration(12)*time.Hour/time.Millisecond), int64(time.Duration(20)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 				createBlockMeta(7, int64(time.Duration(20)*time.Hour/time.Millisecond), int64(time.Duration(28)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
-			expected: map[string]planResult{
-				keys[0]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
-				},
-				keys[1]: {
-					compactionRuns:   1.0,
-					compactionBlocks: 2.0,
-				},
-				keys[2]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
-				},
+			expected: planResult{
+				compactionRuns:   1.0,
+				compactionBlocks: 2.0,
 			},
 		},
 		{
@@ -425,15 +392,9 @@ func TestCompactProgressCalculate(t *testing.T) {
 				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
 				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
 			},
-			expected: map[string]planResult{
-				keys[0]: {
-					compactionRuns:   3.0,
-					compactionBlocks: 6.0,
-				},
-				keys[1]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
-				},
+			expected: planResult{
+				compactionRuns:   3.0,
+				compactionBlocks: 6.0,
 			},
 		},
 		{
@@ -446,11 +407,9 @@ func TestCompactProgressCalculate(t *testing.T) {
 				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 				createBlockMeta(4, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(12)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
-			expected: map[string]planResult{
-				keys[2]: {
-					compactionRuns:   1.0,
-					compactionBlocks: 2.0,
-				},
+			expected: planResult{
+				compactionRuns:   1.0,
+				compactionBlocks: 2.0,
 			},
 		},
 	} {
@@ -465,14 +424,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 			testutil.Ok(t, err)
 			metrics := ps.CompactProgressMetrics
 			testutil.Ok(t, err)
-			for key := range tcase.expected {
-				a, err := metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues(key)
-				testutil.Ok(t, err)
-				b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues(key)
-				testutil.Ok(t, err)
-				testutil.Equals(t, tcase.expected[key].compactionBlocks, promtestutil.ToFloat64(a))
-				testutil.Equals(t, tcase.expected[key].compactionRuns, promtestutil.ToFloat64(b))
-			}
+			testutil.Equals(t, tcase.expected.compactionBlocks, promtestutil.ToFloat64(metrics.NumberOfCompactionBlocks))
+			testutil.Equals(t, tcase.expected.compactionRuns, promtestutil.ToFloat64(metrics.NumberOfCompactionRuns))
 		}); !ok {
 			return
 		}
@@ -482,7 +435,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 func TestDownsampleProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
-	type groupedResult map[string]float64
 
 	keys := make([]string, 3)
 	m := make([]metadata.Meta, 3)
@@ -505,7 +457,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	for _, tcase := range []struct {
 		testName string
 		input    []*metadata.Meta
-		expected groupedResult
+		expected float64
 	}{
 		{
 			// This test case has blocks from multiple groups and resolution levels. Only the blocks in the second group should be downsampled since the others either have time differences not in the range for their resolution, or a resolution which should not be downsampled.
@@ -516,11 +468,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 				createBlockMeta(9, 0, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 11}),
 				createBlockMeta(8, 0, downsample.ResLevel2DownsampleRange, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{9, 10}),
 			},
-			expected: map[string]float64{
-				keys[0]: 0.0,
-				keys[1]: 2.0,
-				keys[2]: 0.0,
-			},
+			expected: 2.0,
 		}, {
 			// This is a test case for resLevel0, with the correct time difference threshold.
 			// This block should be downsampled.
@@ -528,9 +476,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			input: []*metadata.Meta{
 				createBlockMeta(9, 0, downsample.ResLevel1DownsampleRange, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
-			expected: map[string]float64{
-				keys[0]: 1.0,
-			},
+			expected: 1.0,
 		}, {
 			// This is a test case for resLevel1, with the correct time difference threshold.
 			// This block should be downsampled.
@@ -538,9 +484,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			input: []*metadata.Meta{
 				createBlockMeta(9, 0, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
 			},
-			expected: map[string]float64{
-				keys[1]: 1.0,
-			},
+			expected: 1.0,
 		},
 		{
 			// This is a test case for resLevel2.
@@ -549,9 +493,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			input: []*metadata.Meta{
 				createBlockMeta(10, 0, downsample.ResLevel2DownsampleRange, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{11, 12}),
 			},
-			expected: map[string]float64{
-				keys[2]: 0.0,
-			},
+			expected: 0.0,
 		}, {
 			// This is a test case for resLevel0, with incorrect time difference, below the threshold.
 			// This block should be downsampled.
@@ -559,9 +501,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			input: []*metadata.Meta{
 				createBlockMeta(9, 1, downsample.ResLevel1DownsampleRange, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
-			expected: map[string]float64{
-				keys[0]: 0.0,
-			},
+			expected: 0.0,
 		},
 		{
 			// This is a test case for resLevel1, with incorrect time difference, below the threshold.
@@ -570,9 +510,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			input: []*metadata.Meta{
 				createBlockMeta(9, 1, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
 			},
-			expected: map[string]float64{
-				keys[1]: 0.0,
-			},
+			expected: 0.0,
 		},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
@@ -586,12 +524,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			err = ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics
-			for key := range tcase.expected {
-				a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues(key)
-
-				testutil.Ok(t, err)
-				testutil.Equals(t, tcase.expected[key], promtestutil.ToFloat64(a))
-			}
+			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(metrics.NumberOfBlocksDownsampled))
 		}); !ok {
 			return
 		}

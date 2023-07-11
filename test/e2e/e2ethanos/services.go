@@ -248,6 +248,7 @@ type QuerierBuilder struct {
 	fileSDStoreAddresses    []string
 	ruleAddresses           []string
 	metadataAddresses       []string
+	envVars                 map[string]string
 	targetAddresses         []string
 	exemplarAddresses       []string
 	enableFeatures          []string
@@ -373,6 +374,11 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithEnvVars(envVars map[string]string) *QuerierBuilder {
+	q.envVars = envVars
+	return q
+}
+
 func (q *QuerierBuilder) WithTelemetryQuantiles(duration []float64, samples []float64, series []float64) *QuerierBuilder {
 	q.telemetryDurationQuantiles = duration
 	q.telemetrySamplesQuantiles = samples
@@ -390,6 +396,7 @@ func (q *QuerierBuilder) Init() *e2emon.InstrumentedRunnable {
 		Image:     q.image,
 		Command:   e2e.NewCommand("query", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		EnvVars:   q.envVars,
 	})), "http")
 }
 
@@ -846,7 +853,7 @@ receivers:
 	})), "http")
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2emon.InstrumentedRunnable {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig, indexCacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2emon.InstrumentedRunnable {
 	f := e.Runnable(fmt.Sprintf("store-gw-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
 		Future()
@@ -883,6 +890,10 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 
 	if cacheConfig != "" {
 		args = append(args, "--store.caching-bucket.config", cacheConfig)
+	}
+
+	if indexCacheConfig != "" {
+		args = append(args, "--index-cache.config", indexCacheConfig)
 	}
 
 	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{

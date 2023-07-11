@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -50,19 +51,19 @@ func TestQueryNativeHistograms(t *testing.T) {
 	histograms := tsdbutil.GenerateTestHistograms(4)
 	now := time.Now()
 
-	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL1)
+	_, err = writeHistograms(ctx, now, testHistogramMetricName, histograms, nil, rawRemoteWriteURL1)
 	testutil.Ok(t, err)
-	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL2)
+	_, err = writeHistograms(ctx, now, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2)
 	testutil.Ok(t, err)
 
 	ts := func() time.Time { return now }
 
 	// Make sure we can query histogram from both Prometheus instances.
-	queryAndAssert(t, ctx, prom1.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{}, expectedHistogramModelVector(histograms[len(histograms)-1], nil))
-	queryAndAssert(t, ctx, prom2.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{}, expectedHistogramModelVector(histograms[len(histograms)-1], nil))
+	queryAndAssert(t, ctx, prom1.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{}, expectedHistogramModelVector(testHistogramMetricName, histograms[len(histograms)-1], nil, nil))
+	queryAndAssert(t, ctx, prom2.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{}, expectedHistogramModelVector(testHistogramMetricName, histograms[len(histograms)-1], nil, nil))
 
 	t.Run("query deduplicated histogram", func(t *testing.T) {
-		queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(histograms[len(histograms)-1], map[string]string{
+		queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(testHistogramMetricName, histograms[len(histograms)-1], nil, map[string]string{
 			"prometheus": "prom-ha",
 		}))
 	})
@@ -90,7 +91,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 
 	t.Run("query histogram rate and compare to Prometheus result", func(t *testing.T) {
 		query := func() string { return fmt.Sprintf("rate(%v[1m])", testHistogramMetricName) }
-		expected := instantQuery(t, ctx, prom1.Endpoint("http"), query, ts, promclient.QueryOptions{}, 1)
+		expected, _ := instantQuery(t, ctx, prom1.Endpoint("http"), query, ts, promclient.QueryOptions{}, 1)
 		expected[0].Metric["prometheus"] = "prom-ha"
 		expected[0].Timestamp = 0
 		queryAndAssert(t, ctx, querier.Endpoint("http"), query, ts, promclient.QueryOptions{Deduplicate: true}, expected)
@@ -123,14 +124,22 @@ func TestWriteNativeHistograms(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
+	timeNow := time.Now()
+
 	histograms := tsdbutil.GenerateTestHistograms(1)
-	now := time.Now()
-	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL)
+	_, err = writeHistograms(ctx, timeNow, testHistogramMetricName, histograms, nil, rawRemoteWriteURL)
 	testutil.Ok(t, err)
 
-	ts := func() time.Time { return now }
+	testFloatHistogramMetricName := testHistogramMetricName + "_float"
+	floatHistograms := tsdbutil.GenerateTestFloatHistograms(1)
+	_, err = writeHistograms(ctx, timeNow, testFloatHistogramMetricName, nil, floatHistograms, rawRemoteWriteURL)
+	testutil.Ok(t, err)
 
-	queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(histograms[0], map[string]string{
+	queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return testHistogramMetricName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(testHistogramMetricName, histograms[0], nil, map[string]string{
+		"tenant_id": "default-tenant",
+	}))
+
+	queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return testFloatHistogramMetricName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(testFloatHistogramMetricName, nil, floatHistograms[0], map[string]string{
 		"tenant_id": "default-tenant",
 	}))
 }
@@ -166,9 +175,9 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 
 	histograms := tsdbutil.GenerateTestHistograms(4)
 	now := time.Now()
-	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL1)
+	_, err = writeHistograms(ctx, now, testHistogramMetricName, histograms, nil, rawRemoteWriteURL1)
 	testutil.Ok(t, err)
-	startTime, err := writeHistograms(ctx, now, histograms, rawRemoteWriteURL2)
+	startTime, err := writeHistograms(ctx, now, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2)
 	testutil.Ok(t, err)
 
 	// Ensure we can get the result from Querier first so that it
@@ -193,7 +202,7 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	ts := func() time.Time { return now }
 
 	t.Run("query frontend works for instant query", func(t *testing.T) {
-		queryAndAssert(t, ctx, queryFrontend.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(histograms[len(histograms)-1], map[string]string{
+		queryAndAssert(t, ctx, queryFrontend.Endpoint("http"), func() string { return testHistogramMetricName }, ts, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(testHistogramMetricName, histograms[len(histograms)-1], nil, map[string]string{
 			"prometheus": "prom-ha",
 		}))
 
@@ -211,7 +220,7 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	})
 
 	t.Run("query range query, all but last histogram", func(t *testing.T) {
-		expectedRes := expectedHistogramModelMatrix(histograms[:len(histograms)-1], startTime, map[string]string{
+		expectedRes := expectedHistogramModelMatrix(testHistogramMetricName, histograms[:len(histograms)-1], nil, startTime, map[string]string{
 			"prometheus": "prom-ha",
 		})
 
@@ -247,7 +256,7 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	})
 
 	t.Run("query range, all histograms", func(t *testing.T) {
-		expectedRes := expectedHistogramModelMatrix(histograms, startTime, map[string]string{
+		expectedRes := expectedHistogramModelMatrix(testHistogramMetricName, histograms, nil, startTime, map[string]string{
 			"prometheus": "prom-ha",
 		})
 
@@ -280,7 +289,7 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	})
 
 	t.Run("query range, all histograms again", func(t *testing.T) {
-		expectedRes := expectedHistogramModelMatrix(histograms, startTime, map[string]string{
+		expectedRes := expectedHistogramModelMatrix(testHistogramMetricName, histograms, nil, startTime, map[string]string{
 			"prometheus": "prom-ha",
 		})
 
@@ -314,9 +323,14 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	})
 }
 
-func writeHistograms(ctx context.Context, now time.Time, histograms []*histogram.Histogram, rawRemoteWriteURL string) (time.Time, error) {
+func writeHistograms(ctx context.Context, now time.Time, name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, rawRemoteWriteURL string) (time.Time, error) {
 	startTime := now.Add(time.Duration(len(histograms)-1) * -30 * time.Second).Truncate(30 * time.Second)
 	prompbHistograms := make([]prompb.Histogram, 0, len(histograms))
+
+	for i, fh := range floatHistograms {
+		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
+		prompbHistograms = append(prompbHistograms, remote.FloatHistogramToHistogramProto(ts, fh))
+	}
 
 	for i, h := range histograms {
 		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
@@ -325,7 +339,7 @@ func writeHistograms(ctx context.Context, now time.Time, histograms []*histogram
 
 	timeSeriespb := prompb.TimeSeries{
 		Labels: []prompb.Label{
-			{Name: "__name__", Value: testHistogramMetricName},
+			{Name: "__name__", Value: name},
 			{Name: "foo", Value: "bar"},
 		},
 		Histograms: prompbHistograms,
@@ -336,45 +350,60 @@ func writeHistograms(ctx context.Context, now time.Time, histograms []*histogram
 	})
 }
 
-func expectedHistogramModelVector(histogram *histogram.Histogram, externalLabels map[string]string) model.Vector {
+func expectedHistogramModelVector(metricName string, histogram *histogram.Histogram, floatHistogram *histogram.FloatHistogram, externalLabels map[string]string) model.Vector {
 	metrics := model.Metric{
-		"__name__": testHistogramMetricName,
+		"__name__": model.LabelValue(metricName),
 		"foo":      "bar",
 	}
 	for labelKey, labelValue := range externalLabels {
 		metrics[model.LabelName(labelKey)] = model.LabelValue(labelValue)
+	}
+
+	var sampleHistogram *model.SampleHistogram
+
+	if histogram != nil {
+		sampleHistogram = histogramToSampleHistogram(histogram)
+	} else {
+		sampleHistogram = floatHistogramToSampleHistogram(floatHistogram)
 	}
 
 	return model.Vector{
 		&model.Sample{
 			Metric:    metrics,
-			Histogram: histogramToSampleHistogram(histogram),
+			Histogram: sampleHistogram,
 		},
 	}
 }
 
-func expectedHistogramModelMatrix(histograms []*histogram.Histogram, startTime time.Time, externalLabels map[string]string) model.Matrix {
+func expectedHistogramModelMatrix(metricName string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, startTime time.Time, externalLabels map[string]string) model.Matrix {
 	metrics := model.Metric{
-		"__name__": testHistogramMetricName,
+		"__name__": model.LabelValue(metricName),
 		"foo":      "bar",
 	}
 	for labelKey, labelValue := range externalLabels {
 		metrics[model.LabelName(labelKey)] = model.LabelValue(labelValue)
 	}
 
-	shp := make([]model.SampleHistogramPair, 0, len(histograms))
+	sampleHistogramPair := make([]model.SampleHistogramPair, 0, len(histograms))
 
 	for i, h := range histograms {
-		shp = append(shp, model.SampleHistogramPair{
+		sampleHistogramPair = append(sampleHistogramPair, model.SampleHistogramPair{
 			Timestamp: model.Time(startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()),
 			Histogram: histogramToSampleHistogram(h),
+		})
+	}
+
+	for i, fh := range floatHistograms {
+		sampleHistogramPair = append(sampleHistogramPair, model.SampleHistogramPair{
+			Timestamp: model.Time(startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()),
+			Histogram: floatHistogramToSampleHistogram(fh),
 		})
 	}
 
 	return model.Matrix{
 		&model.SampleStream{
 			Metric:     metrics,
-			Histograms: shp,
+			Histograms: sampleHistogramPair,
 		},
 	}
 }
@@ -401,7 +430,29 @@ func histogramToSampleHistogram(h *histogram.Histogram) *model.SampleHistogram {
 	}
 }
 
-func bucketToSampleHistogramBucket(bucket histogram.Bucket[uint64]) *model.HistogramBucket {
+func floatHistogramToSampleHistogram(fh *histogram.FloatHistogram) *model.SampleHistogram {
+	var buckets []*model.HistogramBucket
+
+	it := fh.NegativeBucketIterator()
+	for it.Next() {
+		buckets = append([]*model.HistogramBucket{bucketToSampleHistogramBucket(it.At())}, buckets...)
+	}
+
+	buckets = append(buckets, bucketToSampleHistogramBucket(fh.ZeroBucket()))
+
+	it = fh.PositiveBucketIterator()
+	for it.Next() {
+		buckets = append(buckets, bucketToSampleHistogramBucket(it.At()))
+	}
+
+	return &model.SampleHistogram{
+		Count:   model.FloatString(fh.Count),
+		Sum:     model.FloatString(fh.Sum),
+		Buckets: buckets,
+	}
+}
+
+func bucketToSampleHistogramBucket[BC histogram.BucketCount](bucket histogram.Bucket[BC]) *model.HistogramBucket {
 	return &model.HistogramBucket{
 		Lower:      model.FloatString(bucket.Lower),
 		Upper:      model.FloatString(bucket.Upper),
@@ -410,7 +461,7 @@ func bucketToSampleHistogramBucket(bucket histogram.Bucket[uint64]) *model.Histo
 	}
 }
 
-func boundaries(bucket histogram.Bucket[uint64]) int32 {
+func boundaries[BC histogram.BucketCount](bucket histogram.Bucket[BC]) int32 {
 	switch {
 	case bucket.UpperInclusive && !bucket.LowerInclusive:
 		return 0
