@@ -263,10 +263,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				F: s.Value,
 			})
 		}
-		for _, h := range ts.Histograms {
+		for _, hp := range ts.Histograms {
 			series.Histograms = append(series.Histograms, promql.HPoint{
-				T: h.Timestamp,
-				H: prompb.HistogramProtoToFloatHistogram(h),
+				T: hp.Timestamp,
+				H: prompb.FloatHistogramProtoToFloatHistogram(hp),
 			})
 		}
 		result = append(result, series)

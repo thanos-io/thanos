@@ -117,7 +117,7 @@ func RunReplicate(
 	fromBkt, err := client.NewBucket(
 		logger,
 		fromConfContentYaml,
-		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg),
+		prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
 		component.Replicate.String(),
 	)
 	if err != nil {
@@ -136,7 +136,7 @@ func RunReplicate(
 	toBkt, err := client.NewBucket(
 		logger,
 		toConfContentYaml,
-		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg),
+		prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg)),
 		component.Replicate.String(),
 	)
 	if err != nil {
