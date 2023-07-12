@@ -1517,7 +1517,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 100e7)
 	testutil.Ok(t, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{
 		MaxItemSize: 3000,
 		// This is the exact size of cache needed for our *single request*.
 		// This is limited in order to make sure we test evictions.
@@ -1820,7 +1820,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -1911,7 +1911,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2093,7 +2093,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2309,7 +2309,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2516,7 +2516,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	// Create an index header reader.
 	indexHeaderReader, err := indexheader.NewBinaryReader(ctx, logger, bkt, tmpDir, blockMeta.ULID, DefaultPostingOffsetInMemorySampling)
 	testutil.Ok(b, err)
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.DefaultInMemoryIndexCacheConfig)
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
