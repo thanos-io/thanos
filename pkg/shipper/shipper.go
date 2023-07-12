@@ -104,6 +104,11 @@ func New(
 		lbls = func() labels.Labels { return nil }
 	}
 
+	if uploadCompactedFunc == nil {
+		uploadCompactedFunc = func() bool {
+			return false
+		}
+	}
 	return &Shipper{
 		logger:                 logger,
 		dir:                    dir,

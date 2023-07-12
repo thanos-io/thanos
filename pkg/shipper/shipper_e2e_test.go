@@ -44,8 +44,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		dir := t.TempDir()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		uploadCompactedFunc := func() bool { return false }
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, false, metadata.NoneFunc)
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, nil, false, metadata.NoneFunc)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

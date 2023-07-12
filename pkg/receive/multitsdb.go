@@ -600,7 +600,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.bucket,
 			func() labels.Labels { return lset },
 			metadata.ReceiveSource,
-			func() bool { return false },
+			nil,
 			t.allowOutOfOrderUpload,
 			t.hashFunc,
 		)
