@@ -5,7 +5,6 @@ package compact
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -495,17 +494,6 @@ func (cg *Group) Resolution() int64 {
 
 func (cg *Group) Extensions() any {
 	return cg.extensions
-}
-
-func (cg *Group) ParseExtensions(v any) error {
-	extensionsContent, err := json.Marshal(cg.extensions)
-	if err != nil {
-		return err
-	}
-	if err = json.Unmarshal(extensionsContent, v); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (cg *Group) SetExtensions(extensions any) {
