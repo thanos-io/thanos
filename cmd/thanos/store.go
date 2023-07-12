@@ -323,7 +323,7 @@ func runStore(
 	if len(indexCacheContentYaml) > 0 {
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
-		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
+		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, nil, reg, storecache.InMemoryIndexCacheConfig{
 			MaxSize:     model.Bytes(conf.indexCacheSizeBytes),
 			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})

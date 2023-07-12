@@ -207,8 +207,10 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		if err := r.watcher.addFile(r.cfgFile); err != nil {
 			return errors.Wrapf(err, "add config file %s to watcher", r.cfgFile)
 		}
-
-		if err := r.apply(ctx); err != nil {
+		initialSyncCtx, initialSyncCancel := context.WithTimeout(ctx, r.watchInterval)
+		err := r.apply(initialSyncCtx)
+		initialSyncCancel()
+		if err != nil {
 			return err
 		}
 	}

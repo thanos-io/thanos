@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/oklog/ulid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/crypto/blake2b"
@@ -52,6 +54,25 @@ type IndexCache interface {
 	// FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 	// and returns a map containing cache hits, along with a list of missing IDs.
 	FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef)
+}
+
+// Common metrics that should be used by all cache implementations.
+type commonMetrics struct {
+	requestTotal *prometheus.CounterVec
+	hitsTotal    *prometheus.CounterVec
+}
+
+func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
+	return &commonMetrics{
+		requestTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_store_index_cache_requests_total",
+			Help: "Total number of items requests to the cache.",
+		}, []string{"item_type"}),
+		hitsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_store_index_cache_hits_total",
+			Help: "Total number of items requests to the cache that were a hit.",
+		}, []string{"item_type"}),
+	}
 }
 
 type cacheKey struct {
