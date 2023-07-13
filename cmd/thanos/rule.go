@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/strutil"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"gopkg.in/yaml.v2"
@@ -722,7 +723,7 @@ func runRule(
 		if err != nil {
 			return err
 		}
-		bkt = objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Ensure we close up everything properly.
 		defer func() {

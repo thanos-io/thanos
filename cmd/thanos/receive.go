@@ -180,7 +180,7 @@ func runReceive(
 			if err != nil {
 				return err
 			}
-			bkt = objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+			bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 		} else {
 			level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		}

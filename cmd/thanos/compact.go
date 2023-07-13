@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
@@ -208,7 +209,7 @@ func runCompact(
 	if err != nil {
 		return err
 	}
-	insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {

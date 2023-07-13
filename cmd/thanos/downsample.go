@@ -86,7 +86,7 @@ func RunDownsample(
 	if err != nil {
 		return err
 	}
-	insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	// While fetching blocks, filter out blocks that were marked for no downsample.
 	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{

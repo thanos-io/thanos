@@ -31,10 +31,6 @@ type erroringBucket struct {
 	bkt objstore.InstrumentedBucket
 }
 
-func (b *erroringBucket) IsCustomerManagedKeyError(err error) bool {
-	return b.bkt.IsCustomerManagedKeyError(err)
-}
-
 func (b *erroringBucket) Close() error {
 	return b.bkt.Close()
 }

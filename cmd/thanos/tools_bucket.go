@@ -304,7 +304,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 		defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 
 		backupconfContentYaml, err := objStoreBackupConfig.Content()
@@ -323,7 +323,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			if err != nil {
 				return err
 			}
-			insBkt = objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(nil, bkt))
+			insBkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, nil, bkt.Name()))
 
 			defer runutil.CloseWithLogOnErr(logger, backupBkt, "backup bucket client")
 		}
@@ -387,7 +387,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		var filters []block.MetadataFilter
 
@@ -494,7 +494,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
@@ -603,7 +603,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		if err != nil {
 			return errors.Wrap(err, "bucket client")
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap, insBkt)
 
@@ -789,7 +789,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
@@ -1045,7 +1045,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		var ids []ulid.ULID
 		for _, id := range tbc.blockIDs {
@@ -1125,7 +1125,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		var modifiers []compactv2.Modifier
 
@@ -1333,7 +1333,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		if err != nil {
 			return err
 		}
-		insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})

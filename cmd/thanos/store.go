@@ -22,6 +22,7 @@ import (
 	commonmodel "github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
@@ -287,7 +288,7 @@ func runStore(
 	if err != nil {
 		return err
 	}
-	insBkt := objstoretracing.NewTracingBucket(client.NewInstrumentedBucket(extprom.WrapRegistererWithPrefix("thanos_", reg), bkt))
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	cachingBucketConfigYaml, err := conf.cachingBucketConfig.Content()
 	if err != nil {

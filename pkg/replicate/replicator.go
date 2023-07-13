@@ -119,10 +119,11 @@ func RunReplicate(
 	if err != nil {
 		return err
 	}
-	fromBkt := objstoretracing.NewTracingBucket(
-		client.NewInstrumentedBucket(
-			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
+	fromBkt := objstoretracing.WrapWithTraces(
+		objstore.WrapWithMetrics(
 			bkt,
+			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
+			bkt.Name(),
 		),
 	)
 
@@ -139,10 +140,11 @@ func RunReplicate(
 	if err != nil {
 		return err
 	}
-	toBkt = objstoretracing.NewTracingBucket(
-		client.NewInstrumentedBucket(
-			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
+	toBkt = objstoretracing.WrapWithTraces(
+		objstore.WrapWithMetrics(
 			toBkt,
+			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
+			toBkt.Name(),
 		),
 	)
 
