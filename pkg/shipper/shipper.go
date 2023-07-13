@@ -342,6 +342,8 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 
 	if uploadCompacted {
 		s.metrics.uploadedCompacted.Set(1)
+	} else {
+		s.metrics.uploadedCompacted.Set(0)
 	}
 	return uploaded, nil
 }
