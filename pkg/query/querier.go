@@ -164,11 +164,6 @@ func newQuerier(
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
-	rl := make(map[string]struct{})
-	for _, replicaLabel := range replicaLabels {
-		rl[replicaLabel] = struct{}{}
-	}
-
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
 	if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN

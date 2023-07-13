@@ -233,13 +233,13 @@ test_metric{a="2", b="2"} 1`)
 			},
 		})
 
-		// This should've returned only 2 series, but is returning 4 until the problem reported in
-		// https://github.com/thanos-io/thanos/issues/6257 is fixed
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+		// Until the bug was fixed, this testcase would return 4 series instead of 2.
 		instantQuery(t, ctx, qStatic.Endpoint("http"), func() string {
 			return "test_metric"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
-		}, 4)
+		}, 2)
 	})
 
 	t.Run("router_replication", func(t *testing.T) {
