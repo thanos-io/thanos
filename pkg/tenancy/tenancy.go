@@ -4,11 +4,16 @@
 package tenancy
 
 import (
+	"context"
 	"net/http"
 	"path"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/pkg/errors"
 )
+
+type contextKey int
 
 const (
 	// DefaultTenantHeader is the default header used to designate the tenant making a request.
@@ -17,6 +22,8 @@ const (
 	DefaultTenant = "default-tenant"
 	// DefaultTenantLabel is the default label-name with which the tenant is announced in stored metrics.
 	DefaultTenantLabel = "tenant_id"
+	// This key is used to pass tenant information using Context.
+	TenantKey contextKey = 0
 )
 
 // Allowed fields in client certificates.
@@ -93,4 +100,12 @@ func getTenantFromCertificate(r *http.Request, certTenantField string) (string, 
 	}
 
 	return tenant, nil
+}
+
+func GetTenantFromGRPCMetadata(ctx context.Context) (string, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok || len(md.Get(DefaultTenantHeader)) == 0 {
+		return DefaultTenant, errors.Errorf("could not get tenant from grpc metadata, using default: %s", DefaultTenantHeader)
+	}
+	return md.Get(DefaultTenantHeader)[0], nil
 }

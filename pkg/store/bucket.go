@@ -58,6 +58,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -1229,6 +1230,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		defer s.queryGate.Done()
 	}
 
+	tenant, err := tenancy.GetTenantFromGRPCMetadata(srv.Context())
+	if err != nil {
+		level.Warn(s.logger).Log("msg", err)
+	}
+	level.Debug(s.logger).Log("msg", "Tenant for Series request", "tenant", tenant)
+
 	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -1478,6 +1485,12 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
 
+	tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
+	if err != nil {
+		level.Warn(s.logger).Log("msg", err)
+	}
+	level.Debug(s.logger).Log("msg", "Tenant for LabelNames request", "tenant", tenant)
+
 	resHints := &hintspb.LabelNamesResponseHints{}
 
 	var reqBlockMatchers []*labels.Matcher
@@ -1665,6 +1678,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
+
+	tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
+	if err != nil {
+		level.Warn(s.logger).Log("msg", err)
+	}
+	level.Debug(s.logger).Log("msg", "Tenant for LabelValues request", "tenant", tenant)
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
