@@ -58,8 +58,9 @@ type IndexCache interface {
 
 // Common metrics that should be used by all cache implementations.
 type commonMetrics struct {
-	requestTotal *prometheus.CounterVec
-	hitsTotal    *prometheus.CounterVec
+	requestTotal  *prometheus.CounterVec
+	hitsTotal     *prometheus.CounterVec
+	dataSizeBytes *prometheus.HistogramVec
 }
 
 func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
@@ -71,6 +72,13 @@ func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
 		hitsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_index_cache_hits_total",
 			Help: "Total number of items requests to the cache that were a hit.",
+		}, []string{"item_type"}),
+		dataSizeBytes: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Name: "thanos_store_index_cache_stored_data_size_bytes",
+			Help: "Histogram to track item data size stored in index cache",
+			Buckets: []float64{
+				32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+			},
 		}, []string{"item_type"}),
 	}
 }
