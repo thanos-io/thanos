@@ -988,27 +988,6 @@ func TestQueryStoreDedup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
 
-	bucket := "store-gw-dedup-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
-
-	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
-	testutil.Ok(t, err)
-
-	storeGW := e2ethanos.NewStoreGW(
-		e,
-		"s1",
-		client.BucketConfig{
-			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
-		},
-		"",
-		"",
-		nil,
-	)
-	testutil.Ok(t, e2e.StartAndWaitReady(storeGW))
-
 	tests := []struct {
 		extReplicaLabel  string
 		intReplicaLabel  string
@@ -1036,7 +1015,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		},
 		{
 			desc:            "Deduplication works on external label with resorting required",
-			intReplicaLabel: "a",
+			extReplicaLabel: "a",
 			series: []seriesWithLabels{
 				{
 					intLabels: labels.FromStrings("__name__", "simple_series"),
@@ -1143,16 +1122,33 @@ func TestQueryStoreDedup(t *testing.T) {
 		},
 	}
 
-	// Prepare and upload all the blocks that will be used to S3.
-	var totalBlocks int
-	for _, tt := range tests {
-		createSimpleReplicatedBlocksInS3(ctx, t, e, l, bkt, tt.series, tt.blockFinderLabel)
-		totalBlocks += len(tt.series)
-	}
-	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(float64(totalBlocks)), "thanos_blocks_meta_synced"))
-
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
+			bucket := "store-gw-" + tt.blockFinderLabel
+			minio := e2edb.NewMinio(e, "thanos-minio"+tt.blockFinderLabel, bucket, e2edb.WithMinioTLS())
+			testutil.Ok(t, e2e.StartAndWaitReady(minio))
+
+			l := log.NewLogfmtLogger(os.Stdout)
+			bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+			testutil.Ok(t, err)
+
+			storeGW := e2ethanos.NewStoreGW(
+				e,
+				"s1"+tt.blockFinderLabel,
+				client.BucketConfig{
+					Type:   client.S3,
+					Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+				},
+				"",
+				"",
+				nil,
+			)
+			testutil.Ok(t, e2e.StartAndWaitReady(storeGW))
+
+			// Prepare and upload all the blocks that will be used to S3.
+			createSimpleReplicatedBlocksInS3(ctx, t, e, l, bkt, tt.series, tt.blockFinderLabel)
+			testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(float64(len(tt.series))), "thanos_blocks_meta_synced"))
+
 			querierBuilder := e2ethanos.NewQuerierBuilder(e, tt.blockFinderLabel, storeGW.InternalEndpoint("grpc")).WithProxyStrategy("lazy")
 			var replicaLabels []string
 			if tt.intReplicaLabel != "" {
