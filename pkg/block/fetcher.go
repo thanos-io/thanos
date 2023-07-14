@@ -586,24 +586,28 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 	return nil
 }
 
-var _ MetadataFilter = &DeduplicateFilter{}
+var _ MetadataFilter = &DefaultDeduplicateFilter{}
 
-// DeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
+type DeduplicateFilter interface {
+	DuplicateIDs() []ulid.ULID
+}
+
+// DefaultDeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
 // Not go-routine safe.
-type DeduplicateFilter struct {
+type DefaultDeduplicateFilter struct {
 	duplicateIDs []ulid.ULID
 	concurrency  int
 	mu           sync.Mutex
 }
 
-// NewDeduplicateFilter creates DeduplicateFilter.
-func NewDeduplicateFilter(concurrency int) *DeduplicateFilter {
-	return &DeduplicateFilter{concurrency: concurrency}
+// NewDeduplicateFilter creates DefaultDeduplicateFilter.
+func NewDeduplicateFilter(concurrency int) *DefaultDeduplicateFilter {
+	return &DefaultDeduplicateFilter{concurrency: concurrency}
 }
 
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
-func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	f.duplicateIDs = f.duplicateIDs[:0]
 
 	var wg sync.WaitGroup
@@ -635,7 +639,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	return nil
 }
 
-func (f *DeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec) {
+func (f *DefaultDeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -677,8 +681,8 @@ childLoop:
 	f.mu.Unlock()
 }
 
-// DuplicateIDs returns slice of block ids that are filtered out by DeduplicateFilter.
-func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
+// DuplicateIDs returns slice of block ids that are filtered out by DefaultDeduplicateFilter.
+func (f *DefaultDeduplicateFilter) DuplicateIDs() []ulid.ULID {
 	return f.duplicateIDs
 }
 
