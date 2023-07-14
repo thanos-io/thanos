@@ -38,7 +38,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/strutil"
+
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -716,10 +719,11 @@ func runRule(
 	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Rule.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Rule.String())
 		if err != nil {
 			return err
 		}
+		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Ensure we close up everything properly.
 		defer func() {

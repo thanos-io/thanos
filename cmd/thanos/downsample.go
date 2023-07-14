@@ -21,8 +21,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -80,15 +82,16 @@ func RunDownsample(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Downsample.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, component.Downsample.String())
 	if err != nil {
 		return err
 	}
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	// While fetching blocks, filter out blocks that were marked for no downsample.
-	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
 		block.NewDeduplicateFilter(block.FetcherConcurrency),
-		downsample.NewGatherNoDownsampleMarkFilter(logger, bkt),
+		downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt),
 	})
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
@@ -97,7 +100,7 @@ func RunDownsample(
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
-			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 		}
 	}()
 
@@ -113,7 +116,7 @@ func RunDownsample(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 			statusProber.Ready()
 
 			return runutil.Repeat(waitInterval, ctx.Done(), func() error {
@@ -128,7 +131,7 @@ func RunDownsample(
 					metrics.downsamples.WithLabelValues(groupKey)
 					metrics.downsampleFailures.WithLabelValues(groupKey)
 				}
-				if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 
@@ -137,7 +140,7 @@ func RunDownsample(
 				if err != nil {
 					return errors.Wrap(err, "sync before second pass of downsampling")
 				}
-				if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 				return nil
