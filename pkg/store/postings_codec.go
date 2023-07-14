@@ -423,7 +423,7 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 	return buf.B, nil
 }
 
-// Creating 15 buckets from 1k to 32mb
+// Creating 15 buckets from 1k to 32mb.
 var snappyDecodePool = pool.MustNewBucketedBytes(1024, 32*1024*1024, 2, 0)
 
 type closeablePostings interface {
