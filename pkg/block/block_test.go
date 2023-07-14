@@ -451,7 +451,7 @@ func TestHashDownload(t *testing.T) {
 
 	bkt := objstore.NewInMemBucket()
 	r := prometheus.NewRegistry()
-	instrumentedBkt := objstore.BucketWithMetrics("test", bkt, extprom.WrapRegistererWithPrefix("thanos_", r))
+	instrumentedBkt := objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", r), "test")
 
 	b1, err := e2eutil.CreateBlockWithTombstone(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},

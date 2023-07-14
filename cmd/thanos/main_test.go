@@ -31,10 +31,6 @@ type erroringBucket struct {
 	bkt objstore.InstrumentedBucket
 }
 
-func (b *erroringBucket) IsCustomerManagedKeyError(err error) bool {
-	return b.bkt.IsCustomerManagedKeyError(err)
-}
-
 func (b *erroringBucket) Close() error {
 	return b.bkt.Close()
 }
@@ -79,6 +75,11 @@ func (b *erroringBucket) Exists(ctx context.Context, name string) (bool, error) 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *erroringBucket) IsObjNotFoundErr(err error) bool {
 	return b.bkt.IsObjNotFoundErr(err)
+}
+
+// IsCustomerManagedKeyError returns true if error means that customer managed key is invalid.
+func (b *erroringBucket) IsCustomerManagedKeyError(err error) bool {
+	return b.bkt.IsCustomerManagedKeyError(err)
 }
 
 // Attributes returns information about the specified object.

@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -26,9 +24,12 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
+	"google.golang.org/grpc"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
-	"gopkg.in/yaml.v2"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -175,10 +176,11 @@ func runReceive(
 			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
-			bkt, err = client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), comp.String())
+			bkt, err = client.NewBucket(logger, confContentYaml, comp.String())
 			if err != nil {
 				return err
 			}
+			bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 		} else {
 			level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		}
