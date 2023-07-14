@@ -107,6 +107,8 @@ func (m *Thanos) ParseExtensions(v any) (any, error) {
 	return ConvertExtensions(m.Extensions, v)
 }
 
+// ConvertExtensions converts extensions with `any` type into specific type `v`
+// that the caller expects.
 func ConvertExtensions(extensions any, v any) (any, error) {
 	if extensions == nil {
 		return nil, nil
