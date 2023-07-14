@@ -33,12 +33,15 @@ type RemoteIndexCache struct {
 	compressionScheme string
 
 	// Metrics.
-	postingRequests         prometheus.Counter
-	seriesRequests          prometheus.Counter
-	expandedPostingRequests prometheus.Counter
-	postingHits             prometheus.Counter
-	seriesHits              prometheus.Counter
-	expandedPostingHits     prometheus.Counter
+	postingRequests              prometheus.Counter
+	seriesRequests               prometheus.Counter
+	expandedPostingRequests      prometheus.Counter
+	postingHits                  prometheus.Counter
+	seriesHits                   prometheus.Counter
+	expandedPostingHits          prometheus.Counter
+	postingDataSizeBytes         prometheus.Observer
+	expandedPostingDataSizeBytes prometheus.Observer
+	seriesDataSizeBytes          prometheus.Observer
 }
 
 // NewRemoteIndexCache makes a new RemoteIndexCache.
@@ -61,6 +64,10 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 	c.seriesHits = commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries)
 	c.expandedPostingHits = commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings)
 
+	c.postingDataSizeBytes = commonMetrics.dataSizeBytes.WithLabelValues(cacheTypePostings)
+	c.seriesDataSizeBytes = commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeSeries)
+	c.expandedPostingDataSizeBytes = commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeExpandedPostings)
+
 	level.Info(logger).Log("msg", "created index cache")
 
 	return c, nil
@@ -70,6 +77,7 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
+	c.postingDataSizeBytes.Observe(float64(len(v)))
 	key := cacheKey{blockID.String(), cacheKeyPostings(l), c.compressionScheme}.string()
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
@@ -118,6 +126,7 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labels.Matcher, v []byte) {
+	c.expandedPostingDataSizeBytes.Observe(float64(len(v)))
 	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(keys)), c.compressionScheme}.string()
 
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
@@ -148,6 +157,7 @@ func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ul
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
+	c.seriesDataSizeBytes.Observe(float64(len(v)))
 	key := cacheKey{blockID.String(), cacheKeySeries(id), ""}.string()
 
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
