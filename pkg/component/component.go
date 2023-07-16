@@ -117,6 +117,7 @@ var (
 	Downsample      = source{component: component{name: "downsample"}}
 	Replicate       = source{component: component{name: "replicate"}}
 	QueryFrontend   = source{component: component{name: "query-frontend"}}
+	ObjMeta         = source{component: component{name: "objmeta"}}
 	Debug           = sourceStoreAPI{component: component{name: "debug"}}
 	Receive         = sourceStoreAPI{component: component{name: "receive"}}
 	Rule            = sourceStoreAPI{component: component{name: "rule"}}

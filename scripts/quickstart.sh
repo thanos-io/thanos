@@ -68,6 +68,13 @@ config:
 EOF
 fi
 
+if [ -n "${LOCAL_BUCKET_ENABLED}" ]; then
+  cat <<EOF >data/bucket.yml
+  type: FILESYSTEM
+  config:
+    directory: data/local
+EOF
+fi
 # Setup alert / rules config file.
 cat >data/rules.yml <<-EOF
 	groups:
@@ -144,6 +151,30 @@ OBJSTORECFG=""
 if [ -n "${MINIO_ENABLED}" ]; then
   OBJSTORECFG="--objstore.config-file      data/bucket.yml"
 fi
+if [ -n "${LOCAL_BUCKET_ENABLED}" ]; then
+  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+fi
+
+# Start Thanos ObjMeta.
+OBJ_META_FLAG=""
+if [ -n "${OBJ_META_ENABLED}" ]; then
+  cat >data/obj_meta_redis_config.yaml <<-EOF
+type: REDIS
+config:
+  addr: 127.0.0.1:6379
+EOF
+
+  ${THANOS_EXECUTABLE} objmeta \
+    --http-address="0.0.0.0:20001" \
+    --grpc-address="0.0.0.0:20000" \
+    --log.level="debug" \
+    --objmeta.config-file=data/obj_meta_redis_config.yaml \
+    ${OBJSTORECFG} &
+
+  OBJ_META_FLAG="--objmeta.endpoint=127.0.0.1:20000"
+  sleep 0.5
+
+fi
 
 # Start one sidecar for each Prometheus server.
 for i in $(seq 0 2); do
@@ -161,6 +192,7 @@ for i in $(seq 0 2); do
     --http-grace-period 1s \
     --prometheus.url "${PROMETHEUS_URL}" \
     --tsdb.path data/prom"${i}" \
+    ${OBJ_META_FLAG} \
     ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:109${i}1"
@@ -193,6 +225,7 @@ metafile_content_ttl: 0s
     --http-grace-period 1s \
     --data-dir data/store \
     --store.caching-bucket.config-file=groupcache.yml \
+    ${OBJ_META_FLAG} \
     ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:10905"
@@ -219,6 +252,7 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --receive.local-endpoint 127.0.0.1:1${i}907 \
       --receive.hashrings '[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]' \
       --remote-write.address 0.0.0.0:1${i}908 \
+      ${OBJ_META_FLAG} \
       ${OBJSTORECFG} &
 
     STORES="${STORES} --store 127.0.0.1:1${i}907"
@@ -266,6 +300,7 @@ QUERIER_JAEGER_CONFIG=$(
 REMOTE_WRITE_FLAGS=""
 if [ -n "${STATELESS_RULER_ENABLED}" ]; then
   cat >data/rule-remote-write.yaml <<-EOF
+  name: "thanos-receivers"
   remote_write:
   - url: "http://localhost:10908/api/v1/receive"
     name: "receive-0"
@@ -275,8 +310,9 @@ EOF
 fi
 
 # Start Thanos Ruler.
+mkdir -p data/rule
 ${THANOS_EXECUTABLE} rule \
-  --data-dir data/ \
+  --data-dir data/rule \
   --eval-interval "30s" \
   --rule-file "data/rules.yml" \
   --alert.query-url "http://0.0.0.0:9090" \
@@ -285,7 +321,8 @@ ${THANOS_EXECUTABLE} rule \
   --http-address="0.0.0.0:19999" \
   --grpc-address="0.0.0.0:19998" \
   --label 'rule="true"' \
-  "${REMOTE_WRITE_FLAGS}" \
+  ${OBJ_META_FLAG} \
+  ${REMOTE_WRITE_FLAGS} \
   ${OBJSTORECFG} &
 
 STORES="${STORES} --store 127.0.0.1:19998"
@@ -307,14 +344,34 @@ done
 
 sleep 0.5
 
-if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
+if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" -o -n "${LOCAL_BUCKET_ENABLED}" ]; then
   ${THANOS_EXECUTABLE} tools bucket web \
     --debug.name bucket-web \
     --log.level debug \
     --http-address 0.0.0.0:10933 \
     --http-grace-period 1s \
+    ${OBJ_META_FLAG} \
     ${OBJSTORECFG} &
 fi
+
+sleep 0.5
+
+# Start compactor
+mkdir -p data/compact
+${THANOS_EXECUTABLE} compact \
+  --data-dir=data/compact/ \
+  --log.level debug \
+  --http-grace-period 1s \
+  --http-address=0.0.0.0:10934 \
+  --wait \
+  --wait-interval=5m \
+  ${OBJ_META_FLAG} \
+  --compact.enable-vertical-compaction \
+  --compact.skip-block-with-out-of-order-chunks \
+  --deduplication.replica-label=prometheus \
+  --deduplication.replica-label=receive_replica \
+  --deduplication.func=penalty \
+  ${OBJSTORECFG} &
 
 sleep 0.5
 

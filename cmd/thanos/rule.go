@@ -57,6 +57,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/objmeta"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
@@ -98,6 +99,8 @@ type ruleConfig struct {
 	lset              labels.Labels
 	ignoredLabelNames []string
 	storeRateLimits   store.SeriesSelectLimits
+
+	objMeta objMetaConfig
 }
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -108,6 +111,7 @@ func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.query.registerFlag(cmd)
 	rc.alertmgr.registerFlag(cmd)
 	rc.storeRateLimits.RegisterFlags(cmd)
+	rc.objMeta.registerFlag(cmd)
 }
 
 // registerRule registers a rule command.
@@ -723,6 +727,11 @@ func runRule(
 		if err != nil {
 			return err
 		}
+		objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
+		if err != nil {
+			return err
+		}
+		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, bkt, logger)
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Ensure we close up everything properly.

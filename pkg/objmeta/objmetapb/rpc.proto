@@ -1,0 +1,90 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package thanos;
+
+import "store/storepb/types.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "objmetapb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+service ObjMeta {
+  rpc SetBlockMeta(SetBlockMetaRequest) returns (SetBlockMetaResponse);
+  rpc DelBlockMeta(DelBlockMetaRequest) returns (DelBlockMetaResponse);
+  rpc GetBlockMeta(GetBlockMetaRequest) returns (GetBlockMetaResponse);
+  rpc ExistsBlockMeta(ExistsBlockMetaRequest) returns (ExistsBlockMetaResponse);
+  rpc ListBlocks(ListBlocksRequest) returns (stream ListBlocksResponse);
+}
+
+message SetBlockMetaRequest {
+  BlockMeta block_meta = 1;
+}
+
+enum Source {
+  SOURCE_UNKNOWN = 0;
+  SOURCE_CLIENT = 1;
+  SOURCE_SYNCER = 2;
+}
+
+enum Type {
+  TYPE_UNKNOWN = 0;
+  TYPE_META = 1; // block meta.json
+  TYPE_DELETE_MARK = 2; // block deletion-mark.json
+  TYPE_NO_COMPACT_MARK = 3; // block no-compact-mark.json
+}
+
+message SetBlockMetaResponse {
+}
+
+message DelBlockMetaRequest {
+  string block_id = 1;
+  Type type = 2;
+}
+
+message DelBlockMetaResponse {
+  bool exist = 1;
+}
+
+message GetBlockMetaRequest {
+  string block_id = 1;
+  Type type = 2;
+}
+
+message BlockMeta {
+  string block_id = 1;
+  Type type = 2;
+  Source source = 3;
+  bytes data = 4;
+}
+
+message GetBlockMetaResponse {
+  BlockMeta block_meta = 1;
+}
+
+message ExistsBlockMetaRequest {
+  string block_id = 1;
+  Type type  = 2;
+}
+
+message ExistsBlockMetaResponse {
+  bool exist = 1;
+}
+
+message ListBlocksRequest {
+}
+
+message ListBlocksResponse {
+  repeated string block_id = 1;
+}

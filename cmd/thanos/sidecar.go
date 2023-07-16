@@ -38,6 +38,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objmeta"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/reloader"
@@ -315,6 +316,12 @@ func runSidecar(
 		if err != nil {
 			return err
 		}
+
+		objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
+		if err != nil {
+			return err
+		}
+		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, bkt, logger)
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Ensure we close up everything properly.
@@ -492,6 +499,7 @@ type sidecarConfig struct {
 	shipper         shipperConfig
 	limitMinTime    thanosmodel.TimeOrDurationValue
 	storeRateLimits store.SeriesSelectLimits
+	objMeta         objMetaConfig
 }
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -504,6 +512,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
 	sc.storeRateLimits.RegisterFlags(cmd)
+	sc.objMeta.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
 }
