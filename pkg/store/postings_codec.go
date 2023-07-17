@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"sync"
 
 	"github.com/golang/snappy"
 	"github.com/klauspost/compress/s2"
@@ -424,7 +423,8 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 	return buf.B, nil
 }
 
-var snappyDecodePool sync.Pool
+// Creating 15 buckets from 1k to 32mb.
+var snappyDecodePool = pool.MustNewBucketedBytes(1024, 32*1024*1024, 2, 0)
 
 type closeablePostings interface {
 	index.Postings
@@ -447,10 +447,11 @@ func diffVarintSnappyDecode(input []byte, disablePooling bool) (closeablePosting
 
 	var dstBuf []byte
 	if !disablePooling {
-		decodeBuf := snappyDecodePool.Get()
-		if decodeBuf != nil {
-			dstBuf = *(decodeBuf.(*[]byte))
-			toFree = append(toFree, dstBuf)
+		if len, err := s2.DecodedLen(input[len(codecHeaderSnappy):]); err == nil {
+			if decodeBuf, err := snappyDecodePool.Get(len); err == nil && decodeBuf != nil {
+				dstBuf = *decodeBuf
+				toFree = append(toFree, dstBuf)
+			}
 		}
 	}
 
