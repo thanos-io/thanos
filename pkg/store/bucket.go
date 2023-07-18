@@ -2382,11 +2382,11 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 				j++
 			}
 		}
-		if i < len(pg.removeKeys) {
+		for i < len(pg.removeKeys) {
 			output = append(output, pg.removeKeys[i])
 			i++
 		}
-		if j < len(other.removeKeys) {
+		for j < len(other.removeKeys) {
 			output = append(output, other.removeKeys[j])
 			j++
 		}
