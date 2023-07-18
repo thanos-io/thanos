@@ -2247,9 +2247,6 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		allRequested = allRequested || pg.addAll
 		hasAdds = hasAdds || len(pg.addKeys) > 0
 
-		// Sort keys to make sure good performance when fetching posting offsets.
-		slices.Sort(pg.addKeys)
-		slices.Sort(pg.removeKeys)
 		// Postings returned by fetchPostings will be in the same order as keys
 		// so it's important that we iterate them in the same order later.
 		// We don't have any other way of pairing keys and fetched postings.
@@ -2368,32 +2365,32 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 	if pg.name != other.name {
 		return nil
 	}
+	var i, j int
 	// Both add all, merge remove keys.
 	if pg.addAll && other.addAll {
-		// If nothing to merge, end early.
-		if len(pg.removeKeys) == 0 && len(other.removeKeys) == 0 {
-			return &pg
+		output := make([]string, 0, len(pg.removeKeys)+len(other.removeKeys))
+		for i < len(pg.removeKeys) && j < len(other.removeKeys) {
+			if pg.removeKeys[i] < other.removeKeys[j] {
+				output = append(output, pg.removeKeys[i])
+				i++
+			} else if pg.removeKeys[i] > other.removeKeys[j] {
+				output = append(output, other.removeKeys[i])
+				j++
+			} else {
+				output = append(output, pg.removeKeys[i])
+				i++
+				j++
+			}
 		}
-		if len(other.removeKeys) == 0 {
-			return &pg
-		}
-		if len(pg.removeKeys) == 0 {
-			pg.removeKeys = other.removeKeys
-			return &pg
-		}
-		set := make(map[string]struct{}, len(pg.removeKeys)+len(other.removeKeys))
-		for _, key := range pg.removeKeys {
-			set[key] = struct{}{}
-		}
-		for _, key := range other.removeKeys {
-			set[key] = struct{}{}
-		}
-		pg.removeKeys = make([]string, len(set))
-		i := 0
-		for key := range set {
-			pg.removeKeys[i] = key
+		if i < len(pg.removeKeys) {
+			output = append(output, pg.removeKeys[i])
 			i++
 		}
+		if j < len(other.removeKeys) {
+			output = append(output, other.removeKeys[j])
+			j++
+		}
+		pg.removeKeys = output
 	} else if pg.addAll || other.addAll {
 		// Subtract the remove keys.
 		toRemove := other
@@ -2402,35 +2399,39 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 			toRemove = &pg
 			toAdd = other
 		}
-		set := make(map[string]struct{}, len(toRemove.removeKeys))
-		for _, key := range toRemove.removeKeys {
-			set[key] = struct{}{}
-		}
-		i := 0
-		for _, key := range toAdd.addKeys {
-			if _, ok := set[key]; !ok {
-				toAdd.addKeys[i] = key
+		output := make([]string, 0, len(toAdd.addKeys))
+		for i < len(toAdd.addKeys) && j < len(toRemove.removeKeys) {
+			if toAdd.addKeys[i] < toRemove.removeKeys[j] {
+				output = append(output, toAdd.addKeys[i])
 				i++
+			} else if toAdd.addKeys[i] > toRemove.removeKeys[j] {
+				j++
+			} else {
+				i++
+				j++
 			}
 		}
-		toAdd.addKeys = toAdd.addKeys[:i]
-		if pg.addAll {
-			pg.removeKeys = nil
-			pg.addKeys = other.addKeys
-			pg.addAll = false
+		for i < len(toAdd.addKeys) {
+			output = append(output, toAdd.addKeys[i])
+			i++
 		}
+		pg.addKeys = output
+		pg.addAll = false
+		pg.removeKeys = nil
 	} else {
-		set := make(map[string]struct{}, len(pg.addKeys))
-		for _, key := range pg.addKeys {
-			set[key] = struct{}{}
-		}
-		mergedKeys := make([]string, 0)
-		for _, key := range other.addKeys {
-			if _, ok := set[key]; ok {
-				mergedKeys = append(mergedKeys, key)
+		addKeys := make([]string, 0)
+		for i < len(pg.addKeys) && j < len(other.addKeys) {
+			if pg.addKeys[i] == other.addKeys[j] {
+				addKeys = append(addKeys, pg.addKeys[i])
+				i++
+				j++
+			} else if pg.addKeys[i] < other.addKeys[j] {
+				i++
+			} else {
+				j++
 			}
 		}
-		pg.addKeys = mergedKeys
+		pg.addKeys = addKeys
 	}
 	return &pg
 }

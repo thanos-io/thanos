@@ -1160,16 +1160,14 @@ func benchmarkExpandedPostings(
 	series int,
 ) {
 	n1 := labels.MustNewMatcher(labels.MatchEqual, "n", "1"+storetestutil.LabelLongSuffix)
-
 	jFoo := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	jNotFoo := labels.MustNewMatcher(labels.MatchNotEqual, "j", "foo")
-
 	iStar := labels.MustNewMatcher(labels.MatchRegexp, "i", "^.*$")
 	iPlus := labels.MustNewMatcher(labels.MatchRegexp, "i", "^.+$")
 	i1Plus := labels.MustNewMatcher(labels.MatchRegexp, "i", "^1.+$")
 	iEmptyRe := labels.MustNewMatcher(labels.MatchRegexp, "i", "^$")
 	iNotEmpty := labels.MustNewMatcher(labels.MatchNotEqual, "i", "")
-	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+storetestutil.LabelLongSuffix)
+	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "i", "2"+storetestutil.LabelLongSuffix)
 	iNot2Star := labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")
 	iRegexSet := labels.MustNewMatcher(labels.MatchRegexp, "i", "0"+storetestutil.LabelLongSuffix+"|1"+storetestutil.LabelLongSuffix+"|2"+storetestutil.LabelLongSuffix)
 	bigValueSetSize := series / 10
@@ -1202,14 +1200,14 @@ func benchmarkExpandedPostings(
 		{`i=~""`, []*labels.Matcher{iEmptyRe}, 0},
 		{`i!=""`, []*labels.Matcher{iNotEmpty}, 5 * series},
 		{`n="1",i=~".*",j="foo"`, []*labels.Matcher{n1, iStar, jFoo}, int(float64(series) * 0.1)},
-		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(1 + float64(series)*0.088888)},
 		{`n="1",i!=""`, []*labels.Matcher{n1, iNotEmpty}, int(float64(series) * 0.2)},
 		{`n="1",i!="",j="foo"`, []*labels.Matcher{n1, iNotEmpty, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~"1.+",j="foo"`, []*labels.Matcher{n1, i1Plus, jFoo}, int(float64(series) * 0.011111)},
-		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(1 + float64(series)*0.088888)},
 		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
-		{`n="1",i=~".+",i=~".+",i=~".+",i=~".+",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, iPlus, iPlus, iPlus, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
+		{`n="1",i=~".+",i=~".+",i=~".+",i=~".+",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, iPlus, iPlus, iPlus, iPlus, jFoo}, int(float64(series) * 0.1)},
 		{`i=~"0|1|2"`, []*labels.Matcher{iRegexSet}, 150}, // 50 series for "1", 50 for "2" and 50 for "3".
 		{`uniq=~"9|random-shuffled-values|1"`, []*labels.Matcher{iRegexBigValueSet}, bigValueSetSize},
 	}
@@ -2848,8 +2846,9 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:   labels.MetricName,
-					addAll: true,
+					name:       labels.MetricName,
+					addAll:     true,
+					removeKeys: []string{},
 				},
 			},
 		},
@@ -2918,17 +2917,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			actual, err := matchersToPostingGroups(ctx, func(name string) ([]string, error) {
+				sort.Strings(tc.labelValues[name])
 				return tc.labelValues[name], nil
 			}, tc.matchers)
 			testutil.Ok(t, err)
-			for _, pg := range tc.expected {
-				slices.Sort(pg.addKeys)
-				slices.Sort(pg.removeKeys)
-			}
-			for _, pg := range actual {
-				slices.Sort(pg.addKeys)
-				slices.Sort(pg.removeKeys)
-			}
 			testutil.Equals(t, tc.expected, actual)
 		})
 	}
@@ -2981,7 +2973,7 @@ func TestPostingGroupMerge(t *testing.T) {
 			name:     "both addAll, no remove keys",
 			group1:   &postingGroup{addAll: true},
 			group2:   &postingGroup{addAll: true},
-			expected: &postingGroup{addAll: true},
+			expected: &postingGroup{addAll: true, removeKeys: []string{}},
 		},
 		{
 			name:     "both addAll, one remove keys",
@@ -3019,17 +3011,23 @@ func TestPostingGroupMerge(t *testing.T) {
 			group2:   &postingGroup{addKeys: []string{"foo"}},
 			expected: &postingGroup{addKeys: []string{}},
 		},
+		{
+			name:     "same add and remove key, multiple keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"2"}},
+			group2:   &postingGroup{addKeys: []string{"1", "2", "3", "4", "5", "6"}},
+			expected: &postingGroup{addKeys: []string{"1", "3", "4", "5", "6"}},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.group1 != nil {
+				slices.Sort(tc.group1.addKeys)
+				slices.Sort(tc.group1.removeKeys)
+			}
+			if tc.group2 != nil {
+				slices.Sort(tc.group2.addKeys)
+				slices.Sort(tc.group2.removeKeys)
+			}
 			res := tc.group1.merge(tc.group2)
-			if res != nil {
-				slices.Sort(res.addKeys)
-				slices.Sort(res.removeKeys)
-			}
-			if tc.expected != nil {
-				slices.Sort(tc.expected.addKeys)
-				slices.Sort(tc.expected.removeKeys)
-			}
 			testutil.Equals(t, tc.expected, res)
 		})
 	}
