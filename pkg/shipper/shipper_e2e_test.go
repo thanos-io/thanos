@@ -44,7 +44,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		dir := t.TempDir()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, false, false, metadata.NoneFunc)
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, nil, false, metadata.NoneFunc)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -219,7 +219,8 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel2()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx2, logger))
 
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, true, false, metadata.NoneFunc)
+		uploadCompactedFunc := func() bool { return true }
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, false, metadata.NoneFunc)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
@@ -374,8 +375,9 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	defer upcancel2()
 	testutil.Ok(t, p.WaitPrometheusUp(upctx2, logger))
 
+	uploadCompactedFunc := func() bool { return true }
 	// Here, the allowOutOfOrderUploads flag is set to true, which allows blocks with overlaps to be uploaded.
-	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, true, true, metadata.NoneFunc)
+	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, true, metadata.NoneFunc)
 
 	// Creating 2 overlapping blocks - both uploaded when OOO uploads allowed.
 	var (
