@@ -1451,7 +1451,7 @@ func BenchmarkDedupRules(b *testing.B) {
 	rules := generateRules()
 
 	replicaLabels := map[string]struct{}{
-		"replica": struct{}{},
+		"replica": {},
 	}
 
 	b.ResetTimer()
