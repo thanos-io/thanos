@@ -40,6 +40,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
+	"golang.org/x/exp/slices"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
@@ -1159,16 +1160,14 @@ func benchmarkExpandedPostings(
 	series int,
 ) {
 	n1 := labels.MustNewMatcher(labels.MatchEqual, "n", "1"+storetestutil.LabelLongSuffix)
-
 	jFoo := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	jNotFoo := labels.MustNewMatcher(labels.MatchNotEqual, "j", "foo")
-
 	iStar := labels.MustNewMatcher(labels.MatchRegexp, "i", "^.*$")
 	iPlus := labels.MustNewMatcher(labels.MatchRegexp, "i", "^.+$")
 	i1Plus := labels.MustNewMatcher(labels.MatchRegexp, "i", "^1.+$")
 	iEmptyRe := labels.MustNewMatcher(labels.MatchRegexp, "i", "^$")
 	iNotEmpty := labels.MustNewMatcher(labels.MatchNotEqual, "i", "")
-	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+storetestutil.LabelLongSuffix)
+	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "i", "2"+storetestutil.LabelLongSuffix)
 	iNot2Star := labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")
 	iRegexSet := labels.MustNewMatcher(labels.MatchRegexp, "i", "0"+storetestutil.LabelLongSuffix+"|1"+storetestutil.LabelLongSuffix+"|2"+storetestutil.LabelLongSuffix)
 	bigValueSetSize := series / 10
@@ -1201,13 +1200,14 @@ func benchmarkExpandedPostings(
 		{`i=~""`, []*labels.Matcher{iEmptyRe}, 0},
 		{`i!=""`, []*labels.Matcher{iNotEmpty}, 5 * series},
 		{`n="1",i=~".*",j="foo"`, []*labels.Matcher{n1, iStar, jFoo}, int(float64(series) * 0.1)},
-		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(float64(series)/10 - 1)},
 		{`n="1",i!=""`, []*labels.Matcher{n1, iNotEmpty}, int(float64(series) * 0.2)},
 		{`n="1",i!="",j="foo"`, []*labels.Matcher{n1, iNotEmpty, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~"1.+",j="foo"`, []*labels.Matcher{n1, i1Plus, jFoo}, int(float64(series) * 0.011111)},
-		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series)/10 - 1)},
 		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
+		{`n="1",i=~".+",i=~".+",i=~".+",i=~".+",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, iPlus, iPlus, iPlus, iPlus, jFoo}, int(float64(series) * 0.1)},
 		{`i=~"0|1|2"`, []*labels.Matcher{iRegexSet}, 150}, // 50 series for "1", 50 for "2" and 50 for "3".
 		{`uniq=~"9|random-shuffled-values|1"`, []*labels.Matcher{iRegexBigValueSet}, bigValueSetSize},
 	}
@@ -2612,4 +2612,440 @@ func TestExpandPostingsWithContextCancel(t *testing.T) {
 	testutil.NotOk(t, err)
 	testutil.Equals(t, context.Canceled, err)
 	testutil.Equals(t, []storage.SeriesRef(nil), res)
+}
+
+func TestMatchersToPostingGroup(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name        string
+		matchers    []*labels.Matcher
+		labelValues map[string][]string
+		expected    []*postingGroup
+	}{
+		{
+			name: "single equal matcher",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "deduplicate two equal matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "deduplicate multiple equal matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "two equal matchers with different label name, merge",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "bar", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+				"bar": {"baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "bar",
+					addAll:  false,
+					addKeys: []string{"baz"},
+				},
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "two different equal matchers with same label name, intersect",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: nil,
+		},
+		{
+			name: "Intersect equal and unequal matcher, no hit",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: nil,
+		},
+		{
+			name: "Intersect equal and unequal matcher, has result",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect equal and regex matcher, no result",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "x.*"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+		},
+		{
+			name: "Intersect equal and regex matcher, have result",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "b.*"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect equal and unequal inverse matcher",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", ""),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect equal and regexp matching non empty matcher",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", ".+"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect two regex matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "bar|baz"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "bar|buzz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz", "buzz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Merge inverse matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"buzz", "bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:       "foo",
+					addAll:     true,
+					removeKeys: []string{"bar", "baz"},
+				},
+			},
+		},
+		{
+			name: "Dedup match all regex matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+			},
+			labelValues: map[string][]string{
+				labels.MetricName: {"up", "go_info"},
+			},
+			expected: []*postingGroup{
+				{
+					name:   labels.MetricName,
+					addAll: true,
+				},
+			},
+		},
+		{
+			name: "Multiple posting groups",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "up"),
+				labels.MustNewMatcher(labels.MatchRegexp, "job", ".*"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "cluster", ""),
+			},
+			labelValues: map[string][]string{
+				labels.MetricName: {"up", "go_info"},
+				"cluster":         {"us-east-1", "us-west-2"},
+				"job":             {"prometheus", "thanos"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    labels.MetricName,
+					addAll:  false,
+					addKeys: []string{"up"},
+				},
+				{
+					name:    "cluster",
+					addAll:  false,
+					addKeys: []string{"us-east-1", "us-west-2"},
+				},
+				{
+					name:   "job",
+					addAll: true,
+				},
+			},
+		},
+		{
+			name: "Multiple unequal empty",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotEqual, labels.MetricName, ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, labels.MetricName, ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "job", ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "job", ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "cluster", ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "cluster", ""),
+			},
+			labelValues: map[string][]string{
+				labels.MetricName: {"up", "go_info"},
+				"cluster":         {"us-east-1", "us-west-2"},
+				"job":             {"prometheus", "thanos"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    labels.MetricName,
+					addAll:  false,
+					addKeys: []string{"go_info", "up"},
+				},
+				{
+					name:    "cluster",
+					addAll:  false,
+					addKeys: []string{"us-east-1", "us-west-2"},
+				},
+				{
+					name:    "job",
+					addAll:  false,
+					addKeys: []string{"prometheus", "thanos"},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := matchersToPostingGroups(ctx, func(name string) ([]string, error) {
+				sort.Strings(tc.labelValues[name])
+				return tc.labelValues[name], nil
+			}, tc.matchers)
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestPostingGroupMerge(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		group1   *postingGroup
+		group2   *postingGroup
+		expected *postingGroup
+	}{
+		{
+			name:     "empty group2",
+			group1:   &postingGroup{},
+			group2:   nil,
+			expected: &postingGroup{},
+		},
+		{
+			name:     "group different names, return group1",
+			group1:   &postingGroup{name: "bar"},
+			group2:   &postingGroup{name: "foo"},
+			expected: nil,
+		},
+		{
+			name:     "both same addKey",
+			group1:   &postingGroup{addKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"foo"}},
+			expected: &postingGroup{addKeys: []string{"foo"}},
+		},
+		{
+			name:     "both same addKeys, but different order",
+			group1:   &postingGroup{addKeys: []string{"foo", "bar"}},
+			group2:   &postingGroup{addKeys: []string{"bar", "foo"}},
+			expected: &postingGroup{addKeys: []string{"bar", "foo"}},
+		},
+		{
+			name:     "different addKeys",
+			group1:   &postingGroup{addKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"bar"}},
+			expected: &postingGroup{addKeys: []string{}},
+		},
+		{
+			name:     "intersect common add keys",
+			group1:   &postingGroup{addKeys: []string{"foo", "bar"}},
+			group2:   &postingGroup{addKeys: []string{"bar", "baz"}},
+			expected: &postingGroup{addKeys: []string{"bar"}},
+		},
+		{
+			name:     "both addAll, no remove keys",
+			group1:   &postingGroup{addAll: true},
+			group2:   &postingGroup{addAll: true},
+			expected: &postingGroup{addAll: true},
+		},
+		{
+			name:     "both addAll, one remove keys",
+			group1:   &postingGroup{addAll: true},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+		},
+		{
+			name:     "both addAll, same remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+		},
+		{
+			name:     "both addAll, merge different remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"bar"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"bar", "foo"}},
+		},
+		{
+			name:     "both addAll, multiple remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo", "zoo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"a", "bar"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"a", "bar", "foo", "zoo"}},
+		},
+		{
+			name:     "both addAll, multiple remove keys 2",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"a", "bar"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo", "zoo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"a", "bar", "foo", "zoo"}},
+		},
+		{
+			name:     "one add and one remove, only keep addKeys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{""}},
+			expected: &postingGroup{addKeys: []string{""}},
+		},
+		{
+			name:     "one add and one remove, subtract common keys to add and remove",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"", "foo"}},
+			expected: &postingGroup{addKeys: []string{""}},
+		},
+		{
+			name:     "same add and remove key",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"foo"}},
+			expected: &postingGroup{addKeys: []string{}},
+		},
+		{
+			name:     "same add and remove key, multiple keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"2"}},
+			group2:   &postingGroup{addKeys: []string{"1", "2", "3", "4", "5", "6"}},
+			expected: &postingGroup{addKeys: []string{"1", "3", "4", "5", "6"}},
+		},
+		{
+			name:     "addAll and non addAll posting group merge with empty keys",
+			group1:   &postingGroup{addAll: true, removeKeys: nil},
+			group2:   &postingGroup{addKeys: nil},
+			expected: &postingGroup{addKeys: nil},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.group1 != nil {
+				slices.Sort(tc.group1.addKeys)
+				slices.Sort(tc.group1.removeKeys)
+			}
+			if tc.group2 != nil {
+				slices.Sort(tc.group2.addKeys)
+				slices.Sort(tc.group2.removeKeys)
+			}
+			res := tc.group1.merge(tc.group2)
+			testutil.Equals(t, tc.expected, res)
+		})
+	}
 }
