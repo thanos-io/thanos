@@ -2397,10 +2397,11 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 			toRemove = &pg
 			toAdd = other
 		}
-		output := make([]string, 0, len(toAdd.addKeys))
+		var k int
 		for i < len(toAdd.addKeys) && j < len(toRemove.removeKeys) {
 			if toAdd.addKeys[i] < toRemove.removeKeys[j] {
-				output = append(output, toAdd.addKeys[i])
+				toAdd.addKeys[k] = toAdd.addKeys[i]
+				k++
 				i++
 			} else if toAdd.addKeys[i] > toRemove.removeKeys[j] {
 				j++
@@ -2409,10 +2410,12 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 				j++
 			}
 		}
-		if i < len(toAdd.addKeys) {
-			output = append(output, toAdd.addKeys[i:len(toAdd.addKeys)]...)
+		for i < len(toAdd.addKeys) {
+			toAdd.addKeys[k] = toAdd.addKeys[i]
+			i++
+			k++
 		}
-		pg.addKeys = output
+		pg.addKeys = toAdd.addKeys[:k]
 		pg.addAll = false
 		pg.removeKeys = nil
 	} else {
