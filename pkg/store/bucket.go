@@ -2368,6 +2368,14 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 	var i, j int
 	// Both add all, merge remove keys.
 	if pg.addAll && other.addAll {
+		// Fast path to not allocate output slice if no remove keys are specified.
+		// This is possible when matcher is `=~".*"`.
+		if len(pg.removeKeys) == 0 {
+			pg.removeKeys = other.removeKeys
+			return &pg
+		} else if len(other.removeKeys) == 0 {
+			return &pg
+		}
 		output := make([]string, 0, len(pg.removeKeys)+len(other.removeKeys))
 		for i < len(pg.removeKeys) && j < len(other.removeKeys) {
 			if pg.removeKeys[i] < other.removeKeys[j] {
