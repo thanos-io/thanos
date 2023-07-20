@@ -3029,6 +3029,12 @@ func TestPostingGroupMerge(t *testing.T) {
 			group2:   &postingGroup{addKeys: []string{"1", "2", "3", "4", "5", "6"}},
 			expected: &postingGroup{addKeys: []string{"1", "3", "4", "5", "6"}},
 		},
+		{
+			name:     "addAll and non addAll posting group merge with empty keys",
+			group1:   &postingGroup{addAll: true, removeKeys: nil},
+			group2:   &postingGroup{addKeys: nil},
+			expected: &postingGroup{addKeys: nil},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.group1 != nil {
