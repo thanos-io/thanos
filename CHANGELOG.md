@@ -272,7 +272,7 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5741](https://github.com/thanos-io/thanos/pull/5741) Query: add metrics on how much data is being selected by downstream Store APIs.
 - [#5673](https://github.com/thanos-io/thanos/pull/5673) Receive: Reload tenant limit configuration on file change.
 - [#5749](https://github.com/thanos-io/thanos/pull/5749) Query Frontend: Added small LRU cache to cache query analysis results.
-- [#6500](https://github.com/thanos-io/thanos/pull/6500) Shipper: Add metric `thanos_shipper_uploaded_bytes_total` for number of total uploaded blocks.
+- [#6544](https://github.com/thanos-io/thanos/pull/6500) Shipper: Add metric `thanos_shipper_uploaded_bytes_total` for number of total uploaded blocks.
 
 ### Changed
 
