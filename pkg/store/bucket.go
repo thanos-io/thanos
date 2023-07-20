@@ -2374,7 +2374,7 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 				output = append(output, pg.removeKeys[i])
 				i++
 			} else if pg.removeKeys[i] > other.removeKeys[j] {
-				output = append(output, other.removeKeys[i])
+				output = append(output, other.removeKeys[j])
 				j++
 			} else {
 				output = append(output, pg.removeKeys[i])
@@ -2416,7 +2416,7 @@ func (pg postingGroup) merge(other *postingGroup) *postingGroup {
 		pg.addAll = false
 		pg.removeKeys = nil
 	} else {
-		addKeys := make([]string, 0)
+		addKeys := make([]string, 0, len(pg.addKeys)+len(other.addKeys))
 		for i < len(pg.addKeys) && j < len(other.addKeys) {
 			if pg.addKeys[i] == other.addKeys[j] {
 				addKeys = append(addKeys, pg.addKeys[i])

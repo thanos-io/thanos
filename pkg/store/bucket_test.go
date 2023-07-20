@@ -2994,6 +2994,18 @@ func TestPostingGroupMerge(t *testing.T) {
 			expected: &postingGroup{addAll: true, removeKeys: []string{"bar", "foo"}},
 		},
 		{
+			name:     "both addAll, multiple remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo", "zoo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"a", "bar"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"a", "bar", "foo", "zoo"}},
+		},
+		{
+			name:     "both addAll, multiple remove keys 2",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"a", "bar"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo", "zoo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"a", "bar", "foo", "zoo"}},
+		},
+		{
 			name:     "one add and one remove, only keep addKeys",
 			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
 			group2:   &postingGroup{addKeys: []string{""}},
