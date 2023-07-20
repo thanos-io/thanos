@@ -2846,9 +2846,8 @@ func TestMatchersToPostingGroup(t *testing.T) {
 			},
 			expected: []*postingGroup{
 				{
-					name:       labels.MetricName,
-					addAll:     true,
-					removeKeys: []string{},
+					name:   labels.MetricName,
+					addAll: true,
 				},
 			},
 		},
@@ -2973,7 +2972,7 @@ func TestPostingGroupMerge(t *testing.T) {
 			name:     "both addAll, no remove keys",
 			group1:   &postingGroup{addAll: true},
 			group2:   &postingGroup{addAll: true},
-			expected: &postingGroup{addAll: true, removeKeys: []string{}},
+			expected: &postingGroup{addAll: true},
 		},
 		{
 			name:     "both addAll, one remove keys",

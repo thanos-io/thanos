@@ -2483,6 +2483,13 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 				}
 				valuesCached = true
 			}
+
+			// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
+			// postings would return no postings anyway.
+			// E.g. label="non-existing-value" returns empty group.
+			if !pg.addAll && len(pg.addKeys) == 0 {
+				return nil, nil
+			}
 			if mergedPG == nil {
 				mergedPG = pg
 			} else {
