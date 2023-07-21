@@ -164,40 +164,53 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 // tournament trees need n-1 auxiliary nodes so there
 // might not be much of a difference.
 type ProxyResponseHeap struct {
-	nodes        []ProxyResponseHeapNode
-	iLblsScratch labels.Labels
-	jLblsScratch labels.Labels
+	nodes []*ProxyResponseHeapNode
+
+	replicaLabels    []string
+	replicaLabelsMap map[string]struct{}
+	baseToNodes      map[uint64]*ProxyResponseHeapNode
+	responseSets     []respSet
+
+	cur                            *storepb.SeriesResponse
+	curBaseLabels, curSeriesLabels labels.Labels
+
+	hashBuf []byte
+}
+
+func first[E any](s []E) (E, bool) {
+	if len(s) == 0 {
+		var zero E
+		return zero, false
+	}
+	return s[0], true
 }
 
 func (h *ProxyResponseHeap) Less(i, j int) bool {
-	iResp := h.nodes[i].rs.At()
-	jResp := h.nodes[j].rs.At()
+	iResp, oki := first(h.nodes[i].responses)
+	jResp, okj := first(h.nodes[j].responses)
 
-	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
-		// Response sets are sorted before adding external labels.
-		// This comparison excludes those labels to keep the same order.
-		iStoreLbls := h.nodes[i].rs.StoreLabels()
-		jStoreLbls := h.nodes[j].rs.StoreLabels()
+	if oki && !okj {
+		return true
+	}
+	if !oki && okj {
+		return false
+	}
 
-		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
+	if !oki && !okj {
+		return false
+	}
 
-		copyLabels(&h.iLblsScratch, iLbls)
-		copyLabels(&h.jLblsScratch, jLbls)
-
-		var iExtLbls, jExtLbls labels.Labels
-		h.iLblsScratch, iExtLbls = dropLabels(h.iLblsScratch, iStoreLbls)
-		h.jLblsScratch, jExtLbls = dropLabels(h.jLblsScratch, jStoreLbls)
-
-		c := labels.Compare(h.iLblsScratch, h.jLblsScratch)
+	if iResp.sr.GetSeries() != nil && jResp.sr.GetSeries() != nil {
+		c := labels.Compare(iResp.sr.GetSeries().PromLabels(), jResp.sr.GetSeries().PromLabels())
 		if c != 0 {
 			return c < 0
 		}
-		return labels.Compare(iExtLbls, jExtLbls) < 0
-	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
-		return true
-	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
+
+		return labels.Compare(h.nodes[i].baseLabels, h.nodes[j].baseLabels) < 0
+	} else if iResp.sr.GetSeries() == nil && jResp.sr.GetSeries() != nil {
 		return false
+	} else if iResp.sr.GetSeries() != nil && jResp.sr.GetSeries() == nil {
+		return true
 	}
 
 	// If it is not a series then the order does not matter. What matters
@@ -211,10 +224,12 @@ func (h *ProxyResponseHeap) Len() int {
 
 func (h *ProxyResponseHeap) Swap(i, j int) {
 	h.nodes[i], h.nodes[j] = h.nodes[j], h.nodes[i]
+	h.nodes[j].pos = j
+	h.nodes[i].pos = i
 }
 
 func (h *ProxyResponseHeap) Push(x interface{}) {
-	h.nodes = append(h.nodes, x.(ProxyResponseHeapNode))
+	h.nodes = append(h.nodes, x.(*ProxyResponseHeapNode))
 }
 
 func (h *ProxyResponseHeap) Pop() (v interface{}) {
@@ -227,26 +242,166 @@ func (h *ProxyResponseHeap) Empty() bool {
 }
 
 func (h *ProxyResponseHeap) Min() *ProxyResponseHeapNode {
-	return &h.nodes[0]
+	if h.Len() == 0 {
+		return nil
+	}
+	return h.nodes[0]
+}
+
+type responseRespSetContainer struct {
+	sr                       *storepb.SeriesResponse
+	rs                       respSet
+	baseLabels, seriesLabels labels.Labels
+	pos                      int
+}
+
+type responseRespSetHeap []responseRespSetContainer
+
+func (h *responseRespSetHeap) Len() int { return len(*h) }
+
+func (h *responseRespSetHeap) Swap(i, j int) {
+	(*h)[i], (*h)[j] = (*h)[j], (*h)[i]
+	(*h)[i].pos = i
+	(*h)[j].pos = j
+}
+
+func (h *responseRespSetHeap) Less(i, j int) bool {
+	oki := !((*h)[i].sr == nil || (*h)[i].sr.GetSeries() == nil)
+	okj := !((*h)[j].sr == nil || (*h)[j].sr.GetSeries() == nil)
+	if oki && !okj {
+		return false
+	}
+	if !oki && okj {
+		return true
+	}
+
+	if !oki && !okj {
+		return false
+	}
+	return labels.Compare((*h)[i].sr.GetSeries().PromLabels(), (*h)[j].sr.GetSeries().PromLabels()) < 0
+}
+
+func (h *responseRespSetHeap) Push(x interface{}) {
+	// a failed type assertion here will panic
+	*h = append(*h, x.(responseRespSetContainer))
+}
+
+func (h *responseRespSetHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[0 : n-1]
+	return item
 }
 
 type ProxyResponseHeapNode struct {
-	rs respSet
+	responses  responseRespSetHeap
+	baseLabels labels.Labels
+	pos        int
+}
+
+func (h *ProxyResponseHeap) getBaseLabels(replicaLabels []string, lbls labels.Labels) (uint64, labels.Labels) {
+	h.hashBuf = h.hashBuf[:0]
+
+	for _, rl := range replicaLabels {
+		if lbls.Get(rl) == "" {
+			continue
+		}
+		h.hashBuf = append(h.hashBuf, []byte(lbls.Get(rl))...)
+		h.hashBuf = append(h.hashBuf, 0xff)
+	}
+
+	hash := xxhash.Sum64(h.hashBuf)
+	for bh, node := range h.baseToNodes {
+		if hash != bh {
+			continue
+		}
+		return bh, node.baseLabels
+	}
+
+	l := labels.Labels{}
+
+	for _, rl := range replicaLabels {
+		if lbls.Get(rl) == "" {
+			continue
+		}
+		l = append(l, labels.Label{Name: rl, Value: lbls.Get(rl)})
+	}
+
+	return hash, l
+}
+
+func (h *ProxyResponseHeap) addSeriesResponse(ss respSet) (bool, labels.Labels) {
+	var seriesLabels labels.Labels
+
+	sr := ss.At()
+	if sr == nil {
+		return false, seriesLabels
+	}
+	s := sr.GetSeries()
+	if s == nil {
+		// If not series then the order doesn't matter. Put it in the 0 bucket.
+		if h.baseToNodes[0] == nil {
+			prh := &ProxyResponseHeapNode{
+				responses: []responseRespSetContainer{
+					{rs: ss, sr: sr},
+				},
+			}
+			h.baseToNodes[0] = prh
+			heap.Push(h, prh)
+		} else {
+			heap.Push(&h.baseToNodes[0].responses, responseRespSetContainer{
+				sr: sr, rs: ss,
+			})
+		}
+		return false, seriesLabels
+	}
+
+	bh, baseLabels := h.getBaseLabels(h.replicaLabels, s.PromLabels())
+
+	s.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(s.PromLabels(), h.replicaLabelsMap))
+	seriesLabels = s.PromLabels()
+	if b, ok := h.baseToNodes[bh]; ok {
+		b.responses = append(b.responses, responseRespSetContainer{
+			rs: ss, sr: sr, baseLabels: baseLabels, seriesLabels: seriesLabels,
+		})
+		heap.Fix(&b.responses, len(b.responses)-1)
+		// The b.responses had been empty before. Perhaps our position has changed?
+		heap.Fix(h, b.responses[0].pos)
+	} else {
+		prh := &ProxyResponseHeapNode{
+			responses:  []responseRespSetContainer{{rs: ss, sr: sr, baseLabels: baseLabels, seriesLabels: seriesLabels}},
+			baseLabels: baseLabels,
+		}
+		h.baseToNodes[bh] = prh
+		heap.Push(h, prh)
+	}
+
+	return true, seriesLabels
 }
 
 // NewProxyResponseHeap returns heap that k-way merge series together.
 // It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
-func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
+func NewProxyResponseHeap(replicaLabels []string, responseSets ...respSet) *ProxyResponseHeap {
 	ret := ProxyResponseHeap{
-		nodes: make([]ProxyResponseHeapNode, 0, len(seriesSets)),
+		nodes:         make([]*ProxyResponseHeapNode, 0, len(responseSets)),
+		replicaLabels: replicaLabels,
+		responseSets:  responseSets,
+		baseToNodes:   make(map[uint64]*ProxyResponseHeapNode),
 	}
 
-	for _, ss := range seriesSets {
+	rls := map[string]struct{}{}
+	for _, rl := range replicaLabels {
+		rls[rl] = struct{}{}
+	}
+	ret.replicaLabelsMap = rls
+
+	for _, ss := range responseSets {
 		if ss.Empty() {
 			continue
 		}
-		ss := ss
-		ret.Push(ProxyResponseHeapNode{rs: ss})
+
+		ret.addSeriesResponse(ss)
 	}
 
 	heap.Init(&ret)
@@ -254,22 +409,64 @@ func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
 	return &ret
 }
 
+// Next returns true if there are more responses.
 func (h *ProxyResponseHeap) Next() bool {
-	return !h.Empty()
+	/*
+		if h.stickyRs != nil {
+			if h.stickyRs.Next() {
+
+			} else {
+				h.stickyRs = nil
+			}
+		}
+	*/
+	min := h.Min()
+	if min == nil {
+		return false
+	}
+	if len(min.responses) == 0 {
+		return false
+	}
+
+	var popped responseRespSetContainer
+	min.responses.Swap(0, min.responses.Len()-1)
+	popped = min.responses[len(min.responses)-1]
+	min.responses = min.responses[:len(min.responses)-1]
+	heap.Fix(&min.responses, 0)
+
+	h.cur = popped.sr
+	h.curBaseLabels = popped.baseLabels
+	h.curSeriesLabels = popped.seriesLabels
+
+	// Read from the same popped until series labels are the same or smaller.
+	// We need this to avoid the situation like this with replica label "a":
+	// a=1,b=1
+	// a=1,b=2
+	// a=2,b=1
+	// a=2,b=2
+	// TODO(GiedriusS): we can probably do better somehow to avoid needlessly enlarging slice.
+	added := false
+	for {
+		if !popped.rs.Next() {
+			break
+		}
+
+		added = true
+		gotSeries, seriesLabels := h.addSeriesResponse(popped.rs)
+		if gotSeries && labels.Compare(seriesLabels, h.curSeriesLabels) <= 0 {
+			break
+		}
+	}
+
+	if !added {
+		heap.Init(h)
+	}
+
+	return true
 }
 
 func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
-	min := h.Min().rs
-
-	atResp := min.At()
-
-	if min.Next() {
-		heap.Fix(h, 0)
-	} else {
-		heap.Remove(h, 0)
-	}
-
-	return atResp
+	return h.cur
 }
 
 func (l *lazyRespSet) StoreID() string {
@@ -644,7 +841,6 @@ type eagerRespSet struct {
 
 	shardMatcher *storepb.ShardMatcher
 	removeLabels map[string]struct{}
-	storeLabels  map[string]struct{}
 
 	// Internal bookkeeping.
 	bufferedResponses []*storepb.SeriesResponse
@@ -675,12 +871,6 @@ func newEagerRespSet(
 		wg:                &sync.WaitGroup{},
 		shardMatcher:      shardMatcher,
 		removeLabels:      removeLabels,
-	}
-	ret.storeLabels = make(map[string]struct{})
-	for _, ls := range st.LabelSets() {
-		for _, l := range ls {
-			ret.storeLabels[l.Name] = struct{}{}
-		}
 	}
 
 	ret.wg.Add(1)
@@ -789,34 +979,6 @@ func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels
 	return l
 }
 
-// dropLabels removes labels from the given label set and returns the removed labels.
-func dropLabels(l labels.Labels, labelsToDrop map[string]struct{}) (labels.Labels, labels.Labels) {
-	cutoff := len(l)
-	for i := 0; i < len(l); i++ {
-		if i == cutoff {
-			break
-		}
-		if _, ok := labelsToDrop[l[i].Name]; !ok {
-			continue
-		}
-
-		lbl := l[i]
-		l = append(append(l[:i], l[i+1:]...), lbl)
-		cutoff--
-		i--
-	}
-
-	return l[:cutoff], l[cutoff:]
-}
-
-func copyLabels(dest *labels.Labels, src labels.Labels) {
-	if len(*dest) < cap(src) {
-		*dest = make([]labels.Label, len(src))
-	}
-	*dest = (*dest)[:len(src)]
-	copy(*dest, src)
-}
-
 // sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
 // series with different labels are coming right after each other. Other types of responses are moved to front.
 func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]struct{}) {
@@ -880,16 +1042,11 @@ func (l *eagerRespSet) Labelset() string {
 	return labelpb.PromLabelSetsToString(l.st.LabelSets())
 }
 
-func (l *eagerRespSet) StoreLabels() map[string]struct{} {
-	return l.storeLabels
-}
-
 type respSet interface {
 	Close()
 	At() *storepb.SeriesResponse
 	Next() bool
 	StoreID() string
 	Labelset() string
-	StoreLabels() map[string]struct{}
 	Empty() bool
 }

@@ -239,7 +239,7 @@ test_metric{a="2", b="2"} 1`)
 			return "test_metric"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
-		}, 4)
+		}, 2)
 	})
 
 	t.Run("router_replication", func(t *testing.T) {

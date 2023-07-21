@@ -1073,7 +1073,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			expectedSeries:   1,
 			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
 			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
+			expectedDedupBug: false,
 		},
 		{
 			desc:            "Deduplication works on internal label with resorting required",
@@ -1096,7 +1096,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			expectedSeries:   2,
 			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
 			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
+			expectedDedupBug: false,
 		},
 		{
 			desc:            "Deduplication works with extra internal label",
@@ -1119,7 +1119,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			expectedSeries:   2,
 			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
 			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
+			expectedDedupBug: false,
 		},
 		{
 			desc:            "Deduplication works with both internal and external label",
@@ -1139,7 +1139,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			expectedSeries:   1,
 			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
 			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
+			expectedDedupBug: false,
 		},
 	}
 
@@ -1308,7 +1308,7 @@ func TestSidecarQueryDedup(t *testing.T) {
 			return "my_fake_metric"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
-		}, 4)
+		}, 2)
 	})
 }
 

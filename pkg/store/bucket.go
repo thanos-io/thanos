@@ -1410,7 +1410,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 		}()
 		begin := time.Now()
-		set := NewDedupResponseHeap(NewProxyResponseHeap(respSets...))
+		set := NewDedupResponseHeap(NewProxyResponseHeap(req.WithoutReplicaLabels, respSets...))
 		for set.Next() {
 			at := set.At()
 			warn := at.GetWarning()

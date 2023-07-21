@@ -2198,7 +2198,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.tname, func(t *testing.T) {
-			h := NewDedupResponseHeap(NewProxyResponseHeap(
+			h := NewDedupResponseHeap(NewProxyResponseHeap([]string{},
 				&eagerRespSet{
 					wg:                &sync.WaitGroup{},
 					bufferedResponses: tcase.responses,

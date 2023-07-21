@@ -88,23 +88,21 @@ func TestProxyResponseHeapSort(t *testing.T) {
 				&eagerRespSet{
 					wg: &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 					},
-					storeLabels: map[string]struct{}{"c": {}},
 				},
 				&eagerRespSet{
 					wg: &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 					},
-					storeLabels: map[string]struct{}{"c": {}},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 			},
@@ -118,7 +116,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 					},
-					storeLabels: map[string]struct{}{"ext2": {}},
 				},
 				&eagerRespSet{
 					wg: &sync.WaitGroup{},
@@ -126,7 +123,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
 					},
-					storeLabels: map[string]struct{}{"ext1": {}, "ext2": {}},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
@@ -145,7 +141,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "2")),
 					},
-					storeLabels: map[string]struct{}{"a": {}},
 				},
 				&eagerRespSet{
 					wg: &sync.WaitGroup{},
@@ -153,7 +148,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "1", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
 					},
-					storeLabels: map[string]struct{}{"a": {}},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
@@ -172,7 +166,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 					},
-					storeLabels: map[string]struct{}{"ext2": {}, "replica": {}},
 				},
 				&eagerRespSet{
 					wg: &sync.WaitGroup{},
@@ -180,7 +173,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
 					},
-					storeLabels: map[string]struct{}{"ext1": {}, "ext2": {}, "replica": {}},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
@@ -192,14 +184,12 @@ func TestProxyResponseHeapSort(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.title, func(t *testing.T) {
-			h := NewProxyResponseHeap(tcase.input...)
-			if !h.Empty() {
-				got := []*storepb.SeriesResponse{h.At()}
-				for h.Next() {
-					got = append(got, h.At())
-				}
-				testutil.Equals(t, tcase.exp, got)
+			h := NewProxyResponseHeap([]string{}, tcase.input...)
+			got := []*storepb.SeriesResponse{}
+			for h.Next() {
+				got = append(got, h.At())
 			}
+			testutil.Equals(t, tcase.exp, got)
 		})
 	}
 }
