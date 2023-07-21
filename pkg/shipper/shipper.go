@@ -390,11 +390,13 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 		return errors.Wrap(err, "write meta file")
 	}
 
-	err := block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc); if err != nil {
+	err := block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
+	if err != nil {
 		return errors.Wrap(err, "while uploading the block")
 	}
 
-	fileStats, err := block.GatherFileStats(updir, s.hashFunc, s.logger); if err != nil {
+	fileStats, err := block.GatherFileStats(updir, s.hashFunc, s.logger)
+	if err != nil {
 		// The block upload should not stop due to issues gathering data for a metric.
 		return nil
 	}
