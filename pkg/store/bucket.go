@@ -1232,7 +1232,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(srv.Context())
-	_ = tenant
+	level.Debug(s.logger).Log("msg", "Tenant for Series request", "tenant", tenant)
 
 	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
 	if err != nil {
@@ -1484,7 +1484,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	}
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
-	_ = tenant
+	level.Debug(s.logger).Log("msg", "Tenant for LabelNames request", "tenant", tenant)
 
 	resHints := &hintspb.LabelNamesResponseHints{}
 
@@ -1675,7 +1675,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
-	_ = tenant
+	level.Debug(s.logger).Log("msg", "Tenant for LabelValues request", "tenant", tenant)
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
