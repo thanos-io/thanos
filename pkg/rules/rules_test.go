@@ -1424,7 +1424,6 @@ func BenchmarkDedupGroups(b *testing.B) {
 		copy(groups, testCases)
 		b.StartTimer()
 		_ = dedupGroups(groups)
-
 	}
 }
 
@@ -1449,11 +1448,9 @@ func generateRules() []*rulespb.Rule {
 
 func BenchmarkDedupRules(b *testing.B) {
 	rules := generateRules()
-
 	replicaLabels := map[string]struct{}{
 		"replica": {},
 	}
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -1462,8 +1459,6 @@ func BenchmarkDedupRules(b *testing.B) {
 		rulesCopy := make([]*rulespb.Rule, len(rules))
 		copy(rulesCopy, rules)
 		b.StartTimer()
-
 		_ = dedupRules(rulesCopy, replicaLabels)
-
 	}
 }
