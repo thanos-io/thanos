@@ -102,10 +102,10 @@ func getTenantFromCertificate(r *http.Request, certTenantField string) (string, 
 	return tenant, nil
 }
 
-func GetTenantFromGRPCMetadata(ctx context.Context) (string, error) {
+func GetTenantFromGRPCMetadata(ctx context.Context) (string, bool) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok || len(md.Get(DefaultTenantHeader)) == 0 {
-		return DefaultTenant, errors.Errorf("could not get tenant from grpc metadata, using default: %s", DefaultTenantHeader)
+		return DefaultTenant, false
 	}
-	return md.Get(DefaultTenantHeader)[0], nil
+	return md.Get(DefaultTenantHeader)[0], true
 }
