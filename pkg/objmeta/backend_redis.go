@@ -217,11 +217,6 @@ func genBlocksScore() float64 {
 	return float64(time.Now().Unix())
 }
 
-// parseBlocksScore parse redis zset score to ts.
-func parseBlocksScore(score float64) time.Time {
-	return time.Unix(int64(score), 0)
-}
-
 // genSyncLockKey gen redis key for set nx lock.
 func genSyncLockKey() string {
 	return "objmeta:sync"

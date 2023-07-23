@@ -46,7 +46,7 @@ type BucketWithObjMetaClient struct {
 	logger log.Logger
 }
 
-// NewBucketWithObjMetaClient create a InstrumentedBucket with meta client
+// NewBucketWithObjMetaClient create a InstrumentedBucket with meta client.
 func NewBucketWithObjMetaClient(
 	client objmetapb.ObjMetaClient,
 	instrumentedBucket objstore.InstrumentedBucket,
