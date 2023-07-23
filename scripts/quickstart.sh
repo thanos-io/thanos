@@ -346,7 +346,7 @@ done
 
 sleep 0.5
 
-if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" -o -n "${LOCAL_BUCKET_ENABLED}" ]; then
+if [ -n "${GCS_BUCKET}" ] || [ -n "${S3_ENDPOINT}" ] || [ -n "${LOCAL_BUCKET_ENABLED}" ]; then
   ${THANOS_EXECUTABLE} tools bucket web \
     --debug.name bucket-web \
     --log.level debug \
