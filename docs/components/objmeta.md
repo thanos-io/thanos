@@ -65,39 +65,69 @@ ObjMeta for Thanos object metadata.
 
 Flags:
       --block-meta-fetch-concurrency=32
-                                 Number of goroutines to use when fetching block metadata from object storage.
+                                 Number of goroutines to use when fetching block
+                                 metadata from object storage.
       --grpc-address="0.0.0.0:10901"
-                                 Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.
-      --grpc-grace-period=2m     Time to wait after an interrupt received for GRPC Server.
+                                 Listen ip:port address for gRPC endpoints
+                                 (StoreAPI). Make sure this address is routable
+                                 from other components.
+      --grpc-grace-period=2m     Time to wait after an interrupt received for
+                                 GRPC Server.
       --grpc-server-max-connection-age=60m
-                                 The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.
-      --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to disable TLS
+                                 The grpc server max connection age. This
+                                 controls how often to re-establish connections
+                                 and redo TLS handshakes.
+      --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
+                                 disable TLS
       --grpc-server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to disable TLS
-  -h, --help                     Show context-sensitive help (also try --help-long and --help-man).
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
+                                 verification on server side. (tls.NoClientCert)
+      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
+                                 disable TLS
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
-      --http-grace-period=2m     Time to wait after an interrupt received for HTTP Server.
-      --http.config=""           [EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or json.
+      --http-grace-period=2m     Time to wait after an interrupt received for
+                                 HTTP Server.
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
+                                 that can enable TLS or authentication for all
+                                 HTTP endpoints.
+      --log.format=logfmt        Log format to use. Possible options: logfmt or
+                                 json.
       --log.level=info           Log filtering level.
       --objstore.config=<content>
-                                 Alternative to 'objstore.config-file' flag (mutually exclusive). Content of YAML file that contains object store configuration. See format details:
+                                 Alternative to 'objstore.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains object store
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object store configuration. See format details: https://thanos.io/tip/thanos/storage.md/#configuration
+                                 Path to YAML file that contains object
+                                 store configuration. See format details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.sync-interval=24h
                                  How often to sync from objstore
       --request.logging-config=<content>
-                                 Alternative to 'request.logging-config-file' flag (mutually exclusive). Content of YAML file with request logging configuration. See format details:
+                                 Alternative to 'request.logging-config-file'
+                                 flag (mutually exclusive). Content
+                                 of YAML file with request logging
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
-                                 Path to YAML file with request logging configuration. See format details: https://thanos.io/tip/thanos/logging.md/#configuration
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/logging.md/#configuration
       --tracing.config=<content>
-                                 Alternative to 'tracing.config-file' flag (mutually exclusive). Content of YAML file with tracing configuration. See format details: https://thanos.io/tip/thanos/tracing.md/#configuration
+                                 Alternative to 'tracing.config-file' flag
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration. See format details: https://thanos.io/tip/thanos/tracing.md/#configuration
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                  Show application version.
 
 ```
