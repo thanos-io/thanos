@@ -1,6 +1,6 @@
 # Objmeta
 
-***NOTE:** This component is only needed when your thanos workload is very large, how large is large? when the number of blocks in object storage is more than 10,000 or the HEAD request to object storage more than 10k per second.
+***NOTE:** This component is only needed when your thanos workload is very large, how large is large? when the number of blocks in object storage is more than 100,000 or the HEAD request to object storage more than 10k per second.
 
 The `thanos objmeta` command runs a component that manage the thanos block metadata stored in object storage, allow fast iter all the block and get block metadata.
 
