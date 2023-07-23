@@ -367,6 +367,7 @@ Flags:
                                  LogStartAndFinishCall: Logs the start and
                                  finish call of the requests. NoLogCall: Disable
                                  request logging.
+      --objmeta.endpoint=""     Addresses of the optional objmeta component.
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of

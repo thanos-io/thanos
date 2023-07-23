@@ -295,6 +295,7 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
+      --objmeta.endpoint=""     Addresses of the optional objmeta component.
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of

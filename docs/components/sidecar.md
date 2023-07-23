@@ -119,6 +119,7 @@ Flags:
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
+      --objmeta.endpoint=""     Addresses of the optional objmeta component.
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
