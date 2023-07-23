@@ -156,7 +156,7 @@ func runReceive(
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
 
-	var bkt objstore.InstrumentedBucket
+	var bkt objstore.Bucket
 	confContentYaml, err := conf.objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -181,12 +181,12 @@ func runReceive(
 			if err != nil {
 				return err
 			}
+			insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 			objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
 			if err != nil {
 				return err
 			}
-			bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, bkt, logger)
-			bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+			bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 		} else {
 			level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		}

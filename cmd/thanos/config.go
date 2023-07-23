@@ -242,6 +242,6 @@ type objMetaConfig struct {
 }
 
 func (oc *objMetaConfig) registerFlag(cmd extkingpin.FlagClause) *objMetaConfig {
-	cmd.Flag("objmeta.endpoint", "Addresses of obj meta component addr").Default("").StringVar(&oc.endpoint)
+	cmd.Flag("objmeta.endpoint", "Addresses of the optional objmeta component.").Default("").StringVar(&oc.endpoint)
 	return oc
 }

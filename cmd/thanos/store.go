@@ -306,13 +306,12 @@ func runStore(
 		}
 	}
 
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 	objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
 	if err != nil {
 		return err
 	}
-	bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, bkt, logger)
-
-	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+	bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {

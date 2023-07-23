@@ -144,7 +144,7 @@ type RedisClient struct {
 
 // NewRedisClient makes a new RedisClient.
 func NewRedisClient(logger log.Logger, name string, conf []byte, reg prometheus.Registerer) (*RedisClient, error) {
-	config, err := parseRedisClientConfig(conf)
+	config, err := ParseRedisClientConfig(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +297,11 @@ func (c *RedisClient) Stop() {
 	c.client.Close()
 }
 
+// RawClient return the underly client.
+func (c *RedisClient) RawClient() rueidis.Client {
+	return c.client
+}
+
 // stringToBytes converts string to byte slice (copied from vendor/github.com/go-redis/redis/v8/internal/util/unsafe.go).
 func stringToBytes(s string) []byte {
 	return *(*[]byte)(unsafe.Pointer(
@@ -307,8 +312,8 @@ func stringToBytes(s string) []byte {
 	))
 }
 
-// parseRedisClientConfig unmarshals a buffer into a RedisClientConfig with default values.
-func parseRedisClientConfig(conf []byte) (RedisClientConfig, error) {
+// ParseRedisClientConfig unmarshals a buffer into a RedisClientConfig with default values.
+func ParseRedisClientConfig(conf []byte) (RedisClientConfig, error) {
 	config := DefaultRedisClientConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return RedisClientConfig{}, err

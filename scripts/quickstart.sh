@@ -158,6 +158,8 @@ fi
 # Start Thanos ObjMeta.
 OBJ_META_FLAG=""
 if [ -n "${OBJ_META_ENABLED}" ]; then
+  redis-server &
+
   cat >data/obj_meta_redis_config.yaml <<-EOF
 type: REDIS
 config:

@@ -27,7 +27,7 @@ import (
 
 // Server meta server.
 type Server struct {
-	bucket                    objstore.InstrumentedBucket
+	bucket                    objstore.Bucket
 	backend                   Backend
 	logger                    log.Logger
 	blockMetaFetchConcurrency int
@@ -41,7 +41,7 @@ func NewServer(
 	objMetaConfContentYaml []byte,
 	blockMetaFetchConcurrency int,
 ) (*Server, error) {
-	bucket, err := client.NewBucket(logger, objStoreConfContentYaml, reg, component.ObjMeta.String())
+	bucket, err := client.NewBucket(logger, objStoreConfContentYaml, component.ObjMeta.String())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create bucket")
 	}
@@ -57,6 +57,7 @@ func NewServer(
 	}, nil
 }
 
+// SetBlockMeta set block meta to backend.
 func (m *Server) SetBlockMeta(ctx context.Context, req *objmetapb.SetBlockMetaRequest) (*objmetapb.SetBlockMetaResponse, error) {
 	level.Info(m.logger).Log("msg", "SetBlockMeta", "blockID", req.BlockMeta.BlockId,
 		"metaType", req.BlockMeta.Type)
@@ -66,6 +67,7 @@ func (m *Server) SetBlockMeta(ctx context.Context, req *objmetapb.SetBlockMetaRe
 	return &objmetapb.SetBlockMetaResponse{}, nil
 }
 
+// DelBlockMeta del block meta to backend.
 func (m *Server) DelBlockMeta(ctx context.Context, req *objmetapb.DelBlockMetaRequest) (*objmetapb.DelBlockMetaResponse, error) {
 	level.Info(m.logger).Log("msg", "DelBlockMeta", "blockID", req.BlockId, "metaType", req.Type)
 	exist, err := m.backend.DelBlockMeta(ctx, req.BlockId, req.Type)
@@ -75,6 +77,7 @@ func (m *Server) DelBlockMeta(ctx context.Context, req *objmetapb.DelBlockMetaRe
 	return &objmetapb.DelBlockMetaResponse{Exist: exist}, nil
 }
 
+// GetBlockMeta get block meta from backend.
 func (m *Server) GetBlockMeta(ctx context.Context, req *objmetapb.GetBlockMetaRequest) (*objmetapb.GetBlockMetaResponse, error) {
 	level.Debug(m.logger).Log("msg", "GetBlockMeta", "blockID", req.BlockId, "metaType", req.Type)
 	blockMeta, err := m.backend.GetBlockMeta(ctx, req.BlockId, req.Type)
@@ -86,6 +89,7 @@ func (m *Server) GetBlockMeta(ctx context.Context, req *objmetapb.GetBlockMetaRe
 	}, nil
 }
 
+// ExistsBlockMeta return true if block meta is in backend.
 func (m *Server) ExistsBlockMeta(ctx context.Context, req *objmetapb.ExistsBlockMetaRequest) (*objmetapb.ExistsBlockMetaResponse, error) {
 	level.Debug(m.logger).Log("msg", "ExistsBlockMeta", "blockID", req.BlockId, "metaType", req.Type)
 	ret, err := m.backend.ExistsBlockMeta(ctx, req.BlockId, req.Type)
@@ -95,6 +99,7 @@ func (m *Server) ExistsBlockMeta(ctx context.Context, req *objmetapb.ExistsBlock
 	return &objmetapb.ExistsBlockMetaResponse{Exist: ret}, nil
 }
 
+// ListBlocks return all block id list.
 func (m *Server) ListBlocks(_ *objmetapb.ListBlocksRequest, s objmetapb.ObjMeta_ListBlocksServer) error {
 	level.Info(m.logger).Log("msg", "ListBlocks")
 	return m.backend.ListBlocks(s.Context(), func(blocks []string) error {

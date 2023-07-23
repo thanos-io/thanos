@@ -727,12 +727,12 @@ func runRule(
 		if err != nil {
 			return err
 		}
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 		objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
 		if err != nil {
 			return err
 		}
-		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, bkt, logger)
-		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 
 		// Ensure we close up everything properly.
 		defer func() {

@@ -5,20 +5,21 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/go-redis/redis/v8"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/redis/rueidis"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/objmeta/objmetapb"
 )
 
 type redisBackend struct {
-	redisClient *cacheutil.RedisClient
+	redisClient rueidis.Client
 	logger      log.Logger
 }
 
@@ -28,12 +29,18 @@ func NewRedisBackend(
 	reg *prometheus.Registry,
 	confContentYaml []byte,
 ) (Backend, error) {
-	redisClient, err := cacheutil.NewRedisClient(logger, "meta-store", confContentYaml, reg)
+	config, err := cacheutil.ParseRedisClientConfig(confContentYaml)
+	if err != nil {
+		return nil, err
+	}
+	// disable client caching because we use underly client.
+	config.CacheSize = 0
+	redisClient, err := cacheutil.NewRedisClientWithConfig(logger, "objmeta", config, reg)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create redis client")
 	}
 	return &redisBackend{
-		redisClient: redisClient,
+		redisClient: redisClient.RawClient(),
 		logger:      logger,
 	}, nil
 }
@@ -42,12 +49,14 @@ func NewRedisBackend(
 func (m *redisBackend) SetBlockMeta(ctx context.Context, blockMeta *objmetapb.BlockMeta) error {
 	key := genBlockKey(blockMeta.BlockId, blockMeta.Type)
 	value := genBlockValue(blockMeta)
-	err := m.redisClient.Set(ctx, key, value, 0).Err()
+	cmd := m.redisClient.B().Set().Key(key).Value(rueidis.BinaryString(value)).Build()
+	err := m.redisClient.Do(ctx, cmd).Error()
 	if err != nil {
 		return errors.Wrapf(err, "redisClient.Set")
 	}
-	member := &redis.Z{Score: genBlocksScore(), Member: genBlocksMember(blockMeta.BlockId)}
-	err = m.redisClient.ZAdd(ctx, genBlocksKey(), member).Err()
+	zAddCmd := m.redisClient.B().Zadd().Key(genBlocksKey()).ScoreMember().
+		ScoreMember(genBlocksScore(), genBlocksMember(blockMeta.BlockId)).Build()
+	err = m.redisClient.Do(ctx, zAddCmd).Error()
 	if err != nil {
 		return errors.Wrapf(err, "redisClient.ZAdd")
 	}
@@ -56,14 +65,15 @@ func (m *redisBackend) SetBlockMeta(ctx context.Context, blockMeta *objmetapb.Bl
 
 // GetBlockMeta get block meta.
 func (m *redisBackend) GetBlockMeta(ctx context.Context, blockID string, metaType objmetapb.Type) (*objmetapb.BlockMeta, error) {
-	data, err := m.redisClient.Get(ctx, genBlockKey(blockID, metaType)).Bytes()
+	cmd := m.redisClient.B().Get().Key(genBlockKey(blockID, metaType)).Build()
+	data, err := m.redisClient.Do(ctx, cmd).ToString()
 	if err != nil {
-		if err == redis.Nil {
+		if rueidis.IsRedisNil(err) {
 			return nil, nil
 		}
 		return nil, errors.Wrapf(err, "redisClient.Get")
 	}
-	blockMeta, err := parseBlockValue(data)
+	blockMeta, err := parseBlockValue([]byte(data))
 	if err != nil {
 		return nil, err
 	}
@@ -72,9 +82,10 @@ func (m *redisBackend) GetBlockMeta(ctx context.Context, blockID string, metaTyp
 
 // ExistsBlockMeta return true if block meta exist.
 func (m *redisBackend) ExistsBlockMeta(ctx context.Context, blockID string, metaType objmetapb.Type) (bool, error) {
-	ret, err := m.redisClient.Exists(ctx, genBlockKey(blockID, metaType)).Result()
+	cmd := m.redisClient.B().Exists().Key(genBlockKey(blockID, metaType)).Build()
+	ret, err := m.redisClient.Do(ctx, cmd).ToInt64()
 	if err != nil {
-		if err == redis.Nil {
+		if rueidis.IsRedisNil(err) {
 			return false, nil
 		}
 		return false, errors.Wrapf(err, "redisClient.Exists")
@@ -84,11 +95,13 @@ func (m *redisBackend) ExistsBlockMeta(ctx context.Context, blockID string, meta
 
 // DelBlockMeta delete block meta.
 func (m *redisBackend) DelBlockMeta(ctx context.Context, blockID string, metaType objmetapb.Type) (bool, error) {
-	err := m.redisClient.ZRem(ctx, genBlocksKey(), genBlocksMember(blockID)).Err()
+	cmd := m.redisClient.B().Zrem().Key(genBlocksKey()).Member(genBlocksMember(blockID)).Build()
+	err := m.redisClient.Do(ctx, cmd).Error()
 	if err != nil {
 		return false, errors.Wrapf(err, "redisClient.ZRem")
 	}
-	ret, err := m.redisClient.Del(ctx, genBlockKey(blockID, metaType)).Result()
+	delCmd := m.redisClient.B().Del().Key(genBlockKey(blockID, metaType)).Build()
+	ret, err := m.redisClient.Do(ctx, delCmd).ToInt64()
 	if err != nil {
 		return false, errors.Wrapf(err, "redisClient.Del")
 	}
@@ -97,13 +110,14 @@ func (m *redisBackend) DelBlockMeta(ctx context.Context, blockID string, metaTyp
 
 // DelBlockAllMeta delete block all type meta.
 func (m *redisBackend) DelBlockAllMeta(ctx context.Context, blockID string) error {
-	err := m.redisClient.ZRem(ctx, genBlocksKey(), genBlocksMember(blockID)).Err()
+	cmd := m.redisClient.B().Zrem().Key(genBlocksKey()).Member(genBlocksMember(blockID)).Build()
+	err := m.redisClient.Do(ctx, cmd).Error()
 	if err != nil {
 		return errors.Wrapf(err, "redisClient.ZRem")
 	}
 	for _, v := range objMetaTypes {
-		_, err := m.redisClient.Del(ctx, genBlockKey(blockID, v)).Result()
-		if err != nil {
+		delCmd := m.redisClient.B().Del().Key(genBlockKey(blockID, v)).Build()
+		if err := m.redisClient.Do(ctx, delCmd).Error(); err != nil {
 			return errors.Wrapf(err, "redisClient.Del")
 		}
 	}
@@ -114,16 +128,13 @@ func (m *redisBackend) DelBlockAllMeta(ctx context.Context, blockID string) erro
 func (m *redisBackend) ListBlocks(ctx context.Context, f func(s []string) error) error {
 	key := genBlocksKey()
 	const pageSize = 512
-	opt := &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    "+inf",
-		Offset: 0,
-		Count:  pageSize,
-	}
+	var offset int64
 	for {
-		results, err := m.redisClient.ZRangeByScore(ctx, key, opt).Result()
+		cmd := m.redisClient.B().Zrangebyscore().Key(key).Min("-inf").Max("+inf").
+			Limit(offset, pageSize).Build()
+		results, err := m.redisClient.Do(ctx, cmd).AsStrSlice()
 		if err != nil {
-			if err == redis.Nil {
+			if rueidis.IsRedisNil(err) {
 				return nil
 			}
 			return errors.Wrapf(err, "redisClient.ZRangeByScore")
@@ -131,7 +142,7 @@ func (m *redisBackend) ListBlocks(ctx context.Context, f func(s []string) error)
 		if len(results) == 0 {
 			return nil
 		}
-		opt.Offset += int64(len(results))
+		offset += int64(len(results))
 		if err := f(results); err != nil {
 			if err == io.EOF {
 				return nil
@@ -144,13 +155,16 @@ func (m *redisBackend) ListBlocks(ctx context.Context, f func(s []string) error)
 // AcquireSyncLock Accrue a lock for sync. if return true, it accrued.
 func (m *redisBackend) AcquireSyncLock(ctx context.Context, maxTTL time.Duration) (bool, func() error, error) {
 	lockKey := genSyncLockKey()
-	lockValue := rand.Int()
-	ok, err := m.redisClient.SetNX(ctx, lockKey, lockValue, maxTTL).Result()
-	if err != nil {
+	lockValue := strconv.Itoa(rand.Int())
+	cmd := m.redisClient.B().Set().Key(lockKey).Value(lockValue).Nx().Ex(maxTTL).Build()
+	if err := m.redisClient.Do(ctx, cmd).Error(); err != nil {
+		if rueidis.IsRedisNil(err) {
+			return false, nil, nil
+		}
 		return false, nil, errors.Wrapf(err, "lock SetNX")
 	}
 	releaseFunc := func() error {
-		gotValue, err := m.redisClient.Get(ctx, lockKey).Int()
+		gotValue, err := m.redisClient.Do(ctx, m.redisClient.B().Get().Key(lockKey).Build()).ToString()
 		if err != nil {
 			return errors.Wrapf(err, "lock Get")
 		}
@@ -159,12 +173,12 @@ func (m *redisBackend) AcquireSyncLock(ctx context.Context, maxTTL time.Duration
 				"lockValue", lockValue, "gotValue", gotValue)
 			return nil
 		}
-		if err := m.redisClient.Del(ctx, lockKey).Err(); err != nil {
+		if err := m.redisClient.Do(ctx, m.redisClient.B().Del().Key(lockKey).Build()).Error(); err != nil {
 			return errors.Wrapf(err, "lock Del")
 		}
 		return nil
 	}
-	return ok, releaseFunc, nil
+	return true, releaseFunc, nil
 }
 
 // genBlockKey gen redis key.

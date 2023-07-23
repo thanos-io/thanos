@@ -38,13 +38,10 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 
-	extflag "github.com/efficientgo/tools/extkingpin"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"gopkg.in/yaml.v3"
 
-	"github.com/thanos-io/objstore"
-	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
@@ -614,12 +611,12 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		if err != nil {
 			return errors.Wrap(err, "bucket client")
 		}
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 		objMetaClient, err := objmeta.NewClient(logger, reg, tbc.objMeta.endpoint)
 		if err != nil {
 			return err
 		}
-		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, bkt, logger)
-		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 
 		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap, insBkt)
 

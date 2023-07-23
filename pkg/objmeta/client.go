@@ -62,7 +62,7 @@ func NewBucketWithObjMetaClient(
 	}
 }
 
-// Upload upload meta from objmeta backend if name is meta, otherwise access to objstore.
+// Upload upload meta from objmeta backend and objstore if name is meta, otherwise access to objstore.
 func (b *BucketWithObjMetaClient) Upload(ctx context.Context, name string, r io.Reader) error {
 	level.Info(b.logger).Log("msg", "upload", "name", name)
 	if isMeta, metaType, blockID := isBlockMeta(name); isMeta {
@@ -79,15 +79,14 @@ func (b *BucketWithObjMetaClient) Upload(ctx context.Context, name string, r io.
 			},
 		})
 		if err != nil {
-			level.Warn(b.logger).Log("msg", "SetBlockMeta error", "name", name, "error", err)
-			return b.InstrumentedBucket.Upload(ctx, name, r)
+			return errors.Wrap(err, "SetBlockMeta")
 		}
 		r = bytes.NewReader(fileData)
 	}
 	return b.InstrumentedBucket.Upload(ctx, name, r)
 }
 
-// Delete delete meta from objmeta backend if name is meta, otherwise access to objstore.
+// Delete delete meta from objmeta backend and objstore if name is meta, otherwise access to objstore.
 func (b *BucketWithObjMetaClient) Delete(ctx context.Context, name string) error {
 	level.Info(b.logger).Log("msg", "Delete", "name", name)
 	if isMeta, metaType, blockID := isBlockMeta(name); isMeta {
@@ -96,8 +95,7 @@ func (b *BucketWithObjMetaClient) Delete(ctx context.Context, name string) error
 			Type:    metaType,
 		})
 		if err != nil {
-			level.Warn(b.logger).Log("msg", "DelBlockMeta error", "name", name, "error", err)
-			return b.InstrumentedBucket.Delete(ctx, name)
+			return errors.Wrap(err, "DelBlockMeta")
 		}
 	}
 	return b.InstrumentedBucket.Delete(ctx, name)
@@ -140,8 +138,7 @@ func (b *BucketWithObjMetaClient) Get(ctx context.Context, name string) (io.Read
 			Type:    metaType,
 		})
 		if err != nil {
-			level.Warn(b.logger).Log("msg", "GetBlockMeta error", "name", name, "error", err)
-			return b.InstrumentedBucket.Get(ctx, name)
+			return nil, errors.Wrap(err, "GetBlockMeta")
 		}
 		if rsp.BlockMeta == nil {
 			return nil, errObjNotFound
@@ -159,8 +156,7 @@ func (b *BucketWithObjMetaClient) Exists(ctx context.Context, name string) (bool
 			Type:    metaType,
 		})
 		if err != nil {
-			level.Warn(b.logger).Log("msg", "Exists error", "name", name, "error", err)
-			return b.InstrumentedBucket.Exists(ctx, name)
+			return false, errors.Wrap(err, "ExistsBlockMeta")
 		}
 		return rsp.Exist, nil
 	}
