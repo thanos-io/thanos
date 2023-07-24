@@ -356,7 +356,7 @@ func (h *histogramAggregator) add(s sample) {
 	}
 
 	if h.total > 0 {
-		if fh.DetectReset(h.previous) {
+		if fh.CounterResetHint != histogram.GaugeType && fh.DetectReset(h.previous) {
 			// Counter reset, correct the value.
 			h.counter.Add(fh)
 			h.resets++
