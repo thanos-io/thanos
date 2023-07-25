@@ -73,6 +73,7 @@ func RunDownsample(
 	dataDir string,
 	waitInterval time.Duration,
 	downsampleConcurrency int,
+	blockFilesConcurrency int,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
 	hashFunc metadata.HashFunc,
@@ -131,7 +132,7 @@ func RunDownsample(
 					metrics.downsamples.WithLabelValues(groupKey)
 					metrics.downsampleFailures.WithLabelValues(groupKey)
 				}
-				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 
@@ -140,7 +141,7 @@ func RunDownsample(
 				if err != nil {
 					return errors.Wrap(err, "sync before second pass of downsampling")
 				}
-				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 				return nil
@@ -179,6 +180,7 @@ func downsampleBucket(
 	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
 	downsampleConcurrency int,
+	blockFilesConcurrency int,
 	hashFunc metadata.HashFunc,
 	acceptMalformedIndex bool,
 ) (rerr error) {
@@ -258,7 +260,7 @@ func downsampleBucket(
 					resolution = downsample.ResLevel2
 					errMsg = "downsampling to 60 min"
 				}
-				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics, acceptMalformedIndex); err != nil {
+				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics, acceptMalformedIndex, blockFilesConcurrency); err != nil {
 					metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
 					errCh <- errors.Wrap(err, errMsg)
 
@@ -348,11 +350,12 @@ func processDownsampling(
 	hashFunc metadata.HashFunc,
 	metrics *DownsampleMetrics,
 	acceptMalformedIndex bool,
+	blockFilesConcurrency int,
 ) error {
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := block.Download(ctx, logger, bkt, m.ULID, bdir)
+	err := block.Download(ctx, logger, bkt, m.ULID, bdir, objstore.WithFetchConcurrency(blockFilesConcurrency))
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}
