@@ -525,7 +525,7 @@ func runRule(
 				OutageTolerance: conf.outageTolerance,
 				ForGracePeriod:  conf.forGracePeriod,
 			},
-			queryFuncCreator(logger, queryClients, promClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod),
+			queryFuncCreator(logger, queryClients, promClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -808,6 +808,7 @@ func queryFuncCreator(
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
+	doNotAddThanosParams bool,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -835,6 +836,7 @@ func queryFuncCreator(
 						Deduplicate:             true,
 						PartialResponseStrategy: partialResponseStrategy,
 						Method:                  httpMethod,
+						DoNotAddThanosParams:    doNotAddThanosParams,
 					})
 					span.Finish()
 

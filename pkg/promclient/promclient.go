@@ -356,6 +356,7 @@ func (c *Client) Snapshot(ctx context.Context, base *url.URL, skipHead bool) (st
 }
 
 type QueryOptions struct {
+	DoNotAddThanosParams    bool
 	Deduplicate             bool
 	PartialResponseStrategy storepb.PartialResponseStrategy
 	Method                  string
@@ -402,8 +403,10 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	}
 	params.Add("query", query)
 	params.Add("time", t.Format(time.RFC3339Nano))
-	if err := opts.AddTo(params); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
+	if !opts.DoNotAddThanosParams {
+		if err := opts.AddTo(params); err != nil {
+			return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
+		}
 	}
 
 	u := *base
@@ -511,8 +514,10 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	params.Add("start", formatTime(timestamp.Time(startTime)))
 	params.Add("end", formatTime(timestamp.Time(endTime)))
 	params.Add("step", strconv.FormatInt(step, 10))
-	if err := opts.AddTo(params); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
+	if !opts.DoNotAddThanosParams {
+		if err := opts.AddTo(params); err != nil {
+			return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
+		}
 	}
 
 	u := *base
