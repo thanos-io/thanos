@@ -92,16 +92,16 @@ func TestTenantFromGRPC(t *testing.T) {
 		md := metadata.New(map[string]string{tenancy.DefaultTenantHeader: testTenant})
 		ctx = metadata.NewIncomingContext(ctx, md)
 
-		tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
-		testutil.Ok(t, err)
+		tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
+		testutil.Equals(t, true, foundTenant)
 		testutil.Assert(t, tenant == testTenant)
 	})
 	t.Run("no-tenant", func(t *testing.T) {
 
 		ctx := context.Background()
 
-		tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
-		testutil.NotOk(t, err)
+		tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
+		testutil.Equals(t, false, foundTenant)
 		testutil.Assert(t, tenant == tenancy.DefaultTenant)
 	})
 }

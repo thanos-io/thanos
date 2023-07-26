@@ -1231,10 +1231,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		defer s.queryGate.Done()
 	}
 
-	tenant, err := tenancy.GetTenantFromGRPCMetadata(srv.Context())
-	if err != nil {
-		level.Warn(s.logger).Log("msg", err)
-	}
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(srv.Context())
 	level.Debug(s.logger).Log("msg", "Tenant for Series request", "tenant", tenant)
 
 	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
@@ -1486,10 +1483,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
 
-	tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
-	if err != nil {
-		level.Warn(s.logger).Log("msg", err)
-	}
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
 	level.Debug(s.logger).Log("msg", "Tenant for LabelNames request", "tenant", tenant)
 
 	resHints := &hintspb.LabelNamesResponseHints{}
@@ -1680,10 +1674,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
 
-	tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
-	if err != nil {
-		level.Warn(s.logger).Log("msg", err)
-	}
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
 	level.Debug(s.logger).Log("msg", "Tenant for LabelValues request", "tenant", tenant)
 
 	resHints := &hintspb.LabelValuesResponseHints{}
