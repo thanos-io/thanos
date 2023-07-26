@@ -307,9 +307,8 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
 	ctx := srv.Context()
-	tenant, err := tenancy.GetTenantFromGRPCMetadata(ctx)
-	if err != nil {
-		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
+	if !foundTenant {
 		if ctx.Value(tenancy.TenantKey) != nil {
 			tenant = ctx.Value(tenancy.TenantKey).(string)
 		}
@@ -467,8 +466,8 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
-	tenant, err := tenancy.GetTenantFromGRPCMetadata(gctx)
-	if err != nil {
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(gctx)
+	if !foundTenant {
 		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
 		if gctx.Value(tenancy.TenantKey) != nil {
 			tenant = gctx.Value(tenancy.TenantKey).(string)
@@ -546,8 +545,8 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
-	tenant, err := tenancy.GetTenantFromGRPCMetadata(gctx)
-	if err != nil {
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(gctx)
+	if !foundTenant {
 		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
 		if gctx.Value(tenancy.TenantKey) != nil {
 			tenant = gctx.Value(tenancy.TenantKey).(string)
