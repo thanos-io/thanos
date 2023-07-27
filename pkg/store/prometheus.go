@@ -242,13 +242,13 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	// remote read.
 	contentType := httpResp.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/x-protobuf") {
-		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, enableChunkHashCalculation, extLsetToRemove)
+		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, enableChunkHashCalculation, extLsetToRemove)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
 }
 
 func (p *PrometheusStore) queryPrometheus(
@@ -326,6 +326,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 	s storepb.Store_SeriesServer,
 	httpResp *http.Response,
 	querySpan tracing.Span,
+	extLset labels.Labels,
 	calculateChecksums bool,
 	extLsetToRemove map[string]struct{},
 ) error {
@@ -342,9 +343,10 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
-		// Sampled remote read handler already adds external labels for us:
-		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166.
-		lset := rmLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLsetToRemove)
+		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166
+		// MergeLabels() prefers local labels over external labels but we prefer
+		// external labels hence we need to do this:
+		lset := rmLabels(labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLset), extLsetToRemove)
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
@@ -379,6 +381,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,
+	extLset labels.Labels,
 	calculateChecksums bool,
 	extLsetToRemove map[string]struct{},
 ) error {
@@ -419,10 +422,10 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
-			// Streamed remote read handler already adds
-			// external labels:
+			// MergeLabels() prefers local labels over external labels but we prefer
+			// external labels hence we need to do this:
 			// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/codec.go#L210.
-			completeLabelset := rmLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLsetToRemove)
+			completeLabelset := rmLabels(labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset), extLsetToRemove)
 			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}

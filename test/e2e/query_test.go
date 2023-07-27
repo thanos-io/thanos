@@ -2241,3 +2241,53 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	}, time.Now, promclient.QueryOptions{}, 0)
 
 }
+
+func TestSidecarPrefersExtLabels(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("sidecar-extlbls")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promCfg := `global:
+  external_labels:
+    region: test`
+
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promCfg, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	endpoints := []string{
+		sidecar.InternalEndpoint("grpc"),
+	}
+	querier := e2ethanos.
+		NewQuerierBuilder(e, "1", endpoints...).
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+	now := time.Now()
+	ctx := context.Background()
+	m := model.Sample{
+		Metric: map[model.LabelName]model.LabelValue{
+			"__name__": "sidecar_test_metric",
+			"instance": model.LabelValue("test"),
+			"region":   model.LabelValue("foo"),
+		},
+		Value:     model.SampleValue(2),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
+	}
+	testutil.Ok(t, synthesizeSamples(ctx, prom, []model.Sample{m}))
+
+	retv, _ := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
+		return "sidecar_test_metric"
+	}, func() time.Time { return now.Add(time.Hour) }, promclient.QueryOptions{}, 1)
+
+	testutil.Equals(t, model.Vector{&model.Sample{
+		Metric: model.Metric{
+			"__name__": "sidecar_test_metric",
+			"instance": "test",
+			"region":   "test",
+		},
+		Value:     model.SampleValue(2),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
+	}}, retv)
+}
