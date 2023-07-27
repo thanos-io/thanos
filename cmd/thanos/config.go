@@ -207,7 +207,7 @@ func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
 		Default("miekgdns").Hidden().StringVar(&qc.dnsSDResolver)
 	cmd.Flag("query.default-step", "Default range query step to use. This is only used in stateless Ruler and alert state restoration.").
 		Default("1s").DurationVar(&qc.step)
-	cmd.Flag("query.do-not-add-thanos-params", "Disable adding Thanos parameters (e.g dedup, partial_response) when querying for metrics.").
+	cmd.Flag("query.only-prometheus-params", "Disable adding Thanos parameters (e.g dedup, partial_response) when querying metrics. Some non-Thanos systems have strict API validation.").Hidden().
 		Default("false").BoolVar(&qc.doNotAddThanosParams)
 	return qc
 }
