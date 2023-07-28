@@ -454,6 +454,7 @@ func (qapi *QueryAPI) parseQueryExplainParam(r *http.Request, query promql.Query
 
 	return explanation, nil
 }
+
 func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query) (*engine.AnalyzeOutputNode, *api.ApiError) {
 	var analysis *engine.AnalyzeOutputNode
 
