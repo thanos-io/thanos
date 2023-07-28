@@ -91,6 +91,7 @@ func TestQFEEngineExplanation(t *testing.T) {
 			timestamp.FromTime(now.Add(-5*time.Minute)),
 			timestamp.FromTime(now), 1, promclient.QueryOptions{
 				Explain: true,
+				Analyze: true,
 				Engine:  "thanos",
 			}, func(res model.Matrix) error {
 				if res.Len() == 0 {
@@ -124,6 +125,7 @@ func TestQFEEngineExplanation(t *testing.T) {
 			Deduplicate: false,
 			Engine:      "thanos",
 			Explain:     true,
+			Analyze:     true,
 		}, 1)
 		testutil.Assert(t, explanation != nil, "expected to have an explanation")
 	})
@@ -133,6 +135,7 @@ func TestQFEEngineExplanation(t *testing.T) {
 			Deduplicate: false,
 			Engine:      "thanos",
 			Explain:     false,
+			Analyze:     false,
 		}, 1)
 		testutil.Assert(t, explanation == nil, "expected to have no explanation")
 	})

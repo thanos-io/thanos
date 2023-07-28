@@ -56,7 +56,7 @@ interface PanelState {
   warnings: string[] | null;
   stats: QueryStats | null;
   exprInputValue: string;
-  explanation: QueryTree | null;
+  analysis: QueryTree | null;
 }
 
 export interface PanelOptions {
@@ -71,8 +71,8 @@ export interface PanelOptions {
   usePartialResponse: boolean;
   storeMatches: Store[];
   engine: string;
-  explain: boolean;
-  disableExplainCheckbox: boolean;
+  analyze: boolean;
+  disableAnalyzeCheckbox: boolean;
 }
 
 export enum PanelType {
@@ -92,8 +92,8 @@ export const PanelDefaultOptions: PanelOptions = {
   usePartialResponse: false,
   storeMatches: [],
   engine: '',
-  explain: false,
-  disableExplainCheckbox: false,
+  analyze: false,
+  disableAnalyzeCheckbox: false,
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -110,7 +110,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       error: null,
       stats: null,
       exprInputValue: props.options.expr,
-      explanation: null,
+      analysis: null,
     };
 
     if (this.props.options.engine === '') {
@@ -122,7 +122,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
-    this.handleChangeExplain = this.handleChangeExplain.bind(this);
+    this.handleChangeAnalyze = this.handleChangeAnalyze.bind(this);
   }
 
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
@@ -135,7 +135,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       useDeduplication,
       usePartialResponse,
       engine,
-      explain,
+      analyze,
       // TODO: Add support for Store Matches
     } = this.props.options;
     if (
@@ -147,7 +147,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.useDeduplication !== useDeduplication ||
       prevOpts.usePartialResponse !== usePartialResponse ||
       prevOpts.engine !== engine ||
-      prevOpts.explain !== explain
+      prevOpts.analyze !== analyze
       // Check store matches
     ) {
       this.executeQuery();
@@ -204,14 +204,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('step', resolution.toString());
         params.append('max_source_resolution', this.props.options.maxSourceResolution);
         params.append('engine', this.props.options.engine);
-        params.append('explain', this.props.options.explain.toString());
+        params.append('analyze', this.props.options.analyze.toString());
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
         path = '/api/v1/query';
         params.append('time', endTime.toString());
         params.append('engine', this.props.options.engine);
-        params.append('explain', this.props.options.explain.toString());
+        params.append('analyze', this.props.options.analyze.toString());
         break;
       default:
         throw new Error('Invalid panel type "' + this.props.options.type + '"');
@@ -229,7 +229,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         }
 
         let resultSeries = 0;
-        let explanation = null;
+        let analysis = null;
         if (json.data) {
           const { resultType, result } = json.data;
           if (resultType === 'scalar') {
@@ -237,7 +237,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           } else if (result && result.length > 0) {
             resultSeries = result.length;
           }
-          explanation = json.data.explanation;
+          analysis = json.data.explanation;
         }
 
         this.setState({
@@ -255,7 +255,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             resultSeries,
           },
           loading: false,
-          explanation: explanation,
+          analysis: analysis,
         });
         this.abortInFlightFetch = null;
       })
@@ -336,15 +336,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleEngine(event.target.value);
   };
 
-  handleChangeExplain = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ explain: event.target.checked });
+  handleChangeAnalyze = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ analyze: event.target.checked });
   };
 
   handleEngine = (engine: string): void => {
     if (engine === 'prometheus') {
-      this.setOptions({ engine: engine, explain: false, disableExplainCheckbox: true });
+      this.setOptions({ engine: engine, analyze: false, disableAnalyzeCheckbox: true });
     } else {
-      this.setOptions({ engine: engine, disableExplainCheckbox: false });
+      this.setOptions({ engine: engine, disableAnalyzeCheckbox: false });
     }
   };
 
@@ -433,19 +433,19 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
                 id={`explain-${id}`}
-                onChange={this.handleChangeExplain}
-                checked={options.explain}
-                disabled={options.disableExplainCheckbox}
+                onChange={this.handleChangeAnalyze}
+                checked={options.analyze}
+                disabled={options.disableAnalyzeCheckbox}
               >
-                Explain
+                Analyze
               </Checkbox>
             </div>
           </Col>
         </Row>
-        <Row hidden={!(options.explain && this.state.explanation)}>
+        <Row hidden={!(options.analyze && this.state.analysis)}>
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
-              <ListTree id={`explain-tree-${id}`} node={this.state.explanation} />
+              <ListTree id={`explain-tree-${id}`} node={this.state.analysis} />
             </Alert>
           </Col>
         </Row>

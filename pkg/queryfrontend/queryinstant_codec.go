@@ -154,6 +154,7 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
 	result.Explain = r.FormValue("explain")
+	result.Analyze = r.FormValue("analyze")
 	result.Engine = r.FormValue("engine")
 
 	for _, header := range forwardHeaders {
@@ -177,6 +178,7 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
 		queryv1.QueryExplainParam:    []string{thanosReq.Explain},
+		queryv1.QueryAnalyzeParam:    []string{thanosReq.Analyze},
 		queryv1.EngineParam:          []string{thanosReq.Engine},
 		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
 	}
