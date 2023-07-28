@@ -65,6 +65,11 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 				tracing.StreamClientInterceptor(tracer),
 			),
 		),
+		grpc.WithDefaultServiceConfig(`
+{
+  "loadBalancingConfig": [ { "round_robin": {} } ]
+}
+`),
 	}
 	if reg != nil {
 		reg.MustRegister(grpcMets)
