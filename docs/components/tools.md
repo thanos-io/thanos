@@ -609,6 +609,10 @@ usage: thanos tools bucket downsample [<flags>]
 Continuously downsamples blocks in an object store bucket.
 
 Flags:
+      --block-files-concurrency=1
+                              Number of goroutines to use when
+                              fetching/uploading block files from object
+                              storage.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
       --downsample.concurrency=1

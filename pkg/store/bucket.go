@@ -36,6 +36,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/weaveworks/common/httpgrpc"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -58,6 +59,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -1229,6 +1231,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		defer s.queryGate.Done()
 	}
 
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(srv.Context())
+	level.Debug(s.logger).Log("msg", "Tenant for Series request", "tenant", tenant)
+
 	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -1478,6 +1483,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
 
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
+	level.Debug(s.logger).Log("msg", "Tenant for LabelNames request", "tenant", tenant)
+
 	resHints := &hintspb.LabelNamesResponseHints{}
 
 	var reqBlockMatchers []*labels.Matcher
@@ -1665,6 +1673,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
+
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
+	level.Debug(s.logger).Log("msg", "Tenant for LabelValues request", "tenant", tenant)
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
@@ -2210,40 +2221,32 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		return postings, nil
 	}
 	var (
-		postingGroups []*postingGroup
-		allRequested  = false
-		hasAdds       = false
-		keys          []labels.Label
+		allRequested = false
+		hasAdds      = false
+		keys         []labels.Label
 	)
 
-	// NOTE: Derived from tsdb.PostingsForMatchers.
-	for _, m := range ms {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		// Each group is separate to tell later what postings are intersecting with what.
-		pg, err := toPostingGroup(ctx, r.block.indexHeaderReader.LabelValues, m)
-		if err != nil {
-			return nil, errors.Wrap(err, "toPostingGroup")
-		}
-
-		// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
-		// postings would return no postings anyway.
-		// E.g. label="non-existing-value" returns empty group.
-		if !pg.addAll && len(pg.addKeys) == 0 {
-			r.storeExpandedPostingsToCache(ms, index.EmptyPostings(), 0)
-			return nil, nil
-		}
-
-		postingGroups = append(postingGroups, pg)
+	postingGroups, err := matchersToPostingGroups(ctx, r.block.indexHeaderReader.LabelValues, ms)
+	if err != nil {
+		return nil, errors.Wrap(err, "matchersToPostingGroups")
+	}
+	if postingGroups == nil {
+		r.storeExpandedPostingsToCache(ms, index.EmptyPostings(), 0)
+		return nil, nil
+	}
+	for _, pg := range postingGroups {
 		allRequested = allRequested || pg.addAll
 		hasAdds = hasAdds || len(pg.addKeys) > 0
 
 		// Postings returned by fetchPostings will be in the same order as keys
 		// so it's important that we iterate them in the same order later.
 		// We don't have any other way of pairing keys and fetched postings.
-		keys = append(keys, pg.addKeys...)
-		keys = append(keys, pg.removeKeys...)
+		for _, key := range pg.addKeys {
+			keys = append(keys, labels.Label{Name: pg.name, Value: key})
+		}
+		for _, key := range pg.removeKeys {
+			keys = append(keys, labels.Label{Name: pg.name, Value: key})
+		}
 	}
 
 	// We only need special All postings if there are no other adds. If there are, we can skip fetching
@@ -2253,7 +2256,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		name, value := index.AllPostingsKey()
 		allPostingsLabel := labels.Label{Name: name, Value: value}
 
-		postingGroups = append(postingGroups, newPostingGroup(true, []labels.Label{allPostingsLabel}, nil))
+		postingGroups = append(postingGroups, newPostingGroup(true, name, []string{value}, nil))
 		keys = append(keys, allPostingsLabel)
 	}
 
@@ -2278,7 +2281,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		if len(g.addKeys) > 0 {
 			toMerge := make([]index.Postings, 0, len(g.addKeys))
 			for _, l := range g.addKeys {
-				toMerge = append(toMerge, checkNilPosting(l, fetchedPostings[postingIndex]))
+				toMerge = append(toMerge, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
 				postingIndex++
 			}
 
@@ -2286,7 +2289,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		}
 
 		for _, l := range g.removeKeys {
-			groupRemovals = append(groupRemovals, checkNilPosting(l, fetchedPostings[postingIndex]))
+			groupRemovals = append(groupRemovals, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
 			postingIndex++
 		}
 	}
@@ -2325,37 +2328,186 @@ func ExpandPostingsWithContext(ctx context.Context, p index.Postings) (res []sto
 	return res, p.Err()
 }
 
-// postingGroup keeps posting keys for single matcher. Logical result of the group is:
+// postingGroup keeps posting keys for one or more matchers with the same label name. Logical result of the group is:
 // If addAll is set: special All postings minus postings for removeKeys labels. No need to merge postings for addKeys in this case.
 // If addAll is not set: Merge of postings for "addKeys" labels minus postings for removeKeys labels
 // This computation happens in ExpandedPostings.
 type postingGroup struct {
 	addAll     bool
-	addKeys    []labels.Label
-	removeKeys []labels.Label
+	name       string
+	addKeys    []string
+	removeKeys []string
 }
 
-func newPostingGroup(addAll bool, addKeys, removeKeys []labels.Label) *postingGroup {
+func newPostingGroup(addAll bool, name string, addKeys, removeKeys []string) *postingGroup {
 	return &postingGroup{
 		addAll:     addAll,
+		name:       name,
 		addKeys:    addKeys,
 		removeKeys: removeKeys,
 	}
 }
 
-func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
+func (pg postingGroup) merge(other *postingGroup) *postingGroup {
+	if other == nil {
+		return &pg
+	}
+	// This shouldn't happen, but add this as a safeguard.
+	if pg.name != other.name {
+		return nil
+	}
+	var i, j int
+	// Both add all, merge remove keys.
+	if pg.addAll && other.addAll {
+		// Fast path to not allocate output slice if no remove keys are specified.
+		// This is possible when matcher is `=~".*"`.
+		if len(pg.removeKeys) == 0 {
+			pg.removeKeys = other.removeKeys
+			return &pg
+		} else if len(other.removeKeys) == 0 {
+			return &pg
+		}
+		output := make([]string, 0, len(pg.removeKeys)+len(other.removeKeys))
+		for i < len(pg.removeKeys) && j < len(other.removeKeys) {
+			if pg.removeKeys[i] < other.removeKeys[j] {
+				output = append(output, pg.removeKeys[i])
+				i++
+			} else if pg.removeKeys[i] > other.removeKeys[j] {
+				output = append(output, other.removeKeys[j])
+				j++
+			} else {
+				output = append(output, pg.removeKeys[i])
+				i++
+				j++
+			}
+		}
+		if i < len(pg.removeKeys) {
+			output = append(output, pg.removeKeys[i:len(pg.removeKeys)]...)
+		}
+		if j < len(other.removeKeys) {
+			output = append(output, other.removeKeys[j:len(other.removeKeys)]...)
+		}
+		pg.removeKeys = output
+	} else if pg.addAll || other.addAll {
+		// Subtract the remove keys.
+		toRemove := other
+		toAdd := &pg
+		if pg.addAll {
+			toRemove = &pg
+			toAdd = other
+		}
+		var k int
+		for i < len(toAdd.addKeys) && j < len(toRemove.removeKeys) {
+			if toAdd.addKeys[i] < toRemove.removeKeys[j] {
+				toAdd.addKeys[k] = toAdd.addKeys[i]
+				k++
+				i++
+			} else if toAdd.addKeys[i] > toRemove.removeKeys[j] {
+				j++
+			} else {
+				i++
+				j++
+			}
+		}
+		for i < len(toAdd.addKeys) {
+			toAdd.addKeys[k] = toAdd.addKeys[i]
+			i++
+			k++
+		}
+		pg.addKeys = toAdd.addKeys[:k]
+		pg.addAll = false
+		pg.removeKeys = nil
+	} else {
+		addKeys := make([]string, 0, len(pg.addKeys)+len(other.addKeys))
+		for i < len(pg.addKeys) && j < len(other.addKeys) {
+			if pg.addKeys[i] == other.addKeys[j] {
+				addKeys = append(addKeys, pg.addKeys[i])
+				i++
+				j++
+			} else if pg.addKeys[i] < other.addKeys[j] {
+				i++
+			} else {
+				j++
+			}
+		}
+		pg.addKeys = addKeys
+	}
+	return &pg
+}
+
+func checkNilPosting(name, value string, p index.Postings) index.Postings {
 	if p == nil {
 		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
-		return index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
+		return index.ErrPostings(errors.Errorf("postings is nil for {%s=%s}. It was never fetched.", name, value))
 	}
 	return p
 }
 
+func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]string, error), ms []*labels.Matcher) ([]*postingGroup, error) {
+	matchersMap := make(map[string][]*labels.Matcher)
+	for _, m := range ms {
+		matchersMap[m.Name] = append(matchersMap[m.Name], m)
+	}
+
+	pgs := make([]*postingGroup, 0)
+	// NOTE: Derived from tsdb.PostingsForMatchers.
+	for _, values := range matchersMap {
+		var (
+			mergedPG     *postingGroup
+			pg           *postingGroup
+			vals         []string
+			err          error
+			valuesCached bool
+		)
+		lvalsFunc := lvalsFn
+		// Merge PostingGroups with the same matcher into 1 to
+		//  avoid fetching duplicate postings.
+		for _, val := range values {
+			pg, vals, err = toPostingGroup(ctx, lvalsFunc, val)
+			if err != nil {
+				return nil, errors.Wrap(err, "toPostingGroup")
+			}
+			// Cache label values because label name is the same.
+			if !valuesCached && vals != nil {
+				lvalsFunc = func(_ string) ([]string, error) {
+					return vals, nil
+				}
+				valuesCached = true
+			}
+
+			// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
+			// postings would return no postings anyway.
+			// E.g. label="non-existing-value" returns empty group.
+			if !pg.addAll && len(pg.addKeys) == 0 {
+				return nil, nil
+			}
+			if mergedPG == nil {
+				mergedPG = pg
+			} else {
+				mergedPG = mergedPG.merge(pg)
+			}
+
+			// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
+			// postings would return no postings anyway.
+			// E.g. label="non-existing-value" returns empty group.
+			if !mergedPG.addAll && len(mergedPG.addKeys) == 0 {
+				return nil, nil
+			}
+		}
+		pgs = append(pgs, mergedPG)
+	}
+	slices.SortFunc(pgs, func(a, b *postingGroup) bool {
+		return a.name < b.name
+	})
+	return pgs, nil
+}
+
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
+func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
 	if m.Type == labels.MatchRegexp {
 		if vals := findSetMatches(m.Value); len(vals) > 0 {
-			return newPostingGroup(false, labelsFromSetMatchers(m.Name, vals), nil), nil
+			sort.Strings(vals)
+			return newPostingGroup(false, m.Name, vals, nil), nil, nil
 		}
 	}
 
@@ -2363,74 +2515,62 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
-		var toRemove []labels.Label
+		var toRemove []string
 
 		// Fast-path for MatchNotRegexp matching.
 		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
 		// Fast-path for set matching.
 		if m.Type == labels.MatchNotRegexp {
 			if vals := findSetMatches(m.Value); len(vals) > 0 {
-				toRemove = labelsFromSetMatchers(m.Name, vals)
-				return newPostingGroup(true, nil, toRemove), nil
+				sort.Strings(vals)
+				return newPostingGroup(true, m.Name, nil, vals), nil, nil
 			}
 		}
 
 		// Fast-path for MatchNotEqual matching.
 		// Inverse of a MatchNotEqual is MatchEqual (double negation).
 		if m.Type == labels.MatchNotEqual {
-			return newPostingGroup(true, nil, []labels.Label{{Name: m.Name, Value: m.Value}}), nil
+			return newPostingGroup(true, m.Name, nil, []string{m.Value}), nil, nil
 		}
 
 		vals, err := lvalsFn(m.Name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		for _, val := range vals {
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 			if !m.Matches(val) {
-				toRemove = append(toRemove, labels.Label{Name: m.Name, Value: val})
+				toRemove = append(toRemove, val)
 			}
 		}
 
-		return newPostingGroup(true, nil, toRemove), nil
+		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
 	}
 
 	// Fast-path for equal matching.
 	if m.Type == labels.MatchEqual {
-		return newPostingGroup(false, []labels.Label{{Name: m.Name, Value: m.Value}}, nil), nil
+		return newPostingGroup(false, m.Name, []string{m.Value}, nil), nil, nil
 	}
 
 	vals, err := lvalsFn(m.Name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var toAdd []labels.Label
+	var toAdd []string
 	for _, val := range vals {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		if m.Matches(val) {
-			toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
+			toAdd = append(toAdd, val)
 		}
 	}
 
-	return newPostingGroup(false, toAdd, nil), nil
-}
-
-func labelsFromSetMatchers(name string, vals []string) []labels.Label {
-	// Sorting will improve the performance dramatically if the dataset is relatively large
-	// since entries in the postings offset table was sorted by label name and value,
-	// the sequential reading is much faster.
-	sort.Strings(vals)
-	toAdd := make([]labels.Label, 0, len(vals))
-	for _, val := range vals {
-		toAdd = append(toAdd, labels.Label{Name: name, Value: val})
-	}
-	return toAdd
+	return newPostingGroup(false, m.Name, toAdd, nil), vals, nil
 }
 
 type postingPtr struct {

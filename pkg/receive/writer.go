@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -168,8 +169,18 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		}
 
 		for _, hp := range t.Histograms {
-			h := prompb.HistogramProtoToHistogram(hp)
-			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, nil)
+			var (
+				h  *histogram.Histogram
+				fh *histogram.FloatHistogram
+			)
+
+			if hp.IsFloatHistogram() {
+				fh = prompb.FloatHistogramProtoToFloatHistogram(hp)
+			} else {
+				h = prompb.HistogramProtoToHistogram(hp)
+			}
+
+			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, fh)
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numSamplesOutOfOrder++

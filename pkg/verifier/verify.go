@@ -128,7 +128,7 @@ func NewManager(reg prometheus.Registerer, logger log.Logger, bkt, backupBkt obj
 }
 
 // Verify verifies matching blocks using registered list of Verifier and VerifierRepairer.
-// TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
+// TODO(blotka): Wrap bucket with WrapWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) error {
 	if len(m.vs.Verifiers)+len(m.vs.VerifierRepairers) == 0 {
 		return errors.New("nothing to verify. No verifiers and verifierRepairers registered")
@@ -159,7 +159,7 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 }
 
 // VerifyAndRepair verifies and repairs matching blocks using registered list of VerifierRepairer.
-// TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
+// TODO(blotka): Wrap bucket with WrapWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID) bool) error {
 	if len(m.vs.Verifiers)+len(m.vs.VerifierRepairers) == 0 {
 		return errors.New("nothing to verify. No verifierRepairers registered")

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -18,12 +19,12 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/route"
-	"github.com/thanos-io/objstore/client"
-
 	commonmodel "github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
 
-	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -283,10 +284,11 @@ func runStore(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, conf.component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String())
 	if err != nil {
-		return errors.Wrap(err, "create bucket client")
+		return err
 	}
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	cachingBucketConfigYaml, err := conf.cachingBucketConfig.Content()
 	if err != nil {
@@ -296,7 +298,7 @@ func runStore(
 	r := route.New()
 
 	if len(cachingBucketConfigYaml) > 0 {
-		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg, r)
+		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r)
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
@@ -323,7 +325,7 @@ func runStore(
 	if len(indexCacheContentYaml) > 0 {
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
-		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
+		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, nil, reg, storecache.InMemoryIndexCacheConfig{
 			MaxSize:     model.Bytes(conf.indexCacheSizeBytes),
 			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})
@@ -332,8 +334,8 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
@@ -387,7 +389,7 @@ func runStore(
 	}
 
 	bs, err := store.NewBucketStore(
-		bkt,
+		insBkt,
 		metaFetcher,
 		dataDir,
 		store.NewChunksLimiterFactory(conf.storeRateLimits.SamplesPerRequest/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
@@ -411,7 +413,7 @@ func runStore(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
@@ -503,7 +505,7 @@ func runStore(
 
 			// Configure Request Logging for HTTP calls.
 			logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, conf.label, flagsMap, bkt)
+			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, conf.label, flagsMap, insBkt)
 			api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 			metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
