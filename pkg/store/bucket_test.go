@@ -2015,8 +2015,8 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 			replicaLabels: []string{"replica"},
 			expectedSeries: []labels.Labels{
 				labels.FromStrings("a", "1", "ext1", "0", "z", "1"),
-				labels.FromStrings("a", "1", "ext1", "0", "z", "2"),
 				labels.FromStrings("a", "1", "ext1", "0", "z", "1"),
+				labels.FromStrings("a", "1", "ext1", "0", "z", "2"),
 				labels.FromStrings("a", "1", "ext1", "0", "z", "2"),
 				labels.FromStrings("a", "1", "ext1", "1", "z", "1"),
 				labels.FromStrings("a", "1", "ext1", "1", "z", "2"),
@@ -2071,7 +2071,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 			fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 			testutil.Ok(tb, err)
 
-			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 			testutil.Ok(tb, err)
 
 			store, err := NewBucketStore(
