@@ -130,27 +130,43 @@ func (m *redisBackend) DelBlockAllMeta(ctx context.Context, blockID string) erro
 // ListBlocks list block id list and invoke function f.
 func (m *redisBackend) ListBlocks(ctx context.Context, f func(s []string) error) error {
 	key := genBlocksKey()
-	const pageSize = 512
-	var offset int64
+	const pageSize = 128
+	var (
+		cursor uint64
+		keys   []string
+	)
 	for {
-		cmd := m.redisClient.B().Zrangebyscore().Key(key).Min("-inf").Max("+inf").
-			Limit(offset, pageSize).Build()
-		results, err := m.redisClient.Do(ctx, cmd).AsStrSlice()
+		cmd := m.redisClient.B().Zscan().Key(key).Cursor(cursor).Count(pageSize).Build()
+		results, err := m.redisClient.Do(ctx, cmd).ToArray()
 		if err != nil {
 			if rueidis.IsRedisNil(err) {
 				return nil
 			}
-			return errors.Wrapf(err, "redisClient.ZRangeByScore")
+			return errors.Wrapf(err, "redisClient.Zscan")
 		}
-		if len(results) == 0 {
-			return nil
+		if len(results) != 2 {
+			return errors.Wrapf(err, "parse zscan results length")
 		}
-		offset += int64(len(results))
-		if err := f(results); err != nil {
+		cursor, err = results[0].AsUint64()
+		if err != nil {
+			return errors.Wrapf(err, "parse zscan results[0]")
+		}
+		memberScores, err := results[1].AsZScores()
+		if err != nil {
+			return errors.Wrapf(err, "parse zscan results[1]")
+		}
+		keys = keys[:0]
+		for _, v := range memberScores {
+			keys = append(keys, v.Member)
+		}
+		if err := f(keys); err != nil {
 			if err == io.EOF {
 				return nil
 			}
 			return err
+		}
+		if cursor == 0 {
+			return nil
 		}
 	}
 }

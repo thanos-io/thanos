@@ -22,7 +22,7 @@ func Benchmark_redisBackend_GetBlockMeta(b *testing.B) {
 	redisConf := []byte(`addr: 127.0.0.1:6379`)
 	backend, err := NewRedisBackend(log.NewNopLogger(), prometheus.NewRegistry(), redisConf)
 	assert.NoError(b, err)
-	blockMeta := buildTestBlockMeta(b)
+	blockMeta := buildTestBlockMeta(b, 1)
 	err = backend.SetBlockMeta(ctx, blockMeta)
 	assert.NoError(b, err)
 	b.ReportAllocs()
@@ -40,7 +40,7 @@ func Benchmark_redisBackend_ExistsBlockMeta(b *testing.B) {
 	redisConf := []byte(`addr: 127.0.0.1:6379`)
 	backend, err := NewRedisBackend(log.NewNopLogger(), prometheus.NewRegistry(), redisConf)
 	assert.NoError(b, err)
-	blockMeta := buildTestBlockMeta(b)
+	blockMeta := buildTestBlockMeta(b, 1)
 	err = backend.SetBlockMeta(ctx, blockMeta)
 	assert.NoError(b, err)
 	b.ReportAllocs()
@@ -53,10 +53,10 @@ func Benchmark_redisBackend_ExistsBlockMeta(b *testing.B) {
 	})
 }
 
-func buildTestBlockMeta(t testing.TB) *objmetapb.BlockMeta {
+func buildTestBlockMeta(t testing.TB, ms uint64) *objmetapb.BlockMeta {
 	metaJSON := metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
-			ULID:    ulid.MustNew(5, nil),
+			ULID:    ulid.MustNew(ms, nil),
 			MinTime: 2424,
 			MaxTime: 134,
 			Version: 1,

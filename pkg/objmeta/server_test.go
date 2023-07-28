@@ -6,6 +6,7 @@ package objmeta
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -32,7 +33,7 @@ config:
 `, miniRedis.Addr()))
 	s, err := NewServer(log.NewNopLogger(), prometheus.NewRegistry(), objStoreConfContentYaml, objMetaConfContentYaml, 32)
 	assert.NoError(t, err)
-	m1 := buildTestBlockMeta(t)
+	m1 := buildTestBlockMeta(t, 1)
 	t.Run("set", func(t *testing.T) {
 		_, err = s.SetBlockMeta(ctx, &objmetapb.SetBlockMetaRequest{BlockMeta: m1})
 		assert.NoError(t, err)
@@ -48,13 +49,26 @@ config:
 		assert.Equal(t, true, rsp.Exist)
 	})
 	t.Run("list", func(t *testing.T) {
+		var setBlockIDs []string
+		for i := 0; i < 200; i++ {
+			m := buildTestBlockMeta(t, uint64(i))
+			setBlockIDs = append(setBlockIDs, m.BlockId)
+			_, err = s.SetBlockMeta(ctx, &objmetapb.SetBlockMetaRequest{BlockMeta: m})
+		}
+		sort.Slice(setBlockIDs, func(i, j int) bool {
+			return setBlockIDs[i] < setBlockIDs[j]
+		})
+		assert.NoError(t, err)
 		var result []string
 		err := s.backend.ListBlocks(ctx, func(s []string) error {
 			result = append(result, s...)
 			return nil
 		})
+		sort.Slice(result, func(i, j int) bool {
+			return result[i] < result[j]
+		})
 		assert.NoError(t, err)
-		assert.Equal(t, []string{m1.BlockId}, result)
+		assert.Equal(t, setBlockIDs, result)
 	})
 	t.Run("del", func(t *testing.T) {
 		rsp, err := s.DelBlockMeta(ctx, &objmetapb.DelBlockMetaRequest{BlockId: m1.BlockId, Type: objmetapb.Type_TYPE_META})
