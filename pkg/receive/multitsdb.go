@@ -58,9 +58,6 @@ type MultiTSDB struct {
 	labels          labels.Labels
 	bucket          objstore.Bucket
 
-	lmx           sync.Mutex
-	labelNamesSet stringset.Set
-
 	mtx                   *sync.RWMutex
 	tenants               map[string]*tenant
 	allowOutOfOrderUpload bool
@@ -97,7 +94,6 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
-		labelNamesSet:         stringset.AllStrings(),
 	}
 }
 
@@ -886,28 +882,13 @@ func (t *MultiTSDB) UpdateLabelNames(ctx context.Context) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	newSet := stringset.New()
 	for _, tenant := range t.tenants {
-		db := tenant.store()
+		db := tenant.storeTSDB
 		if db == nil {
 			continue
 		}
-		names, err := db.LabelNames(ctx, &storepb.LabelNamesRequest{})
-		if err != nil {
-			level.Debug(t.logger).Log("msg", "failed to get label names", "err", err)
-			t.lmx.Lock()
-			t.labelNamesSet = stringset.AllStrings()
-			t.lmx.Unlock()
-			return
-		}
-		for _, name := range names.Names {
-			newSet.Insert(name)
-		}
+		db.UpdateLabelNames(ctx)
 	}
-
-	t.lmx.Lock()
-	t.labelNamesSet = newSet
-	t.lmx.Unlock()
 }
 
 // extendLabels extends external labels of the initial label set.

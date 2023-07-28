@@ -1671,17 +1671,12 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 func (s *BucketStore) UpdateLabelNames() {
 	newSet := stringset.New()
 	for _, b := range s.blocks {
-		for _, l := range b.extLset {
-			newSet.Insert(l.Name)
-		}
-
 		indexr := b.indexReader()
 		defer runutil.CloseWithLogOnErr(b.logger, indexr, "label names")
 
 		res, err := indexr.block.indexHeaderReader.LabelNames()
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
-
 			s.bmtx.Lock()
 			s.labelNamesSet = stringset.AllStrings()
 			s.bmtx.Unlock()
