@@ -35,7 +35,7 @@ func NewClient(
 	if err != nil {
 		return nil, errors.Wrap(err, "building gRPC client")
 	}
-	cc, err := grpc.Dial(metaServerEndpoint, dialOpts...)
+	cc, err := grpc.Dial(metaServerEndpoint, append(dialOpts, extgrpc.EndpointGroupGRPCOpts()...)...)
 	if err != nil {
 		return nil, errors.Wrap(err, "grpc Dial")
 	}
