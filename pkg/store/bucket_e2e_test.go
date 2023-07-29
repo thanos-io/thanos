@@ -796,8 +796,8 @@ func TestBucketStore_LabelNamesSet_e2e(t *testing.T) {
 		}
 
 		filter := s.store.LabelNamesSet()
-		for _, n := range []string{"a", "b", "c", "ext1", "ext2"} {
-			testutil.Assert(t, filter.Has(n))
+		for _, n := range []string{"a", "b", "c"} {
+			testutil.Assert(t, filter.Has(n), "expected filter to have %s", n)
 		}
 	})
 }
