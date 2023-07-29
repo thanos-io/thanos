@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"hash"
 	"io"
 	"math"
@@ -210,14 +211,15 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	for _, lbl := range r.WithoutReplicaLabels {
 		extLsetToRemove[lbl] = struct{}{}
 	}
+	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
-	if s.labelNamesSet.HasAny(r.WithoutReplicaLabels) {
+	fmt.Println(r.WithoutReplicaLabels)
+	if s.LabelNamesSet().HasAny(r.WithoutReplicaLabels) {
+		fmt.Println("resorting")
 		rs := &resortingServer{Store_SeriesServer: srv}
 		defer rs.Flush()
 		srv = rs
 	}
-
-	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
@@ -383,18 +385,27 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 
 func (s *TSDBStore) UpdateLabelNames(ctx context.Context) {
 	newSet := stringset.New()
-	labelNames, err := s.LabelNames(ctx, &storepb.LabelNamesRequest{})
+	q, err := s.db.ChunkQuerier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
-		level.Warn(s.logger).Log("msg", "error getting label names", "err", err.Error())
-		s.lmx.Lock()
-		s.labelNamesSet = stringset.AllStrings()
-		s.lmx.Unlock()
+		level.Warn(s.logger).Log("msg", "error creating tsdb querier", "err", err.Error())
+		s.setLabelNamesSet(stringset.AllStrings())
 		return
 	}
-	for _, l := range labelNames.Names {
+	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
+
+	res, _, err := q.LabelNames()
+	if err != nil {
+		level.Warn(s.logger).Log("msg", "error getting label names", "err", err.Error())
+		s.setLabelNamesSet(stringset.AllStrings())
+		return
+	}
+	for _, l := range res {
 		newSet.Insert(l)
 	}
+	s.setLabelNamesSet(newSet)
+}
 
+func (s *TSDBStore) setLabelNamesSet(newSet stringset.Set) {
 	s.lmx.Lock()
 	s.labelNamesSet = newSet
 	s.lmx.Unlock()

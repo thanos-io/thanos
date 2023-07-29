@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"

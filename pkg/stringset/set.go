@@ -72,7 +72,7 @@ func (e mutableSet) HasAny(strings []string) bool {
 
 type allStringsSet struct{}
 
-func (e allStringsSet) HasAny(strings []string) bool {
+func (e allStringsSet) HasAny(_ []string) bool {
 	return true
 }
 

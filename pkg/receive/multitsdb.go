@@ -31,8 +31,6 @@ import (
 
 	"github.com/thanos-io/objstore"
 
-	"github.com/thanos-io/thanos/pkg/stringset"
-
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -107,15 +105,6 @@ func newLocalClient(c storepb.StoreClient, store *store.TSDBStore) *localClient 
 		StoreClient: c,
 		store:       store,
 	}
-}
-
-func (l *localClient) LabelNamesSet() stringset.Set {
-	labelNames, err := l.store.LabelNames(context.Background(), &storepb.LabelNamesRequest{})
-	if err != nil {
-		return stringset.AllStrings()
-	}
-
-	return stringset.NewFromStrings(labelNames.Names...)
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
