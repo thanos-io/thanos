@@ -5,7 +5,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"hash"
 	"io"
 	"math"
@@ -213,9 +212,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	}
 	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
-	fmt.Println(r.WithoutReplicaLabels)
 	if s.LabelNamesSet().HasAny(r.WithoutReplicaLabels) {
-		fmt.Println("resorting")
 		rs := &resortingServer{Store_SeriesServer: srv}
 		defer rs.Flush()
 		srv = rs
