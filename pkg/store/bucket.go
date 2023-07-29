@@ -1676,16 +1676,17 @@ func (s *BucketStore) UpdateLabelNames() {
 		res, err := indexr.block.indexHeaderReader.LabelNames()
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
-			s.bmtx.Lock()
-			s.labelNamesSet = stringset.AllStrings()
-			s.bmtx.Unlock()
+			s.updateLabelNamesSet(stringset.AllStrings())
 			return
 		}
 		for _, l := range res {
 			newSet.Insert(l)
 		}
 	}
+	s.updateLabelNamesSet(newSet)
+}
 
+func (s *BucketStore) updateLabelNamesSet(newSet stringset.Set) {
 	s.bmtx.Lock()
 	s.labelNamesSet = newSet
 	s.bmtx.Unlock()

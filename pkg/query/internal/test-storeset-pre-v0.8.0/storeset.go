@@ -29,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 )
 
 const (
@@ -206,10 +205,6 @@ func (s *storeRef) TimeRange() (int64, int64) {
 	defer s.mtx.RUnlock()
 
 	return s.minTime, s.maxTime
-}
-
-func (s *storeRef) LabelNamesSet() stringset.Set {
-	return stringset.AllStrings()
 }
 
 func (s *storeRef) SupportsSharding() bool {
