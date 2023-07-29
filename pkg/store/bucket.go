@@ -1232,7 +1232,9 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 }
 
 // Series implements the storepb.StoreServer interface.
-func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) (err error) {
+	srv := newFlushableServer(seriesSrv, s.LabelNamesSet(), req.WithoutReplicaLabels)
+
 	if s.queryGate != nil {
 		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
 			err = s.queryGate.Start(srv.Context())
@@ -1288,12 +1290,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		for _, l := range req.WithoutReplicaLabels {
 			extLsetToRemove[l] = struct{}{}
 		}
-	}
-
-	if s.labelNamesSet.HasAny(req.WithoutReplicaLabels) {
-		rs := &resortingServer{Store_SeriesServer: srv}
-		defer rs.Flush()
-		srv = rs
 	}
 
 	s.mtx.RLock()
@@ -1485,7 +1481,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+	return srv.Flush()
 }
 
 func chunksSize(chks []storepb.AggrChunk) (size int) {

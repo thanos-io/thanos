@@ -148,7 +148,8 @@ func (p *PrometheusStore) putBuffer(b *[]byte) {
 }
 
 // Series returns all series for a requested time range and label matcher.
-func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
+func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
+	s := newFlushableServer(seriesSrv, p.labelNamesSet(), r.WithoutReplicaLabels)
 	extLset := p.externalLabelsFn()
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
@@ -186,14 +187,6 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		extLsetToRemove[lbl] = struct{}{}
 	}
 
-	labelNames := p.labelNamesSet()
-	if labelNames.HasAny(r.WithoutReplicaLabels) {
-		level.Debug(p.logger).Log("msg", "resorting series due to internal label dedup")
-		rs := &resortingServer{Store_SeriesServer: s}
-		defer rs.Flush()
-		s = rs
-	}
-
 	if r.SkipChunks {
 		finalExtLset := rmLabels(extLset.Copy(), extLsetToRemove)
 		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
@@ -213,7 +206,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 				return err
 			}
 		}
-		return nil
+		return s.Flush()
 	}
 
 	shardMatcher := r.ShardInfo.Matcher(&p.buffers)
@@ -336,7 +329,7 @@ func (p *PrometheusStore) queryPrometheus(
 }
 
 func (p *PrometheusStore) handleSampledPrometheusResponse(
-	s storepb.Store_SeriesServer,
+	s flushableServer,
 	httpResp *http.Response,
 	querySpan tracing.Span,
 	extLset labels.Labels,
@@ -386,11 +379,11 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 	}
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_SAMPLED request.", "series", len(resp.Results[0].Timeseries))
-	return nil
+	return s.Flush()
 }
 
 func (p *PrometheusStore) handleStreamedPrometheusResponse(
-	s storepb.Store_SeriesServer,
+	s flushableServer,
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,
@@ -483,7 +476,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
 
-	return nil
+	return s.Flush()
 }
 
 type BytesCounter struct {

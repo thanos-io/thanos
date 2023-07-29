@@ -6,7 +6,30 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/stringset"
 )
+
+type flushableServer interface {
+	storepb.Store_SeriesServer
+	Flush() error
+}
+
+func newFlushableServer(
+	upstream storepb.Store_SeriesServer,
+	labelNames stringset.Set,
+	replicaLabels []string,
+) flushableServer {
+	if labelNames.HasAny(replicaLabels) {
+		return &resortingServer{Store_SeriesServer: upstream}
+	}
+	return &passthroughServer{Store_SeriesServer: upstream}
+}
+
+type passthroughServer struct {
+	storepb.Store_SeriesServer
+}
+
+func (p *passthroughServer) Flush() error { return nil }
 
 type resortingServer struct {
 	storepb.Store_SeriesServer

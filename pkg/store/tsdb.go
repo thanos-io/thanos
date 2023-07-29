@@ -174,7 +174,9 @@ type CloseDelegator interface {
 
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
-func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
+	srv := newFlushableServer(seriesSrv, s.LabelNamesSet(), r.WithoutReplicaLabels)
+
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -212,11 +214,6 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	}
 	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
-	if s.LabelNamesSet().HasAny(r.WithoutReplicaLabels) {
-		rs := &resortingServer{Store_SeriesServer: srv}
-		defer rs.Flush()
-		srv = rs
-	}
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
@@ -290,7 +287,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}
-	return nil
+	return srv.Flush()
 }
 
 // LabelNames returns all known label names constrained with the given matchers.
