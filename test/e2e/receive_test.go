@@ -235,7 +235,6 @@ test_metric{a="2", b="2"} 1`)
 		})
 
 		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
-		// Until the bug was fixed, this testcase would return 4 series instead of 2.
 		instantQuery(t, ctx, qStatic.Endpoint("http"), func() string {
 			return "test_metric"
 		}, time.Now, promclient.QueryOptions{

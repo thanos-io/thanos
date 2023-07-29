@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
@@ -9,6 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/stringset"
 )
 
+// flushableServer is an extension of storepb.Store_SeriesServer with a Flush method.
 type flushableServer interface {
 	storepb.Store_SeriesServer
 	Flush() error
@@ -25,12 +29,17 @@ func newFlushableServer(
 	return &passthroughServer{Store_SeriesServer: upstream}
 }
 
+// passthroughServer is a flushableServer that does not need forwards all data to
+// an upstream server without additional processing.
 type passthroughServer struct {
 	storepb.Store_SeriesServer
 }
 
 func (p *passthroughServer) Flush() error { return nil }
 
+// resortingServer is a flushableServer that resorts all series by their labels.
+// This is required if the replica labels are not a subset of the label names.
+// Data is resorted and sent to an upstream server upon calling Flush.
 type resortingServer struct {
 	storepb.Store_SeriesServer
 	series []*storepb.Series

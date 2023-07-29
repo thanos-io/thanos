@@ -1017,7 +1017,6 @@ func TestQueryStoreDedup(t *testing.T) {
 		blockFinderLabel string
 		series           []seriesWithLabels
 		expectedSeries   int
-		expectedDedupBug bool
 	}{
 		{
 			desc:            "Deduplication works with external label",
@@ -1072,10 +1071,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupint",
 			expectedSeries:   1,
-			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
-			// Until the bug was fixed, this testcase would return double the expected series.
-			expectedDedupBug: true,
 		},
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
 		{
 			desc:            "Deduplication works on internal label with resorting required",
 			intReplicaLabel: "a",
@@ -1095,10 +1092,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintresort",
 			expectedSeries:   2,
-			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
-			// Until the bug was fixed, this testcase would return double the expected series.
-			expectedDedupBug: true,
 		},
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
 		{
 			desc:            "Deduplication works with extra internal label",
 			intReplicaLabel: "replica",
@@ -1118,10 +1113,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintextra",
 			expectedSeries:   2,
-			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
-			// Until the bug was fixed, this testcase would return double the expected series.
-			expectedDedupBug: true,
 		},
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
 		{
 			desc:            "Deduplication works with both internal and external label",
 			intReplicaLabel: "replica",
@@ -1138,9 +1131,6 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintext",
 			expectedSeries:   1,
-			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
-			// Until the bug was fixed, this testcase would return double the expected series.
-			expectedDedupBug: true,
 		},
 	}
 
