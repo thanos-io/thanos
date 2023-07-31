@@ -507,8 +507,14 @@ Replicate data from one object storage to another. NOTE: Currently it works only
 with Thanos blocks (meta.json has to have Thanos metadata).
 
 Flags:
-      --compaction=1... ...   Only blocks with these compaction levels will be
-                              replicated. Repeated flag.
+      --compaction=COMPACTION ...
+                              Only blocks with these compaction levels
+                              will be replicated. Repeated flag. Overrides
+                              compaction-min and compaction-max if set.
+      --compaction-max=4      Only blocks up to a maximum of this compaction
+                              level will be replicated.
+      --compaction-min=1      Only blocks with at least this compaction level
+                              will be replicated.
   -h, --help                  Show context-sensitive help (also try --help-long
                               and --help-man).
       --http-address="0.0.0.0:10902"
