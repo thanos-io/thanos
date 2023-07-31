@@ -236,3 +236,12 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", extflag.WithEnvSubstitution())
 	return ac
 }
+
+type objMetaConfig struct {
+	endpoint string
+}
+
+func (oc *objMetaConfig) registerFlag(cmd extkingpin.FlagClause) *objMetaConfig {
+	cmd.Flag("objmeta.endpoint", "Addresses of the optional objmeta component.").Default("").StringVar(&oc.endpoint)
+	return oc
+}

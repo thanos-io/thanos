@@ -35,12 +35,13 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"gopkg.in/yaml.v3"
 
-	"github.com/thanos-io/objstore"
-	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
@@ -55,6 +56,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objmeta"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/replicate"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -119,6 +121,7 @@ type bucketWebConfig struct {
 	interval            time.Duration
 	label               string
 	timeout             time.Duration
+	objMeta             objMetaConfig
 }
 
 type bucketReplicateConfig struct {
@@ -201,6 +204,8 @@ func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bu
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 
 	cmd.Flag("label", "External block label to use as group title").StringVar(&tbc.label)
+
+	tbc.objMeta.registerFlag(cmd)
 	return tbc
 }
 
@@ -607,6 +612,11 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return errors.Wrap(err, "bucket client")
 		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+		objMetaClient, err := objmeta.NewClient(logger, reg, tbc.objMeta.endpoint)
+		if err != nil {
+			return err
+		}
+		bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 
 		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap, insBkt)
 

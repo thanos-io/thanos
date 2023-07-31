@@ -39,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objmeta"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -88,6 +89,7 @@ type storeConfig struct {
 	reqLogConfig                *extflag.PathOrContent
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
+	objMeta                     objMetaConfig
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -196,6 +198,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&sc.label)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+	sc.objMeta.registerFlag(cmd)
 }
 
 // registerStore registers a store command.
@@ -288,7 +291,6 @@ func runStore(
 	if err != nil {
 		return err
 	}
-	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	cachingBucketConfigYaml, err := conf.cachingBucketConfig.Content()
 	if err != nil {
@@ -298,11 +300,18 @@ func runStore(
 	r := route.New()
 
 	if len(cachingBucketConfigYaml) > 0 {
-		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r)
+		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg, r)
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
 	}
+
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+	objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
+	if err != nil {
+		return err
+	}
+	bkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
+	"github.com/thanos-io/thanos/pkg/objmeta"
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -210,6 +211,11 @@ func runCompact(
 		return err
 	}
 	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+	objMetaClient, err := objmeta.NewClient(logger, reg, conf.objMeta.endpoint)
+	if err != nil {
+		return err
+	}
+	insBkt = objmeta.NewBucketWithObjMetaClient(objMetaClient, insBkt, logger)
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {
@@ -678,6 +684,7 @@ type compactConfig struct {
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
+	objMeta                                        objMetaConfig
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -786,4 +793,6 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
+
+	cc.objMeta.registerFlag(cmd)
 }
