@@ -113,11 +113,13 @@ func Downsample(
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
+		resChunks  []chunks.Meta
 		builder    labels.ScratchBuilder
 		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
 		chks = chks[:0]
+		resChunks = resChunks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
 
@@ -146,7 +148,13 @@ func Downsample(
 
 		// Raw and already downsampled data need different processing.
 		if origMeta.Thanos.Downsample.Resolution == 0 {
+			var prevEnc chunkenc.Encoding
 			for _, c := range chks {
+				if prevEnc != c.Chunk.Encoding() {
+					resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
+					all = all[:0]
+					prevEnc = c.Chunk.Encoding()
+				}
 				// TODO(bwplotka): We can optimze this further by using in WriteSeries iterators of each chunk instead of
 				// samples. Also ensure 120 sample limit, otherwise we have gigantic chunks.
 				// https://github.com/thanos-io/thanos/issues/2542.
@@ -154,12 +162,17 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
-			if err := streamedBlockWriter.WriteSeries(lset, DownsampleRaw(all, resolution)); err != nil {
+			resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
+			if err := streamedBlockWriter.WriteSeries(lset, resChunks); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
 		} else {
 			// Downsample a block that contains aggregated chunks already.
-			for _, c := range chks {
+			var (
+				previousIsHistogram bool
+				mint, maxt          int64
+			)
+			for i, c := range chks {
 				ac, ok := c.Chunk.(*AggrChunk)
 				if !ok {
 					if c.Chunk.NumSamples() == 0 {
@@ -180,20 +193,43 @@ func Downsample(
 						}
 					}
 				}
+				if i > 0 && previousIsHistogram != isHistogram(ac) {
+					err := downsampleAggr(
+						aggrChunks,
+						&all,
+						mint,
+						maxt,
+						origMeta.Thanos.Downsample.Resolution,
+						resolution,
+						&resChunks,
+					)
+					if err != nil {
+						return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
+					}
+					previousIsHistogram = isHistogram(ac)
+					aggrChunks = aggrChunks[:0]
+					mint = c.MinTime
+				}
 				aggrChunks = append(aggrChunks, ac)
+				if i == 0 {
+					mint = c.MinTime
+					previousIsHistogram = isHistogram(ac)
+				}
+				maxt = c.MaxTime
 			}
-			downsampledChunks, err := downsampleAggr(
+			err = downsampleAggr(
 				aggrChunks,
 				&all,
-				chks[0].MinTime,
-				chks[len(chks)-1].MaxTime,
+				mint,
+				maxt,
 				origMeta.Thanos.Downsample.Resolution,
 				resolution,
+				&resChunks,
 			)
 			if err != nil {
 				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 			}
-			if err := streamedBlockWriter.WriteSeries(lset, downsampledChunks); err != nil {
+			if err := streamedBlockWriter.WriteSeries(lset, resChunks); err != nil {
 				return id, errors.Wrapf(err, "write series: %d", postings.At())
 			}
 		}
@@ -619,8 +655,10 @@ func downsampleRawLoop(
 
 func downsampleFloatBatch(batch []sample, resolution int64) chunks.Meta {
 	ab := newAggrChunkBuilder()
+	// Encode first raw value; see ApplyCounterResetsSeriesIterator.
 	ab.apps[AggrCounter].Append(batch[0].t, batch[0].v)
 	lastT := downsampleBatch(batch, resolution, &floatAggregator{}, ab.add)
+	// Encode last raw value; see ApplyCounterResetsSeriesIterator.
 	ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
 	return ab.encode()
 }
@@ -706,7 +744,8 @@ func downsampleAggr(
 	chks []*AggrChunk,
 	buf *[]sample,
 	mint, maxt, inRes, outRes int64,
-) ([]chunks.Meta, error) {
+	res *[]chunks.Meta,
+) error {
 	var fChks, hChks []*AggrChunk
 	var numSamples int
 
@@ -720,13 +759,27 @@ func downsampleAggr(
 		}
 	}
 
+	var (
+		rescChks []chunks.Meta
+		err      error
+	)
+
 	if len(fChks) > 0 {
 		numChunksF := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
-		return downsampleAggrLoop(fChks, buf, outRes, numChunksF, downsampleAggrBatch)
+		rescChks, err = downsampleAggrLoop(fChks, buf, outRes, numChunksF, downsampleAggrBatch)
+		if err != nil {
+			return err
+		}
+	} else {
+		numChunksH := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
+		rescChks, err = downsampleAggrLoop(hChks, buf, outRes, numChunksH, downsampleHistogramAggrBatch)
+		if err != nil {
+			return err
+		}
 	}
 
-	numChunksH := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
-	return downsampleAggrLoop(hChks, buf, outRes, numChunksH, downsampleHistogramAggrBatch)
+	*res = append(*res, rescChks...)
+	return nil
 }
 
 func downsampleAggrLoop(
