@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -923,16 +924,23 @@ func TestRedisClient_Rueidis(t *testing.T) {
 	testutil.Ok(t, r.Start())
 
 	redisClient, err := cacheutil.NewRedisClientWithConfig(log.NewLogfmtLogger(os.Stderr), "redis", cacheutil.RedisClientConfig{
-		Addr: r.Endpoint("redis"),
+		Addr:                r.Endpoint("redis"),
+		MaxAsyncBufferSize:  10,
+		MaxAsyncConcurrency: 1,
 	}, nil)
 	testutil.Ok(t, err)
 
-	err = redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute)
-	testutil.Ok(t, err)
-
-	returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
-	testutil.Equals(t, 1, len(returnedVals))
-	testutil.Equals(t, []byte("bar"), returnedVals["foo"])
+	testutil.Ok(t, redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute))
+	testutil.Ok(t, runutil.Retry(1*time.Second, make(<-chan struct{}), func() error {
+		returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
+		if len(returnedVals) != 1 {
+			return fmt.Errorf("got zero responses")
+		}
+		if !bytes.Equal(returnedVals["foo"], []byte("bar")) {
+			return fmt.Errorf("got wrong response, expected bar: %v", returnedVals["foo"])
+		}
+		return nil
+	}))
 }
 
 func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
