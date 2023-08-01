@@ -496,7 +496,6 @@ func runStore(
 		})
 	}
 
-	// Start bloom name filter updater.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		level.Debug(logger).Log("msg", "setting up periodic update for label names")

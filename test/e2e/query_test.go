@@ -1160,10 +1160,6 @@ func TestQueryStoreDedup(t *testing.T) {
 			testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 			expectedSeries := tt.expectedSeries
-			// The below commented condition checks for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
-			// if tt.expectedDedupBug {
-			// 	expectedSeries *= 2
-			// }
 			instantQuery(t, ctx, querier.Endpoint("http"), func() string {
 				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinderLabel)
 			}, time.Now, promclient.QueryOptions{

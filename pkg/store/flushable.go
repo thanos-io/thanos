@@ -29,7 +29,7 @@ func newFlushableServer(
 	return &passthroughServer{Store_SeriesServer: upstream}
 }
 
-// passthroughServer is a flushableServer that does not need forwards all data to
+// passthroughServer is a flushableServer that forwards all data to
 // an upstream server without additional processing.
 type passthroughServer struct {
 	storepb.Store_SeriesServer
@@ -38,7 +38,7 @@ type passthroughServer struct {
 func (p *passthroughServer) Flush() error { return nil }
 
 // resortingServer is a flushableServer that resorts all series by their labels.
-// This is required if the replica labels are not a subset of the label names.
+// This is required if replica labels are stored internally in a TSDB.
 // Data is resorted and sent to an upstream server upon calling Flush.
 type resortingServer struct {
 	storepb.Store_SeriesServer
