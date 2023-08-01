@@ -1228,7 +1228,7 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), c.matchers, NewBytesLimiterFactory(0)(nil))
+				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil))
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
@@ -1261,7 +1261,7 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	// Match nothing.
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
-	ps, err := indexr.ExpandedPostings(context.Background(), []*labels.Matcher{matcher1, matcher2}, NewBytesLimiterFactory(0)(nil))
+	ps, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil))
 	testutil.Ok(t, err)
 	testutil.Equals(t, len(ps), 0)
 	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
@@ -2562,6 +2562,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// TODO FIXME! testutil.Ok calls b.Fatalf under the hood, which
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
+				sortedMatchers := newSortedMatchers(matchers)
 
 				dummyHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{})
 				blockClient := newBlockSeriesClient(
@@ -2577,7 +2578,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					dummyHistogram,
 					nil,
 				)
-				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter))
+				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter))
 				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).
