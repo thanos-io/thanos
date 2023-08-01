@@ -98,6 +98,7 @@ type ruleConfig struct {
 	lset              labels.Labels
 	ignoredLabelNames []string
 	storeRateLimits   store.SeriesSelectLimits
+	statelessModeFlag *bool
 }
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -142,6 +143,8 @@ func registerRule(app *extkingpin.App) {
 		StringsVar(&conf.ignoredLabelNames)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+
+	conf.statelessModeFlag = cmd.Flag("stateless", "Enable stateless mode for the ruler").Default("true").Bool()
 
 	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
@@ -363,9 +366,16 @@ func runRule(
 		agentDB    *agent.DB
 	)
 
-	rwCfgYAML, err := conf.rwConfig.Content()
-	if err != nil {
-		return err
+	isStateless := *conf.statelessModeFlag
+	var rwCfgYAML []byte
+
+	if isStateless {
+		rwCfgYAML, err = conf.rwConfig.Content()
+		if err != nil {
+			return err
+		}
+	} else {
+		rwCfgYAML = nil
 	}
 
 	if len(rwCfgYAML) > 0 {
