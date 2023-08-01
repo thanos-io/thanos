@@ -3214,9 +3214,14 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
+	var locked bool
 	fetchBegin := time.Now()
 	defer func() {
+		if !locked {
+			r.mtx.Lock()
+		}
 		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+		r.mtx.Unlock()
 	}()
 
 	// Get a reader for the required range.
@@ -3227,14 +3232,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
 	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
-	locked := true
+	locked = true
 	r.mtx.Lock()
-
-	defer func() {
-		if locked {
-			r.mtx.Unlock()
-		}
-	}()
 
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(pIdxs)
