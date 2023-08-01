@@ -1039,26 +1039,6 @@ func blockFromChunks(chks []chunks.Meta) *memBlock {
 	return mb
 }
 
-func chunkFromSamples(t *testing.T, samples []sample) chunks.Meta {
-	if len(samples) == 0 {
-		return chunks.Meta{}
-	}
-
-	chk := chunkenc.NewXORChunk()
-	app, err := chk.Appender()
-	testutil.Ok(t, err)
-
-	for _, s := range samples {
-		app.Append(s.t, s.v)
-	}
-
-	return chunks.Meta{
-		MinTime: samples[0].t,
-		MaxTime: samples[len(samples)-1].t,
-		Chunk:   chk,
-	}
-}
-
 func chunksFromHistogramSamples(t *testing.T, samples []sample) []chunks.Meta {
 	if len(samples) == 0 {
 		return nil
