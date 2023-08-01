@@ -18,8 +18,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
-func GetMetaAndChunks(t *testing.T, dir string, id ulid.ULID) (*metadata.Meta, []chunks.Meta) {
-	newMeta, err := metadata.ReadFromDir(filepath.Join(dir, id.String()))
+func GetMetaLabelsAndChunks(t *testing.T, dir string, id ulid.ULID) (*metadata.Meta, []labels.Labels, [][]chunks.Meta) {
+	meta, err := metadata.ReadFromDir(filepath.Join(dir, id.String()))
 	testutil.Ok(t, err)
 
 	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
@@ -35,11 +35,19 @@ func GetMetaAndChunks(t *testing.T, dir string, id ulid.ULID) (*metadata.Meta, [
 	}
 	testutil.Ok(t, pall.Err())
 
-	var chks []chunks.Meta
-	var builder labels.ScratchBuilder
-	testutil.Ok(t, indexr.Series(series[0], &builder, &chks))
+	var (
+		lbls []labels.Labels
+		chks [][]chunks.Meta
+	)
+	for _, s := range series {
+		var builder labels.ScratchBuilder
+		var seriesChks []chunks.Meta
+		testutil.Ok(t, indexr.Series(s, &builder, &seriesChks))
+		lbls = append(lbls, builder.Labels())
+		chks = append(chks, seriesChks)
+	}
 
-	return newMeta, chks
+	return meta, lbls, chks
 }
 
 func GetAggregateFromChunk(t *testing.T, chunkr *chunks.Reader, c chunks.Meta, aggrType AggrType) []sample {
