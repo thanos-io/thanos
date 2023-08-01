@@ -1670,16 +1670,13 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 func (s *BucketStore) UpdateLabelNames() {
 	newSet := stringset.New()
 	for _, b := range s.blocks {
-		indexr := b.indexReader()
-		defer runutil.CloseWithLogOnErr(b.logger, indexr, "label names")
-
-		res, err := indexr.block.indexHeaderReader.LabelNames()
+		labelNames, err := b.indexHeaderReader.LabelNames()
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
 			s.updateLabelNamesSet(stringset.AllStrings())
 			return
 		}
-		for _, l := range res {
+		for _, l := range labelNames {
 			newSet.Insert(l)
 		}
 	}
