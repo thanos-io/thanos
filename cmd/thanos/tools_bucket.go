@@ -123,6 +123,8 @@ type bucketWebConfig struct {
 
 type bucketReplicateConfig struct {
 	resolutions []time.Duration
+	compactMin  int
+	compactMax  int
 	compactions []int
 	matcherStrs string
 	singleRun   bool
@@ -207,7 +209,11 @@ func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bu
 func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.FlagClause) *bucketReplicateConfig {
 	cmd.Flag("resolution", "Only blocks with these resolutions will be replicated. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationListVar(&tbc.resolutions)
 
-	cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").IntsVar(&tbc.compactions)
+	cmd.Flag("compaction-min", "Only blocks with at least this compaction level will be replicated.").Default("1").IntVar(&tbc.compactMin)
+
+	cmd.Flag("compaction-max", "Only blocks up to a maximum of this compaction level will be replicated.").Default("4").IntVar(&tbc.compactMax)
+
+	cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag. Overrides compaction-min and compaction-max if set.").Default().IntsVar(&tbc.compactions)
 
 	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
@@ -719,6 +725,16 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 		var resolutionLevels []compact.ResolutionLevel
 		for _, lvl := range tbc.resolutions {
 			resolutionLevels = append(resolutionLevels, compact.ResolutionLevel(lvl.Milliseconds()))
+		}
+
+		if len(tbc.compactions) == 0 {
+			if tbc.compactMin > tbc.compactMax {
+				return errors.New("compaction-min must be less than or equal to compaction-max")
+			}
+			tbc.compactions = []int{}
+			for compactionLevel := tbc.compactMin; compactionLevel <= tbc.compactMax; compactionLevel++ {
+				tbc.compactions = append(tbc.compactions, compactionLevel)
+			}
 		}
 
 		blockIDs := make([]ulid.ULID, 0, len(*ids))
