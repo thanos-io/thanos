@@ -4,6 +4,7 @@
 package main
 
 import (
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"net"
 	"net/http"
 	"time"
@@ -37,10 +38,10 @@ import (
 )
 
 type queryFrontendConfig struct {
+	queryfrontend.Config
 	http           httpConfig
 	webDisableCORS bool
-	queryfrontend.Config
-	orgIdHeaders []string
+	orgIdHeaders   []string
 }
 
 func registerQueryFrontend(app *extkingpin.App) {
@@ -146,6 +147,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-frontend.forward-header", "List of headers forwarded by the query-frontend to downstream queriers, default is empty").PlaceHolder("<http-header-name>").StringsVar(&cfg.ForwardHeaders)
 
+	cmd.Flag("query-frontend.tenant-header", "HTTP header to determine tenant").Default(tenancy.DefaultTenantHeader).Hidden().StringVar(&cfg.TenantHeader)
+	cmd.Flag("query-frontend.default-tenant", "Default tenant to use if tenant header is not present").Default(tenancy.DefaultTenant).Hidden().StringVar(&cfg.DefaultTenant)
+
 	cmd.Flag("query-frontend.vertical-shards", "Number of shards to use when distributing shardable PromQL queries. For more details, you can refer to the Vertical query sharding proposal: https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md").IntVar(&cfg.NumShards)
 
 	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
@@ -217,6 +221,11 @@ func runQueryFrontend(
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
+	if cfg.TenantHeader != "" {
+		cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
+		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader, tenancy.DefaultTenantHeader)
+	}
+
 	queryRangeCacheConfContentYaml, err := cfg.QueryRangeConfig.CachePathOrContent.Content()
 	if err != nil {
 		return err

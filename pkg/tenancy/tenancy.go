@@ -45,7 +45,10 @@ func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID str
 	var err error
 	tenant := r.Header.Get(tenantHeader)
 	if tenant == "" {
-		tenant = defaultTenantID
+		tenant = r.Header.Get(DefaultTenantHeader)
+		if tenant == "" {
+			tenant = defaultTenantID
+		}
 	}
 
 	if certTenantField != "" {
@@ -61,6 +64,16 @@ func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID str
 		return "", err
 	}
 	return tenant, nil
+}
+
+// ForwardTenantInternalRequest rewrites the configurable tenancy header in the request into the hardcoded tenancy
+// header that is used for internal communication in Thanos components.
+func ForwardTenantInternalRequest(r *http.Request, customTenantHeader string) *http.Request {
+	if tenant := r.Header.Get(customTenantHeader); tenant != "" {
+		r.Header.Set(DefaultTenantHeader, tenant)
+		r.Header.Del(customTenantHeader)
+	}
+	return r
 }
 
 // getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as

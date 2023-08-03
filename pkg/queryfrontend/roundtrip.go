@@ -4,6 +4,7 @@
 package queryfrontend
 
 import (
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"net/http"
 	"regexp"
 	"strings"
@@ -78,22 +79,36 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		config.ForwardHeaders,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
-		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
+		// TODO: Create a tripperware to rewrite the tenant header for internal communications and wrap the ones below
+		// with it.
+		return newRoundTripper(
+			next,
+			queryRangeTripperware(next),
+			labelsTripperware(next),
+			queryInstantTripperware(next),
+			config.TenantHeader,
+			config.DefaultTenant,
+			reg,
+		)
 	}, nil
 }
 
 type roundTripper struct {
 	next, queryInstant, queryRange, labels http.RoundTripper
 
-	queriesCount *prometheus.CounterVec
+	queriesCount  *prometheus.CounterVec
+	tenantHeader  string
+	defaultTenant string
 }
 
-func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper, reg prometheus.Registerer) roundTripper {
+func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper, tenantHeader, defaultTenant string, reg prometheus.Registerer) roundTripper {
 	r := roundTripper{
-		next:         next,
-		queryInstant: queryInstant,
-		queryRange:   queryRange,
-		labels:       metadata,
+		next:          next,
+		queryInstant:  queryInstant,
+		queryRange:    queryRange,
+		labels:        metadata,
+		tenantHeader:  tenantHeader,
+		defaultTenant: defaultTenant,
 		queriesCount: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_query_frontend_queries_total",
 			Help: "Total queries passing through query frontend",
@@ -109,6 +124,7 @@ func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper,
 }
 
 func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	tenancy.ForwardTenantInternalRequest(req, r.tenantHeader)
 	switch op := getOperation(req); op {
 	case instantQueryOp:
 		r.queriesCount.WithLabelValues(instantQueryOp).Inc()
