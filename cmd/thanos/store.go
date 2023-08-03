@@ -135,7 +135,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.objStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
 
 	cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
-		Default("3m").DurationVar(&sc.syncInterval)
+		Default("15m").DurationVar(&sc.syncInterval)
 
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage. Must be equal or greater than 1.").
 		Default("20").IntVar(&sc.blockSyncConcurrency)
