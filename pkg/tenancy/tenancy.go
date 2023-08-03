@@ -68,6 +68,7 @@ func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID str
 
 // ForwardTenantInternalRequest rewrites the configurable tenancy header in the request into the hardcoded tenancy
 // header that is used for internal communication in Thanos components.
+// TODO: Add support for forwarding tenant information from client certificates.
 func ForwardTenantInternalRequest(r *http.Request, customTenantHeader string) *http.Request {
 	if tenant := r.Header.Get(customTenantHeader); tenant != "" {
 		r.Header.Set(DefaultTenantHeader, tenant)
