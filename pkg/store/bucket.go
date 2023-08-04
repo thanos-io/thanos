@@ -2935,7 +2935,9 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 		}
+		r.mtx.Lock()
 		r.stats.DataDownloadedSizeSum += units.Base2Bytes(end - start)
+		r.mtx.Unlock()
 	}
 
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
