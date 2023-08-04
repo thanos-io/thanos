@@ -16,7 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6369](https://github.com/thanos-io/thanos/pull/6369) Receive: add az-aware replication support for Ketama algorithm
 - [#6185](https://github.com/thanos-io/thanos/pull/6185) Tracing: tracing in OTLP support configuring service_name.
 - [#6192](https://github.com/thanos-io/thanos/pull/6192) Store: add flag `bucket-web-label` to select the label to use as timeline title in web UI
-- [#6167](https://github.com/thanos-io/thanos/pull/6195) Receive: add flag `tsdb.too-far-in-future.time-window` to prevent clock skewed samples to pollute TSDB head and block all valid incoming samples.
+- [#6195](https://github.com/thanos-io/thanos/pull/6195) Receive: add flag `tsdb.too-far-in-future.time-window` to prevent clock skewed samples to pollute TSDB head and block all valid incoming samples.
 - [#6273](https://github.com/thanos-io/thanos/pull/6273) Mixin: Allow specifying an instance name filter in dashboards
 - [#6163](https://github.com/thanos-io/thanos/pull/6163) Receiver: Add hidden flag `--receive-forward-max-backoff` to configure the max backoff for forwarding requests.
 - [#5777](https://github.com/thanos-io/thanos/pull/5777) Receive: Allow specifying tenant-specific external labels in Router Ingestor.
@@ -27,6 +27,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6467](https://github.com/thanos-io/thanos/pull/6467) Mixin (Receive): add alert for tenant reaching head series limit.
 - [#6528](https://github.com/thanos-io/thanos/pull/6528) Index Cache: Add histogram metric `thanos_store_index_cache_stored_data_size_bytes` for item size.
 - [#6560](https://github.com/thanos-io/thanos/pull/6560) Thanos ruler: add flag to optionally disable adding Thanos params when querying metrics
+- [#6574](https://github.com/thanos-io/thanos/pull/6574) Tools: Add min and max compactions range flags to `bucket replicate` command.
 
 ### Fixed
 - [#6503](https://github.com/thanos-io/thanos/pull/6503) *: Change the engine behind `ContentPathReloader` to be completely independent of any filesystem concept. This effectively fixes this configuration reload when used with Kubernetes ConfigMaps, Secrets, or other volume mounts.
@@ -72,6 +73,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6432](https://github.com/thanos-io/thanos/pull/6432) Receive: Remove duplicated `gopkg.in/fsnotify.v1` dependency
 - [#6479](https://github.com/thanos-io/thanos/pull/6479) Store: *breaking :warning:* Rename `thanos_bucket_store_cached_series_fetch_duration_seconds` to `thanos_bucket_store_series_fetch_duration_seconds` and `thanos_bucket_store_cached_postings_fetch_duration_seconds` to `thanos_bucket_store_postings_fetch_duration_seconds`.
 - [#6474](https://github.com/thanos-io/thanos/pull/6474) Store/Compact: Reduce a large amount of `Exists` API calls against object storage when synchronizing meta files in favour of a recursive `Iter` call.
+- [#6548](https://github.com/thanos-io/thanos/pull/6548) Objstore: Bump minio-go to v7.0.61.
 
 ### Removed
 

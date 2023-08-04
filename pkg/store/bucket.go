@@ -229,7 +229,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Name: "thanos_bucket_store_postings_size_bytes",
 		Help: "Size in bytes of the postings for a single series call.",
 		Buckets: []float64{
-			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024, 768 * 1024 * 1024, 1024 * 1024 * 1024,
 		},
 	})
 
@@ -962,8 +962,24 @@ func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
 	return stats
 }
 
+type sortedMatchers []*labels.Matcher
+
+func newSortedMatchers(matchers []*labels.Matcher) sortedMatchers {
+	sort.Slice(matchers, func(i, j int) bool {
+		if matchers[i].Type == matchers[j].Type {
+			if matchers[i].Name == matchers[j].Name {
+				return matchers[i].Value < matchers[j].Value
+			}
+			return matchers[i].Name < matchers[j].Name
+		}
+		return matchers[i].Type < matchers[j].Type
+	})
+
+	return matchers
+}
+
 func (b *blockSeriesClient) ExpandPostings(
-	matchers []*labels.Matcher,
+	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
 	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter)
@@ -1284,6 +1300,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			continue
 		}
 
+		sortedBlockMatchers := newSortedMatchers(blockMatchers)
+
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
 
 		if s.debugLogging {
@@ -1326,7 +1344,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
 				})
 
-				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter); err != nil {
+				if err := blockClient.ExpandPostings(sortedBlockMatchers, seriesLimiter); err != nil {
 					span.Finish()
 					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
 				}
@@ -1527,6 +1545,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			continue
 		}
 
+		sortedReqSeriesMatchersNoExtLabels := newSortedMatchers(reqSeriesMatchersNoExtLabels)
+
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader()
@@ -1581,7 +1601,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
-					reqSeriesMatchersNoExtLabels,
+					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
 				); err != nil {
 					return err
@@ -1727,6 +1747,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			reqSeriesMatchersNoExtLabels = append(reqSeriesMatchersNoExtLabels, m)
 		}
 
+		sortedReqSeriesMatchersNoExtLabels := newSortedMatchers(reqSeriesMatchersNoExtLabels)
+
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader()
@@ -1775,7 +1797,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
-					reqSeriesMatchersNoExtLabels,
+					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
 				); err != nil {
 					return err
@@ -2196,23 +2218,13 @@ func (r *bucketIndexReader) reset() {
 // Reminder: A posting is a reference (represented as a uint64) to a series reference, which in turn points to the first
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
-func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
+func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
 	// Shortcut the case of `len(postingGroups) == 0`. It will only happen when no
 	// matchers specified, and we don't need to fetch expanded postings from cache.
 	if len(ms) == 0 {
 		return nil, nil
 	}
 
-	// Sort matchers to make sure we generate the same cache key.
-	sort.Slice(ms, func(i, j int) bool {
-		if ms[i].Type == ms[j].Type {
-			if ms[i].Name == ms[j].Name {
-				return ms[i].Value < ms[j].Value
-			}
-			return ms[i].Name < ms[j].Name
-		}
-		return ms[i].Type < ms[j].Type
-	})
 	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiter)
 	if err != nil {
 		return nil, err
@@ -3214,9 +3226,14 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
+	var locked bool
 	fetchBegin := time.Now()
 	defer func() {
+		if !locked {
+			r.mtx.Lock()
+		}
 		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+		r.mtx.Unlock()
 	}()
 
 	// Get a reader for the required range.
@@ -3227,14 +3244,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
 	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
-	locked := true
+	locked = true
 	r.mtx.Lock()
-
-	defer func() {
-		if locked {
-			r.mtx.Unlock()
-		}
-	}()
 
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(pIdxs)

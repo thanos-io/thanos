@@ -130,6 +130,8 @@ config:
     insecure_skip_verify: false
   cache_size: 0
   master_name: ""
+  max_async_buffer_size: 10000
+  max_async_concurrency: 20
   expiration: 24h0m0s
 ```
 

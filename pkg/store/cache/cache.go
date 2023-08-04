@@ -77,7 +77,7 @@ func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
 			Name: "thanos_store_index_cache_stored_data_size_bytes",
 			Help: "Histogram to track item data size stored in index cache",
 			Buckets: []float64{
-				32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+				32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 64 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 			},
 		}, []string{"item_type"}),
 	}

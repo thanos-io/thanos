@@ -15,7 +15,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20220629234738-4cfc9cdeeb92
 	github.com/chromedp/chromedp v0.8.2
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dustin/go-humanize v1.0.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/efficientgo/e2e v0.14.1-0.20230710114240-c316eb95ae5b
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
@@ -40,12 +40,12 @@ require (
 	github.com/hashicorp/golang-lru v0.6.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.15.9
+	github.com/klauspost/compress v1.16.7
 	github.com/leanovate/gopter v0.2.9
 	github.com/lightstep/lightstep-tracer-go v0.25.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.53
-	github.com/minio/minio-go/v7 v7.0.45 // indirect
+	github.com/minio/minio-go/v7 v7.0.61 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
 	github.com/oklog/ulid v1.3.1
@@ -65,7 +65,7 @@ require (
 	github.com/prometheus/prometheus v0.44.1-0.20230524110021-37e5249e33e4
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.3
-	github.com/thanos-io/objstore v0.0.0-20230713070940-eb01c83b89a4
+	github.com/thanos-io/objstore v0.0.0-20230721074820-89475d4508df
 	github.com/thanos-io/promql-engine v0.0.0-20230524050847-9a1a33217cf2
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -84,10 +84,10 @@ require (
 	go.uber.org/atomic v1.10.0
 	go.uber.org/automaxprocs v1.5.2
 	go.uber.org/goleak v1.2.1
-	golang.org/x/crypto v0.7.0
-	golang.org/x/net v0.10.0
+	golang.org/x/crypto v0.11.0
+	golang.org/x/net v0.12.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/text v0.9.0
+	golang.org/x/text v0.11.0
 	golang.org/x/time v0.3.0
 	google.golang.org/api v0.114.0 // indirect
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4 // indirect
@@ -100,7 +100,7 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.2
-	github.com/minio/sha256-simd v1.0.0
+	github.com/minio/sha256-simd v1.0.1
 )
 
 require (
@@ -194,7 +194,7 @@ require (
 	github.com/joeshaw/multierror v0.0.0-20140124173710-69b34d4ec901 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lightstep/lightstep-tracer-common/golang/gogo v0.0.0-20210210170715-a8dfcb80d3a7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
@@ -214,11 +214,11 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/redis/rueidis v1.0.10-go1.18
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/rs/xid v1.4.0 // indirect
+	github.com/rs/xid v1.5.0 // indirect
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.22.9 // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.40 // indirect
@@ -240,7 +240,7 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
+	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/tools v0.8.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/gonum v0.12.0 // indirect
