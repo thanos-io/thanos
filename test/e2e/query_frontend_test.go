@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -930,57 +931,96 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 func TestQueryFrontendTenantForward(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.New(e2e.WithName("query-frontend"))
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-	testTenant := "test-tenant"
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-		testutil.Equals(t, testTenant, r.Header.Get("THANOS-TENANT"))
-		testutil.Equals(t, testTenant, r.Header.Get("X-Scope-OrgID"))
-	}))
-	t.Cleanup(ts.Close)
-	tsPort := urlParse(t, ts.URL).Port()
-
-	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
-		Type: queryfrontend.INMEMORY,
-		Config: queryfrontend.InMemoryResponseCacheConfig{
-			MaxSizeItems: 1000,
-			Validity:     time.Hour,
+	tests := []struct {
+		name                   string
+		customTenantHeaderName string
+		tenantName             string
+	}{
+		{
+			name:                   "default tenant header name with a tenant name",
+			customTenantHeaderName: tenancy.DefaultTenantHeader,
+			tenantName:             "test-tenant",
+		},
+		{
+			name:                   "default tenant header name without a tenant name",
+			customTenantHeaderName: tenancy.DefaultTenantHeader,
+		},
+		{
+			name:                   "custom tenant header name with a tenant name",
+			customTenantHeaderName: "X-Foobar-Tenant",
+			tenantName:             "test-tenant",
+		},
+		{
+			name:                   "custom tenant header name without a tenant name",
+			customTenantHeaderName: "X-Foobar-Tenant",
 		},
 	}
-	queryFrontendConfig := queryfrontend.Config{}
-	queryFrontend := e2ethanos.NewQueryFrontend(
-		e,
-		"1",
-		fmt.Sprintf("http://%s:%s", e.HostAddr(), tsPort),
-		queryFrontendConfig,
-		inMemoryCacheConfig,
-	)
-	testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.tenantName == "" {
+				tc.tenantName = tenancy.DefaultTenant
+			}
+			// Use a shorthash of tc.name as e2e env name because the random name generator is having a collision for
+			// some reason.
+			e2ename := fmt.Sprintf("%x", sha256.Sum256([]byte(tc.name)))[:8]
+			e, err := e2e.New(e2e.WithName(e2ename))
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	t.Cleanup(cancel)
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+				testutil.Equals(t, tc.tenantName, r.Header.Get(tenancy.DefaultTenantHeader))
+				if tc.customTenantHeaderName != tenancy.DefaultTenantHeader {
+					testutil.Equals(t, "", r.Header.Get(tc.customTenantHeaderName))
+				}
+				testutil.Equals(t, tc.tenantName, r.Header.Get("X-Scope-OrgID"))
+			}))
+			t.Cleanup(ts.Close)
+			tsPort := urlParse(t, ts.URL).Port()
 
-	promClient, err := api.NewClient(api.Config{
-		Address: "http://" + queryFrontend.Endpoint("http"),
-		RoundTripper: tenantRoundTripper{
-			tenant: testTenant,
-			rt:     http.DefaultTransport,
-		},
-	})
-	testutil.Ok(t, err)
-	v1api := v1.NewAPI(promClient)
+			inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
+				Type: queryfrontend.INMEMORY,
+				Config: queryfrontend.InMemoryResponseCacheConfig{
+					MaxSizeItems: 1000,
+					Validity:     time.Hour,
+				},
+			}
+			queryFrontendConfig := queryfrontend.Config{
+				TenantHeader: tc.customTenantHeaderName,
+			}
+			queryFrontend := e2ethanos.NewQueryFrontend(
+				e,
+				"qfe",
+				fmt.Sprintf("http://%s:%s", e.HostAddr(), tsPort),
+				queryFrontendConfig,
+				inMemoryCacheConfig,
+			)
+			testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
 
-	r := v1.Range{
-		Start: time.Now().Add(-time.Hour),
-		End:   time.Now(),
-		Step:  time.Minute,
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			t.Cleanup(cancel)
+
+			promClient, err := api.NewClient(api.Config{
+				Address: "http://" + queryFrontend.Endpoint("http"),
+				RoundTripper: tenantRoundTripper{
+					tenant: tc.tenantName,
+					rt:     http.DefaultTransport,
+				},
+			})
+			testutil.Ok(t, err)
+			v1api := v1.NewAPI(promClient)
+
+			r := v1.Range{
+				Start: time.Now().Add(-time.Hour),
+				End:   time.Now(),
+				Step:  time.Minute,
+			}
+
+			_, _, _ = v1api.QueryRange(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", r)
+		})
 	}
-
-	_, _, _ = v1api.QueryRange(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", r)
 }
 
 type tenantRoundTripper struct {
