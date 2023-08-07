@@ -4,10 +4,11 @@
 package main
 
 import (
-	"github.com/thanos-io/thanos/pkg/tenancy"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/tenancy"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
@@ -149,6 +150,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-frontend.tenant-header", "HTTP header to determine tenant").Default(tenancy.DefaultTenantHeader).Hidden().StringVar(&cfg.TenantHeader)
 	cmd.Flag("query-frontend.default-tenant", "Default tenant to use if tenant header is not present").Default(tenancy.DefaultTenant).Hidden().StringVar(&cfg.DefaultTenant)
+	cmd.Flag("query-frontend.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query-frontend.tenant-header flag value to be ignored.").Default("").EnumVar(&cfg.TenantCertField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
 	cmd.Flag("query-frontend.vertical-shards", "Number of shards to use when distributing shardable PromQL queries. For more details, you can refer to the Vertical query sharding proposal: https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md").IntVar(&cfg.NumShards)
 
@@ -221,9 +223,11 @@ func runQueryFrontend(
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
-	if cfg.TenantHeader != "" {
-		cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
-		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader, tenancy.DefaultTenantHeader)
+	cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
+	cfg.orgIdHeaders = append(cfg.orgIdHeaders, tenancy.DefaultTenantHeader)
+	if cfg.TenantHeader != "" && cfg.TenantHeader != tenancy.DefaultTenantHeader {
+		cfg.ForwardHeaders = append(cfg.ForwardHeaders, cfg.TenantHeader)
+		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader)
 	}
 
 	queryRangeCacheConfContentYaml, err := cfg.QueryRangeConfig.CachePathOrContent.Content()

@@ -66,15 +66,26 @@ func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID str
 	return tenant, nil
 }
 
-// ForwardTenantInternalRequest rewrites the configurable tenancy header in the request into the hardcoded tenancy
-// header that is used for internal communication in Thanos components.
-// TODO: Add support for forwarding tenant information from client certificates.
-func ForwardTenantInternalRequest(r *http.Request, customTenantHeader string) *http.Request {
-	if tenant := r.Header.Get(customTenantHeader); tenant != "" {
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (r roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return r(request)
+}
+
+// InternalTenancyConversionTripper is a tripperware that rewrites the configurable tenancy header in the request into
+// the hardcoded tenancy header that is used for internal communication in Thanos components. If any custom tenant
+// header is configured and present in the request, it will be stripped out.
+func InternalTenancyConversionTripper(customTenantHeader, certTenantField string, next http.RoundTripper) http.RoundTripper {
+	return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		tenant, _ := GetTenantFromHTTP(r, customTenantHeader, DefaultTenant, certTenantField)
 		r.Header.Set(DefaultTenantHeader, tenant)
-		r.Header.Del(customTenantHeader)
-	}
-	return r
+		// If the custom tenant header is not the same as the default internal header, we want to exclude the custom
+		// one from the request to keep things simple.
+		if customTenantHeader != DefaultTenantHeader {
+			r.Header.Del(customTenantHeader)
+		}
+		return next.RoundTrip(r)
+	})
 }
 
 // getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as

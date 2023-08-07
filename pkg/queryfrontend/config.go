@@ -205,6 +205,7 @@ type Config struct {
 	NumShards              int
 	TenantHeader           string
 	DefaultTenant          string
+	TenantCertField        string
 }
 
 // QueryRangeConfig holds the config for query range tripperware.

@@ -79,9 +79,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		config.ForwardHeaders,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
-		// TODO: Create a tripperware to rewrite the tenant header for internal communications and wrap the ones below
-		// with it.
-		return newRoundTripper(
+		tripper := newRoundTripper(
 			next,
 			queryRangeTripperware(next),
 			labelsTripperware(next),
@@ -90,6 +88,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 			config.DefaultTenant,
 			reg,
 		)
+		return tenancy.InternalTenancyConversionTripper(config.TenantHeader, config.TenantCertField, tripper)
 	}, nil
 }
 
@@ -124,7 +123,6 @@ func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper,
 }
 
 func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	tenancy.ForwardTenantInternalRequest(req, r.tenantHeader)
 	switch op := getOperation(req); op {
 	case instantQueryOp:
 		r.queriesCount.WithLabelValues(instantQueryOp).Inc()
