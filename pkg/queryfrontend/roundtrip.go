@@ -4,11 +4,12 @@
 package queryfrontend
 
 import (
-	"github.com/thanos-io/thanos/pkg/tenancy"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/tenancy"
 
 	"github.com/thanos-io/thanos/pkg/querysharding"
 

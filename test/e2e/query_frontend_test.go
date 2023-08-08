@@ -7,8 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/thanos/pkg/tenancy"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +14,9 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
