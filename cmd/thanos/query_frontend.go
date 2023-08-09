@@ -16,6 +16,9 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/weaveworks/common/user"
+	"gopkg.in/yaml.v2"
+
 	cortexfrontend "github.com/thanos-io/thanos/internal/cortex/frontend"
 	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
@@ -32,8 +35,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"github.com/weaveworks/common/user"
-	"gopkg.in/yaml.v2"
 )
 
 type queryFrontendConfig struct {
