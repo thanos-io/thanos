@@ -53,6 +53,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6519](https://github.com/thanos-io/thanos/pull/6519) Reloader: Use timeout for initial apply.
 - [#6509](https://github.com/thanos-io/thanos/pull/6509) Store Gateway: Remove `memWriter` from `fileWriter` to reduce memory usage when sync index headers.
 - [#6556](https://github.com/thanos-io/thanos/pull/6556) Thanos compact: respect block-files-concurrency setting when downsampling
+- [#6592](https://github.com/thanos-io/thanos/pull/6592) Query Frontend: fix bugs in vertical sharding `without` and `union` function to allow more queries to be shardable.
 
 ### Changed
 - [#6049](https://github.com/thanos-io/thanos/pull/6049) Compact: *breaking :warning:* Replace group with resolution in compact metrics to avoid cardinality explosion on compact metrics for large numbers of groups.
