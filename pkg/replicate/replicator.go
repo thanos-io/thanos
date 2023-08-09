@@ -143,7 +143,7 @@ func RunReplicate(
 	toBkt = objstoretracing.WrapWithTraces(
 		objstore.WrapWithMetrics(
 			toBkt,
-			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
+			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg)),
 			toBkt.Name(),
 		),
 	)

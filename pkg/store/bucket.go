@@ -135,6 +135,7 @@ type bucketStoreMetrics struct {
 	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
+	chunkRefetches        prometheus.Counter
 	emptyPostingCount     prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
@@ -231,7 +232,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Name: "thanos_bucket_store_postings_size_bytes",
 		Help: "Size in bytes of the postings for a single series call.",
 		Buckets: []float64{
-			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024, 768 * 1024 * 1024, 1024 * 1024 * 1024,
 		},
 	})
 
@@ -242,6 +243,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
 		Help: "Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch.",
+	})
+	m.chunkRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_chunk_refetches_total",
+		Help: "Total number of cases where configured estimated chunk bytes was not enough was to fetch chunks from object store, resulting in refetch.",
 	})
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -971,8 +976,24 @@ func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
 	return stats
 }
 
+type sortedMatchers []*labels.Matcher
+
+func newSortedMatchers(matchers []*labels.Matcher) sortedMatchers {
+	sort.Slice(matchers, func(i, j int) bool {
+		if matchers[i].Type == matchers[j].Type {
+			if matchers[i].Name == matchers[j].Name {
+				return matchers[i].Value < matchers[j].Value
+			}
+			return matchers[i].Name < matchers[j].Name
+		}
+		return matchers[i].Type < matchers[j].Type
+	})
+
+	return matchers
+}
+
 func (b *blockSeriesClient) ExpandPostings(
-	matchers []*labels.Matcher,
+	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
 	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter)
@@ -1299,6 +1320,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 			continue
 		}
 
+		sortedBlockMatchers := newSortedMatchers(blockMatchers)
+
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
 
 		if s.debugLogging {
@@ -1341,7 +1364,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
 				})
 
-				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter); err != nil {
+				if err := blockClient.ExpandPostings(sortedBlockMatchers, seriesLimiter); err != nil {
 					span.Finish()
 					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
 				}
@@ -1545,6 +1568,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			continue
 		}
 
+		sortedReqSeriesMatchersNoExtLabels := newSortedMatchers(reqSeriesMatchersNoExtLabels)
+
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader()
@@ -1599,7 +1624,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
-					reqSeriesMatchersNoExtLabels,
+					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
 				); err != nil {
 					return err
@@ -1774,6 +1799,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			reqSeriesMatchersNoExtLabels = append(reqSeriesMatchersNoExtLabels, m)
 		}
 
+		sortedReqSeriesMatchersNoExtLabels := newSortedMatchers(reqSeriesMatchersNoExtLabels)
+
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader()
@@ -1822,7 +1849,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
-					reqSeriesMatchersNoExtLabels,
+					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
 				); err != nil {
 					return err
@@ -2243,23 +2270,13 @@ func (r *bucketIndexReader) reset() {
 // Reminder: A posting is a reference (represented as a uint64) to a series reference, which in turn points to the first
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
-func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
+func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
 	// Shortcut the case of `len(postingGroups) == 0`. It will only happen when no
 	// matchers specified, and we don't need to fetch expanded postings from cache.
 	if len(ms) == 0 {
 		return nil, nil
 	}
 
-	// Sort matchers to make sure we generate the same cache key.
-	sort.Slice(ms, func(i, j int) bool {
-		if ms[i].Type == ms[j].Type {
-			if ms[i].Name == ms[j].Name {
-				return ms[i].Value < ms[j].Value
-			}
-			return ms[i].Name < ms[j].Name
-		}
-		return ms[i].Type < ms[j].Type
-	})
 	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiter)
 	if err != nil {
 		return nil, err
@@ -2970,7 +2987,9 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 		}
+		r.mtx.Lock()
 		r.stats.DataDownloadedSizeSum += units.Base2Bytes(end - start)
+		r.mtx.Unlock()
 	}
 
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
@@ -3261,9 +3280,14 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
+	var locked bool
 	fetchBegin := time.Now()
 	defer func() {
+		if !locked {
+			r.mtx.Lock()
+		}
 		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+		r.mtx.Unlock()
 	}()
 
 	// Get a reader for the required range.
@@ -3274,14 +3298,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
 	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
-	locked := true
+	locked = true
 	r.mtx.Lock()
-
-	defer func() {
-		if locked {
-			r.mtx.Unlock()
-		}
-	}()
 
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(pIdxs)
@@ -3350,18 +3368,18 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			continue
 		}
 
+		r.block.metrics.chunkRefetches.Inc()
 		// If we didn't fetch enough data for the chunk, fetch more.
-		r.mtx.Unlock()
-		locked = false
-
 		fetchBegin = time.Now()
-
 		// Read entire chunk into new buffer.
 		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
 		if err := bytesLimiter.Reserve(uint64(chunkLen)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 		}
 		r.stats.DataDownloadedSizeSum += units.Base2Bytes(chunkLen)
+		r.mtx.Unlock()
+		locked = false
+
 		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}})
 		if err != nil {
 			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chunkLen)
