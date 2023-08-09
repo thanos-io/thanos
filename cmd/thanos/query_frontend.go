@@ -225,7 +225,6 @@ func runQueryFrontend(
 	cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
 	cfg.orgIdHeaders = append(cfg.orgIdHeaders, tenancy.DefaultTenantHeader)
 	if cfg.TenantHeader != "" && cfg.TenantHeader != tenancy.DefaultTenantHeader {
-		cfg.ForwardHeaders = append(cfg.ForwardHeaders, cfg.TenantHeader)
 		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader)
 	}
 
