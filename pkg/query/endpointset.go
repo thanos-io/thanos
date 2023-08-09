@@ -481,7 +481,10 @@ func (e *EndpointSet) getTimedOutRefs() map[string]*endpointRef {
 			continue
 		}
 
-		lastCheck := er.getStatus().LastCheck
+		er.mtx.RLock()
+		lastCheck := er.status.LastCheck
+		er.mtx.RUnlock()
+
 		if now.Sub(lastCheck) >= e.unhealthyEndpointTimeout {
 			result[er.addr] = er
 		}
@@ -609,7 +612,10 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 
 	statuses := make([]EndpointStatus, 0, len(e.endpoints))
 	for _, v := range e.endpoints {
-		status := v.getStatus()
+		v.mtx.RLock()
+		defer v.mtx.RUnlock()
+
+		status := v.status
 		if status != nil {
 			statuses = append(statuses, *status)
 		}
@@ -703,18 +709,14 @@ func (er *endpointRef) updateMetadata(metadata *endpointMetadata, err error) {
 	}
 }
 
-func (er *endpointRef) getStatus() *EndpointStatus {
-	er.mtx.RLock()
-	defer er.mtx.RUnlock()
-
-	return er.status
-}
-
 // isQueryable returns true if an endpointRef should be used for querying.
 // A strict endpointRef is always queriable. A non-strict endpointRef
 // is queryable if the last health check (info call) succeeded.
 func (er *endpointRef) isQueryable() bool {
-	return er.isStrict || er.getStatus().LastError == nil
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	return er.isStrict || er.status.LastError == nil
 }
 
 func (er *endpointRef) ComponentType() component.Component {
