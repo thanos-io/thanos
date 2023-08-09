@@ -133,6 +133,7 @@ type bucketStoreMetrics struct {
 	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
+	chunkRefetches        prometheus.Counter
 	emptyPostingCount     prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
@@ -240,6 +241,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
 		Help: "Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch.",
+	})
+	m.chunkRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_chunk_refetches_total",
+		Help: "Total number of cases where configured estimated chunk bytes was not enough was to fetch chunks from object store, resulting in refetch.",
 	})
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -3316,6 +3321,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			continue
 		}
 
+		r.block.metrics.chunkRefetches.Inc()
 		// If we didn't fetch enough data for the chunk, fetch more.
 		fetchBegin = time.Now()
 		// Read entire chunk into new buffer.

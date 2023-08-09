@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6528](https://github.com/thanos-io/thanos/pull/6528) Index Cache: Add histogram metric `thanos_store_index_cache_stored_data_size_bytes` for item size.
 - [#6560](https://github.com/thanos-io/thanos/pull/6560) Thanos ruler: add flag to optionally disable adding Thanos params when querying metrics
 - [#6574](https://github.com/thanos-io/thanos/pull/6574) Tools: Add min and max compactions range flags to `bucket replicate` command.
+- [#6593](https://github.com/thanos-io/thanos/pull/6574) Store: Add `thanos_bucket_store_chunk_refetches_total` metric to track number of chunk refetches.
 
 ### Fixed
 - [#6503](https://github.com/thanos-io/thanos/pull/6503) *: Change the engine behind `ContentPathReloader` to be completely independent of any filesystem concept. This effectively fixes this configuration reload when used with Kubernetes ConfigMaps, Secrets, or other volume mounts.
