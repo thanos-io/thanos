@@ -380,6 +380,9 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 			batch = append(batch, s)
 		}
 		data = data[j:]
+		if len(batch) == 0 {
+			continue
+		}
 
 		ab := newAggrChunkBuilder()
 

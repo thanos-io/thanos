@@ -641,7 +641,6 @@ func TestDownsampleAndReadResultingData(t *testing.T) {
 	chks := DownsampleRaw(data, ResLevel1)
 	testutil.Assert(t, chks != nil, "Downsample from raw to 300s")
 
-	// downsample from 300s to 3600s
 	for _, c := range chks {
 		ac, ok := c.Chunk.(*AggrChunk)
 		if !ok {
@@ -662,6 +661,7 @@ func TestDownsampleAndReadResultingData(t *testing.T) {
 	// validate aggrChunks from first downsample iteration
 	validateAggrChunks(t, aggrChunks, chks, "First downsample iteration")
 
+	// downsample from 300s to 3600s
 	downsampledChunks, err := downsampleAggr(
 		aggrChunks,
 		&all,
@@ -673,7 +673,6 @@ func TestDownsampleAndReadResultingData(t *testing.T) {
 	testutil.Ok(t, err, "Downsample from 300s to 3600s")
 	testutil.Assert(t, downsampledChunks != nil)
 
-	// validate arrgChunks from second downsample iteration
 	aggrChunks = aggrChunks[:0]
 	for _, c := range downsampledChunks {
 		ac, ok := c.Chunk.(*AggrChunk)
@@ -687,6 +686,7 @@ func TestDownsampleAndReadResultingData(t *testing.T) {
 		aggrChunks = append(aggrChunks, ac)
 	}
 
+	// validate arrgChunks from second downsample iteration
 	validateAggrChunks(t, aggrChunks, chks, "Second downsample iteration")
 }
 
