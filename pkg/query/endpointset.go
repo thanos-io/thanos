@@ -363,6 +363,8 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	)
 
 	for _, spec := range e.endpointSpec() {
+		spec := spec
+
 		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
 			wg.Add(1)
 			go func(spec *GRPCEndpointSpec) {
@@ -509,12 +511,14 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 	stores := make([]store.Client, 0, len(endpoints))
 	for _, er := range endpoints {
 		if er.HasStoreAPI() {
+			er.mtx.RLock()
 			// Make a new endpointRef with store client.
 			stores = append(stores, &endpointRef{
 				StoreClient: storepb.NewStoreClient(er.cc),
 				addr:        er.addr,
 				metadata:    er.metadata,
 			})
+			er.mtx.RUnlock()
 		}
 	}
 	return stores
@@ -635,7 +639,10 @@ type endpointRef struct {
 // newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec) (*endpointRef, error) {
-	dialOpts := append(e.dialOpts, spec.dialOpts...)
+	var dialOpts []grpc.DialOption
+
+	dialOpts = append(dialOpts, e.dialOpts...)
+	dialOpts = append(dialOpts, spec.dialOpts...)
 	// By default DialContext is non-blocking which means that any connection
 	// failure won't be reported/logged. Instead block until the connection is
 	// successfully established and return the details of the connection error
@@ -657,8 +664,8 @@ func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec
 
 // update sets the metadata and status of the endpoint ref based on the info response value and error.
 func (er *endpointRef) update(now nowFunc, metadata *endpointMetadata, err error) {
-	er.mtx.RLock()
-	defer er.mtx.RUnlock()
+	er.mtx.Lock()
+	defer er.mtx.Unlock()
 
 	er.updateMetadata(metadata, err)
 	er.updateStatus(now, err)
