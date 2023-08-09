@@ -751,7 +751,7 @@ func runQuery(
 				maxConcurrentQueries,
 				gate.Queries,
 			),
-			store.NewSeriesStatsAggregator(
+			store.NewSeriesStatsAggregatorFactory(
 				reg,
 				queryTelemetryDurationQuantiles,
 				queryTelemetrySamplesQuantiles,
