@@ -7,8 +7,10 @@ import (
 	"bytes"
 	"context"
 	crand "crypto/rand"
+	"io"
 	"math"
 	"math/rand"
+	"os"
 	"sort"
 	"strconv"
 	"testing"
@@ -337,4 +339,48 @@ func FuzzSnappyStreamEncoding(f *testing.F) {
 		_, err := diffVarintSnappyStreamedEncode(ps, ps.len())
 		testutil.Ok(t, err)
 	})
+}
+
+func TestRegressionIssue6545(t *testing.T) {
+	diffVarintPostings, err := os.ReadFile("6545postingsrepro")
+	testutil.Ok(t, err)
+
+	gotPostings := 0
+	dvp := newDiffVarintPostings(diffVarintPostings, nil)
+	decodedPostings := []storage.SeriesRef{}
+	for dvp.Next() {
+		decodedPostings = append(decodedPostings, dvp.At())
+		gotPostings++
+	}
+	testutil.Ok(t, dvp.Err())
+	testutil.Equals(t, 114024, gotPostings)
+
+	dataToCache, err := snappyStreamedEncode(114024, diffVarintPostings)
+	testutil.Ok(t, err)
+
+	// Check that the original decompressor works well.
+	sr := s2.NewReader(bytes.NewBuffer(dataToCache[3:]))
+	readBytes, err := io.ReadAll(sr)
+	testutil.Ok(t, err)
+	testutil.Equals(t, readBytes, diffVarintPostings)
+
+	dvp = newDiffVarintPostings(readBytes, nil)
+	gotPostings = 0
+	for dvp.Next() {
+		gotPostings++
+	}
+	testutil.Equals(t, 114024, gotPostings)
+
+	p, err := decodePostings(dataToCache)
+	testutil.Ok(t, err)
+
+	i := 0
+	for p.Next() {
+		post := p.At()
+		testutil.Equals(t, uint64(decodedPostings[i]), uint64(post))
+		i++
+	}
+
+	testutil.Ok(t, p.Err())
+	testutil.Equals(t, 114024, i)
 }
