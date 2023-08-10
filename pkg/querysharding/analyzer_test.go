@@ -203,7 +203,7 @@ sum by (container) (
 		{
 			name:           "binary expression with outer without grouping",
 			expression:     `sum(http_requests_total{code="400"} * http_requests_total) without (pod)`,
-			shardingLabels: []string{"pod"},
+			shardingLabels: []string{"__name__", "pod"},
 		},
 		{
 			name:           "binary expression with vector matching and outer without grouping",
