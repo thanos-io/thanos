@@ -1,4 +1,4 @@
-import React, { FC, useState } from 'react';
+import React, { FC, useEffect, useState } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
@@ -13,6 +13,7 @@ export interface BlockDetailsProps {
 export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
   const [modalAction, setModalAction] = useState<string>('');
   const [detailValue, setDetailValue] = useState<string | null>(null);
+  const [disableAdminOperations, setDisableAdminOperations] = useState<boolean>(false);
 
   const submitMarkBlock = async (action: string, ulid: string, detail: string | null) => {
     try {
@@ -39,6 +40,17 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
       setModalAction('');
     }
   };
+
+  const fetchDisableAdminOperations = async () => {
+    const response = await fetch('/api/v1/flags');
+    const result = await response.json();
+    setDisableAdminOperations(result.data.disableAdminOperations);
+    console.log('disableAdminOperations', result.data.disableAdminOperations);
+  };
+
+  useEffect(() => {
+    fetchDisableAdminOperations();
+  }, []);
 
   return (
     <div className={`${styles.blockDetails} ${block && styles.open}`}>
@@ -100,26 +112,30 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
               <Button>Download meta.json</Button>
             </a>
           </div>
-          <div style={{ marginTop: '12px' }}>
-            <Button
-              onClick={() => {
-                setModalAction('DELETION');
-                setDetailValue('');
-              }}
-            >
-              Mark Deletion
-            </Button>
-          </div>
-          <div style={{ marginTop: '12px' }}>
-            <Button
-              onClick={() => {
-                setModalAction('NO_COMPACTION');
-                setDetailValue('');
-              }}
-            >
-              Mark No Compaction
-            </Button>
-          </div>
+          {!disableAdminOperations && (
+            <div style={{ marginTop: '12px' }}>
+              <Button
+                onClick={() => {
+                  setModalAction('DELETION');
+                  setDetailValue('');
+                }}
+              >
+                Mark Deletion
+              </Button>
+            </div>
+          )}
+          {!disableAdminOperations && (
+            <div style={{ marginTop: '12px' }}>
+              <Button
+                onClick={() => {
+                  setModalAction('NO_COMPACTION');
+                  setDetailValue('');
+                }}
+              >
+                Mark No Compaction
+              </Button>
+            </div>
+          )}
           <Modal isOpen={!!modalAction}>
             <ModalBody>
               <ModalHeader toggle={() => setModalAction('')}>
