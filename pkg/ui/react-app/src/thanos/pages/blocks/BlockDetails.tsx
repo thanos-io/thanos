@@ -4,6 +4,8 @@ import styles from './blocks.module.css';
 import moment from 'moment';
 import { Button, Modal, ModalBody, Form, Input, ModalHeader, ModalFooter } from 'reactstrap';
 import { download } from './helpers';
+import { FlagMap } from '../../../pages/flags/Flags';
+import { useFetch } from '../../../hooks/useFetch';
 
 export interface BlockDetailsProps {
   block: Block | undefined;
@@ -39,6 +41,9 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
       setModalAction('');
     }
   };
+
+  const { response: flagsRes } = useFetch<FlagMap>(`/api/v1/status/flags`);
+  const disableAdminOperations = flagsRes?.data?.['disable-admin-operations'] || false;
 
   return (
     <div className={`${styles.blockDetails} ${block && styles.open}`}>
@@ -100,26 +105,30 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
               <Button>Download meta.json</Button>
             </a>
           </div>
-          <div style={{ marginTop: '12px' }}>
-            <Button
-              onClick={() => {
-                setModalAction('DELETION');
-                setDetailValue('');
-              }}
-            >
-              Mark Deletion
-            </Button>
-          </div>
-          <div style={{ marginTop: '12px' }}>
-            <Button
-              onClick={() => {
-                setModalAction('NO_COMPACTION');
-                setDetailValue('');
-              }}
-            >
-              Mark No Compaction
-            </Button>
-          </div>
+          {!disableAdminOperations && (
+            <div style={{ marginTop: '12px' }}>
+              <Button
+                onClick={() => {
+                  setModalAction('DELETION');
+                  setDetailValue('');
+                }}
+              >
+                Mark Deletion
+              </Button>
+            </div>
+          )}
+          {!disableAdminOperations && (
+            <div style={{ marginTop: '12px' }}>
+              <Button
+                onClick={() => {
+                  setModalAction('NO_COMPACTION');
+                  setDetailValue('');
+                }}
+              >
+                Mark No Compaction
+              </Button>
+            </div>
+          )}
           <Modal isOpen={!!modalAction}>
             <ModalBody>
               <ModalHeader toggle={() => setModalAction('')}>

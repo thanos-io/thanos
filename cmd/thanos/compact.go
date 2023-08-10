@@ -678,6 +678,7 @@ type compactConfig struct {
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
+	disableAdminOperations                         bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -786,4 +787,6 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
+
+	cmd.Flag("disable-admin-operations", "Restrict access to Block Mark deletion and no compaction").Default("false").BoolVar(&cc.disableAdminOperations)
 }
