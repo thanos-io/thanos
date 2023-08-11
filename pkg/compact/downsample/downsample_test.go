@@ -962,6 +962,25 @@ func TestDownsample(t *testing.T) {
 
 			expected: realisticChkDataWithCounterResetRes5m,
 		},
+		{
+			name: "three chunks, the first one with NaN values only",
+			inRaw: [][]sample{
+				{{20, math.Float64frombits(value.NormalNaN)}, {40, math.Float64frombits(value.NormalNaN)}, {60, math.Float64frombits(value.NormalNaN)}, {80, math.Float64frombits(value.NormalNaN)}, {100, math.Float64frombits(value.NormalNaN)}, {101, math.Float64frombits(value.StaleNaN)}, {120, math.Float64frombits(value.NormalNaN)}, {180, math.Float64frombits(value.NormalNaN)}, {250, math.Float64frombits(value.NormalNaN)}},
+				{{260, 1}, {300, 10}, {340, 15}, {380, 25}, {420, 35}},
+				{{460, math.Float64frombits(value.StaleNaN)}, {500, 10}, {540, 3}},
+			},
+			resolution: 100,
+
+			expected: []map[AggrType][]sample{
+				{
+					AggrCount:   {{t: 299, v: 1}, {t: 399, v: 3}, {t: 499, v: 1}, {t: 540, v: 2}},
+					AggrSum:     {{t: 299, v: 1}, {t: 399, v: 50}, {t: 499, v: 35}, {t: 540, v: 13}},
+					AggrMin:     {{t: 299, v: 1}, {t: 399, v: 10}, {t: 499, v: 35}, {t: 540, v: 3}},
+					AggrMax:     {{t: 299, v: 1}, {t: 399, v: 25}, {t: 499, v: 35}, {t: 540, v: 10}},
+					AggrCounter: {{t: 260, v: 1}, {t: 299, v: 1}, {t: 399, v: 25}, {t: 499, v: 35}, {t: 540, v: 48}, {t: 540, v: 3}},
+				},
+			},
+		},
 		// Aggregated -> Downsampled Aggregated.
 		{
 			name: "single aggregated chunks",
