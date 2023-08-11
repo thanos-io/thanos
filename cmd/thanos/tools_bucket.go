@@ -205,7 +205,7 @@ func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bu
 
 	cmd.Flag("label", "External block label to use as group title").StringVar(&tbc.label)
 
-	cmd.Flag("disable-admin-operations", "Restrict access to Block Mark deletion and no compaction").Default("false").BoolVar(&tbc.disableAdminOperations)
+	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&tbc.disableAdminOperations)
 	return tbc
 }
 

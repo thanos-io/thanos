@@ -788,5 +788,5 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
 
-	cmd.Flag("disable-admin-operations", "Restrict access to Block Mark deletion and no compaction").Default("false").BoolVar(&cc.disableAdminOperations)
+	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&cc.disableAdminOperations)
 }
