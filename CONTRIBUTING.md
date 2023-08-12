@@ -9,9 +9,9 @@ First of all please follow the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) in all your
 The philosophy of Thanos and our community borrows heavily from UNIX philosophy and the Golang programming language.
 
 * Each subcommand should do one thing and do it well.
-  * eg. Thanos query proxies incoming calls to known store API endpoints merging the result
+  * eg. Thanos query proxies incoming calls to known store API endpoints merging the resul
 * Write components that work together.
-  * e.g. blocks should be stored in native Prometheus format
+  * e.g. blocks should be stored in native Prometheus forma
 * Make it easy to read, write, and run components.
   * e.g. reduce complexity in system design and implementation
 
@@ -60,7 +60,7 @@ However, when discussing these components in a more general manner we use the `a
 * Documentation
 * Code comments
 
-## Development
+## Developmen
 
 The following section explains various suggestions and procedures to note during development of Thanos.
 
@@ -128,9 +128,9 @@ Start your development with forking `thanos-io/thanos.git` . Here are sample ste
 $ GOPATH=$(go env GOPATH)
 $ mkdir -p $GOPATH/src/github.com/thanos-io
 $ cd $GOPATH/src/github.com/thanos-io
-$ git clone https://github.com/<your_github_id>/thanos.git
+$ git clone https://github.com/<your_github_id>/thanos.gi
 $ cd thanos
-$ git remote add upstream https://github.com/thanos-io/thanos.git
+$ git remote add upstream https://github.com/thanos-io/thanos.gi
 $ git remote update
 $ git merge upstream/main
 $ make build
@@ -186,7 +186,7 @@ It is a good practice to keep your branch updated by rebasing your branch to mai
 * If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 * If you are a new contributor with no write access, you can tag in the respective maintainer for the changes, but be patient enough for the reviews. *Remember, good things take time :)*
 
-### Dependency management
+### Dependency managemen
 
 The Thanos project uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies on external packages. This requires a working Go environment with version 1.11 or greater and git installed.
 
@@ -205,7 +205,7 @@ Tidy up the `go.mod` and `go.sum` files:
 ```bash
 make deps
 git add go.mod go.sum
-git commit
+git commi
 ```
 
 You have to commit the changes to `go.mod` and `go.sum` before submitting the pull request.

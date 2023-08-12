@@ -6,7 +6,7 @@ author: Pradyumna Krishna
 
 Hello everyone, my name is Pradyumna Krishna and I was contributing to Thanos as a part of the LFX mentorship programme. I was working on adding Query Execution Observability to the Thanos PromQL engine and Thanos project itself. I am going to share my experience and provide insights into the project.
 
-## The Project
+## The Projec
 
 ### What's PromQL?
 
@@ -66,7 +66,7 @@ Thanos UI got updated with time, resulting in the development of the explanation
 - Add method to explain query vector ([thanos-io/promql-engine#252](https://github.com/thanos-io/promql-engine/pull/252))
 - Query Explanation ([thanos-io/thanos#6346](https://github.com/thanos-io/thanos/pull/6346))
 
-### What next
+### What nex
 
 We have laid the foundation of Query Observability by implementing the Query Explanation feature. The next steps forward can be:
 * Showing memory allocations, CPU usage

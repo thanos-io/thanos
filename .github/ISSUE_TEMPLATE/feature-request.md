@@ -33,7 +33,7 @@ assignees: ''
 
 (Write your answer here.)
 
-### Additional context
+### Additional contex
 
 <!--
   Is there anything else you can add about the proposal?

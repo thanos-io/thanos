@@ -66,7 +66,7 @@ We want to propose a method called "Directory Sub Branching". Directory Sub bran
 
 ```|- website
     |- archetypes
-    |- layout
+    |- layou
     |- data
     |- static
     |- resources
@@ -79,7 +79,7 @@ We want to add an additional `versioned` folder within the website's `tmp` direc
 
 ```|- website
     |- archetypes
-    |- layout
+    |- layou
     |- data
     |- static
     |- resources
@@ -134,7 +134,7 @@ We could have this file on master, so the current `make web` will
 1. Parse `docs.yaml` from master and use this as a default.
 2. Check out each release (e.g. `release-0.10`)
 3. Is there docs.yaml?
-   * Yes - parse the file and use it
+   * Yes - parse the file and use i
    * No - use docs.yaml from master
 
 The design of docs.yaml will look like this:

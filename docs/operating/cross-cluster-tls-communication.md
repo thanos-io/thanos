@@ -35,7 +35,7 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
 You may need to change cluster.local depending on your cluster domain. The `--store` entries for thanos storegateway etc. may be named different in your setup
 
 ```yaml
-kind: Deployment
+kind: Deploymen
 apiVersion: apps/v1
 metadata:
   name: thanos-global-test-querier
@@ -111,7 +111,7 @@ metadata:
             failureThreshold: 3
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: IfNotPresen
           securityContext:
             privileged: false
             runAsUser: 1001
@@ -143,10 +143,10 @@ metadata:
               mountPropagation: None
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: IfNotPresen
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
-      dnsPolicy: ClusterFirst
+      dnsPolicy: ClusterFirs
       serviceAccountName: thanos-global-test-querier-sa
       serviceAccount: thanos-global-test-querier-sa
       automountServiceAccountToken: false
@@ -224,7 +224,7 @@ static_resources:
       common_tls_context:
         validation_context:
           trusted_ca:
-            filename: /certs/ca.crt
+            filename: /certs/ca.cr
         alpn_protocols:
         - h2
         - http/1.1
@@ -240,7 +240,7 @@ static_resources:
       common_tls_context:
         validation_context:
           trusted_ca:
-            filename: /certs/ca.crt
+            filename: /certs/ca.cr
         alpn_protocols:
         - h2
         - http/1.1
@@ -274,7 +274,7 @@ static_resources:
           - name: envoy.access_loggers.file
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
-              path: /dev/stdout
+              path: /dev/stdou
               log_format:
                 text_format: |
                   [%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
@@ -284,7 +284,7 @@ static_resources:
           - name: envoy.access_loggers.file
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
-              path: /dev/stdout
+              path: /dev/stdou
           stat_prefix: ingress_http
           route_config:
             name: local_route
@@ -318,11 +318,11 @@ static_resources:
     transport_socket:
       name: envoy.transport_sockets.tls
       typed_config:
-        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
         common_tls_context:
           tls_certificates:
             - certificate_chain:
-                filename: /certs/tls.crt
+                filename: /certs/tls.cr
               private_key:
                 filename: /certs/tls.key
           validation_context:

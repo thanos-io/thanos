@@ -43,7 +43,7 @@ Thanos uses the directive *replace*. The reason is to provide a way to unblock o
 If you want to build Thanos from source you would need a working installation of the Go 1.18+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`). Next one should make a clone of our repository:
 
 ```
-git clone git@github.com:thanos-io/thanos.git
+git clone git@github.com:thanos-io/thanos.gi
 ```
 
 When you have access to the source code locally, we have prepared a `Makefile`. Invoke this by using `make` in your CLI. For example `make help` will list all options. For building Thanos one could use `make build`
@@ -156,7 +156,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 See [Integrations page](integrations.md).
 
-## Testing Thanos on Single Host
+## Testing Thanos on Single Hos
 
 We don't recommend running Thanos on a single node on production. Thanos is designed and built to run as a distributed system. Vanilla Prometheus might be totally enough for small setups.
 

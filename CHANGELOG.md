@@ -126,13 +126,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
-- [#6086](https://github.com/thanos-io/thanos/pull/6086) Store Gateway: Fix store-gateway deadlock due to not close BlockSeriesClient
+- [#6086](https://github.com/thanos-io/thanos/pull/6086) Store Gateway: Fix store-gateway deadlock due to not close BlockSeriesClien
 
 ## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
 
 ### Fixed
 
-- [#6009](https://github.com/thanos-io/thanos/pull/6009) Query Frontend/Store: fix duplicate metrics registration in Redis client
+- [#6009](https://github.com/thanos-io/thanos/pull/6009) Query Frontend/Store: fix duplicate metrics registration in Redis clien
 
 ## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - 2.01.2023
 
@@ -562,11 +562,11 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 ### Changed
 
-- 
+-
 
 ### Removed
 
-- 
+-
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
@@ -706,7 +706,7 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
   - This, generally, reduces baseline memory usage of store when inactive, as well as a total number of mapped files (which is limited to 64k in some systems.
 - [#3437](https://github.com/thanos-io/thanos/pull/3437) StoreAPI: Added `hints` field to `LabelNamesResponse` and `LabelValuesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
   - This, generally, reduces baseline memory usage of store when inactive, as well as a total number of mapped files (which is limited to 64k in some systems.
-- [#3415](https://github.com/thanos-io/thanos/pull/3415) Tools: Added `thanos tools bucket mark` command that allows to mark given block for deletion or for no-compact
+- [#3415](https://github.com/thanos-io/thanos/pull/3415) Tools: Added `thanos tools bucket mark` command that allows to mark given block for deletion or for no-compac
 
 ### Fixed
 
@@ -804,7 +804,7 @@ Highlights:
 - [#2832](https://github.com/thanos-io/thanos/pull/2832) ui React: Add runtime and build info page
 - [#2926](https://github.com/thanos-io/thanos/pull/2926) API: Add new blocks HTTP API to serve blocks metadata. The status endpoints (`/api/v1/status/flags`, `/api/v1/status/runtimeinfo` and `/api/v1/status/buildinfo`) are now available on all components with a HTTP API.
 - [#2892](https://github.com/thanos-io/thanos/pull/2892) Receive: Receiver fails when the initial upload fails.
-- [#2865](https://github.com/thanos-io/thanos/pull/2865) ui: Migrate Thanos Ruler UI to React
+- [#2865](https://github.com/thanos-io/thanos/pull/2865) ui: Migrate Thanos Ruler UI to Reac
 - [#2964](https://github.com/thanos-io/thanos/pull/2964) Query: Add time range parameters to label APIs. Add `start` and `end` fields to Store API `LabelNamesRequest` and `LabelValuesRequest`.
 - [#2996](https://github.com/thanos-io/thanos/pull/2996) Sidecar: Add `reloader_config_apply_errors_total` metric. Add new flags `--reloader.watch-interval`, and `--reloader.retry-interval`.
 - [#2973](https://github.com/thanos-io/thanos/pull/2973) Add Thanos Query Frontend component.
@@ -1198,9 +1198,9 @@ Accepted into CNCF:
 
 - [#1248](https://github.com/thanos-io/thanos/pull/1248) Add a web UI to show the state of remote storage.
 
-- [#1217](https://github.com/thanos-io/thanos/pull/1217) Thanos Receive gained basic hashring support
+- [#1217](https://github.com/thanos-io/thanos/pull/1217) Thanos Receive gained basic hashring suppor
 
-- [#1262](https://github.com/thanos-io/thanos/pull/1262) Thanos Receive got a new metric `thanos_http_requests_total` which shows how many requests were handled by it
+- [#1262](https://github.com/thanos-io/thanos/pull/1262) Thanos Receive got a new metric `thanos_http_requests_total` which shows how many requests were handled by i
 
 - [#1243](https://github.com/thanos-io/thanos/pull/1243) Thanos Receive got an ability to forward time series data between nodes. Now you can pass the hashring configuration via `--receive.hashrings-file`; the refresh interval `--receive.hashrings-file-refresh-interval`; the name of the local node's name `--receive.local-endpoint`; and finally the header's name which is used to determine the tenant `--receive.tenant-header`.
 
@@ -1439,7 +1439,7 @@ New Store tracing span: \* `store_query_gate_ismyturn` shows how long it took fo
 - [#848](https://github.com/thanos-io/thanos/pull/848) Compact: now correctly works with time series with duplicate labels.
 - [#894](https://github.com/thanos-io/thanos/pull/894) Thanos Rule: UI now correctly shows evaluation time.
 - [#865](https://github.com/thanos-io/thanos/pull/865) Query: now properly parses DNS SRV Service Discovery.
-- [#889](https://github.com/thanos-io/thanos/pull/889) Store: added safeguard against merging posting groups segfault
+- [#889](https://github.com/thanos-io/thanos/pull/889) Store: added safeguard against merging posting groups segfaul
 - [#941](https://github.com/thanos-io/thanos/pull/941) Sidecar: added better handling of intermediate restarts.
 - [#933](https://github.com/thanos-io/thanos/pull/933) Query: Fixed 30 seconds lag of adding new store to query.
 - [#962](https://github.com/thanos-io/thanos/pull/962) Sidecar: Make config reloader file writes atomic.

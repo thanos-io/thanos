@@ -84,7 +84,7 @@ As specified, the rule type and then rule name is used for deduplication.
 
 Given the following stream of incoming rule groups and containing recording/alerting rules:
 
-```text
+```tex
 group: a
    recording:<name:"r1" last_evaluation:<seconds:1 > >
    alert:    <name:"a1" last_evaluation:<seconds:1 > >
@@ -96,7 +96,7 @@ group: a
 
 The output becomes:
 
-```text
+```tex
 group: a
    alert:    <name:"a1" last_evaluation:<seconds:1 > >
    recording:<name:"r1" last_evaluation:<seconds:1 > >
@@ -113,7 +113,7 @@ The next level of deduplication is governed by the label/value set of the underl
 
 Given the following stream of incoming recording rules:
 
-```text
+```tex
 group: a
    recording:<name:"r1" labels:<labels:<name:"replica" value:"thanos-ruler-1" > > last_evaluation:<2006-01-02T10:00:00> >
 group: a
@@ -122,14 +122,14 @@ group: a
 
 The output becomes:
 
-```text
+```tex
 group: a
    recording:<name:"r1" labels:<labels:<name:"replica" value:"thanos-ruler-2" > > last_evaluation:<2006-01-02T10:01:00> >
 ```
 
 Given the following stream of incoming alerting rules:
 
-```text
+```tex
 group: a
    alert:<state:FIRING name:"a1" labels:<labels:<name:"replica" value:"thanos-ruler-1" > > last_evaluation:<2006-01-02T10:00:00> >
 group: a
@@ -138,7 +138,7 @@ group: a
 
 The output becomes:
 
-```text
+```tex
 group: a
    alert:<state:FIRING name:"a1" labels:<labels:<name:"replica" value:"thanos-ruler-1" > > last_evaluation:<2006-01-02T10:00:00> >
 ```
@@ -151,10 +151,10 @@ If, under the above conditions a rule is a candidate for deduplication, finally 
 
 Given the following stream of incoming alerting rules will also result in two independent alerting rules as both the `expr` and `for` fields differ:
 
-```text
+```tex
   - alert: KubeAPIErrorBudgetBurn
     annotations:
-      message: The API server is burning too much error budget
+      message: The API server is burning too much error budge
     expr: |
       sum(apiserver_request:burnrate1h) > (14.40 * 0.01000)
       and
@@ -164,7 +164,7 @@ Given the following stream of incoming alerting rules will also result in two in
       severity: critical
   - alert: KubeAPIErrorBudgetBurn
     annotations:
-      message: The API server is burning too much error budget
+      message: The API server is burning too much error budge
     expr: |
       sum(apiserver_request:burnrate6h) > (6.00 * 0.01000)
       and
@@ -180,7 +180,7 @@ As specified, the group name and file fields are used for deduplication.
 
 Given the following stream of incoming rule groups:
 
-```text
+```tex
 group: a/file1
 group: b/file1
 group: a/file2
@@ -188,7 +188,7 @@ group: a/file2
 
 The output becomes:
 
-```text
+```tex
 group: a/file1
 group: a/file2
 group: b/file1

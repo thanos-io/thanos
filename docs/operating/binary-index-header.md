@@ -53,7 +53,7 @@ The table of contents serves as an entry point to the entire index and points to
 └─────────────────────────────────────────┘
 ```
 
-## How the index-header is built
+## How the index-header is buil
 
 The [Store Gateway](../components/store.md) periodically scans the bucket to look for new and deleted blocks. For each new block found, the Gateway stores the index-header on the local disk, building it with specific sections of the block's index downloaded using GET byte range requests.
 

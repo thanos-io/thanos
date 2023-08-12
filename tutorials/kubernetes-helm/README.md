@@ -56,7 +56,7 @@ server:
             operator: In
             values:
             - prometheus
-          - key: component
+          - key: componen
             operator: In
             values:
             - server
@@ -95,8 +95,8 @@ server:
     volumeMounts:
     - name: storage-volume
       mountPath: /data
-    - name: thanos-storage-secret
-      mountPath: /etc/secret
+    - name: thanos-storage-secre
+      mountPath: /etc/secre
     - name: config-volume
       mountPath: /etc/prometheus-config
       readOnly: false
@@ -128,11 +128,11 @@ server:
       prometheus_replica: '$(HOSTNAME)'
     evaluation_interval: 5s
   extraSecretMounts:
-  - name: thanos-storage-secret
+  - name: thanos-storage-secre
     mountPath: /etc/secret/
     subPath: sa
     readOnly: false
-    secretName: thanos-storage-secret
+    secretName: thanos-storage-secre
 
 configmapReload:
   image:

@@ -9,9 +9,9 @@ Querier is fully stateless and horizontally scalable.
 Example command to run Querier:
 
 ```bash
-thanos query \
-    --http-address     "0.0.0.0:9090" \
-    --endpoint         "<store-api>:<grpc-port>" \
+thanos query
+    --http-address     "0.0.0.0:9090"
+    --endpoint         "<store-api>:<grpc-port>"
     --endpoint         "<store-api2>:<grpc-port>"
 ```
 
@@ -68,11 +68,11 @@ Two or more series that are only distinguished by the given replica label, will 
 If we configure Querier like this:
 
 ```
-thanos query \
-    --http-address        "0.0.0.0:9090" \
-    --query.replica-label "replica" \
-    --endpoint            "<store-api>:<grpc-port>" \
-    --endpoint            "<store-api2>:<grpc-port>" \
+thanos query
+    --http-address        "0.0.0.0:9090"
+    --query.replica-label "replica"
+    --endpoint            "<store-api>:<grpc-port>"
+    --endpoint            "<store-api2>:<grpc-port>"
 ```
 
 And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
@@ -93,12 +93,12 @@ WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 * Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
 
 ```
-thanos query \
-    --http-address        "0.0.0.0:9090" \
-    --query.replica-label "replica" \
-    --query.replica-label "replicaX" \
-    --endpoint            "<store-api>:<grpc-port>" \
-    --endpoint            "<store-api2>:<grpc-port>" \
+thanos query
+    --http-address        "0.0.0.0:9090"
+    --query.replica-label "replica"
+    --query.replica-label "replicaX"
+    --endpoint            "<store-api>:<grpc-port>"
+    --endpoint            "<store-api2>:<grpc-port>"
 ```
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
@@ -279,69 +279,69 @@ Query node exposing PromQL enabled Query API with data retrieved from multiple
 store nodes.
 
 Flags:
-      --alert.query-url=ALERT.QUERY-URL  
-                                 The external Thanos Query URL that would be set
+      --alert.query-url=ALERT.QUERY-URL
+                                 The external Thanos Query URL that would be se
                                  in all alerts 'Source' field.
       --enable-feature= ...      Comma separated experimental feature names
                                  to enable.The current list of features is
                                  query-pushdown.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 prefixed with 'dns+' or 'dnssrv+' to detec
                                  Thanos API servers through respective DNS
                                  lookups.
-      --endpoint-group=<endpoint-group> ...  
+      --endpoint-group=<endpoint-group> ...
                                  Experimental: DNS name of statically configured
                                  Thanos API server groups (repeatable). Targets
                                  resolved from the DNS name will be queried in
                                  a round-robin, instead of a fanout manner.
                                  This flag should be used when connecting a
                                  Thanos Query to HA groups of Thanos components.
-      --endpoint-group-strict=<endpoint-group-strict> ...  
+      --endpoint-group-strict=<endpoint-group-strict> ...
                                  Experimental: DNS name of statically configured
                                  Thanos API server groups (repeatable) that are
                                  always used, even if the health check fails.
-      --endpoint-strict=<staticendpoint> ...  
+      --endpoint-strict=<staticendpoint> ...
                                  Addresses of only statically configured Thanos
                                  API servers that are always used, even if
                                  the health check fails. Useful if you have a
                                  caching layer on top.
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
-      --grpc-client-server-name=""  
+      --grpc-client-server-name=""
                                  Server name to verify the hostname on
                                  the returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
                                  servers
-      --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
+      --grpc-client-tls-cert=""  TLS Certificates to use to identify this clien
                                  to the server
       --grpc-client-tls-key=""   TLS Key for the client's certificate
       --grpc-client-tls-secure   Use TLS when talking to the gRPC server
-      --grpc-client-tls-skip-verify  
+      --grpc-client-tls-skip-verify
                                  Disable TLS certificate verification i.e self
                                  signed, signed by fake CA
       --grpc-compression=none    Compression algorithm to use for gRPC requests
                                  to other clients. Must be one of: snappy, none
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --grpc-server-max-connection-age=60m  
+      --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""  
+      --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no client
+                                 client CA is specified, there is no clien
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
@@ -360,44 +360,44 @@ Flags:
                                  LogStartAndFinishCall: Logs the start and
                                  finish call of the requests. NoLogCall: Disable
                                  request logging.
-      --query.active-query-path=""  
+      --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
-      --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
+      --query.auto-downsampling  Enable automatic adjustment (step / 5) to wha
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
-      --query.conn-metric.label=external_labels... ...  
+      --query.conn-metric.label=external_labels... ...
                                  Optional selection of query connection metric
-                                 labels to be collected from endpoint set
-      --query.default-evaluation-interval=1m  
+                                 labels to be collected from endpoint se
+      --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
-      --query.default-step=1s    Set default step for range queries. Default
+      --query.default-step=1s    Set default step for range queries. Defaul
                                  step is only used when step is not set in UI.
-                                 In such cases, Thanos UI will use default
+                                 In such cases, Thanos UI will use defaul
                                  step to calculate resolution (resolution
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
-      --query.lookback-delta=QUERY.LOOKBACK-DELTA  
+      --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
                                  PromQL always evaluates the query for the
                                  certain timestamp (query range timestamps are
-                                 deduced by step). Since scrape intervals might
+                                 deduced by step). Since scrape intervals migh
                                  be different, PromQL looks back for given
-                                 amount of time to get latest sample. If it
+                                 amount of time to get latest sample. If i
                                  exceeds the maximum lookback delta it assumes
                                  series is stale and returns none (a gap).
-                                 This is why lookback delta should be set to at
+                                 This is why lookback delta should be set to a
                                  least 2 times of the slowest scrape interval.
                                  If unset it will use the promql default of 5m.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
-      --query.max-concurrent-select=4  
+      --query.max-concurrent-select=4
                                  Maximum number of select requests made
                                  concurrently per a query.
-      --query.metadata.default-time-range=0s  
+      --query.metadata.default-time-range=0s
                                  The default metadata time range duration for
                                  retrieving labels through Labels and Series API
                                  when the range parameters are not specified.
@@ -406,35 +406,35 @@ Flags:
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
-      --query.promql-engine=prometheus  
+      --query.promql-engine=prometheus
                                  Default PromQL engine to use.
-      --query.replica-label=QUERY.REPLICA-LABEL ...  
+      --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will
                                  be able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
-      --query.telemetry.request-duration-seconds-quantiles=0.1... ...  
+      --query.telemetry.request-duration-seconds-quantiles=0.1... ...
                                  The quantiles for exporting metrics about the
                                  request duration quantiles.
-      --query.telemetry.request-samples-quantiles=100... ...  
+      --query.telemetry.request-samples-quantiles=100... ...
                                  The quantiles for exporting metrics about the
                                  samples count quantiles.
-      --query.telemetry.request-series-seconds-quantiles=10... ...  
+      --query.telemetry.request-series-seconds-quantiles=10... ...
                                  The quantiles for exporting metrics about the
                                  series count quantiles.
       --query.timeout=2m         Maximum time to process query by query node.
-      --request.logging-config=<content>  
+      --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content
+                                 flag (mutually exclusive). Conten
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --request.logging-config-file=<file-path>  
+      --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --selector-label=<name>="<value>" ...  
+      --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
       --store=<store> ...        Deprecation Warning - This flag is deprecated
@@ -443,46 +443,46 @@ Flags:
                                  (repeatable). The scheme may be prefixed with
                                  'dns+' or 'dnssrv+' to detect store API servers
                                  through respective DNS lookups.
-      --store-strict=<staticstore> ...  
+      --store-strict=<staticstore> ...
                                  Deprecation Warning - This flag is deprecated
                                  and replaced with `endpoint-strict`. Addresses
                                  of only statically configured store API servers
                                  that are always used, even if the health check
                                  fails. Useful if you have a caching layer on
                                  top.
-      --store.limits.request-samples=0  
+      --store.limits.request-samples=0
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
                                  chunk contains a maximum of 120 samples.
-      --store.limits.request-series=0  
+      --store.limits.request-series=0
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --store.response-timeout=0ms  
+      --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored
                                  and partial data will be returned if it's
                                  enabled. 0 disables timeout.
-      --store.sd-dns-interval=30s  
+      --store.sd-dns-interval=30s
                                  Interval between DNS resolutions.
-      --store.sd-files=<path> ...  
+      --store.sd-files=<path> ...
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
                                  (repeatable).
       --store.sd-interval=5m     Refresh interval to re-read file SD files.
                                  It is used as a resync fallback.
-      --store.unhealthy-timeout=5m  
+      --store.unhealthy-timeout=5m
                                  Timeout before an unhealthy store is cleaned
                                  from the store UI page.
-      --tracing.config=<content>  
+      --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
                                  with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration

@@ -36,7 +36,7 @@ The `sync` process includes:
     * Download the whole TSDB index file, mmap all of it.
     * Build index-cache.json
   * else:
-    * Download index-cache.json from bucket
+    * Download index-cache.json from bucke
   * Delete downloaded TSDB index.
 * Load whole index-cache.json to memory and keep it for lifetime of the block.
 

@@ -1,4 +1,4 @@
-# Object Storage & Data Format
+# Object Storage & Data Forma
 
 Thanos uses object storage as primary storage for metrics and metadata related to them. In this document you can learn how to configure your object storage and what is the data layout and format for primary Thanos components that are "block" aware, like: `sidecar` `compact`, `receive` and `store gateway`.
 
@@ -125,7 +125,7 @@ Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListO
 
 `bucket_lookup_type` can be `auto`, `virtual-hosted` or `path`. Read more about it [here](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html).
 
-For debug and testing purposes you can set
+For debug and testing purposes you can se
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 
@@ -247,7 +247,7 @@ With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZ
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 
-##### STS Endpoint
+##### STS Endpoin
 
 If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
 
@@ -297,7 +297,7 @@ Application credentials are configured via JSON file and only the bucket needs t
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
 
-##### Using inline a Service Account
+##### Using inline a Service Accoun
 
 Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file. This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
 
@@ -394,7 +394,7 @@ If `user_assigned_id` is used, authentication is done via user-assigned managed 
 
 The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
-#### OpenStack Swift
+#### OpenStack Swif
 
 Thanos uses [ncw/swift](https://github.com/ncw/swift) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
@@ -1055,7 +1055,7 @@ The table of contents serves as an entry point to the entire index and points to
 └─────────────────────────────────────────┘
 ```
 
-#### Chunks File Format
+#### Chunks File Forma
 
 > NOTE: Currently supported index file versions: v1.
 

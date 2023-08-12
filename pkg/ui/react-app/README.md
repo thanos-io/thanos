@@ -8,7 +8,7 @@ The [React-based](https://reactjs.org/) Thanos UI was bootstrapped using [Create
 
 Instead of plain JavaScript, we use [TypeScript](https://www.typescriptlang.org/) to ensure typed code.
 
-## Development environment
+## Development environmen
 
 To work with the React UI code, you will need to have the following tools installed:
 
@@ -30,7 +30,7 @@ npm consults the `package.json` and `package-lock.json` files for dependencies t
 
 You can start a development server for the React UI outside of a running Thanos server by running:
 
-    npm start
+    npm star
 
 This will open a browser window with the React app running on http://localhost:3000/. The page will reload if you make edits to the source code. You will also see any lint errors in the console.
 
@@ -42,7 +42,7 @@ Due to a `"proxy": "http://localhost:10902"` setting in the `package.json` file,
 
 Create React App uses the [Jest](https://jestjs.io/) framework for running tests. To run tests in interactive watch mode:
 
-    npm test
+    npm tes
 
 To generate an HTML-based test coverage report, run:
 
@@ -60,7 +60,7 @@ We define linting rules for the [ESLint](https://eslint.org/) linter. We recomme
 
 To detect and automatically fix lint errors, run:
 
-    npm run lint
+    npm run lin
 
 This is also available via the `react-app-lint-fix` target in the main Thanos `Makefile`.
 

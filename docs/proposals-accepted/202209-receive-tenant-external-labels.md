@@ -65,7 +65,7 @@ For the tests, the foremost ones are testing defining one or multiple tenants’
 ## 8 Implementation plan
 
 * Add a new `external_labels` field in the hashring config
-* Allow MultiTSDB to extend external labels to each corresponding tenant's label set
+* Allow MultiTSDB to extend external labels to each corresponding tenant's label se
 * Allow MultiTSDB to update each tenant's label set whenever its external labels change
 * Handle external labels in soft tenancy cases
 * Implement tenants’ external labels in RouterOnly
