@@ -12,6 +12,7 @@ export interface OperatorTelemetry {
 
 export interface QueryTree {
   name: string;
+  executionTime?: number;
   children?: QueryTree[];
 }
 
@@ -50,7 +51,9 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
                   </div>
                 )}
                 <div id={id} style={{ cursor: `${node.children ? 'pointer' : 'inherit'}` }} onClick={toggle}>
-                  {node.telemetry.CPUTimeTaken}
+                  {node.name} 
+                              {node.telemetry.CPUTimeTaken}
+
                 </div>
               </div>
             }
