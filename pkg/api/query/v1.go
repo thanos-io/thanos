@@ -582,6 +582,27 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	return explanation, nil, nil, func() {}
 }
 
+func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query) (*engine.AnalyzeOutputNode, *api.ApiError) {
+	var analysis *engine.AnalyzeOutputNode
+
+	if val := r.FormValue(QueryAnalyzeParam); val != "" {
+		var err error
+		enableAnalysis, err := strconv.ParseBool(val)
+		if err != nil {
+			return analysis, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", QueryAnalyzeParam)}
+		}
+		if enableAnalysis {
+			if eq, ok := query.(engine.ExplainableQuery); ok {
+				analysis = eq.Analyze()
+			} else {
+				return analysis, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("Query not analyzable")}
+			}
+		}
+	}
+
+	return analysis, nil
+}
+
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -682,6 +703,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
+	analysis, apiErr := qapi.parseQueryAnalyzeParam(r, qry)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
@@ -985,6 +1011,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
+	analysis, apiErr := qapi.parseQueryAnalyzeParam(r, qry)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {

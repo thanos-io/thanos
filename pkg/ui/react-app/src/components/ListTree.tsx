@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { InputProps, Collapse, ListGroupItem, ListGroup } from 'reactstrap';
 
+export interface ObservableQueryTree {
+  telemetry: OperatorTelemetry;
+  children?: ObservableQueryTree[];
+}
+
+export interface OperatorTelemetry {
+  CPUTimeTaken(): number;
+}
+
 export interface QueryTree {
   name: string;
   executionTime?: number;
@@ -8,7 +17,7 @@ export interface QueryTree {
 }
 
 interface NodeProps extends InputProps {
-  node: QueryTree | null;
+  node: ObservableQueryTree | null;
 }
 
 const ListTree: React.FC<NodeProps> = ({ id, node }) => {
@@ -26,8 +35,8 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
   };
 
   // Constructing List Items recursively.
-  const mapper = (nodes: QueryTree[], parentId?: any, lvl?: any) => {
-    return nodes.map((node: QueryTree, index: number) => {
+  const mapper = (nodes: ObservableQueryTree[], parentId?: any, lvl?: any) => {
+    return nodes.map((node: ObservableQueryTree, index: number) => {
       const id = `${index}-${parentId ? parentId : 'top'}`.replace(/[^a-zA-Z0-9-_]/g, '');
       const item = (
         <React.Fragment>
@@ -43,7 +52,8 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
                 )}
                 <div id={id} style={{ cursor: `${node.children ? 'pointer' : 'inherit'}` }} onClick={toggle}>
                   {node.name} 
-                  
+                              {node.telemetry.CPUTimeTaken}
+
                 </div>
               </div>
             }
