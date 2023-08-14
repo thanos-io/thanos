@@ -4,6 +4,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sort"
@@ -14,8 +15,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-
+	"github.com/opentracing/opentracing-go"
 	httputil "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
 )
 
 type HTTPServerMiddleware struct {
@@ -23,18 +25,32 @@ type HTTPServerMiddleware struct {
 	logger log.Logger
 }
 
+func logTraceID(ctx context.Context) string {
+	span := opentracing.SpanFromContext(ctx)
+	if tid, ok := migration.GetTraceIDFromBridgeSpanForLogging(span); ok {
+		return tid
+	}
+	return ""
+}
+
 func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Request) {
 	logger := m.opts.filterLog(m.logger)
-	level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
+	if logTraceID(r.Context()) != "" {
+		logger = log.With(logger, "TraceID", logTraceID(r.Context()))
+	}
+	level.Debug(logger).Log("http.start_time", start.String(), "http.method2", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call", "TraceID", logTraceID(r.Context()))
 }
 
 func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *httputil.ResponseWriterWithStatus, r *http.Request) {
 	status := wrapped.Status()
-	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", fmt.Sprintf("%d", status),
+	logger := log.With(m.logger, "http.method2", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", fmt.Sprintf("%d", status),
 		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))), "http.remote_addr", r.RemoteAddr, "thanos.method_name", name)
-
+	if logTraceID(r.Context()) != "" {
+		logger = log.With(logger, "TraceID", logTraceID(r.Context()))
+	}
 	logger = m.opts.filterLog(logger)
 	m.opts.levelFunc(logger, status).Log("msg", "finished call")
+
 }
 
 func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) http.HandlerFunc {

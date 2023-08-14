@@ -1,0 +1,10 @@
+type: GROUPCACHE
+config:
+  self_url: http://localhost:10906
+  peers:
+    - http://localhost:10906
+  groupcache_group: groupcache_test_group
+blocks_iter_ttl: 0s
+metafile_exists_ttl: 0s
+metafile_doesnt_exist_ttl: 0s
+metafile_content_ttl: 0s
