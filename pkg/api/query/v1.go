@@ -346,7 +346,6 @@ func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []
 	if len(r.Form[ReplicaLabelsParam]) > 0 {
 		replicaLabels = r.Form[ReplicaLabelsParam]
 	}
-
 	return replicaLabels, nil
 }
 

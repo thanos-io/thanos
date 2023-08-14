@@ -37,6 +37,10 @@ interface CMExpressionInputProps {
 
 const dynamicConfigCompartment = new Compartment();
 
+export interface ExplainOutput {
+  name: string;
+  children?: ExplainOutput[];
+}
 // Autocompletion strategy that wraps the main one and enriches
 // it with past query items.
 export class HistoryCompleteStrategy implements CompleteStrategy {
@@ -89,10 +93,30 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   enableHighlighting,
   enableLinter,
 }) => {
+  const [explainOutput, setExplainOutput] = React.useState<ExplainOutput | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { theme } = useTheme();
-
+  const handleExplain = () => {
+    fetch(`${pathPrefix}/api/v1/query_explain`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: value }),
+    })
+      .then((response) => response.json())
+      .then((json) => {
+        if (json.status === 'success') {
+          setExplainOutput(json.data);
+        } else {
+          // Handle error here
+        }
+      })
+      .catch((error) => {
+        // Handle error here
+      });
+  };
   // (Re)initialize editor based on settings / setting changes.
   useEffect(() => {
     // Build the dynamic part of the config.
@@ -205,7 +229,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
             Execute
           </Button>
         </InputGroupAddon>
-        <Button className="execute-btn ml-1" color="info">
+        <Button className="execute-btn ml-1" color="info" onClick={handleExplain}>
           Explain
         </Button>
       </InputGroup>

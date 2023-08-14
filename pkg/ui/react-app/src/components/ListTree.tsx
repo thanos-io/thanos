@@ -42,7 +42,7 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
                   </div>
                 )}
                 <div id={id} style={{ cursor: `${node.children ? 'pointer' : 'inherit'}` }} onClick={toggle}>
-                  {node.name} {node.executionTime}
+                  {node.name} · {node.executionTime}
                 </div>
               </div>
             }
