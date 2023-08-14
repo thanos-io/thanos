@@ -6,10 +6,11 @@ package logging
 import (
 	"context"
 	"fmt"
-	"github.com/opentracing/opentracing-go"
 	"net"
 	"sort"
 	"strings"
+
+	"github.com/opentracing/opentracing-go"
 
 	"net/http"
 	"time"
