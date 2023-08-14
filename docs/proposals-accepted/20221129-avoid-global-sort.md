@@ -1,7 +1,12 @@
-## Avoid Global Sort on Querier Select
+---
+type: proposal
+title: Avoid Global Sort on Querier Select
+status: approved
+owner: bwplotka,fpetkovski
+menu: proposals-accepted
+---
 
-* **Owners:**
-  * @bwplotka, @fpetkovski
+## Avoid Global Sort on Querier Select
 
 * **Related Tickets:**
   * https://github.com/thanos-io/thanos/issues/5719

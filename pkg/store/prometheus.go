@@ -42,6 +42,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -53,8 +54,10 @@ type PrometheusStore struct {
 	buffers          sync.Pool
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
-	promVersion      func() string
-	timestamps       func() (mint int64, maxt int64)
+	labelNamesSet    func() stringset.Set
+
+	promVersion func() string
+	timestamps  func() (mint int64, maxt int64)
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -78,6 +81,7 @@ func NewPrometheusStore(
 	component component.StoreAPI,
 	externalLabelsFn func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
+	labelNamesSet func() stringset.Set,
 	promVersion func() string,
 ) (*PrometheusStore, error) {
 	if logger == nil {
@@ -91,6 +95,7 @@ func NewPrometheusStore(
 		externalLabelsFn:              externalLabelsFn,
 		promVersion:                   promVersion,
 		timestamps:                    timestamps,
+		labelNamesSet:                 labelNamesSet,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -143,7 +148,8 @@ func (p *PrometheusStore) putBuffer(b *[]byte) {
 }
 
 // Series returns all series for a requested time range and label matcher.
-func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
+func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
+	s := newFlushableServer(seriesSrv, p.labelNamesSet(), r.WithoutReplicaLabels)
 	extLset := p.externalLabelsFn()
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
@@ -200,7 +206,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 				return err
 			}
 		}
-		return nil
+		return s.Flush()
 	}
 
 	shardMatcher := r.ShardInfo.Matcher(&p.buffers)
@@ -323,7 +329,7 @@ func (p *PrometheusStore) queryPrometheus(
 }
 
 func (p *PrometheusStore) handleSampledPrometheusResponse(
-	s storepb.Store_SeriesServer,
+	s flushableServer,
 	httpResp *http.Response,
 	querySpan tracing.Span,
 	extLset labels.Labels,
@@ -373,11 +379,11 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 	}
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_SAMPLED request.", "series", len(resp.Results[0].Timeseries))
-	return nil
+	return s.Flush()
 }
 
 func (p *PrometheusStore) handleStreamedPrometheusResponse(
-	s storepb.Store_SeriesServer,
+	s flushableServer,
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,
@@ -455,9 +461,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(
-					completeLabelset,
-				),
+				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {
@@ -472,7 +476,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
 
-	return nil
+	return s.Flush()
 }
 
 type BytesCounter struct {
