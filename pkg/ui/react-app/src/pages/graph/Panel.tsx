@@ -237,7 +237,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           } else if (result && result.length > 0) {
             resultSeries = result.length;
           }
-          analysis = json.data.explanation;
+          analysis = json.data.analysis;
         }
 
         this.setState({
@@ -432,7 +432,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             <div className="float-right">
               <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
-                id={`explain-${id}`}
+                id={`analyze-${id}`}
                 onChange={this.handleChangeAnalyze}
                 checked={options.analyze}
                 disabled={options.disableAnalyzeCheckbox}
@@ -445,7 +445,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         <Row hidden={!(options.analyze && this.state.analysis)}>
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
-              <ListTree id={`explain-tree-${id}`} node={this.state.analysis} />
+              <ListTree id={`analyze-tree-${id}`} node={this.state.analysis} />
             </Alert>
           </Col>
         </Row>
