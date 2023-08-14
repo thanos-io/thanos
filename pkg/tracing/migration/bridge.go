@@ -58,6 +58,16 @@ func GetTraceIDFromBridgeSpan(span opentracing.Span) (string, bool) {
 	return "", false
 }
 
+func GetTraceIDFromBridgeSpanForLogging(span opentracing.Span) (string, bool) {
+	ctx := bridge.NewBridgeTracer().ContextWithSpanHook(context.Background(), span)
+	otelSpan := trace.SpanFromContext(ctx)
+	if otelSpan.SpanContext().IsValid() {
+		return otelSpan.SpanContext().TraceID().String(), true
+	}
+
+	return "", false
+}
+
 type otelErrHandler func(err error)
 
 func (o otelErrHandler) Handle(err error) {
