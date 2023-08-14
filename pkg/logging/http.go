@@ -27,18 +27,15 @@ type HTTPServerMiddleware struct {
 	logger log.Logger
 }
 
-func logTraceID(ctx context.Context) string {
+func logTraceID(ctx context.Context) (string, bool) {
 	span := opentracing.SpanFromContext(ctx)
-	if tid, ok := migration.GetTraceIDFromBridgeSpanForLogging(span); ok {
-		return tid
-	}
-	return ""
+	return migration.GetTraceIDFromBridgeSpanForLogging(span)
 }
 
 func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Request) {
 	logger := m.opts.filterLog(m.logger)
-	if logTraceID(r.Context()) != "" {
-		logger = log.With(logger, "TraceID", logTraceID(r.Context()))
+	if traceID, ok := logTraceID(r.Context()); ok {
+		logger = log.With(logger, "TraceID", traceID)
 	}
 	level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
 }
@@ -47,8 +44,8 @@ func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *h
 	status := wrapped.Status()
 	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", fmt.Sprintf("%d", status),
 		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))), "http.remote_addr", r.RemoteAddr, "thanos.method_name", name)
-	if logTraceID(r.Context()) != "" {
-		logger = log.With(logger, "TraceID", logTraceID(r.Context()))
+	if traceID, ok := logTraceID(r.Context()); ok {
+		logger = log.With(logger, "TraceID", traceID)
 	}
 	logger = m.opts.filterLog(logger)
 	m.opts.levelFunc(logger, status).Log("msg", "finished call")

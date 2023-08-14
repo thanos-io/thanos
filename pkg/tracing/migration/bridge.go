@@ -58,6 +58,10 @@ func GetTraceIDFromBridgeSpan(span opentracing.Span) (string, bool) {
 	return "", false
 }
 
+// Similar to the above function however here we do not check when
+// X-Thanos-Force-Tracing is added to the HTTP header to enable
+// tracing sampling (X-Thanos-Trace-Id) and
+// always returns the traceID to add to the logs.
 func GetTraceIDFromBridgeSpanForLogging(span opentracing.Span) (string, bool) {
 	ctx := bridge.NewBridgeTracer().ContextWithSpanHook(context.Background(), span)
 	otelSpan := trace.SpanFromContext(ctx)
