@@ -8,10 +8,10 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.20-node
+      - image: cimg/go:1.21-node
   golang-test:
     docker:
-      - image: cimg/go:1.20-node
+      - image: cimg/go:1.21-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
