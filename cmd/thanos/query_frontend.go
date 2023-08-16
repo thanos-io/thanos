@@ -228,6 +228,7 @@ func runQueryFrontend(
 	// If tenant header is set and different from the default tenant header, add it to the list of org id headers.
 	// In this case we don't need to add the tenant header to `cfg.ForwardHeaders` because tripperware will modify
 	// the request, renaming the tenant header to the default tenant header, before the header propagation logic runs.
+	// TODO: This should be removed once the org id header is fully removed in Thanos.
 	if tenantHeaderProvided {
 		// If tenant header is provided together with the org id header, error out.
 		if len(cfg.orgIdHeaders) != 0 {
@@ -239,8 +240,8 @@ func runQueryFrontend(
 
 	// Temporarily manually adding the default tenant header into the list of headers to forward and org id headers.
 	// This facilitates the transition from org id to tenant id with minimal amount of changes.
-	// TODO: This should be removed once the org id header is deprecated in Thanos.
 	cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
+	// TODO: This should be removed once the org id header is fully removed in Thanos.
 	cfg.orgIdHeaders = append(cfg.orgIdHeaders, tenancy.DefaultTenantHeader)
 
 	queryRangeCacheConfContentYaml, err := cfg.QueryRangeConfig.CachePathOrContent.Content()
