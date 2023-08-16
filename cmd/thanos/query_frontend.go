@@ -224,8 +224,17 @@ func runQueryFrontend(
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
-	if len(cfg.orgIdHeaders) != 0 && cfg.TenantHeader != "" {
-		return errors.New("query-frontend.org-id-header and query-frontend.tenant-header cannot be used together")
+	tenantHeaderProvided := cfg.TenantHeader != "" && cfg.TenantHeader != tenancy.DefaultTenantHeader
+	// If tenant header is set and different from the default tenant header, add it to the list of org id headers.
+	// In this case we don't need to add the tenant header to `cfg.ForwardHeaders` because tripperware will modify
+	// the request, renaming the tenant header to the default tenant header, before the header propagation logic runs.
+	if tenantHeaderProvided {
+		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader)
+
+		// If tenant header is provided together with the org id header, error out.
+		if len(cfg.orgIdHeaders) != 0 {
+			return errors.New("query-frontend.org-id-header and query-frontend.tenant-header cannot be used together")
+		}
 	}
 
 	// Temporarily manually adding the default tenant header into the list of headers to forward and org id headers.
@@ -233,13 +242,6 @@ func runQueryFrontend(
 	// TODO: This should be removed once the org id header is deprecated in Thanos.
 	cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
 	cfg.orgIdHeaders = append(cfg.orgIdHeaders, tenancy.DefaultTenantHeader)
-
-	// If tenant header is set and different from the default tenant header, add it to the list of org id headers.
-	// In this case we don't need to add the tenant header to `cfg.ForwardHeaders` because tripperware will modify
-	// the request, renaming the tenant header to the default tenant header, before the header propagation logic runs.
-	if cfg.TenantHeader != "" && cfg.TenantHeader != tenancy.DefaultTenantHeader {
-		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader)
-	}
 
 	queryRangeCacheConfContentYaml, err := cfg.QueryRangeConfig.CachePathOrContent.Content()
 	if err != nil {
