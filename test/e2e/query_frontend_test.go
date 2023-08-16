@@ -971,10 +971,16 @@ func TestQueryFrontendTenantForward(t *testing.T) {
 
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
+				// The tenant header present in the outgoing request should be the default tenant header.
 				testutil.Equals(t, tc.tenantName, r.Header.Get(tenancy.DefaultTenantHeader))
+
+				// In case the query frontend is configured with a custom tenant header name, verify such header
+				// is not present in the outgoing request.
 				if tc.customTenantHeaderName != tenancy.DefaultTenantHeader {
 					testutil.Equals(t, "", r.Header.Get(tc.customTenantHeaderName))
 				}
+
+				// Verify the outgoing request will keep the X-Scope-OrgID header for compatibility with Cortex.
 				testutil.Equals(t, tc.tenantName, r.Header.Get("X-Scope-OrgID"))
 			}))
 			t.Cleanup(ts.Close)
