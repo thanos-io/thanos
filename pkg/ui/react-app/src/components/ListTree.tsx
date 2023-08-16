@@ -3,7 +3,7 @@ import { InputProps, Collapse, ListGroupItem, ListGroup } from 'reactstrap';
 
 export interface QueryTree {
   name: string;
-  executionTime?: number;
+  executionTime?: string;
   children?: QueryTree[];
 }
 

@@ -111,9 +111,9 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 	}
 
 	if f.remoteEngineEndpoints == nil {
-		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine()})
+		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true})
 	} else {
-		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine()}, f.remoteEngineEndpoints)
+		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
 	}
 
 	return f.thanosEngine
@@ -294,7 +294,7 @@ type queryTelemetry struct {
 	// TODO(saswatamcode): Replace with engine.TrackedTelemetry once it has exported fields.
 	// TODO(saswatamcode): Add aggregate fields to enrich data.
 	OperatorName string           `json:"name,omitempty"`
-	Execution    time.Duration    `json:"executionTime,omitempty"`
+	Execution    string           `json:"executionTime,omitempty"`
 	Children     []queryTelemetry `json:"children,omitempty"`
 }
 
@@ -461,7 +461,7 @@ func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	var analysis queryTelemetry
 	analysis.OperatorName = a.OperatorTelemetry.Name()
-	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken()
+	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken().String()
 	for _, c := range a.Children {
 		analysis.Children = append(analysis.Children, processAnalysis(&c))
 	}
