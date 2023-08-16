@@ -140,7 +140,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
-	cmd.Flag("query-frontend.org-id-header", "Request header names used to identify the source of slow queries (repeated flag). "+
+	cmd.Flag("query-frontend.org-id-header", "Deprecation Warning - This flag will be soon deprecated in favour of query-frontend.tenant-header"+
+		" and both flags cannot be used at the same time. "+
+		"Request header names used to identify the source of slow queries (repeated flag). "+
 		"The values of the header will be added to the org id field in the slow query log. "+
 		"If multiple headers match the request, the first matching arg specified will take precedence. "+
 		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
@@ -222,6 +224,13 @@ func runQueryFrontend(
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
+	if len(cfg.orgIdHeaders) != 0 && cfg.TenantHeader != "" {
+		return errors.New("query-frontend.org-id-header and query-frontend.tenant-header cannot be used together")
+	}
+
+	// Temporarily manually adding the default tenant header into the list of headers to forward and org id headers.
+	// This facilitates the transition from org id to tenant id with minimal amount of changes. This should be removed
+	// once the org id header is deprecated.
 	cfg.ForwardHeaders = append(cfg.ForwardHeaders, tenancy.DefaultTenantHeader)
 	cfg.orgIdHeaders = append(cfg.orgIdHeaders, tenancy.DefaultTenantHeader)
 	if cfg.TenantHeader != "" && cfg.TenantHeader != tenancy.DefaultTenantHeader {
