@@ -65,8 +65,8 @@ require (
 	github.com/prometheus/prometheus v0.44.1-0.20230524110021-37e5249e33e4
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.3
-	github.com/thanos-io/objstore v0.0.0-20230721074820-89475d4508df
-	github.com/thanos-io/promql-engine v0.0.0-20230804113022-99d2be3bb060
+	github.com/thanos-io/objstore v0.0.0-20230804084840-c042a6a16c58
+	github.com/thanos-io/promql-engine v0.0.0-20230816062837-c64fc7b373db
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -209,7 +209,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/ncw/swift v1.0.53 // indirect
-	github.com/oracle/oci-go-sdk/v65 v65.13.0 // indirect
+	github.com/oracle/oci-go-sdk/v65 v65.41.1 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common/sigv4 v0.1.0 // indirect
