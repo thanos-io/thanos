@@ -161,16 +161,11 @@ type QueryAPI struct {
 
 	queryRangeHist prometheus.Histogram
 
-	seriesStatsAggregator seriesQueryPerformanceMetricsAggregator
+	seriesStatsAggregatorFactory store.SeriesQueryPerformanceMetricsAggregatorFactory
 
 	tenantHeader    string
 	defaultTenant   string
 	tenantCertField string
-}
-
-type seriesQueryPerformanceMetricsAggregator interface {
-	Aggregate(seriesStats storepb.SeriesStatsCounter)
-	Observe(duration float64)
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -199,14 +194,14 @@ func NewQueryAPI(
 	defaultMetadataTimeRange time.Duration,
 	disableCORS bool,
 	gate gate.Gate,
-	statsAggregator seriesQueryPerformanceMetricsAggregator,
+	statsAggregatorFactory store.SeriesQueryPerformanceMetricsAggregatorFactory,
 	reg *prometheus.Registry,
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
 ) *QueryAPI {
-	if statsAggregator == nil {
-		statsAggregator = &store.NoopSeriesStatsAggregator{}
+	if statsAggregatorFactory == nil {
+		statsAggregatorFactory = &store.NoopSeriesStatsAggregatorFactory{}
 	}
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
@@ -233,7 +228,7 @@ func NewQueryAPI(
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
-		seriesStatsAggregator:                  statsAggregator,
+		seriesStatsAggregatorFactory:           statsAggregatorFactory,
 		tenantHeader:                           tenantHeader,
 		defaultTenant:                          defaultTenant,
 		tenantCertField:                        tenantCertField,
@@ -576,10 +571,12 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+
+	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator()
 	for i := range seriesStats {
-		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
+		aggregator.Aggregate(seriesStats[i])
 	}
-	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
+	aggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -745,10 +742,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator()
 	for i := range seriesStats {
-		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
+		aggregator.Aggregate(seriesStats[i])
 	}
-	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
+	aggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats

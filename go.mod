@@ -65,8 +65,8 @@ require (
 	github.com/prometheus/prometheus v0.44.1-0.20230524110021-37e5249e33e4
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.3
-	github.com/thanos-io/objstore v0.0.0-20230721074820-89475d4508df
-	github.com/thanos-io/promql-engine v0.0.0-20230524050847-9a1a33217cf2
+	github.com/thanos-io/objstore v0.0.0-20230804084840-c042a6a16c58
+	github.com/thanos-io/promql-engine v0.0.0-20230816062837-c64fc7b373db
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -118,17 +118,19 @@ require (
 
 require (
 	github.com/onsi/gomega v1.27.10
+	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
 	go.opentelemetry.io/contrib/propagators/autoprop v0.38.0
-	go4.org/intern v0.0.0-20220617035311-6925f38cc365
+	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 )
 
 require (
+	github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	go.opentelemetry.io/contrib/propagators/ot v1.13.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.16.0 // indirect
-	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230209150437-ee73d164e760 // indirect
+	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 )
 
 require (
@@ -207,7 +209,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/ncw/swift v1.0.53 // indirect
-	github.com/oracle/oci-go-sdk/v65 v65.13.0 // indirect
+	github.com/oracle/oci-go-sdk/v65 v65.41.1 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common/sigv4 v0.1.0 // indirect

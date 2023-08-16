@@ -43,6 +43,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -58,6 +59,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -133,6 +135,7 @@ type bucketStoreMetrics struct {
 	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
+	chunkRefetches        prometheus.Counter
 	emptyPostingCount     prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
@@ -240,6 +243,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
 		Help: "Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch.",
+	})
+	m.chunkRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_chunk_refetches_total",
+		Help: "Total number of cases where configured estimated chunk bytes was not enough was to fetch chunks from object store, resulting in refetch.",
 	})
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -358,6 +365,9 @@ type BucketStore struct {
 	enableSeriesResponseHints bool
 
 	enableChunkHashCalculation bool
+
+	bmtx          sync.Mutex
+	labelNamesSet stringset.Set
 
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
@@ -505,6 +515,7 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
+		labelNamesSet:               stringset.AllStrings(),
 	}
 
 	for _, option := range options {
@@ -874,9 +885,10 @@ type seriesEntry struct {
 // single TSDB block in object storage.
 type blockSeriesClient struct {
 	grpc.ClientStream
-	ctx     context.Context
-	logger  log.Logger
-	extLset labels.Labels
+	ctx             context.Context
+	logger          log.Logger
+	extLset         labels.Labels
+	extLsetToRemove map[string]struct{}
 
 	mint           int64
 	maxt           int64
@@ -926,9 +938,11 @@ func newBlockSeriesClient(
 	}
 
 	return &blockSeriesClient{
-		ctx:                ctx,
-		logger:             logger,
-		extLset:            extLset,
+		ctx:             ctx,
+		logger:          logger,
+		extLset:         extLset,
+		extLsetToRemove: extLsetToRemove,
+
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -1067,6 +1081,10 @@ func (b *blockSeriesClient) nextBatch() error {
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
+		if b.extLsetToRemove != nil {
+			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
+		}
+
 		if !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
@@ -1235,7 +1253,9 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 }
 
 // Series implements the storepb.StoreServer interface.
-func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) (err error) {
+	srv := newFlushableServer(seriesSrv, s.LabelNamesSet(), req.WithoutReplicaLabels)
+
 	if s.queryGate != nil {
 		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
 			err = s.queryGate.Start(srv.Context())
@@ -1484,7 +1504,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+	return srv.Flush()
 }
 
 func chunksSize(chks []storepb.AggrChunk) (size int) {
@@ -1667,6 +1690,35 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		Names: strutil.MergeSlices(sets...),
 		Hints: anyHints,
 	}, nil
+}
+
+func (s *BucketStore) UpdateLabelNames() {
+	newSet := stringset.New()
+	for _, b := range s.blocks {
+		labelNames, err := b.indexHeaderReader.LabelNames()
+		if err != nil {
+			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
+			s.updateLabelNamesSet(stringset.AllStrings())
+			return
+		}
+		for _, l := range labelNames {
+			newSet.Insert(l)
+		}
+	}
+	s.updateLabelNamesSet(newSet)
+}
+
+func (s *BucketStore) updateLabelNamesSet(newSet stringset.Set) {
+	s.bmtx.Lock()
+	s.labelNamesSet = newSet
+	s.bmtx.Unlock()
+}
+
+func (b *BucketStore) LabelNamesSet() stringset.Set {
+	b.bmtx.Lock()
+	defer b.bmtx.Unlock()
+
+	return b.labelNamesSet
 }
 
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
@@ -3155,6 +3207,10 @@ type bucketChunkReader struct {
 	mtx        sync.Mutex
 	stats      *queryStats
 	chunkBytes []*[]byte // Byte slice to return to the chunk pool on close.
+
+	loadingChunksMtx  sync.Mutex
+	loadingChunks     bool
+	finishLoadingChks chan struct{}
 }
 
 func newBucketChunkReader(block *bucketBlock) *bucketChunkReader {
@@ -3169,9 +3225,22 @@ func (r *bucketChunkReader) reset() {
 	for i := range r.toLoad {
 		r.toLoad[i] = r.toLoad[i][:0]
 	}
+	r.loadingChunksMtx.Lock()
+	r.loadingChunks = false
+	r.finishLoadingChks = make(chan struct{})
+	r.loadingChunksMtx.Unlock()
 }
 
 func (r *bucketChunkReader) Close() error {
+	// NOTE(GiedriusS): we need to wait until loading chunks because loading
+	// chunks modifies r.block.chunkPool.
+	r.loadingChunksMtx.Lock()
+	loadingChks := r.loadingChunks
+	r.loadingChunksMtx.Unlock()
+
+	if loadingChks {
+		<-r.finishLoadingChks
+	}
 	r.block.pendingReaders.Done()
 
 	for _, b := range r.chunkBytes {
@@ -3196,6 +3265,18 @@ func (r *bucketChunkReader) addLoad(id chunks.ChunkRef, seriesEntry, chunk int) 
 
 // load loads all added chunks and saves resulting aggrs to refs.
 func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
+	r.loadingChunksMtx.Lock()
+	r.loadingChunks = true
+	r.loadingChunksMtx.Unlock()
+
+	defer func() {
+		r.loadingChunksMtx.Lock()
+		r.loadingChunks = false
+		r.loadingChunksMtx.Unlock()
+
+		close(r.finishLoadingChks)
+	}()
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	for seq, pIdxs := range r.toLoad {
@@ -3316,6 +3397,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			continue
 		}
 
+		r.block.metrics.chunkRefetches.Inc()
 		// If we didn't fetch enough data for the chunk, fetch more.
 		fetchBegin = time.Now()
 		// Read entire chunk into new buffer.
