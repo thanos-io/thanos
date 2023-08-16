@@ -229,12 +229,12 @@ func runQueryFrontend(
 	// In this case we don't need to add the tenant header to `cfg.ForwardHeaders` because tripperware will modify
 	// the request, renaming the tenant header to the default tenant header, before the header propagation logic runs.
 	if tenantHeaderProvided {
-		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader)
-
 		// If tenant header is provided together with the org id header, error out.
 		if len(cfg.orgIdHeaders) != 0 {
 			return errors.New("query-frontend.org-id-header and query-frontend.tenant-header cannot be used together")
 		}
+
+		cfg.orgIdHeaders = append(cfg.orgIdHeaders, cfg.TenantHeader)
 	}
 
 	// Temporarily manually adding the default tenant header into the list of headers to forward and org id headers.
