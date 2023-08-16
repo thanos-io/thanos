@@ -189,6 +189,18 @@ type EndpointStatus struct {
 	MaxTime       int64               `json:"maxTime"`
 }
 
+func newFailedConnectStatus(name string, lastCheck time.Time) EndpointStatus {
+	return EndpointStatus{
+		Name:          name,
+		LastCheck:     lastCheck,
+		LabelSets:     make([]labels.Labels, 0),
+		LastError:     &stringError{originalErr: errors.New("failed to connect")},
+		ComponentType: component.UnknownStoreAPI,
+		MinTime:       math.MinInt64,
+		MaxTime:       math.MaxInt32,
+	}
+}
+
 // endpointSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
 // A Collector is required as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
 // TODO(hitanshu-mehta) Currently,only collecting metrics of storeEndpoints. Make this struct generic.
@@ -295,6 +307,8 @@ type EndpointSet struct {
 	endpointsMtx    sync.RWMutex
 	endpoints       map[string]*endpointRef
 	endpointsMetric *endpointSetNodeCollector
+
+	failedConnectStatuses []EndpointStatus
 }
 
 // nowFunc is a function that returns time.Time.
@@ -354,9 +368,10 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	level.Debug(e.logger).Log("msg", "starting to update API endpoints", "cachedEndpoints", len(e.endpoints))
 
 	var (
-		newRefs      = make(map[string]*endpointRef)
-		existingRefs = make(map[string]*endpointRef)
-		staleRefs    = make(map[string]*endpointRef)
+		newRefs        = make(map[string]*endpointRef)
+		existingRefs   = make(map[string]*endpointRef)
+		staleRefs      = make(map[string]*endpointRef)
+		failedConnects = make([]EndpointStatus, 0)
 
 		wg sync.WaitGroup
 		mu sync.Mutex
@@ -389,6 +404,9 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 			newRef, err := e.newEndpointRef(ctx, spec)
 			if err != nil {
+				if spec.isStrictStatic {
+					failedConnects = append(failedConnects, newFailedConnectStatus(spec.Addr(), time.Now()))
+				}
 				level.Warn(e.logger).Log("msg", "new endpoint creation failed", "err", err, "address", spec.Addr())
 				return
 			}
@@ -430,6 +448,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		er.Close()
 		delete(e.endpoints, addr)
 	}
+	e.failedConnectStatuses = failedConnects
 	level.Debug(e.logger).Log("msg", "updated endpoints", "activeEndpoints", len(e.endpoints))
 
 	// Update stats.
@@ -524,6 +543,16 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 			er.mtx.RUnlock()
 		}
 	}
+
+	e.endpointsMtx.RLock()
+	defer e.endpointsMtx.RUnlock()
+	for _, status := range e.failedConnectStatuses {
+		stores = append(stores, &endpointRef{
+			StoreClient: storepb.NewDisconnectedClient(),
+			addr:        status.Name,
+		})
+	}
+
 	return stores
 }
 
@@ -620,6 +649,7 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 			statuses = append(statuses, *status)
 		}
 	}
+	statuses = append(statuses, e.failedConnectStatuses...)
 
 	sort.Slice(statuses, func(i, j int) bool {
 		return statuses[i].Name < statuses[j].Name
