@@ -669,7 +669,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-
+	res := qry.Exec(ctx)
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -682,9 +682,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
-
 	beforeRange := time.Now()
-	res := qry.Exec(ctx)
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
@@ -975,6 +973,8 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
+	res := qry.Exec(ctx)
+
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -989,7 +989,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	defer qapi.gate.Done()
 
 	beforeRange := time.Now()
-	res := qry.Exec(ctx)
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:

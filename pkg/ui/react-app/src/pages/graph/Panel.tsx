@@ -227,7 +227,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
-
+        console.log(json.data.analysis);
         let resultSeries = 0;
         let analysis = null;
         if (json.data) {

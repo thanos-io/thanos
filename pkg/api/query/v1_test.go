@@ -223,6 +223,7 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 2,
 					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
@@ -237,6 +238,7 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 0.333,
 					T: timestamp.FromTime(start.Add(123 * time.Second)),
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
@@ -251,6 +253,7 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 0.333,
 					T: timestamp.FromTime(start.Add(123 * time.Second)),
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Query endpoint without deduplication.
@@ -336,8 +339,10 @@ func TestQueryEndpoints(t *testing.T) {
 						F: 2,
 					},
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
+
 		// Query endpoint with single deduplication label.
 		{
 			endpoint: api.query,
@@ -396,6 +401,7 @@ func TestQueryEndpoints(t *testing.T) {
 						F: 2,
 					},
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Query endpoint with multiple deduplication label.
@@ -438,6 +444,7 @@ func TestQueryEndpoints(t *testing.T) {
 						F: 2,
 					},
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
@@ -451,6 +458,7 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 0.333,
 					T: timestamp.FromTime(now),
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Bad dedup parameter.
@@ -484,6 +492,7 @@ func TestQueryEndpoints(t *testing.T) {
 						Metric: nil,
 					},
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Use default step when missing.
@@ -655,9 +664,9 @@ func TestQueryExplainEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &store.NoopSeriesStatsAggregator{},
-		tenantHeader:          "thanos-tenant",
-		defaultTenant:         "default-tenant",
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
 	}
 
 	var tests = []endpointTestCase{
@@ -669,7 +678,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*numberLiteralSelector] 2",
+				OperatorName: "[*numberLiteralSelector]",
 			},
 		},
 		{
@@ -683,6 +692,74 @@ func TestQueryExplainEndpoints(t *testing.T) {
 			},
 			response: &engine.ExplainOutputNode{
 				OperatorName: "[*noArgFunctionOperator] time()",
+			},
+		},
+	}
+	for i, test := range tests {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+}
+
+func TestQueryAnalyzeEndpoints(t *testing.T) {
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	now := time.Now()
+	timeout := 100 * time.Second
+	ef := NewQueryEngineFactory(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	}, nil)
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		engineFactory:         ef,
+		defaultEngine:         PromqlEnginePrometheus,
+		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
+		gate:                  gate.New(nil, 4, gate.Queries),
+		defaultRangeQueryStep: time.Second,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
+	}
+
+	var tests = []endpointTestCase{
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query":  []string{"2"},
+				"time":   []string{"123.4"},
+				"engine": []string{"thanos"},
+			},
+			response: &queryData{
+				QueryAnalysis: queryTelemetry{
+					OperatorName: "[*numberLiteralSelector] 2",
+				},
+			},
+		},
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query":  []string{"time()"},
+				"start":  []string{"0"},
+				"end":    []string{"500"},
+				"step":   []string{"1"},
+				"engine": []string{"thanos"},
+			},
+			response: &queryData{
+				QueryAnalysis: queryTelemetry{
+					OperatorName: "[*numberLiteralSelector] 2",
+				},
 			},
 		},
 	}
