@@ -258,7 +258,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 }
 
 func (p *PrometheusStore) queryPrometheus(
-	s storepb.Store_SeriesServer,
+	s flushableServer,
 	r *storepb.SeriesRequest,
 	extLsetToRemove map[string]struct{},
 ) error {
@@ -325,7 +325,7 @@ func (p *PrometheusStore) queryPrometheus(
 		}
 	}
 
-	return nil
+	return s.Flush()
 }
 
 func (p *PrometheusStore) handleSampledPrometheusResponse(
