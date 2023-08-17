@@ -49,12 +49,14 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
+	// region is an external label; by adding it as an internal label too we also trigger
+	// the resorting code paths
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -153,6 +155,38 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.NotOk(t, err)
 		testutil.Equals(t, []string(nil), srv.Warnings)
 		testutil.Equals(t, "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)", err.Error())
+	}
+	// Querying with pushdown.
+	{
+		srv := newStoreSeriesServer(ctx)
+		testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
+			MinTime: baseT + 101,
+			MaxTime: baseT + 300,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			},
+			QueryHints: &storepb.QueryHints{Func: &storepb.Func{Name: "min_over_time"}, Range: &storepb.Range{Millis: 300}},
+		}, srv))
+
+		testutil.Equals(t, 1, len(srv.SeriesSet))
+
+		testutil.Equals(t, []labelpb.ZLabel{
+			{Name: "a", Value: "b"},
+			{Name: "region", Value: "eu-west"},
+			{Name: "__thanos_pushed_down", Value: "true"},
+		}, srv.SeriesSet[0].Labels)
+		testutil.Equals(t, []string(nil), srv.Warnings)
+		testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
+
+		c := srv.SeriesSet[0].Chunks[0]
+		testutil.Equals(t, storepb.Chunk_XOR, c.Raw.Type)
+
+		chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
+		testutil.Ok(t, err)
+
+		samples := expandChunk(chk.Iterator(nil))
+		testutil.Equals(t, []sample{{baseT + 300, 1}}, samples)
+
 	}
 }
 
