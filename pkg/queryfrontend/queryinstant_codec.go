@@ -177,7 +177,6 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 		"query":                      []string{thanosReq.Query},
 		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
-		queryv1.QueryExplainParam:    []string{thanosReq.Explain},
 		queryv1.QueryAnalyzeParam:    []string{thanosReq.Analyze},
 		queryv1.EngineParam:          []string{thanosReq.Engine},
 		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,

@@ -77,7 +77,6 @@ const (
 	ShardInfoParam           = "shard_info"
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
-	QueryExplainParam        = "explain"
 	QueryAnalyzeParam        = "analyze"
 )
 
@@ -671,7 +670,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}
 	res := qry.Exec(ctx)
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if apiErr != nil {
+	if err != nil {
 		return nil, nil, apiErr, func() {}
 	}
 
@@ -976,7 +975,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	res := qry.Exec(ctx)
 
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if apiErr != nil {
+	if err != nil {
 		return nil, nil, apiErr, func() {}
 	}
 
