@@ -1264,7 +1264,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 	testutil.Equals(t, 2, len(endpointSet.GetStoreClients()), "two static clients must remain available")
 	testutil.Equals(t, curMin, endpointSet.endpoints[staticEndpointAddr].metadata.Store.MinTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, curMax, endpointSet.endpoints[staticEndpointAddr].metadata.Store.MaxTime, "minimum time reported by the store node is different")
-	testutil.NotOk(t, endpointSet.endpoints[staticEndpointAddr].getStatus().LastError.originalErr)
+	testutil.NotOk(t, endpointSet.endpoints[staticEndpointAddr].status.LastError.originalErr)
 
 	testutil.Equals(t, updatedCurMin, endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MinTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, updatedCurMax, endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MaxTime, "minimum time reported by the store node is different")
@@ -1554,7 +1554,7 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 
 		mockEndpointRef.update(time.Now, mockEndpointRef.metadata, tc.InputError)
 
-		b, err := json.Marshal(mockEndpointRef.getStatus().LastError)
+		b, err := json.Marshal(mockEndpointRef.status.LastError)
 		testutil.Ok(t, err)
 		testutil.Equals(t, tc.ExpectedLastErr, string(b))
 	}
@@ -1570,14 +1570,14 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 
 	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, errors.New("test err"))
 
-	b, err := json.Marshal(mockEndpointRef.getStatus().LastError)
+	b, err := json.Marshal(mockEndpointRef.status.LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `"test err"`, string(b))
 
 	// updating status without and error should clear the previous one.
 	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, nil)
 
-	b, err = json.Marshal(mockEndpointRef.getStatus().LastError)
+	b, err = json.Marshal(mockEndpointRef.status.LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `null`, string(b))
 }

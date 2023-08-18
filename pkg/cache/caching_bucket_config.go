@@ -38,30 +38,20 @@ func NewCachingBucketConfig() *CachingBucketConfig {
 
 // SetCacheImplementation sets the value of Cache for all configurations.
 func (cfg *CachingBucketConfig) SetCacheImplementation(c Cache) {
-	if cfg.get != nil {
-		for k := range cfg.get {
-			cfg.get[k].Cache = c
-		}
+	for k := range cfg.get {
+		cfg.get[k].Cache = c
 	}
-	if cfg.iter != nil {
-		for k := range cfg.iter {
-			cfg.iter[k].Cache = c
-		}
+	for k := range cfg.iter {
+		cfg.iter[k].Cache = c
 	}
-	if cfg.exists != nil {
-		for k := range cfg.exists {
-			cfg.exists[k].Cache = c
-		}
+	for k := range cfg.exists {
+		cfg.exists[k].Cache = c
 	}
-	if cfg.getRange != nil {
-		for k := range cfg.getRange {
-			cfg.getRange[k].Cache = c
-		}
+	for k := range cfg.getRange {
+		cfg.getRange[k].Cache = c
 	}
-	if cfg.attributes != nil {
-		for k := range cfg.attributes {
-			cfg.attributes[k].Cache = c
-		}
+	for k := range cfg.attributes {
+		cfg.attributes[k].Cache = c
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"sync"
 
 	"github.com/golang/snappy"
 	"github.com/klauspost/compress/s2"
@@ -228,10 +227,7 @@ func (it *streamedDiffVarintPostings) At() storage.SeriesRef {
 	return it.curSeries
 }
 
-func (it *streamedDiffVarintPostings) readNextChunk() bool {
-	if len(it.db.B) > 0 {
-		return true
-	}
+func (it *streamedDiffVarintPostings) readNextChunk(remainder []byte) bool {
 	// Normal EOF.
 	if len(it.input) == 0 {
 		return false
@@ -256,13 +252,13 @@ func (it *streamedDiffVarintPostings) readNextChunk() bool {
 			it.err = fmt.Errorf("corrupted identifier")
 			return false
 		}
-		if string(it.input[:6]) != magicBody {
+		if string(it.input[:len(magicBody)]) != magicBody {
 			it.err = fmt.Errorf("got bad identifier %s", string(it.input[:6]))
 			return false
 		}
 		it.input = it.input[6:]
 		it.readSnappyIdentifier = true
-		return it.readNextChunk()
+		return it.readNextChunk(nil)
 	case chunkTypeCompressedData:
 		if !it.readSnappyIdentifier {
 			it.err = fmt.Errorf("missing magic snappy marker")
@@ -277,7 +273,6 @@ func (it *streamedDiffVarintPostings) readNextChunk() bool {
 			it.err = io.ErrUnexpectedEOF
 			return false
 		}
-		encodedBuf := it.input[:chunkLen]
 
 		if it.buf == nil {
 			if it.disablePooling {
@@ -292,6 +287,15 @@ func (it *streamedDiffVarintPostings) readNextChunk() bool {
 			}
 		}
 
+		encodedBuf := it.input[:chunkLen]
+
+		// NOTE(GiedriusS): we can probably optimize this better but this should be rare enough
+		// and not cause any problems.
+		if len(remainder) > 0 {
+			remainderCopy := make([]byte, 0, len(remainder))
+			remainderCopy = append(remainderCopy, remainder...)
+			remainder = remainderCopy
+		}
 		decoded, err := s2.Decode(it.buf, encodedBuf[checksumSize:])
 		if err != nil {
 			it.err = err
@@ -301,7 +305,11 @@ func (it *streamedDiffVarintPostings) readNextChunk() bool {
 			it.err = fmt.Errorf("mismatched checksum (got %v, expected %v)", crc(decoded), checksum)
 			return false
 		}
-		it.db.B = decoded
+		if len(remainder) > 0 {
+			it.db.B = append(remainder, decoded...)
+		} else {
+			it.db.B = decoded
+		}
 	case chunkTypeUncompressedData:
 		if !it.readSnappyIdentifier {
 			it.err = fmt.Errorf("missing magic snappy marker")
@@ -316,10 +324,24 @@ func (it *streamedDiffVarintPostings) readNextChunk() bool {
 			it.err = io.ErrUnexpectedEOF
 			return false
 		}
-		it.db.B = it.input[checksumSize:chunkLen]
-		if crc(it.db.B) != checksum {
-			it.err = fmt.Errorf("mismatched checksum (got %v, expected %v)", crc(it.db.B), checksum)
+		uncompressedData := it.input[checksumSize:chunkLen]
+		if crc(uncompressedData) != checksum {
+			it.err = fmt.Errorf("mismatched checksum (got %v, expected %v)", crc(uncompressedData), checksum)
 			return false
+		}
+
+		// NOTE(GiedriusS): we can probably optimize this better but this should be rare enough
+		// and not cause any problems.
+		if len(remainder) > 0 {
+			remainderCopy := make([]byte, 0, len(remainder))
+			remainderCopy = append(remainderCopy, remainder...)
+			remainder = remainderCopy
+		}
+
+		if len(remainder) > 0 {
+			it.db.B = append(remainder, uncompressedData...)
+		} else {
+			it.db.B = uncompressedData
 		}
 	default:
 		if chunkType <= 0x7f {
@@ -337,19 +359,21 @@ func (it *streamedDiffVarintPostings) readNextChunk() bool {
 }
 
 func (it *streamedDiffVarintPostings) Next() bool {
-	if !it.readNextChunk() {
-		return false
-	}
-	val := it.db.Uvarint()
-	if it.db.Err() != nil {
-		if it.db.Err() != io.EOF {
-			it.err = it.db.Err()
+	// Continue reading next chunks until there is at least binary.MaxVarintLen64.
+	// If we cannot add any more chunks then return false.
+	for {
+		val := it.db.Uvarint64()
+		if it.db.Err() != nil {
+			if !it.readNextChunk(it.db.B) {
+				return false
+			}
+			it.db.E = nil
+			continue
 		}
-		return false
-	}
 
-	it.curSeries = it.curSeries + storage.SeriesRef(val)
-	return true
+		it.curSeries = it.curSeries + storage.SeriesRef(val)
+		return true
+	}
 }
 
 func (it *streamedDiffVarintPostings) Err() error {
@@ -424,7 +448,8 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 	return buf.B, nil
 }
 
-var snappyDecodePool sync.Pool
+// Creating 15 buckets from 1k to 32mb.
+var snappyDecodePool = pool.MustNewBucketedBytes(1024, 32*1024*1024, 2, 0)
 
 type closeablePostings interface {
 	index.Postings
@@ -447,10 +472,11 @@ func diffVarintSnappyDecode(input []byte, disablePooling bool) (closeablePosting
 
 	var dstBuf []byte
 	if !disablePooling {
-		decodeBuf := snappyDecodePool.Get()
-		if decodeBuf != nil {
-			dstBuf = *(decodeBuf.(*[]byte))
-			toFree = append(toFree, dstBuf)
+		if len, err := s2.DecodedLen(input[len(codecHeaderSnappy):]); err == nil {
+			if decodeBuf, err := snappyDecodePool.Get(len); err == nil && decodeBuf != nil {
+				dstBuf = *decodeBuf
+				toFree = append(toFree, dstBuf)
+			}
 		}
 	}
 
@@ -533,7 +559,6 @@ func snappyStreamedEncode(postingsLength int, diffVarintPostings []byte) ([]byte
 	if err != nil {
 		return nil, fmt.Errorf("creating snappy compressor: %w", err)
 	}
-
 	_, err = sw.Write(diffVarintPostings)
 	if err != nil {
 		return nil, err

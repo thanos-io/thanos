@@ -45,6 +45,7 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -1016,7 +1017,6 @@ func TestQueryStoreDedup(t *testing.T) {
 		blockFinderLabel string
 		series           []seriesWithLabels
 		expectedSeries   int
-		expectedDedupBug bool
 	}{
 		{
 			desc:            "Deduplication works with external label",
@@ -1036,7 +1036,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		},
 		{
 			desc:            "Deduplication works on external label with resorting required",
-			intReplicaLabel: "a",
+			extReplicaLabel: "a",
 			series: []seriesWithLabels{
 				{
 					intLabels: labels.FromStrings("__name__", "simple_series"),
@@ -1071,10 +1071,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupint",
 			expectedSeries:   1,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
 		},
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
 		{
 			desc:            "Deduplication works on internal label with resorting required",
 			intReplicaLabel: "a",
@@ -1094,10 +1092,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintresort",
 			expectedSeries:   2,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
 		},
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
 		{
 			desc:            "Deduplication works with extra internal label",
 			intReplicaLabel: "replica",
@@ -1117,10 +1113,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintextra",
 			expectedSeries:   2,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
 		},
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
 		{
 			desc:            "Deduplication works with both internal and external label",
 			intReplicaLabel: "replica",
@@ -1137,9 +1131,6 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintext",
 			expectedSeries:   1,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
-			expectedDedupBug: true,
 		},
 	}
 
@@ -1169,9 +1160,6 @@ func TestQueryStoreDedup(t *testing.T) {
 			testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 			expectedSeries := tt.expectedSeries
-			if tt.expectedDedupBug {
-				expectedSeries *= 2
-			}
 			instantQuery(t, ctx, querier.Endpoint("http"), func() string {
 				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinderLabel)
 			}, time.Now, promclient.QueryOptions{
@@ -1302,13 +1290,13 @@ func TestSidecarQueryDedup(t *testing.T) {
 
 	t.Run("deduplication on internal label with reorder", func(t *testing.T) {
 		// Uses "a" as replica label, which is an internal label from the samples used.
-		// Should return 4 samples as long as the bug described by https://github.com/thanos-io/thanos/issues/6257#issuecomment-1544023978
-		// is not fixed. When it is fixed, it should return 2 samples.
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+		// Until the bug was fixed, this testcase would return 4 samples instead of 2.
 		instantQuery(t, ctx, query4.Endpoint("http"), func() string {
 			return "my_fake_metric"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
-		}, 4)
+		}, 2)
 	})
 }
 
@@ -1448,8 +1436,32 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 	}
 }
 
+// An emptyCtx is never canceled, has no values, and has no deadline. It is not
+// struct{}, since vars of this type must have distinct addresses.
+type emptyCtx int
+
+func (*emptyCtx) Deadline() (deadline time.Time, ok bool) {
+	return
+}
+
+func (*emptyCtx) Done() <-chan struct{} {
+	return nil
+}
+
+func (*emptyCtx) Err() error {
+	return nil
+}
+
+func (*emptyCtx) Value(key any) any {
+	return nil
+}
+
+func (e *emptyCtx) String() string {
+	return "Context"
+}
+
 func checkNetworkRequests(t *testing.T, addr string) {
-	ctx, cancel := chromedp.NewContext(context.Background())
+	ctx, cancel := chromedp.NewContext(new(emptyCtx))
 	t.Cleanup(cancel)
 
 	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
@@ -2240,4 +2252,54 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 		return "sum(metric_that_does_not_exist)"
 	}, time.Now, promclient.QueryOptions{}, 0)
 
+}
+
+func TestSidecarPrefersExtLabels(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("sidecar-extlbls")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promCfg := `global:
+  external_labels:
+    region: test`
+
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promCfg, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	endpoints := []string{
+		sidecar.InternalEndpoint("grpc"),
+	}
+	querier := e2ethanos.
+		NewQuerierBuilder(e, "1", endpoints...).
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+	now := time.Now()
+	ctx := context.Background()
+	m := model.Sample{
+		Metric: map[model.LabelName]model.LabelValue{
+			"__name__": "sidecar_test_metric",
+			"instance": model.LabelValue("test"),
+			"region":   model.LabelValue("foo"),
+		},
+		Value:     model.SampleValue(2),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
+	}
+	testutil.Ok(t, synthesizeSamples(ctx, prom, []model.Sample{m}))
+
+	retv, _ := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
+		return "sidecar_test_metric"
+	}, func() time.Time { return now.Add(time.Hour) }, promclient.QueryOptions{}, 1)
+
+	testutil.Equals(t, model.Vector{&model.Sample{
+		Metric: model.Metric{
+			"__name__": "sidecar_test_metric",
+			"instance": "test",
+			"region":   "test",
+		},
+		Value:     model.SampleValue(2),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
+	}}, retv)
 }
