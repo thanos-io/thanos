@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/promql-engine/api"
 
@@ -234,7 +235,11 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		return &promql.Result{Err: err}
 	}
 
-	result := make(promql.Matrix, 0)
+	var (
+		result   = make(promql.Matrix, 0)
+		warnings storage.Warnings
+	)
+
 	for {
 		msg, err := qry.Recv()
 		if err == io.EOF {
@@ -245,7 +250,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 
 		if warn := msg.GetWarnings(); warn != "" {
-			return &promql.Result{Err: errors.New(warn)}
+			warnings = append(warnings, errors.New(warn))
+			continue
 		}
 
 		ts := msg.GetTimeseries()
@@ -273,7 +279,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	}
 	level.Debug(r.logger).Log("Executed query", "query", r.qs, "time", time.Since(start))
 
-	return &promql.Result{Value: result}
+	return &promql.Result{Value: result, Warnings: warnings}
 }
 
 func (r *remoteQuery) Close() { r.Cancel() }
