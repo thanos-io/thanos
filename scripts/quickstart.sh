@@ -184,7 +184,8 @@ blocks_iter_ttl: 0s
 metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s
-	EOF
+	     EOF
+       
   ${THANOS_EXECUTABLE} store \
     --debug.name store \
     --log.level debug \
