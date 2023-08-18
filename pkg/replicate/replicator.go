@@ -23,6 +23,7 @@ import (
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -114,15 +115,17 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate from")
 	}
 
-	fromBkt, err := client.NewBucket(
-		logger,
-		fromConfContentYaml,
-		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg),
-		component.Replicate.String(),
-	)
+	bkt, err := client.NewBucket(logger, fromConfContentYaml, component.Replicate.String())
 	if err != nil {
 		return err
 	}
+	fromBkt := objstoretracing.WrapWithTraces(
+		objstore.WrapWithMetrics(
+			bkt,
+			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg)),
+			bkt.Name(),
+		),
+	)
 
 	toConfContentYaml, err := toObjStoreConfig.Content()
 	if err != nil {
@@ -133,15 +136,17 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate to")
 	}
 
-	toBkt, err := client.NewBucket(
-		logger,
-		toConfContentYaml,
-		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg),
-		component.Replicate.String(),
-	)
+	toBkt, err := client.NewBucket(logger, toConfContentYaml, component.Replicate.String())
 	if err != nil {
 		return err
 	}
+	toBkt = objstoretracing.WrapWithTraces(
+		objstore.WrapWithMetrics(
+			toBkt,
+			prometheus.WrapRegistererWithPrefix("thanos_", prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg)),
+			toBkt.Name(),
+		),
+	)
 
 	replicationRunCounter := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_replicate_replication_runs_total",

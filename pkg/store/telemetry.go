@@ -16,11 +16,43 @@ import (
 // seriesStatsAggregator aggregates results from fanned-out queries into a histogram given their
 // response's shape.
 type seriesStatsAggregator struct {
-	queryDuration *prometheus.HistogramVec
-
+	queryDuration    *prometheus.HistogramVec
 	seriesLeBuckets  []float64
 	samplesLeBuckets []float64
-	seriesStats      storepb.SeriesStatsCounter
+
+	seriesStats storepb.SeriesStatsCounter
+}
+
+type seriesStatsAggregatorFactory struct {
+	queryDuration    *prometheus.HistogramVec
+	seriesLeBuckets  []float64
+	samplesLeBuckets []float64
+}
+
+func (f *seriesStatsAggregatorFactory) NewAggregator() SeriesQueryPerformanceMetricsAggregator {
+	return &seriesStatsAggregator{
+		queryDuration:    f.queryDuration,
+		seriesLeBuckets:  f.seriesLeBuckets,
+		samplesLeBuckets: f.samplesLeBuckets,
+		seriesStats:      storepb.SeriesStatsCounter{},
+	}
+}
+
+func NewSeriesStatsAggregatorFactory(
+	reg prometheus.Registerer,
+	durationQuantiles []float64,
+	sampleQuantiles []float64,
+	seriesQuantiles []float64,
+) *seriesStatsAggregatorFactory {
+	return &seriesStatsAggregatorFactory{
+		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "thanos_store_api_query_duration_seconds",
+			Help:    "Duration of the Thanos Store API select phase for a query.",
+			Buckets: durationQuantiles,
+		}, []string{"series_le", "samples_le"}),
+		seriesLeBuckets:  seriesQuantiles,
+		samplesLeBuckets: sampleQuantiles,
+	}
 }
 
 // NewSeriesStatsAggregator is a constructor for seriesStatsAggregator.
@@ -82,12 +114,28 @@ func findBucket(value float64, quantiles []float64) string {
 	return strconv.FormatFloat(quantiles[sort.SearchFloat64s(quantiles, value)], 'f', -1, 64)
 }
 
+type SeriesQueryPerformanceMetricsAggregatorFactory interface {
+	NewAggregator() SeriesQueryPerformanceMetricsAggregator
+}
+
+type SeriesQueryPerformanceMetricsAggregator interface {
+	Aggregate(seriesStats storepb.SeriesStatsCounter)
+	Observe(duration float64)
+}
+
 // NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.
 type NoopSeriesStatsAggregator struct{}
 
 func (s *NoopSeriesStatsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
 func (s *NoopSeriesStatsAggregator) Observe(_ float64) {}
+
+// NoopSeriesStatsAggregatorFactory is a query performance series aggregator factory that does nothing.
+type NoopSeriesStatsAggregatorFactory struct{}
+
+func (s *NoopSeriesStatsAggregatorFactory) NewAggregator() SeriesQueryPerformanceMetricsAggregator {
+	return &NoopSeriesStatsAggregator{}
+}
 
 // instrumentedStoreServer is a storepb.StoreServer that exposes metrics about Series requests.
 type instrumentedStoreServer struct {

@@ -93,11 +93,34 @@ type Thanos struct {
 
 	// IndexStats contains stats info related to block index.
 	IndexStats IndexStats `json:"index_stats,omitempty"`
+
+	// Extensions are used for plugin any arbitrary additional information for block. Optional.
+	Extensions any `json:"extensions,omitempty"`
 }
 
 type IndexStats struct {
 	SeriesMaxSize int64 `json:"series_max_size,omitempty"`
 	ChunkMaxSize  int64 `json:"chunk_max_size,omitempty"`
+}
+
+func (m *Thanos) ParseExtensions(v any) (any, error) {
+	return ConvertExtensions(m.Extensions, v)
+}
+
+// ConvertExtensions converts extensions with `any` type into specific type `v`
+// that the caller expects.
+func ConvertExtensions(extensions any, v any) (any, error) {
+	if extensions == nil {
+		return nil, nil
+	}
+	extensionsContent, err := json.Marshal(extensions)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(extensionsContent, v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 type Rewrite struct {

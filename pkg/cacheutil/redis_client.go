@@ -31,15 +31,14 @@ var (
 		DialTimeout:            time.Second * 5,
 		ReadTimeout:            time.Second * 3,
 		WriteTimeout:           time.Second * 3,
-		PoolSize:               100,
-		MinIdleConns:           10,
-		IdleTimeout:            time.Minute * 5,
 		MaxGetMultiConcurrency: 100,
 		GetMultiBatchSize:      100,
 		MaxSetMultiConcurrency: 100,
 		SetMultiBatchSize:      100,
 		TLSEnabled:             false,
 		TLSConfig:              TLSConfig{},
+		MaxAsyncConcurrency:    20,
+		MaxAsyncBufferSize:     10000,
 	}
 )
 
@@ -84,22 +83,6 @@ type RedisClientConfig struct {
 	// WriteTimeout specifies the client write timeout.
 	WriteTimeout time.Duration `yaml:"write_timeout"`
 
-	// Maximum number of socket connections.
-	PoolSize int `yaml:"pool_size"`
-
-	// MinIdleConns specifies the minimum number of idle connections which is useful when establishing
-	// new connection is slow.
-	MinIdleConns int `yaml:"min_idle_conns"`
-
-	// Amount of time after which client closes idle connections.
-	// Should be less than server's timeout.
-	// -1 disables idle timeout check.
-	IdleTimeout time.Duration `yaml:"idle_timeout"`
-
-	// Connection age at which client retires (closes) the connection.
-	// Default 0 is to not close aged connections.
-	MaxConnAge time.Duration `yaml:"max_conn_age"`
-
 	// MaxGetMultiConcurrency specifies the maximum number of concurrent GetMulti() operations.
 	// If set to 0, concurrency is unlimited.
 	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
@@ -129,6 +112,12 @@ type RedisClientConfig struct {
 	// MasterName specifies the master's name. Must be not empty
 	// for Redis Sentinel.
 	MasterName string `yaml:"master_name"`
+
+	// MaxAsyncBufferSize specifies the queue buffer size for SetAsync operations.
+	MaxAsyncBufferSize int `yaml:"max_async_buffer_size"`
+
+	// MaxAsyncConcurrency specifies the maximum number of SetAsync goroutines.
+	MaxAsyncConcurrency int `yaml:"max_async_concurrency"`
 }
 
 func (c *RedisClientConfig) validate() error {
@@ -159,6 +148,8 @@ type RedisClient struct {
 	durationSet      prometheus.Observer
 	durationSetMulti prometheus.Observer
 	durationGetMulti prometheus.Observer
+
+	p *asyncOperationProcessor
 }
 
 // NewRedisClient makes a new RedisClient.
@@ -230,6 +221,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		client: client,
 		config: config,
 		logger: logger,
+		p:      newAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_redis_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
@@ -249,18 +241,20 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	c.durationSet = duration.WithLabelValues(opSet)
 	c.durationSetMulti = duration.WithLabelValues(opSetMulti)
 	c.durationGetMulti = duration.WithLabelValues(opGetMulti)
+
 	return c, nil
 }
 
 // SetAsync implement RemoteCacheClient.
 func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) error {
-	start := time.Now()
-	if err := c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
-		level.Warn(c.logger).Log("msg", "failed to set item into redis", "err", err, "key", key, "value_size", len(value))
-		return nil
-	}
-	c.durationSet.Observe(time.Since(start).Seconds())
-	return nil
+	return c.p.enqueueAsync(func() {
+		start := time.Now()
+		if err := c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
+			level.Warn(c.logger).Log("msg", "failed to set item into redis", "err", err, "key", key, "value_size", len(value))
+			return
+		}
+		c.durationSet.Observe(time.Since(start).Seconds())
+	})
 }
 
 // SetMulti set multiple keys and value.
@@ -313,6 +307,7 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 
 // Stop implement RemoteCacheClient.
 func (c *RedisClient) Stop() {
+	c.p.Stop()
 	c.client.Close()
 }
 

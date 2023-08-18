@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -825,7 +826,7 @@ config:
 		},
 		string(cacheCfg),
 		"",
-		[]string{"--store.grpc.downloaded-bytes-limit=196627B"},
+		[]string{"--store.grpc.downloaded-bytes-limit=310176B"},
 	)
 
 	testutil.Ok(t, e2e.StartAndWaitReady(store1, store2, store3))
@@ -842,6 +843,7 @@ config:
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
 	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
+	extLset4 := labels.FromStrings("ext1", "value2", "replica", "4")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
@@ -853,7 +855,7 @@ config:
 	testutil.Ok(t, err)
 	id3, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset3, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0, metadata.NoneFunc)
+	id4, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset4, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
@@ -897,8 +899,11 @@ config:
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
 			if _, _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q3.Endpoint("http")), testQuery, now, opts); err != nil {
+				if err != nil {
+					t.Logf("got error: %s", err)
+				}
 				e := err.Error()
-				if strings.Contains(e, "load chunks") && strings.Contains(e, "exceeded bytes limit while fetching chunks: limit 196627 violated") {
+				if strings.Contains(e, "load chunks") && strings.Contains(e, "exceeded bytes limit while fetching chunks: limit 310176 violated") {
 					return nil
 				}
 				return err
@@ -919,16 +924,23 @@ func TestRedisClient_Rueidis(t *testing.T) {
 	testutil.Ok(t, r.Start())
 
 	redisClient, err := cacheutil.NewRedisClientWithConfig(log.NewLogfmtLogger(os.Stderr), "redis", cacheutil.RedisClientConfig{
-		Addr: r.Endpoint("redis"),
+		Addr:                r.Endpoint("redis"),
+		MaxAsyncBufferSize:  10,
+		MaxAsyncConcurrency: 1,
 	}, nil)
 	testutil.Ok(t, err)
 
-	err = redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute)
-	testutil.Ok(t, err)
-
-	returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
-	testutil.Equals(t, 1, len(returnedVals))
-	testutil.Equals(t, []byte("bar"), returnedVals["foo"])
+	testutil.Ok(t, redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute))
+	testutil.Ok(t, runutil.Retry(1*time.Second, make(<-chan struct{}), func() error {
+		returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
+		if len(returnedVals) != 1 {
+			return fmt.Errorf("got zero responses")
+		}
+		if !bytes.Equal(returnedVals["foo"], []byte("bar")) {
+			return fmt.Errorf("got wrong response, expected bar: %v", returnedVals["foo"])
+		}
+		return nil
+	}))
 }
 
 func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {

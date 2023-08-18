@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -157,9 +158,14 @@ func newPrometheus(binPath, prefix string) (*Prometheus, error) {
 		return nil, err
 	}
 
-	// Just touch an empty config file. We don't need to actually scrape anything.
-	_, err = os.Create(filepath.Join(db.Dir(), "prometheus.yml"))
+	f, err := os.Create(filepath.Join(db.Dir(), "prometheus.yml"))
 	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	// Some well-known external labels so that we can test label resorting
+	if _, err = io.WriteString(f, "global:\n  external_labels:\n    region: eu-west"); err != nil {
 		return nil, err
 	}
 

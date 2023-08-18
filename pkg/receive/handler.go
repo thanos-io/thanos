@@ -64,13 +64,6 @@ const (
 	labelError   = "error"
 )
 
-// Allowed fields in client certificates.
-const (
-	CertificateFieldOrganization       = "organization"
-	CertificateFieldOrganizationalUnit = "organizationalUnit"
-	CertificateFieldCommonName         = "commonName"
-)
-
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
