@@ -5,7 +5,7 @@
 
 trap 'kill 0' SIGTERM
 
-MINIO_ENABLED=${MINIO_ENABLED:-""}
+MINIO_ENABLED=${MINIO_ENABLED:-"y"}
 MINIO_EXECUTABLE=${MINIO_EXECUTABLE:-"minio"}
 MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
 PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"prometheus"}
@@ -41,7 +41,7 @@ if [ -n "${MINIO_ENABLED}" ]; then
   export MINIO_ENDPOINT="127.0.0.1:9000"
   export MINIO_BUCKET="thanos"
   export S3_ACCESS_KEY=${MINIO_ROOT_USER}
-  export S3_SECRET_KEY=${MINIO_ROOT_USER}
+  export S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
   export S3_BUCKET=${MINIO_BUCKET}
   export S3_ENDPOINT=${MINIO_ENDPOINT}
   export S3_INSECURE="true"
@@ -142,6 +142,7 @@ sleep 0.5
 
 OBJSTORECFG=""
 if [ -n "${MINIO_ENABLED}" ]; then
+  echo "objectcfg enabled"
   OBJSTORECFG="--objstore.config-file      data/bucket.yml"
 fi
 
@@ -171,6 +172,7 @@ done
 sleep 0.5
 
 if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
+echo "store enabled"
   cat >groupcache.yml <<-EOF
 		type: GROUPCACHE
 config:
@@ -184,6 +186,7 @@ metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s
 	EOF
 
+  
   ${THANOS_EXECUTABLE} store \
     --debug.name store \
     --log.level debug \
