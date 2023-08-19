@@ -382,9 +382,12 @@ func (h *histogramAggregator) reset() {
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
 	if fh.Schema < h.schema {
-		panic("schema should be greater or equal to aggregator schema")
+		panic("schema must be greater or equal to aggregator schema")
 	}
 
+	// A schema increase is treated as a reset, so we need to preserve
+	// the original histogram in case the schema is adjusted.
+	oFh := fh
 	// If schema of the sample is greater than the
 	// aggregator schema, we need to reduce the resolution.
 	if fh.Schema > h.schema {
@@ -392,7 +395,7 @@ func (h *histogramAggregator) add(s sample) {
 	}
 
 	if h.total > 0 {
-		if fh.CounterResetHint != histogram.GaugeType && fh.DetectReset(h.previous) {
+		if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
 			// Counter reset, correct the value.
 			h.counter.Add(fh)
 			h.resets++
