@@ -3229,7 +3229,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 		Random:           rand.New(rand.NewSource(120)),
 		SkipChunks:       true,
 	})
-	blockID := createBlockFromHead(t, tmpDir, head)
+	blockID := storetestutil.CreateBlockFromHead(t, tmpDir, head)
 
 	bucketBlocks := make([]*bucketBlock, 0, blockCount)
 
