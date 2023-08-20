@@ -97,25 +97,27 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { theme } = useTheme();
-  const handleExplain = () => {
-    fetch(`${pathPrefix}/api/v1/query_explain`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: value }),
-    })
-      .then((response) => response.json())
-      .then((json) => {
-        if (json.status === 'success') {
-          setExplainOutput(json.data);
-        } else {
-          // Handle error here
-        }
-      })
-      .catch((error) => {
-        // Handle error here
+  const handleExplain = async (val: string | null) => {
+    try {
+      const body = val
+        ? new URLSearchParams({
+            val,
+          })
+        : null;
+
+      const response = await fetch('/api/v1/query_explain', {
+        method: 'POST',
+        body,
       });
+      const data = await response.json();
+      setExplainOutput(data);
+
+      if (!response.ok) {
+        throw new Error(response.statusText);
+      }
+    } catch (e) {
+      console.log(e);
+    }
   };
   // (Re)initialize editor based on settings / setting changes.
   useEffect(() => {
@@ -229,7 +231,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
             Execute
           </Button>
         </InputGroupAddon>
-        <Button className="execute-btn ml-1" color="info" onClick={handleExplain}>
+        <Button className="execute-btn ml-1" color="info" onClick={() => handleExplain(value)}>
           Explain
         </Button>
       </InputGroup>
