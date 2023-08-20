@@ -20,6 +20,7 @@ import moment from 'moment-timezone';
 
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
+import { ExplainOutput } from './ExpressionInput';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -57,6 +58,7 @@ interface PanelState {
   stats: QueryStats | null;
   exprInputValue: string;
   analysis: QueryTree | null;
+  explainOutput: ExplainOutput | null;
 }
 
 export interface PanelOptions {
@@ -110,6 +112,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       error: null,
       stats: null,
       exprInputValue: props.options.expr,
+      explainOutput: null,
       analysis: null,
     };
 
@@ -124,7 +127,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
     this.handleChangeAnalyze = this.handleChangeAnalyze.bind(this);
   }
-
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
     const {
       endTime,
@@ -227,7 +229,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
-        console.log(json.data.analysis);
         let resultSeries = 0;
         let analysis = null;
         if (json.data) {
@@ -350,6 +351,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
+    const getExplainOutput = (explaination: ExplainOutput) => {
+      this.setState({ explainOutput: explaination });
+    };
     return (
       <div className="panel">
         <Row>
@@ -365,6 +369,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               enableLinter={this.props.enableLinter}
               queryHistory={pastQueries}
               metricNames={metricNames}
+              getExplain={getExplainOutput}
             />
           </Col>
         </Row>
@@ -446,6 +451,13 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
               <ListTree id={`analyze-tree-${id}`} node={this.state.analysis} />
+            </Alert>
+          </Col>
+        </Row>
+        <Row hidden={!this.state.explainOutput}>
+          <Col>
+            <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
+              <ListTree id={`explain-tree-${id}`} node={this.state.explainOutput} />
             </Alert>
           </Col>
         </Row>

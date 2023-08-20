@@ -33,6 +33,7 @@ interface CMExpressionInputProps {
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
   enableLinter: boolean;
+  getExplain: (explain: ExplainOutput) => void;
 }
 
 const dynamicConfigCompartment = new Compartment();
@@ -92,28 +93,31 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   enableAutocomplete,
   enableHighlighting,
   enableLinter,
+  getExplain,
 }) => {
-  const [explainOutput, setExplainOutput] = React.useState<ExplainOutput | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { theme } = useTheme();
-  const handleExplain = async (val: string | null) => {
+  const handleExplain = async (query: string) => {
     try {
-      const body = val
-        ? new URLSearchParams({
-            val,
-          })
-        : null;
-
-      const response = await fetch('/api/v1/query_explain', {
-        method: 'POST',
-        body,
+      const queryParams = new URLSearchParams({
+        query,
+        engine: 'thanos',
       });
-      const data = await response.json();
-      setExplainOutput(data);
-
+      const response = await fetch(`/api/v1/query_explain`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: queryParams,
+      });
       if (!response.ok) {
         throw new Error(response.statusText);
+      } else {
+        const json = await response.json();
+        getExplain(json.data);
+        // TODO(nishchayv): Display the explanation in the UI or do something with the result
+        // We can use the `json` data to render or manipulate the UI as needed.
       }
     } catch (e) {
       console.log(e);
