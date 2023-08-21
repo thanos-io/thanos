@@ -374,7 +374,7 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 
 		batch := make([]sample, 0, j)
 		for _, s := range data[:j] {
-			if value.IsStaleNaN(s.v) || math.Float64bits(s.v) == value.NormalNaN {
+			if value.IsStaleNaN(s.v) || math.Float64bits(s.v) == value.NormalNaN || math.IsNaN(s.v) {
 				continue
 			}
 			batch = append(batch, s)
