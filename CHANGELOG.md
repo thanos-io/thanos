@@ -47,6 +47,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6604](https://github.com/thanos-io/thanos/pull/6604)
 Compact and Bucket: Add `--disable-admin-operations` flag in Compactor UI and Bucket UI
 
+
 ### Fixed
 - [#6503](https://github.com/thanos-io/thanos/pull/6503) *: Change the engine behind `ContentPathReloader` to be completely independent of any filesystem concept. This effectively fixes this configuration reload when used with Kubernetes ConfigMaps, Secrets, or other volume mounts.
 - [#6456](https://github.com/thanos-io/thanos/pull/6456) Store: fix crash when computing set matches from regex pattern
