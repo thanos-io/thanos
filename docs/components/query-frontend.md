@@ -215,14 +215,14 @@ Flags:
       --labels.response-cache-config=<content>
                                  Alternative to
                                  'labels.response-cache-config-file' flag
-                                 (mutually exclusive). Content of YAML file tha
+                                 (mutually exclusive). Content of YAML file that
                                  contains response cache configuration.
       --labels.response-cache-config-file=<file-path>
                                  Path to YAML file that contains response cache
                                  configuration.
       --labels.response-cache-max-freshness=1m
                                  Most recent allowed cacheable result for
-                                 labels requests, to prevent caching very recen
+                                 labels requests, to prevent caching very recent
                                  results that might still be in flux.
       --labels.split-interval=24h
                                  Split labels requests by an interval and
@@ -250,13 +250,13 @@ Flags:
                                  that contains downstream tripper configuration.
                                  If your downstream URL is localhost or
                                  127.0.0.1 then it is highly recommended to
-                                 increase max_idle_conns_per_host to at leas
+                                 increase max_idle_conns_per_host to at least
                                  100.
       --query-frontend.downstream-tripper-config-file=<file-path>
                                  Path to YAML file that contains downstream
                                  tripper configuration. If your downstream URL
                                  is localhost or 127.0.0.1 then it is highly
-                                 recommended to increase max_idle_conns_per_hos
+                                 recommended to increase max_idle_conns_per_host
                                  to at least 100.
       --query-frontend.downstream-url="http://localhost:9090"
                                  URL of downstream Prometheus Query compatible
@@ -273,7 +273,7 @@ Flags:
                                  source of slow queries (repeated flag).
                                  The values of the header will be added to
                                  the org id field in the slow query log. If
-                                 multiple headers match the request, the firs
+                                 multiple headers match the request, the first
                                  matching arg specified will take precedence.
                                  If no headers match 'anonymous' will be used.
       --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
@@ -285,7 +285,7 @@ Flags:
       --query-range.align-range-with-step
                                  Mutate incoming queries to align their
                                  start and end with their step for better
-                                 cache-ability. Note: Grafana dashboards do tha
+                                 cache-ability. Note: Grafana dashboards do that
                                  by default.
       --query-range.horizontal-shards=0
                                  Split queries in this many requests
@@ -311,7 +311,7 @@ Flags:
                                  interval in query-range.horizontal-shards
                                  requests of equal range. Using
                                  this parameter is not allowed with
-                                 query-range.split-interval. One should also se
+                                 query-range.split-interval. One should also set
                                  query-range.split-min-horizontal-shards to a
                                  value greater than 1 to enable splitting.
       --query-range.partial-response
@@ -326,14 +326,14 @@ Flags:
       --query-range.response-cache-config=<content>
                                  Alternative to
                                  'query-range.response-cache-config-file' flag
-                                 (mutually exclusive). Content of YAML file tha
+                                 (mutually exclusive). Content of YAML file that
                                  contains response cache configuration.
       --query-range.response-cache-config-file=<file-path>
                                  Path to YAML file that contains response cache
                                  configuration.
       --query-range.response-cache-max-freshness=1m
                                  Most recent allowed cacheable result for query
-                                 range requests, to prevent caching very recen
+                                 range requests, to prevent caching very recent
                                  results that might still be in flux.
       --query-range.split-interval=24h
                                  Split query range requests by an interval and
@@ -342,7 +342,7 @@ Flags:
                                  configured.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Conten
+                                 flag (mutually exclusive). Content
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration

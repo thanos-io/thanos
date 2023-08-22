@@ -270,13 +270,13 @@ Flags:
                                  disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no clien
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
-                                 If no function has been specified, it does no
+                                 If no function has been specified, it does not
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
@@ -302,7 +302,7 @@ Flags:
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains objec
+                                 Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --receive.default-tenant-id="default-tenant"
@@ -333,7 +333,7 @@ Flags:
                                  Endpoint of local receive node. Used to
                                  identify the local node in the hashring
                                  configuration. If it's empty AND hashring
-                                 configuration was provided, it means tha
+                                 configuration was provided, it means that
                                  receive will run in RoutingOnly mode.
       --receive.relabel-config=<content>
                                  Alternative to 'receive.relabel-config-file'
@@ -351,7 +351,7 @@ Flags:
       --receive.tenant-certificate-field=
                                  Use TLS client's certificate field to
                                  determine tenant for write requests.
-                                 Must be one of organization, organizationalUni
+                                 Must be one of organization, organizationalUnit
                                  or commonName. This setting will cause the
                                  receive.tenant-header flag value to be ignored.
       --receive.tenant-header="THANOS-TENANT"
@@ -369,7 +369,7 @@ Flags:
       --remote-write.client-tls-ca=""
                                  TLS CA Certificates to use to verify servers.
       --remote-write.client-tls-cert=""
-                                 TLS Certificates to use to identify this clien
+                                 TLS Certificates to use to identify this client
                                  to the server.
       --remote-write.client-tls-key=""
                                  TLS Key for the client's certificate.
@@ -378,14 +378,14 @@ Flags:
                                  disable TLS.
       --remote-write.server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no clien
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
                                  disable TLS.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Conten
+                                 flag (mutually exclusive). Content
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
@@ -422,7 +422,7 @@ Flags:
                                  be stored per tenant. In case the exemplar
                                  storage becomes full (number of stored
                                  exemplars becomes equal to max-exemplars),
-                                 ingesting a new exemplar will evict the oldes
+                                 ingesting a new exemplar will evict the oldest
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
@@ -434,9 +434,9 @@ Flags:
                                  policy (i.e. infinite retention).
                                  For more details on how retention is
                                  enforced for individual tenants, please
-                                 refer to the Tenant lifecycle managemen
+                                 refer to the Tenant lifecycle management
                                  section in the Receive documentation:
-                                 https://thanos.io/tip/components/receive.md/#tenant-lifecycle-managemen
+                                 https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
       --tsdb.too-far-in-future.time-window=0s
                                  [EXPERIMENTAL] Configures the allowed time
                                  window for ingesting samples too far in the

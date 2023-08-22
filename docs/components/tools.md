@@ -122,7 +122,7 @@ Flags:
                            object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains objec
+                           Path to YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
@@ -248,7 +248,7 @@ Flags:
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                Path to YAML file that contains objec
+                                Path to YAML file that contains object
                                 store configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --refresh=30m             Refresh interval to download metadata from
@@ -281,11 +281,11 @@ Flags:
       --web.disable-cors        Whether to disable CORS headers to be set by
                                 Thanos. By default Thanos sets CORS headers to
                                 be allowed by all.
-      --web.external-prefix=""  Static prefix for all HTML links and redirec
+      --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface.
                                 Actual endpoints are still served on / or the
-                                web.route-prefix. This allows thanos bucke
-                                web UI to be served behind a reverse proxy tha
+                                web.route-prefix. This allows thanos bucket
+                                web UI to be served behind a reverse proxy that
                                 strips a URL sub-path.
       --web.prefix-header=""    Name of HTTP request header used for dynamic
                                 prefixing of UI links and redirects.
@@ -361,7 +361,7 @@ Flags:
                            Used for repair logic to backup blocks before
                            removal.
       --objstore-backup.config-file=<file-path>
-                           Path to YAML file that contains objec
+                           Path to YAML file that contains object
                            store-backup configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
@@ -372,7 +372,7 @@ Flags:
                            object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains objec
+                           Path to YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -r, --repair             Attempt to repair blocks for which issues were
@@ -417,7 +417,7 @@ Flags:
                            object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains objec
+                           Path to YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
@@ -464,7 +464,7 @@ Flags:
                              configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                             Path to YAML file that contains objec
+                             Path to YAML file that contains object
                              store configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
       --output=table         Output format for result. Currently supports table,
@@ -562,7 +562,7 @@ Flags:
                               https://thanos.io/tip/thanos/storage.md/#configuration
                               The object storage which replicate data to.
       --objstore-to.config-file=<file-path>
-                              Path to YAML file that contains objec
+                              Path to YAML file that contains object
                               store-to configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
                               The object storage which replicate data to.
@@ -573,7 +573,7 @@ Flags:
                               configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                              Path to YAML file that contains objec
+                              Path to YAML file that contains object
                               store configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --resolution=0s... ...  Only blocks with these resolutions will be
@@ -620,7 +620,7 @@ Continuously downsamples blocks in an object store bucket.
 Flags:
       --block-files-concurrency=1
                               Number of goroutines to use when
-                              fetching/uploading block files from objec
+                              fetching/uploading block files from object
                               storage.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
@@ -652,7 +652,7 @@ Flags:
                               configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                              Path to YAML file that contains objec
+                              Path to YAML file that contains object
                               store configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
@@ -713,7 +713,7 @@ Flags:
                            object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains objec
+                           Path to YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --remove             Remove the marker.
@@ -782,7 +782,7 @@ Flags:
                                 Pass --no-dry-run to skip this.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
-                                If no function has been specified, it does no
+                                If no function has been specified, it does not
                                 happen. This permits avoiding downloading some
                                 files twice albeit at some performance cost.
                                 Possible values are: "", "SHA256".
@@ -800,7 +800,7 @@ Flags:
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                Path to YAML file that contains objec
+                                Path to YAML file that contains object
                                 store configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --prom-blocks             If specified, we assume the blocks to be
@@ -812,7 +812,7 @@ Flags:
       --rewrite.to-delete-config=<content>
                                 Alternative to 'rewrite.to-delete-config-file'
                                 flag (mutually exclusive). Content of YAML file
-                                that contains []metadata.DeletionRequest tha
+                                that contains []metadata.DeletionRequest that
                                 will be applied to blocks
       --rewrite.to-delete-config-file=<file-path>
                                 Path to YAML file that contains

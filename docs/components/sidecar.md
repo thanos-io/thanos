@@ -90,13 +90,13 @@ Flags:
                                  disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no clien
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
-                                 If no function has been specified, it does no
+                                 If no function has been specified, it does not
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
@@ -115,7 +115,7 @@ Flags:
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened
-                                 later than this value. Option can be a constan
+                                 later than this value. Option can be a constant
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
@@ -126,7 +126,7 @@ Flags:
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains objec
+                                 Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --prometheus.get_config_interval=30s
@@ -135,7 +135,7 @@ Flags:
                                  Timeout for getting Prometheus config
       --prometheus.http-client=<content>
                                  Alternative to 'prometheus.http-client-file'
-                                 flag (mutually exclusive). Conten
+                                 flag (mutually exclusive). Content
                                  of YAML file or string with http
                                  client configs. See Format details:
                                  https://thanos.io/tip/components/sidecar.md/#configuration.
@@ -164,7 +164,7 @@ Flags:
                                  rules.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Conten
+                                 flag (mutually exclusive). Content
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
