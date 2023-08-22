@@ -5,7 +5,7 @@ Here are some example alerts configured for Kubernetes environment.
 ## Compaction
 
 ```yaml mdox-exec="cat examples/tmp/thanos-compact.yaml"
-name: thanos-compac
+name: thanos-compact
 rules:
 - alert: ThanosCompactMultipleRunning
   annotations:
@@ -572,7 +572,7 @@ rules:
   expr: |
     (
       sum by (job) (rate(thanos_replicate_replication_runs_total{result="error", job=~".*thanos-bucket-replicate.*"}[5m]))
-    / on (job) group_lef
+    / on (job) group_left
       sum by (job) (rate(thanos_replicate_replication_runs_total{job=~".*thanos-bucket-replicate.*"}[5m]))
     ) * 100 >= 10
   for: 5m
@@ -599,7 +599,7 @@ rules:
 ### Absent Rules
 
 ```yaml mdox-exec="cat examples/tmp/thanos-component-absent.yaml"
-name: thanos-component-absen
+name: thanos-component-absent
 rules:
 - alert: ThanosCompactIsDown
   annotations:
