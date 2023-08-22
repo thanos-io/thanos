@@ -826,7 +826,7 @@ Flags:
       --rewrite.to-relabel-config-file=<file-path>
                                 Path to YAML file that contains relabel configs
                                 that will be applied to blocks
-      --tmp.dir="/var/folders/yn/c6y00yq11klbr1pk_92j61580000gn/T/thanos-rewrite"
+      --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
