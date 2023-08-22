@@ -73,7 +73,7 @@ An example configuration file is provided below,
 ```yaml
 # A certificate and a key file are needed.
 tls_server_config:
-  cert_file: server.cr
+  cert_file: server.crt
   key_file: server.key
 
 # Usernames and passwords required to connect to Thanos.

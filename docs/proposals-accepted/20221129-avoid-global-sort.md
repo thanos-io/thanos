@@ -1,12 +1,12 @@
 ---
 type: proposal
-title: Avoid Global Sort on Querier Selec
+title: Avoid Global Sort on Querier Select
 status: approved
 owner: bwplotka,fpetkovski
 menu: proposals-accepted
 ---
 
-## Avoid Global Sort on Querier Selec
+## Avoid Global Sort on Querier Select
 
 * **Related Tickets:**
   * https://github.com/thanos-io/thanos/issues/5719
@@ -144,7 +144,7 @@ Cons:
 * Feels hacky. Proper way for preserving this information would be like alternative 4.
 * Debuggability might be not needed here - YAGNI
 
-4. Replica label struc
+4. Replica label struct
 
 We could make Store API response fully replica aware. This means that series response will now include an extra slice of replica labels that this series belongs to:
 

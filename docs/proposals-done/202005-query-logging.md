@@ -213,7 +213,7 @@ type ActiveQueryLogging struct {
 	// mmapped file to store the queries.
 	mmappedFile []byte
 	// channel to generate the next available index, much like Python’s generator indexing
-	getNextIndex chan in
+	getNextIndex chan int
 	// logger, different from the usual one
 	logger log.Logger
 }
@@ -221,7 +221,7 @@ type ActiveQueryLogging struct {
 
 This interface is designed with some ideas from a similar interface designed for *Prometheus Query Logger*[[2]](https://prometheus.io/docs/guides/query-log/). Here is a rough algorithm that would implement the Query Logging in Thanos -
 
-```tx
+```txt
 1) Thanos receives a query.
 2) It calls the index_generator, which is a Python-style generator that will generate natural numbers from 0(or 1) indicating the byte index at which to put the information about the query in the log file. This would ensure that the key remains unique for each of the queries logged.
 3) The log file would be a memory-mapped file, which would help in accessing a random position for logging the query in constant time.

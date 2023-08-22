@@ -50,7 +50,7 @@ To improve navigating through issues and PRs we introduce various [labels](https
 
 The main labels are:
 
-#### Componen
+#### Component
 
 `component: *` and `website/docs` labels indicate an area related to the change or issue.
 

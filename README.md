@@ -62,9 +62,9 @@ Source file to copy and edit: https://docs.google.com/drawings/d/1iimTbcicKXqz0F
 The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
 
 * Each subcommand should do one thing and do it well
-  * e.g. thanos query proxies incoming calls to known store API endpoints merging the resul
+  * e.g. thanos query proxies incoming calls to known store API endpoints merging the result
 * Write components that work together
-  * e.g. blocks should be stored in native prometheus forma
+  * e.g. blocks should be stored in native prometheus format
 * Make it easy to read, write, and, run components
   * e.g. reduce complexity in system design and implementation
 

@@ -114,7 +114,7 @@ Due to the limitations of the prom Querier API, we can instead use the reporter 
 
 **tl;dr:** Longer term to capture the entire query path by amending the Prometheus Querier API to return some stats alongside the query, and creating this generic metric inside the Prometheus PromQL engine. Short term, pass a func parameter to the Queryable constructor for the proxy StoreAPI querier that will exfiltrate the `SeriesStats`, circumventing PromQL engine.
 
-### Measuring Thanos Query Latency with respect to query fanou
+### Measuring Thanos Query Latency with respect to query fanout
 
 First we would create a new `SeriesQueryPerformanceCalculator` for aggregating/tracking the `SeriesStatsCounters` for each fanned out query
 
@@ -157,7 +157,7 @@ func (s *SeriesQueryPerformanceMetricsAggregator) Observe(duration float64) {
 }
 
 // Determine the appropriate bucket for a given value relative to a set of quantiles
-func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantiles *[]float64) in
+func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantiles *[]float64) int
 ```
 
 Current query fanout logic:
@@ -178,7 +178,7 @@ for _, st := range s.stores() {
 type seriesServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.Store_SeriesServer
-	ctx context.Contex
+	ctx context.Context
 
 	seriesSet      []storepb.Series
 	seriesSetStats storepb.SeriesStatsCounter
@@ -262,10 +262,10 @@ Injecting the reporter into the qapi Queryable static constructor:
 ```
 
 In summary, we will:
-* Amend the `seriesServer` to keep track of all `SeriesStats` for each series pushed to i
+* Amend the `seriesServer` to keep track of all `SeriesStats` for each series pushed to it
 * Amend the static `qapi.queryableCreate` to take a `SeriesStatsReporter` func parameter that will exfiltrate the seriesStats from the Thanos Proxy StoreAPI
 * Add new runtime flags that will allow us to specify a) Query time quantiles b) Series size quantiles c) Sample size quantiles for our partitioned histogram
-* Start a query duration timer as soon as the handler is hi
+* Start a query duration timer as soon as the handler is hit
 * Create a new partitioned vector histogram called `thanos_query_duration_seconds` in the `queryRange` API handler
 * Propagate all exfiltrated `SeriesStats` to aforementioned metric
 * Record observations against the `thanos_query_duration_seconds` histogram after bucketing samples_le/series_le buckets

@@ -40,7 +40,7 @@ We could scale horizontally automatically during such increased load (once we im
 
 ## 6 Non-Goals
 
-* [Request-based limiting](https://github.com/thanos-io/thanos/issues/5404), i.e, number of samples in a remote write reques
+* [Request-based limiting](https://github.com/thanos-io/thanos/issues/5404), i.e, number of samples in a remote write request
 * Per-replica-tenant limiting which is already being discussed in this [PR](https://github.com/thanos-io/thanos/pull/5333)
 * Using [consistent hashing](https://github.com/thanos-io/thanos/issues/4972) implementation in Receive to make it easily scalable
 
@@ -84,12 +84,12 @@ So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resul
 
 #### 8.1.1 Pros:
 
-* Simpler as compared to other solutions and easier to implemen
+* Simpler as compared to other solutions and easier to implement
 * Lesser endpoint calls, so improved latency
 * Relies on "external to Thanos" system, and doesn’t increase load on Receive
 * Does not add much tenancy-based complexity to Thanos
 * No need to merge statistics across replicas, handled by meta-monitoring
-* Additional request-based rate limiting can be done within same componen
+* Additional request-based rate limiting can be done within same component
 * In case, external meta-monitoring solution is down, can fall back to per-replica-tenant limits
 * Growing our instrumentation to improve validator, improves our observability as well
 * Easy to iterate. We can move out of meta-monitoring to different standalone solution if needed later on.
@@ -98,7 +98,7 @@ So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resul
 
 * Not very accurate
   * We do not know exact state of each TSDB, only know view of meta-monitoring solution, which gets updated on every scrape
-  * We do not account for how much a remote write request will increase the number of active series, only infer that from query result after the fac
+  * We do not account for how much a remote write request will increase the number of active series, only infer that from query result after the fact
 * Data replication (quorum-based) will likely cause inaccuracies in HEAD stat metrics
 * Dependence on an external meta-monitoring system that is Prometheus API compatible. It's fairly easy and reliable with local Prometheus setup, but if the user uses 3rd party system like central remote monitoring, this might be less trivial to setup.
 
@@ -129,7 +129,7 @@ This approach would add validation logic within Receive Router, which we can cal
 The implementation would be as follows,
 
 * Implement configuration option for global series limit (which would be the same for each tenant initially) i.e `globalSeriesLimit`
-* Implement validation logic in Receive Router mode, which can recognize other Receive replicas and call the `api/v1/status/tsdb` endpoint on each replica with `all_tenants=true` query parameter and merge the count of active series i.e `currentSeries` of a tenan
+* Implement validation logic in Receive Router mode, which can recognize other Receive replicas and call the `api/v1/status/tsdb` endpoint on each replica with `all_tenants=true` query parameter and merge the count of active series i.e `currentSeries` of a tenant
 * Implement an endpoint in Receive, `api/v1/getrefmap`, which when provided with a tenant id and a remote write request returns a map of SeriesRef and labelsets
 * We can then merge this with maps from other replicas, and get the number of series for which `SeriesRef == 0` for all replicas. This is the increase in the number of active series if the remote write request is ingested i.e `increaseOnRequest`. For example,
 
@@ -164,11 +164,11 @@ message SeriesRefMap {
 
 * Would result in more accurate measurements to limit on, however data replication would still make `api/v1/status/tsdb` [inaccurate](https://github.com/thanos-io/thanos/pull/5402#discussion_r893434246)
   * It considers the exact amount of current active series for a tenant as it calls status API each time
-  * It considers how much the number of active series would increase after a remote write reques
-* No new TSDB-related changes, it utilizes interfaces that are already presen
-* Simple proxy-like solution, as an optional componen
+  * It considers how much the number of active series would increase after a remote write request
+* No new TSDB-related changes, it utilizes interfaces that are already present
+* Simple proxy-like solution, as an optional component
 * Does not change existing way in which Receive nodes communicate with each other
-* Additional request-based rate limiting can be done within same componen
+* Additional request-based rate limiting can be done within same component
 
 #### 9.1.2 Cons:
 
@@ -201,8 +201,8 @@ The option of using gRPC instead of two API calls each time is also valid here.
 
 * Would result in more accurate measurements to limit on however data replication would still make `api/v1/status/tsdb` [inaccurate](https://github.com/thanos-io/thanos/pull/5402#discussion_r893434246)
   * It considers the exact amount of active series for a tenant as it calls status API each time
-  * It considers how much the number of active series would increase after a remote write reques
-* No new TSDB-related changes, it utilizes interfaces that are already presen
+  * It considers how much the number of active series would increase after a remote write request
+* No new TSDB-related changes, it utilizes interfaces that are already present
 
 #### 9.2.2 Cons:
 

@@ -94,7 +94,7 @@ To test the changes to the docs locally just start serving the website by runnin
 make web-serve
 ```
 
-## Deploymen
+## Deployment
 
 We use [Netlify](https://www.netlify.com/) for hosting. We are using Open Source license (PRO). Thanks Netlify for this!
 

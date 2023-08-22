@@ -16,7 +16,7 @@ menu: proposals-accepted
 
   * [Per-Store TLS configuration in Thanos Query](https://github.com/thanos-io/thanos/issues/977)
 
-## Wha
+## What
 
 The Thanos Querier component supports basic mTLS configuration for internal gRPC communication. This works great for basic use cases but it still requires extra forward proxies to make it work for bigger deployments. It’s also hard to rotate certificates automatically and configure safe mTLS. This proposal aims to allow a better TLS story.
 
@@ -37,7 +37,7 @@ So it requires extra forward proxies to make it work for bigger (multi-cluster) 
 ## Goals
 
 * To add support for per-endpoint TLS configuration in Thanos Query Component for internal gRPC communication
-* Automatic certificate rotation without restar
+* Automatic certificate rotation without restart
 
 ## Non-Goals
 

@@ -45,7 +45,7 @@ Lets look through their pros and cons:
 
 If we were to graph these choices in terms of their incisiveness and complexity it would look something like this:
 
-```tex
+```text
 Most incisive / Least Complex ------------ Least incisive / Most Complex
 #1           #2                                      #4
            #3    #5

@@ -14,7 +14,7 @@ Programs we participated / are participating:
 
 You have been selected for mentorship with Prometheus or Thanos? Congratulations! Here is some short quick information for a quick start!
 
-### Onboarding Check Lis
+### Onboarding Check List
 
 - [X] Please see and acknowledge our [Code of Conduct](../../CODE_OF_CONDUCT.md). A similar one is for the Prometheus project. TL;DR: Be nice and friendly!
 - [X] Create an account on the [CNCF Slack](https://slack.cncf.io/). Please add any profile photo to make it unique. (: This is Thanos's main chat provider. You can reach any of the mentors there.

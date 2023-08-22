@@ -73,7 +73,7 @@ The main motivation for considering deletions in the object storage are the foll
 * Pros: Does have quick access to querying or block indexes
 * Cons: There would be many writers, and store never was about to write things, it only needed read access
 
-#### How we store the tombstone and in what forma
+#### How we store the tombstone and in what format
 
 1. Prometheus Format per block
 2. Prometheus Format global

@@ -20,7 +20,7 @@ The number of active series that our metrics platforms ingests at any given time
 
 With a scrape frequency of once per minute, that puts or ingestion throughput between 13-17 Million samples per seconds across all our ingest components (Prometheus/Thanos Receive).
 
-## Historical and current business contex
+## Historical and current business context
 
 Founded in 2001, Medallia is a pioneer and leader in the field of experience management as a SaaS solution. The initial focus for the company was on collecting and analyzing solicited feedback (i.e., web-based surveys). But, the focus has evolved over the years to include a variety of interactions, including voice, video, digital, IoT, social media, and corporate-messaging tools.
 
@@ -28,7 +28,7 @@ Observability is largely a practice of capturing a variety of health and perform
 
 Just as a goal in observability is to catch problems early and to facilitate fast mitigation, Medallia helps its customers to detect customer and employee dissatisfaction and to take proactive action while the relationship can still be salvaged .
 
-## Problem Statemen
+## Problem Statement
 
 With such a strong analogy from our own business to lean on, the value of investing in observability has not been a difficult concept to justify. However, until the middle of the previous decade, observability within Medallia was limited to reachability monitoring and log aggregation. At that point, however, the company’s broad-focused SRE organization brought forth the use of metrics, which was both a revelation to and a revolution within the engineering organization with respect to awareness of the quality and performance of our software.
 
@@ -106,7 +106,7 @@ Our current inventory, across all data centers, includes:
 - 402 Prometheus instances
 - 39 Alertmanager instances
 
-### Compute Cos
+### Compute Cost
 
 Over the course of a week, total resource utilization for all of our Thanos and Prometheus components across all data centers is within these ranges:
 

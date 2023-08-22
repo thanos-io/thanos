@@ -2,7 +2,7 @@
 
 Our interactive, in-browser tutorials are available under https://killercoda.com/thanos.
 
-## Developmen
+## Development
 
 Process of adding / editing tutorials:
 

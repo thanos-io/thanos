@@ -922,13 +922,13 @@ It's very easy to forget to add Prometheus metrics (e.g a `prometheus.Counter`) 
 
 Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L308).
 
-#### go ve
+#### go vet
 
 Standard Go vet is quite strict, but for a good reason. Always vet your Go code!
 
 Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L313).
 
-#### golangci-lin
+#### golangci-lint
 
 [golangci-lint](https://github.com/golangci/golangci-lint) is an amazing tool that allows running a set of different custom linters from the Go community against your code. Give it a star and use it. (:
 

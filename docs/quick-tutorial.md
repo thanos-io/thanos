@@ -65,7 +65,7 @@ Sidecar makes use of Prometheus's `reload` endpoint. Make sure it's enabled with
 The following configures Sidecar to write Prometheus's data into a configured object storage bucket:
 
 ```bash
-thanos sidecar
+thanos sidecar \
     --tsdb.path            /var/prometheus \          # TSDB data directory of Prometheus
     --prometheus.url       "http://localhost:9090" \  # Be sure that Sidecar can use this URL!
     --objstore.config-file bucket_config.yaml \       # Storage configuration for uploading data
@@ -88,8 +88,8 @@ The Sidecar component implements and exposes a gRPC *[Store API](https://github.
 Let's extend the Sidecar from the previous section to connect to a Prometheus server, and expose the Store API:
 
 ```bash
-thanos sidecar
-    --tsdb.path                 /var/prometheus
+thanos sidecar \
+    --tsdb.path                 /var/prometheus \
     --objstore.config-file      bucket_config.yaml \       # Bucket config file to send data to
     --prometheus.url            http://localhost:9090 \    # Location of the Prometheus HTTP server
     --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on Sidecar
@@ -113,7 +113,7 @@ Every Prometheus instance must have a globally unique set of identifying labels.
 ```yaml
 global:
   external_labels:
-    region: eu-wes
+    region: eu-west
     monitor: infrastructure
     replica: A
 ```
@@ -129,7 +129,7 @@ Thanos Querier also implements Prometheus's official HTTP API and can thus be us
 Below, we will set up a Thanos Querier to connect to our Sidecars, and expose its HTTP UI:
 
 ```bash
-thanos query
+thanos query \
     --http-address 0.0.0.0:19192 \                                # HTTP Endpoint for Thanos Querier UI
     --endpoint     1.2.3.4:19090 \                                # Static gRPC Store API Address for the query node to query
     --endpoint     1.2.3.5:19090 \                                # Also repeatable
@@ -149,7 +149,7 @@ A typical configuration uses the label name "replica" with whatever value you ch
 ```yaml
 global:
   external_labels:
-    region: eu-wes
+    region: eu-west
     monitor: infrastructure
     replica: A
 # ...
@@ -160,10 +160,10 @@ In a Kubernetes stateful deployment, the replica label can also be the pod name.
 Ensure your Prometheus instances have been reloaded with the configuration you defined above. Then, in Thanos Querier, we will define `replica` as the label we want to enable deduplication on:
 
 ```bash
-thanos query
-    --http-address        0.0.0.0:19192
-    --endpoint            1.2.3.4:19090
-    --endpoint            1.2.3.5:19090
+thanos query \
+    --http-address        0.0.0.0:19192 \
+    --endpoint            1.2.3.4:19090 \
+    --endpoint            1.2.3.5:19090 \
     --query.replica-label replica          # Replica label for deduplication
     --query.replica-label replicaX         # Supports multiple replica labels for deduplication
 ```
@@ -179,7 +179,7 @@ The only required communication between nodes is for a Thanos Querier to be able
 There are various ways to tell Thanos Querier about the Store APIs it should query data from. The simplest way is to use a static list of well known addresses to query. These are repeatable, so you can add as many endpoints as you need. You can also put a DNS domain prefixed by `dns+` or `dnssrv+` to have a Thanos Querier do an `A` or `SRV` lookup to get all the required IPs it should communicate with.
 
 ```bash
-thanos query
+thanos query \
     --http-address 0.0.0.0:19192 \              # Endpoint for Thanos Querier UI
     --grpc-address 0.0.0.0:19092 \              # gRPC endpoint for Store API
     --endpoint     1.2.3.4:19090 \              # Static gRPC Store API Address for the query node to query
@@ -196,7 +196,7 @@ Read more details [here](service-discovery.md).
 As Thanos Sidecar backs up data into the object storage bucket of your choice, you can decrease Prometheus's retention in order to store less data locally. However, we need a way to query all that historical data again. Store Gateway does just that, by implementing the same gRPC data API as Sidecar, but backing it with data it can find in your object storage bucket. Just like sidecars and query nodes, Store Gateway exposes a Store API and needs to be discovered by Thanos Querier.
 
 ```bash
-thanos store
+thanos store \
     --data-dir             /var/thanos/store \   # Disk space for local caches
     --objstore.config-file bucket_config.yaml \  # Bucket to fetch data from
     --http-address         0.0.0.0:19191 \       # HTTP endpoint for collecting metrics on the Store Gateway
@@ -216,7 +216,7 @@ A local Prometheus installation periodically compacts older data to improve quer
 Thanos Compactor simply scans the object storage bucket and performs compaction where required. At the same time, it is responsible for creating downsampled copies of data in order to speed up queries.
 
 ```bash
-thanos compac
+thanos compact \
     --data-dir             /var/thanos/compact \  # Temporary workspace for data processing
     --objstore.config-file bucket_config.yaml \   # Bucket where compacting will be performed
     --http-address         0.0.0.0:19191          # HTTP endpoint for collecting metrics on the compactor

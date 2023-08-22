@@ -10,7 +10,7 @@ The content of this project is written in [jsonnet](http://jsonnet.org/). This p
 
 ## Requirements
 
-### jsonne
+### jsonnet
 
 The content of this project consists of a set of [jsonnet](http://jsonnet.org/) files making up a library to be consumed.
 
@@ -19,7 +19,7 @@ We recommend to use [go-jsonnet](https://github.com/google/go-jsonnet). It's an 
 To install:
 
 ```shell
-go get github.com/google/go-jsonnet/cmd/jsonne
+go get github.com/google/go-jsonnet/cmd/jsonnet
 ```
 
 ### jsonnet-bundler
@@ -136,7 +136,7 @@ This project is intended to be used as a library. You can extend and customize d
 You can format your code using:
 
 ```shell
-$ make jsonnet-forma
+$ make jsonnet-format
 ```
 
 ## Examples
@@ -180,7 +180,7 @@ Make action runs the jsonnet code, then reads each key of the generated json and
 You validate your structural correctness of your Prometheus [alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) or [recording rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) with:
 
 ```shell
-$ make example-rules-lin
+$ make example-rules-lint
 ```
 
 Check out [test.yaml](../examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
@@ -188,7 +188,7 @@ Check out [test.yaml](../examples/alerts/tests.yaml) to add/modify tests for the
 You test alerts with:
 
 ```shell
-$ make alerts-tes
+$ make alerts-test
 ```
 
 ---

@@ -18,7 +18,7 @@ This component is only recommended for uses for whom pushing is the only viable 
 
 This component is not recommended in order to achieve a global view of data of a single tenant, for those cases the sidecar based approach with layered Thanos queriers is recommended. Also, users are asked to note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur). Multi tenancy may also be achievable if ingestion is not user controlled, as then enforcing of labels, for example using the [prom-label-proxy](https://github.com/openshift/prom-label-proxy) (please thoroughly understand the mechanism if intending to employ this mechanism, as wrong configuration could leak data).
 
-## Technical summary of Thanos receiver componen
+## Technical summary of Thanos receiver component
 
 To solve the above mentioned problems, a new Thanos component is proposed: the Thanos receiver.
 
