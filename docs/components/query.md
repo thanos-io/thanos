@@ -280,14 +280,14 @@ store nodes.
 
 Flags:
       --alert.query-url=ALERT.QUERY-URL
-                                 The external Thanos Query URL that would be set
+                                 The external Thanos Query URL that would be se
                                  in all alerts 'Source' field.
       --enable-feature= ...      Comma separated experimental feature names
                                  to enable.The current list of features is
                                  query-pushdown.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 prefixed with 'dns+' or 'dnssrv+' to detec
                                  Thanos API servers through respective DNS
                                  lookups.
       --endpoint-group=<endpoint-group> ...
@@ -316,7 +316,7 @@ Flags:
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
                                  servers
-      --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
+      --grpc-client-tls-cert=""  TLS Certificates to use to identify this clien
                                  to the server
       --grpc-client-tls-key=""   TLS Key for the client's certificate
       --grpc-client-tls-secure   Use TLS when talking to the gRPC server
@@ -335,7 +335,7 @@ Flags:
                                  disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no client
+                                 client CA is specified, there is no clien
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
@@ -363,18 +363,18 @@ Flags:
       --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
-      --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
+      --query.auto-downsampling  Enable automatic adjustment (step / 5) to wha
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
       --query.conn-metric.label=external_labels... ...
                                  Optional selection of query connection metric
-                                 labels to be collected from endpoint set
+                                 labels to be collected from endpoint se
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
-      --query.default-step=1s    Set default step for range queries. Default
+      --query.default-step=1s    Set default step for range queries. Defaul
                                  step is only used when step is not set in UI.
-                                 In such cases, Thanos UI will use default
+                                 In such cases, Thanos UI will use defaul
                                  step to calculate resolution (resolution
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
@@ -384,12 +384,12 @@ Flags:
                                  metrics during expression evaluations.
                                  PromQL always evaluates the query for the
                                  certain timestamp (query range timestamps are
-                                 deduced by step). Since scrape intervals might
+                                 deduced by step). Since scrape intervals migh
                                  be different, PromQL looks back for given
-                                 amount of time to get latest sample. If it
+                                 amount of time to get latest sample. If i
                                  exceeds the maximum lookback delta it assumes
                                  series is stale and returns none (a gap).
-                                 This is why lookback delta should be set to at
+                                 This is why lookback delta should be set to a
                                  least 2 times of the slowest scrape interval.
                                  If unset it will use the promql default of 5m.
       --query.max-concurrent=20  Maximum number of queries processed
@@ -426,7 +426,7 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content
+                                 flag (mutually exclusive). Conten
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration

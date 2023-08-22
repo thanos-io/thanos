@@ -268,18 +268,18 @@ Flags:
                                  deduplicated on replica label (repeated).
                                  Similar Prometheus alert relabelling
       --alert.query-url=ALERT.QUERY-URL
-                                 The external Thanos Query URL that would be set
+                                 The external Thanos Query URL that would be se
                                  in all alerts 'Source' field
       --alert.relabel-config=<content>
                                  Alternative to 'alert.relabel-config-file' flag
-                                 (mutually exclusive). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file tha
                                  contains alert relabelling configuration.
       --alert.relabel-config-file=<file-path>
-                                 Path to YAML file that contains alert
+                                 Path to YAML file that contains aler
                                  relabelling configuration.
       --alertmanagers.config=<content>
                                  Alternative to 'alertmanagers.config-file'
-                                 flag (mutually exclusive). Content
+                                 flag (mutually exclusive). Conten
                                  of YAML file that contains alerting
                                  configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
@@ -304,7 +304,7 @@ Flags:
                                  at least one alertmanager from discovered
                                  succeeds. The scheme should not be empty
                                  e.g `http` might be used. The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 prefixed with 'dns+' or 'dnssrv+' to detec
                                  Alertmanager IPs through respective DNS
                                  lookups. The port defaults to 9093 or the
                                  SRV record's value. The URL path is used as a
@@ -331,13 +331,13 @@ Flags:
                                  disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no client
+                                 client CA is specified, there is no clien
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
-                                 If no function has been specified, it does not
+                                 If no function has been specified, it does no
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
@@ -374,12 +374,12 @@ Flags:
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object
+                                 Path to YAML file that contains objec
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --query=<query> ...        Addresses of statically configured query
                                  API servers (repeatable). The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 prefixed with 'dns+' or 'dnssrv+' to detec
                                  query API servers through respective DNS
                                  lookups.
       --query.config=<content>   Alternative to 'query.config-file' flag
@@ -410,7 +410,7 @@ Flags:
                                  (used as a fallback)
       --remote-write.config=<content>
                                  Alternative to 'remote-write.config-file'
-                                 flag (mutually exclusive). Content
+                                 flag (mutually exclusive). Conten
                                  of YAML config for the remote-write
                                  configurations, that specify servers
                                  where samples should be sent to (see
@@ -432,7 +432,7 @@ Flags:
                                  with its own TSDB.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content
+                                 flag (mutually exclusive). Conten
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
@@ -487,11 +487,11 @@ Flags:
       --web.disable-cors         Whether to disable CORS headers to be set by
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
-      --web.external-prefix=""   Static prefix for all HTML links and redirect
+      --web.external-prefix=""   Static prefix for all HTML links and redirec
                                  URLs in the bucket web UI interface.
                                  Actual endpoints are still served on / or the
-                                 web.route-prefix. This allows thanos bucket
-                                 web UI to be served behind a reverse proxy that
+                                 web.route-prefix. This allows thanos bucke
+                                 web UI to be served behind a reverse proxy tha
                                  strips a URL sub-path.
       --web.prefix-header=""     Name of HTTP request header used for dynamic
                                  prefixing of UI links and redirects.

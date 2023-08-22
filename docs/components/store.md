@@ -41,7 +41,7 @@ Flags:
                                  the bucket web UI
       --cache-index-header       Cache TSDB index-headers on disk to reduce
                                  startup time. When set to true, Thanos Store
-                                 will download index headers from remote object
+                                 will download index headers from remote objec
                                  storage on startup and create a header file on
                                  disk. Use --data-dir to set the directory in
                                  which index headers will be downloaded.
@@ -56,7 +56,7 @@ Flags:
                                  purposes (index-header, in-mem cache items and
                                  meta.jsons). If removed, no data will be lost,
                                  just store will have to rebuild the cache.
-                                 NOTE: Putting raw blocks here will not
+                                 NOTE: Putting raw blocks here will no
                                  cause the store to read them. For such use
                                  cases use Prometheus + sidecar. Ignored if
                                  --no-cache-index-header option is specified.
@@ -74,7 +74,7 @@ Flags:
                                  disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no client
+                                 client CA is specified, there is no clien
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
@@ -102,7 +102,7 @@ Flags:
                                  be deleted rather than deleting the block
                                  straight away. If delete-delay is non-zero
                                  for compactor or bucket verify component,
-                                 ignore-deletion-marks-delay should be set
+                                 ignore-deletion-marks-delay should be se
                                  to (delete-delay)/2 so that blocks marked
                                  for deletion are filtered out while fetching
                                  blocks before being deleted from bucket.
@@ -134,7 +134,7 @@ Flags:
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  Store will serve only metrics, which happened
-                                 later than this value. Option can be a constant
+                                 later than this value. Option can be a constan
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
@@ -145,12 +145,12 @@ Flags:
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object
+                                 Path to YAML file that contains objec
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content
+                                 flag (mutually exclusive). Conten
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
@@ -215,11 +215,11 @@ Flags:
       --web.disable-cors         Whether to disable CORS headers to be set by
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
-      --web.external-prefix=""   Static prefix for all HTML links and redirect
+      --web.external-prefix=""   Static prefix for all HTML links and redirec
                                  URLs in the bucket web UI interface.
                                  Actual endpoints are still served on / or the
-                                 web.route-prefix. This allows thanos bucket
-                                 web UI to be served behind a reverse proxy that
+                                 web.route-prefix. This allows thanos bucke
+                                 web UI to be served behind a reverse proxy tha
                                  strips a URL sub-path.
       --web.prefix-header=""     Name of HTTP request header used for dynamic
                                  prefixing of UI links and redirects.

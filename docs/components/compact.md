@@ -281,7 +281,7 @@ Continuously compacts blocks in an object store bucket.
 Flags:
       --block-files-concurrency=1
                                 Number of goroutines to use when
-                                fetching/uploading block files from object
+                                fetching/uploading block files from objec
                                 storage.
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
@@ -353,7 +353,7 @@ Flags:
                                 Note that deleting blocks immediately can cause
                                 query failures, if store gateway still has the
                                 block loaded, or compactor is ignoring the
-                                deletion because it's compacting the block at
+                                deletion because it's compacting the block a
                                 the same time.
       --disable-admin-operations
                                 Disable UI/API admin operations like marking
@@ -362,13 +362,13 @@ Flags:
                                 Number of goroutines to use when downsampling
                                 blocks.
       --downsampling.disable    Disables downsampling. This is not recommended
-                                as querying long time ranges without
+                                as querying long time ranges withou
                                 non-downsampled data is not efficient and useful
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
-                                If no function has been specified, it does not
+                                If no function has been specified, it does no
                                 happen. This permits avoiding downloading some
                                 files twice albeit at some performance cost.
                                 Possible values are: "", "SHA256".
@@ -406,7 +406,7 @@ Flags:
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                Path to YAML file that contains object
+                                Path to YAML file that contains objec
                                 store configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --retention.resolution-1h=0d
@@ -454,11 +454,11 @@ Flags:
       --web.disable-cors        Whether to disable CORS headers to be set by
                                 Thanos. By default Thanos sets CORS headers to
                                 be allowed by all.
-      --web.external-prefix=""  Static prefix for all HTML links and redirect
+      --web.external-prefix=""  Static prefix for all HTML links and redirec
                                 URLs in the bucket web UI interface.
                                 Actual endpoints are still served on / or the
-                                web.route-prefix. This allows thanos bucket
-                                web UI to be served behind a reverse proxy that
+                                web.route-prefix. This allows thanos bucke
+                                web UI to be served behind a reverse proxy tha
                                 strips a URL sub-path.
       --web.prefix-header=""    Name of HTTP request header used for dynamic
                                 prefixing of UI links and redirects.
