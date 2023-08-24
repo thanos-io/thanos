@@ -220,6 +220,7 @@ func registerStore(app *extkingpin.App) {
 		}
 
 		grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
+
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}

@@ -174,7 +174,6 @@ func ParseHTTPOptions(reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-
 func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]grpc_logging.Option, error) {
 	// Default Option: No Logging.
 	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
@@ -190,5 +189,6 @@ func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]grpc_logging.Optio
 	if err != nil {
 		return logOpts, err
 	}
+
 	return logOpts, nil
 }
