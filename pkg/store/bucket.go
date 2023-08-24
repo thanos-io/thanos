@@ -2864,14 +2864,13 @@ func (r *bucketIndexReader) decodeCachedPostings(b []byte) (index.Postings, []fu
 	)
 	if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
 		s := time.Now()
-		clPostings, err := decodePostings(b)
+		l, err = decodePostings(b)
 		r.stats.cachedPostingsDecompressions += 1
 		r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
 		if err != nil {
 			r.stats.cachedPostingsDecompressionErrors += 1
 		} else {
-			closeFns = append(closeFns, clPostings.close)
-			l = clPostings
+			closeFns = append(closeFns, l.(closeablePostings).close)
 		}
 	} else {
 		_, l, err = r.dec.Postings(b)
