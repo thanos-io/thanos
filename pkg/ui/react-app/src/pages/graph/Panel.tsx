@@ -436,8 +436,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 onChange={this.handleChangeExplain}
                 checked={options.explain}
                 disabled={options.disableExplainCheckbox}
+                isExplainCheckbox={true}
               >
-                Explain
+                Explaine
               </Checkbox>
             </div>
           </Col>
