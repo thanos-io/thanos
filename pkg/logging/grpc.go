@@ -5,15 +5,11 @@ package logging
 
 import (
 	"fmt"
-	"math/rand"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
-	"github.com/oklog/ulid"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v2"
 )
@@ -105,25 +101,8 @@ func validateLevel(level string) error {
 }
 
 // NewGRPCOption adds in the config options and returns tags for logging middleware.
-func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
+func NewGRPCOption(configYAML []byte) ([]grpc_logging.Option, error) {
 
-	// Configure tagOpts and logOpts.
-	tagOpts := []tags.Option{
-		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
-			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
-			// If a request-id exists for a given request.
-			if tagMap != nil {
-				if _, ok := tagMap["request-id"]; ok {
-					return tagMap
-				}
-			}
-			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
-			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-			tagMap = make(map[string]string)
-			tagMap["request-id"] = reqID.String()
-			return tagMap
-		}),
-	}
 	logOpts := []grpc_logging.Option{
 		grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
 			return grpc_logging.NoLogCall
@@ -134,30 +113,30 @@ func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, err
 	// Unmarshal YAML.
 	// if req logging is disabled.
 	if len(configYAML) == 0 {
-		return tagOpts, logOpts, nil
+		return logOpts, nil
 	}
 
 	reqLogConfig, err := NewRequestConfig(configYAML)
 	// If unmarshalling is an issue.
 	if err != nil {
-		return tagOpts, logOpts, err
+		return logOpts, err
 	}
 
 	globalLevel, globalStart, globalEnd, err := fillGlobalOptionConfig(reqLogConfig, true)
 	// If global options have invalid entries.
 	if err != nil {
-		return tagOpts, logOpts, err
+		return logOpts, err
 	}
 
 	// If the level entry does not matches our entries.
 	if err := validateLevel(globalLevel); err != nil {
-		return tagOpts, logOpts, err
+		return logOpts, err
 	}
 
 	// If the combination is valid, use them, otherwise return error.
 	reqLogDecision, err := getGRPCLoggingOption(globalStart, globalEnd)
 	if err != nil {
-		return tagOpts, logOpts, err
+		return logOpts, err
 	}
 
 	if len(reqLogConfig.GRPC.Config) == 0 {
@@ -174,7 +153,7 @@ func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, err
 			}),
 			grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
 		}
-		return tagOpts, logOpts, nil
+		return logOpts, nil
 	}
 
 	logOpts = []grpc_logging.Option{
@@ -203,5 +182,5 @@ func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, err
 			return grpc_logging.NoLogCall
 		}),
 	}...)
-	return tagOpts, logOpts, nil
+	return logOpts, nil
 }
