@@ -210,6 +210,9 @@ usage: thanos tools bucket web [<flags>]
 Web interface for remote storage bucket.
 
 Flags:
+      --disable-admin-operations
+                                Disable UI/API admin operations like marking
+                                blocks for deletion and no compaction.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -823,7 +826,7 @@ Flags:
       --rewrite.to-relabel-config-file=<file-path>
                                 Path to YAML file that contains relabel configs
                                 that will be applied to blocks
-      --tmp.dir="/tmp/thanos-rewrite"
+      --tmp.dir="/var/folders/yn/c6y00yq11klbr1pk_92j61580000gn/T/thanos-rewrite"
                                 Working directory for temporary files
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
