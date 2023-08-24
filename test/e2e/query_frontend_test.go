@@ -90,9 +90,9 @@ func TestQFEEngineExplanation(t *testing.T) {
 		explanation := rangeQuery(t, ctx, queryFrontend.Endpoint("http"), e2ethanos.QueryUpWithoutInstance,
 			timestamp.FromTime(now.Add(-5*time.Minute)),
 			timestamp.FromTime(now), 1, promclient.QueryOptions{
-				Explain: true,
-				Analyze: true,
-				Engine:  "thanos",
+				Explain:     true,
+				Analyze:     true,
+				Engine:      "thanos",
 				Deduplicate: true,
 			}, func(res model.Matrix) error {
 				if res.Len() == 0 {

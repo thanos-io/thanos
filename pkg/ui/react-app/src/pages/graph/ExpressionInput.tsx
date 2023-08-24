@@ -33,14 +33,15 @@ interface CMExpressionInputProps {
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
   enableLinter: boolean;
-  getExplain: (explain: ExplainOutput) => void;
+  getExplain: (explain: ExplainTree) => void;
+  type: string;
 }
 
 const dynamicConfigCompartment = new Compartment();
 
-export interface ExplainOutput {
+export interface ExplainTree {
   name: string;
-  children?: ExplainOutput[];
+  children?: ExplainTree[];
 }
 // Autocompletion strategy that wraps the main one and enriches
 // it with past query items.
@@ -94,6 +95,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   enableHighlighting,
   enableLinter,
   getExplain,
+  type,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -104,7 +106,11 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
         query,
         engine: 'thanos',
       });
-      const response = await fetch(`/api/v1/query_explain`, {
+      let endpoint = '/api/v1/query_explain';
+      if (type === 'graph') {
+        endpoint = '/api/v1/query_range_explain';
+      }
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -116,8 +122,6 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
       } else {
         const json = await response.json();
         getExplain(json.data);
-        // TODO(nishchayv): Display the explanation in the UI or do something with the result
-        // We can use the `json` data to render or manipulate the UI as needed.
       }
     } catch (e) {
       console.log(e);

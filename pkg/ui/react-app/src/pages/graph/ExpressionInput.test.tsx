@@ -21,6 +21,7 @@ describe('ExpressionInput', () => {
     enableHighlighting: true,
     enableLinter: true,
     getExplain: (): void => {},
+    type: 'table',
   };
 
   let expressionInput: ReactWrapper;

@@ -17,10 +17,10 @@ import {
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
-
+import { Tooltip } from 'reactstrap';
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
-import { ExplainOutput } from './ExpressionInput';
+import { ExplainTree } from './ExpressionInput';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -58,7 +58,8 @@ interface PanelState {
   stats: QueryStats | null;
   exprInputValue: string;
   analysis: QueryTree | null;
-  explainOutput: ExplainOutput | null;
+  explainOutput: ExplainTree | null;
+  isHovered: boolean;
 }
 
 export interface PanelOptions {
@@ -114,6 +115,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       exprInputValue: props.options.expr,
       explainOutput: null,
       analysis: null,
+      isHovered: false,
     };
 
     if (this.props.options.engine === '') {
@@ -126,6 +128,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
     this.handleChangeAnalyze = this.handleChangeAnalyze.bind(this);
+    this.handleMouseEnter = this.handleMouseEnter.bind(this);
+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
   }
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
     const {
@@ -341,6 +345,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ analyze: event.target.checked });
   };
 
+  handleMouseEnter = () => {
+    this.setState({ isHovered: true });
+  };
+
+  handleMouseLeave = () => {
+    this.setState({ isHovered: false });
+  };
+
   handleEngine = (engine: string): void => {
     if (engine === 'prometheus') {
       this.setOptions({ engine: engine, analyze: false, disableAnalyzeCheckbox: true });
@@ -351,7 +363,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
-    const getExplainOutput = (explaination: ExplainOutput) => {
+    const getExplainOutput = (explaination: ExplainTree) => {
       this.setState({ explainOutput: explaination });
     };
     return (
@@ -370,6 +382,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               queryHistory={pastQueries}
               metricNames={metricNames}
               getExplain={getExplainOutput}
+              type={this.props.options.type}
             />
           </Col>
         </Row>
@@ -434,16 +447,28 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 <option value="thanos">Thanos</option>
               </Input>
             </div>
-            <div className="float-right">
+            <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
               <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
                 id={`analyze-${id}`}
                 onChange={this.handleChangeAnalyze}
                 checked={options.analyze}
                 disabled={options.disableAnalyzeCheckbox}
+                className="analyze-checkbox"
               >
                 Analyze
               </Checkbox>
+              <Tooltip
+                placement="bottom"
+                className="analyze-tooltip"
+                target={`analyze-${id}`}
+                isOpen={this.state.isHovered && options.disableAnalyzeCheckbox}
+                delay={{ show: 0, hide: 0 }}
+                fade={false}
+                trigger="hover"
+              >
+                Change engine to 'thanos'
+              </Tooltip>
             </div>
           </Col>
         </Row>

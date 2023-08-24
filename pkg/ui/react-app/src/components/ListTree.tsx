@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { InputProps, Collapse, ListGroupItem, ListGroup } from 'reactstrap';
-import { ExplainOutput } from '../pages/graph/ExpressionInput';
+import { ExplainTree } from '../pages/graph/ExpressionInput';
 
 export interface QueryTree {
   name: string;
@@ -9,7 +9,7 @@ export interface QueryTree {
 }
 
 interface NodeProps extends InputProps {
-  node: QueryTree | ExplainOutput | null;
+  node: QueryTree | ExplainTree | null;
 }
 
 const ListTree: React.FC<NodeProps> = ({ id, node }) => {
