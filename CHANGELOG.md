@@ -44,9 +44,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6264](https://github.com/thanos-io/thanos/pull/6264) Query: Add Thanos logo in navbar
 - [#6234](https://github.com/thanos-io/thanos/pull/6234) Query: Add ability to switch between `thanos` and `prometheus` engines dynamically via UI and API.
 - [#6346](https://github.com/thanos-io/thanos/pull/6346) Query: Add ability to generate SQL-like query explanations when `thanos` engine is used.
-- [#6646](https://github.com/thanos-io/thanos/pull/6646)
-Compact and Bucket: Add `--disable-admin-operations` flag in Compactor UI and Bucket UI
-
+- [#6646](https://github.com/thanos-io/thanos/pull/6646) Compact and Bucket: Add `--disable-admin-operations` flag in Compactor UI and Bucket UI
 
 ### Fixed
 - [#6503](https://github.com/thanos-io/thanos/pull/6503) *: Change the engine behind `ContentPathReloader` to be completely independent of any filesystem concept. This effectively fixes this configuration reload when used with Kubernetes ConfigMaps, Secrets, or other volume mounts.
