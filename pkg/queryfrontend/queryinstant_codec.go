@@ -153,7 +153,6 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
-	result.Explain = r.FormValue("explain")
 	result.Analyze = r.FormValue("analyze")
 	result.Engine = r.FormValue("engine")
 
