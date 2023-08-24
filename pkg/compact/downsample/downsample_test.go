@@ -965,7 +965,7 @@ func TestDownsample(t *testing.T) {
 		{
 			name: "three chunks, the first one with NaN values only",
 			inRaw: [][]sample{
-				{{20, math.Float64frombits(value.NormalNaN)}, {40, math.Float64frombits(value.NormalNaN)}, {60, math.Float64frombits(value.NormalNaN)}, {80, math.Float64frombits(value.NormalNaN)}, {100, math.Float64frombits(value.NormalNaN)}, {101, math.Float64frombits(value.StaleNaN)}, {120, math.Float64frombits(value.NormalNaN)}, {180, math.Float64frombits(value.NormalNaN)}, {250, math.Float64frombits(value.NormalNaN)}},
+				{{20, math.Float64frombits(value.NormalNaN)}, {40, math.Float64frombits(value.NormalNaN)}, {60, math.Float64frombits(value.NormalNaN)}, {80, math.Float64frombits(value.NormalNaN)}, {100, math.NaN()}, {101, math.Float64frombits(value.StaleNaN)}, {120, math.Float64frombits(value.NormalNaN)}, {180, math.Float64frombits(value.NormalNaN)}, {250, math.Float64frombits(value.NormalNaN)}},
 				{{260, 1}, {300, 10}, {340, 15}, {380, 25}, {420, 35}},
 				{{460, math.Float64frombits(value.StaleNaN)}, {500, 10}, {540, 3}},
 			},
