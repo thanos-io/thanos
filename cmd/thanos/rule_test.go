@@ -48,3 +48,27 @@ func Test_parseFlagLabels(t *testing.T) {
 		testutil.Equals(t, err != nil, td.expectErr)
 	}
 }
+
+func Test_validateTemplate(t *testing.T) {
+	tData := []struct {
+		template  string
+		expectErr bool
+	}{
+		{
+			template:  `/graph?g0.expr={{.Expr}}&g0.tab=1`,
+			expectErr: false,
+		},
+		{
+			template:  `/graph?g0.expr={{.Expression}}&g0.tab=1`,
+			expectErr: true,
+		},
+		{
+			template:  `another template includes {{.Expr}}`,
+			expectErr: false,
+		},
+	}
+	for _, td := range tData {
+		err := validateTemplate(td.template, Expression{Expr: "test_expr"})
+		testutil.Equals(t, err != nil, td.expectErr)
+	}
+}
