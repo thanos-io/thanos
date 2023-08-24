@@ -13,11 +13,11 @@ const Checkbox: FC<CheckboxProps> = ({ children, wrapperStyles, id, disabled, is
     if (isExplainCheckbox && disabled) {
       setShowMessage(true);
     }
-  }
+  };
 
   const handleMouseLeave = () => {
     setShowMessage(false);
-  }
+  };
   return (
     <FormGroup className="custom-control custom-checkbox" style={wrapperStyles}>
       <Input {...rest} id={id} type="checkbox" className="custom-control-input" />

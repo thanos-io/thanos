@@ -28,6 +28,7 @@ benchmarks/
 
 /.idea
 /*.iml
+/.bin
 
 website/public/
 website/docs-pre-processed/
