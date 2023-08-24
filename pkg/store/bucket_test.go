@@ -3330,3 +3330,15 @@ func TestExpandedPostingsRace(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
+	bir := bucketIndexReader{stats: &queryStats{}}
+	t.Run("should return error on broken cached postings without snappy prefix", func(t *testing.T) {
+		_, _, err := bir.decodeCachedPostings([]byte("foo"))
+		testutil.NotOk(t, err)
+	})
+	t.Run("should return error on broken cached postings with snappy prefix", func(t *testing.T) {
+		_, _, err := bir.decodeCachedPostings(append([]byte(codecHeaderSnappy), []byte("foo")...))
+		testutil.NotOk(t, err)
+	})
+}
