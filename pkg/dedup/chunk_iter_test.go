@@ -292,11 +292,11 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 						MinTime: 299999,
 						MaxTime: 540000,
 						Chunk: downsample.EncodeAggrChunk([5]chunkenc.Chunk{
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 3}, sample{540000, 5}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 540000}, sample{540000, 2100000}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 120000}, sample{540000, 300000}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 240000}, sample{540000, 540000}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 240000}, sample{299999, 240000}}).Chunk,
+							chunkFromSamples(t, []tsdbutil.Sample{sample{299999, 3}, sample{540000, 5}}),
+							chunkFromSamples(t, []tsdbutil.Sample{sample{299999, 540000}, sample{540000, 2100000}}),
+							chunkFromSamples(t, []tsdbutil.Sample{sample{299999, 120000}, sample{540000, 300000}}),
+							chunkFromSamples(t, []tsdbutil.Sample{sample{299999, 240000}, sample{540000, 540000}}),
+							chunkFromSamples(t, []tsdbutil.Sample{sample{299999, 240000}, sample{299999, 240000}}),
 						}),
 					})
 				},
@@ -324,4 +324,10 @@ func createSamplesWithStep(start, numOfSamples, step int) []tsdbutil.Sample {
 	}
 
 	return res
+}
+
+func chunkFromSamples(t *testing.T, samples []tsdbutil.Sample) chunkenc.Chunk {
+	res, err := tsdbutil.ChunkFromSamples(samples)
+	testutil.Ok(t, err)
+	return res.Chunk
 }

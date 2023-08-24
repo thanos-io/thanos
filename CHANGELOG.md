@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
+- [#6648](https://github.com/thanos-io/thanos/pull/6648) Query: Add option to allow subqueries in the thanos engine.
 
 ### Changed
 

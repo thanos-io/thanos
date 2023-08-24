@@ -166,11 +166,11 @@ func registerRule(app *extkingpin.App) {
 			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:        *noLockFile,
-			WALCompression:    *walCompression,
+			WALCompression:    walCompressionType(*walCompression),
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: *walCompression,
+			WALCompression: walCompressionType(*walCompression),
 			NoLockfile:     *noLockFile,
 		}
 

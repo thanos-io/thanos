@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/thanos-io/promql-engine/api"
+	"github.com/thanos-io/promql-engine/engine"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -197,6 +198,9 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	enableThanosEngineSubqueries := cmd.Flag("query.enable-thanos-engine-subqueries", "Enable subqueries in the thanos engine.").
+		Hidden().Default("false").Bool()
+
 	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
 	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+queryPushdown+".").Default("").Strings()
@@ -320,6 +324,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			*enableThanosEngineSubqueries,
 			*activeQueryDir,
 			fileSD,
 			time.Duration(*dnsSDInterval),
@@ -399,6 +404,7 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableThanosEngineSubqueries bool,
 	activeQueryDir string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
@@ -690,7 +696,11 @@ func runQuery(
 	}
 
 	engineFactory := apiv1.NewQueryEngineFactory(
-		engineOpts,
+		engine.Opts{
+			EngineOpts:       engineOpts,
+			Engine:           promql.NewEngine(engineOpts),
+			EnableSubqueries: enableThanosEngineSubqueries,
+		},
 		remoteEngineEndpoints,
 	)
 
