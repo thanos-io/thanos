@@ -25,12 +25,13 @@ import (
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI          *api.BaseAPI
-	logger           log.Logger
-	globalBlocksInfo *BlocksInfo
-	loadedBlocksInfo *BlocksInfo
-	disableCORS      bool
-	bkt              objstore.Bucket
+	baseAPI                *api.BaseAPI
+	logger                 log.Logger
+	globalBlocksInfo       *BlocksInfo
+	loadedBlocksInfo       *BlocksInfo
+	disableCORS            bool
+	bkt                    objstore.Bucket
+	disableAdminOperations bool
 }
 
 type BlocksInfo struct {
@@ -61,6 +62,7 @@ func parse(s string) ActionType {
 
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
 func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket) *BlocksAPI {
+	disableAdminOperations := flagsMap["disable-admin-operations"] == "true"
 	return &BlocksAPI{
 		baseAPI: api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:  logger,
@@ -72,8 +74,9 @@ func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap ma
 			Blocks: []metadata.Meta{},
 			Label:  label,
 		},
-		disableCORS: disableCORS,
-		bkt:         bkt,
+		disableCORS:            disableCORS,
+		bkt:                    bkt,
+		disableAdminOperations: disableAdminOperations,
 	}
 }
 
@@ -87,6 +90,9 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	if bapi.disableAdminOperations {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Admin operations are disabled")}, func() {}
+	}
 	idParam := r.FormValue("id")
 	actionParam := r.FormValue("action")
 	detailParam := r.FormValue("detail")

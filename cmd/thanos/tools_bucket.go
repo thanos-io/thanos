@@ -112,13 +112,14 @@ type bucketLsConfig struct {
 }
 
 type bucketWebConfig struct {
-	webRoutePrefix      string
-	webExternalPrefix   string
-	webPrefixHeaderName string
-	webDisableCORS      bool
-	interval            time.Duration
-	label               string
-	timeout             time.Duration
+	webRoutePrefix         string
+	webExternalPrefix      string
+	webPrefixHeaderName    string
+	webDisableCORS         bool
+	interval               time.Duration
+	label                  string
+	timeout                time.Duration
+	disableAdminOperations bool
 }
 
 type bucketReplicateConfig struct {
@@ -203,6 +204,8 @@ func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bu
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 
 	cmd.Flag("label", "External block label to use as group title").StringVar(&tbc.label)
+
+	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&tbc.disableAdminOperations)
 	return tbc
 }
 
