@@ -85,6 +85,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6163](https://github.com/thanos-io/thanos/pull/6163) Receiver: changed default max backoff from 30s to 5s for forwarding requests. Can be configured with `--receive-forward-max-backoff`.
 - [#6327](https://github.com/thanos-io/thanos/pull/6327) *: *breaking :warning:* Use histograms instead of summaries for instrumented handlers.
 - [#6322](https://github.com/thanos-io/thanos/pull/6322) Logging: Avoid expensive log.Valuer evaluation for disallowed levels.
+- [#6350] https://github.com/thanos-io/thanos/pull/6350 Compact: Add native histogram support for downsampling.
 - [#6358](https://github.com/thanos-io/thanos/pull/6358) Query: Add +Inf bucket to query duration metrics
 - [#6363](https://github.com/thanos-io/thanos/pull/6363) Store: Check context error when expanding postings.
 - [#6405](https://github.com/thanos-io/thanos/pull/6405) Index Cache: Change postings cache key to include the encoding format used so that older Thanos versions would not try to decode it during the deployment of a new version.
