@@ -1928,7 +1928,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.",
+               "description": "Shows rate of execution for compactions against blocks that are stored in the bucket.",
                "fill": 10,
                "id": 19,
                "legend": {

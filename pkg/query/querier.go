@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -60,7 +61,7 @@ type QueryableCreator func(
 func NewQueryableCreator(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	proxy *store.ProxyStore,
+	proxy storepb.StoreServer,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
@@ -102,7 +103,7 @@ type queryable struct {
 	logger               log.Logger
 	replicaLabels        []string
 	storeDebugMatchers   [][]*labels.Matcher
-	proxy                *store.ProxyStore
+	proxy                storepb.StoreServer
 	deduplicate          bool
 	maxResolutionMillis  int64
 	partialResponse      bool
@@ -127,7 +128,7 @@ type querier struct {
 	mint, maxt              int64
 	replicaLabels           []string
 	storeDebugMatchers      [][]*labels.Matcher
-	proxy                   *store.ProxyStore
+	proxy                   storepb.StoreServer
 	deduplicate             bool
 	maxResolutionMillis     int64
 	partialResponseStrategy storepb.PartialResponseStrategy
@@ -148,7 +149,7 @@ func newQuerier(
 	maxt int64,
 	replicaLabels []string,
 	storeDebugMatchers [][]*labels.Matcher,
-	proxy *store.ProxyStore,
+	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse,
@@ -340,6 +341,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
+	ctx = context.WithValue(ctx, tenancy.TenantKey, q.ctx.Value(tenancy.TenantKey))
 
 	// TODO(bwplotka): Use inprocess gRPC when we want to stream responses.
 	// Currently streaming won't help due to nature of the both PromQL engine which
@@ -419,6 +421,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
+	ctx = context.WithValue(ctx, tenancy.TenantKey, q.ctx.Value(tenancy.TenantKey))
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {
@@ -452,6 +455,7 @@ func (q *querier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.War
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
+	ctx = context.WithValue(ctx, tenancy.TenantKey, q.ctx.Value(tenancy.TenantKey))
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {

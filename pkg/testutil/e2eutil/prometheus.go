@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -156,9 +158,14 @@ func newPrometheus(binPath, prefix string) (*Prometheus, error) {
 		return nil, err
 	}
 
-	// Just touch an empty config file. We don't need to actually scrape anything.
-	_, err = os.Create(filepath.Join(db.Dir(), "prometheus.yml"))
+	f, err := os.Create(filepath.Join(db.Dir(), "prometheus.yml"))
 	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	// Some well-known external labels so that we can test label resorting
+	if _, err = io.WriteString(f, "global:\n  external_labels:\n    region: eu-west"); err != nil {
 		return nil, err
 	}
 
@@ -485,6 +492,7 @@ func createBlock(
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)
 	var batchSize = len(series) / runtime.GOMAXPROCS(0)
 	r := rand.New(rand.NewSource(int64(numSamples)))
+	var randMutex sync.Mutex
 
 	for len(series) > 0 {
 		l := batchSize
@@ -507,7 +515,9 @@ func createBlock(
 
 					var err error
 					if sampleType == chunkenc.ValFloat {
+						randMutex.Lock()
 						_, err = app.Append(0, lset, t, r.Float64())
+						randMutex.Unlock()
 					} else if sampleType == chunkenc.ValHistogram {
 						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
 					}

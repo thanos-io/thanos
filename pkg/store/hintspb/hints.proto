@@ -24,11 +24,15 @@ message SeriesRequestHints {
     /// labels to filter which blocks get queried. If the list is empty, no per-block filtering
     /// is applied.
     repeated thanos.LabelMatcher block_matchers = 1 [(gogoproto.nullable) = false];
+
+    bool enable_query_stats = 2;
 }
 
 message SeriesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+    /// query_stats contains statistics of querying store gateway.
+    QueryStats query_stats = 2 [(gogoproto.nullable) = true];
 }
 
 message Block {
@@ -58,4 +62,32 @@ message LabelValuesRequestHints {
 message LabelValuesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+}
+
+/// QueryStats fields are unstable and might change in the future.
+message QueryStats {
+    int64 blocks_queried = 1;
+    int64 merged_series_count = 2;
+    int64 merged_chunks_count = 3;
+
+    int64 postings_touched = 4;
+    int64 postings_touched_size_sum = 5;
+    int64 postings_to_fetch = 6;
+    int64 postings_fetched = 7;
+    int64 postings_fetched_size_sum = 8;
+    int64 postings_fetch_count = 9;
+
+    int64 series_touched = 10;
+    int64 series_touched_size_sum = 11;
+    int64 series_fetched = 12;
+    int64 series_fetched_size_sum = 13;
+    int64 series_fetch_count = 14;
+
+    int64 chunks_touched = 15;
+    int64 chunks_touched_size_sum = 16;
+    int64 chunks_fetched = 17;
+    int64 chunks_fetched_size_sum = 18;
+    int64 chunks_fetch_count = 19;
+
+    int64 data_downloaded_size_sum = 20;
 }

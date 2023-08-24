@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
+	"math"
 	"net"
 	"net/http"
-	"path"
 	"sort"
 	"strconv"
 	"sync"
@@ -46,30 +46,22 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
-	// DefaultTenantHeader is the default header used to designate the tenant making a write request.
-	DefaultTenantHeader = "THANOS-TENANT"
-	// DefaultTenant is the default value used for when no tenant is passed via the tenant header.
-	DefaultTenant = "default-tenant"
-	// DefaultTenantLabel is the default label-name used for when no tenant is passed via the tenant header.
-	DefaultTenantLabel = "tenant_id"
+	// DefaultStatsLimit is the default value used for limiting tenant stats.
+	DefaultStatsLimit = 10
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
 	// AllTenantsQueryParam is the query parameter for getting TSDB stats for all tenants.
 	AllTenantsQueryParam = "all_tenants"
+	// LimitStatsQueryParam is the query parameter for limiting the amount of returned TSDB stats.
+	LimitStatsQueryParam = "limit"
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
-)
-
-// Allowed fields in client certificates.
-const (
-	CertificateFieldOrganization       = "organization"
-	CertificateFieldOrganizationalUnit = "organizationalUnit"
-	CertificateFieldCommonName         = "commonName"
 )
 
 var (
@@ -98,6 +90,7 @@ type Options struct {
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
+	MaxBackoff        time.Duration
 	RelabelConfigs    []*relabel.Config
 	TSDBStats         TSDBStats
 	Limiter           *Limiter
@@ -148,7 +141,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
-			Max:    30 * time.Second,
+			Max:    o.MaxBackoff,
 			Jitter: true,
 		},
 		Limiter: o.Limiter,
@@ -279,6 +272,21 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func getStatsLimitParameter(r *http.Request) (int, error) {
+	statsLimitStr := r.URL.Query().Get(LimitStatsQueryParam)
+	if statsLimitStr == "" {
+		return DefaultStatsLimit, nil
+	}
+	statsLimit, err := strconv.ParseInt(statsLimitStr, 10, 0)
+	if err != nil {
+		return 0, fmt.Errorf("unable to parse '%s' parameter: %w", LimitStatsQueryParam, err)
+	}
+	if statsLimit > math.MaxInt {
+		return 0, fmt.Errorf("'%s' parameter is larger than %d", LimitStatsQueryParam, math.MaxInt)
+	}
+	return int(statsLimit), nil
+}
+
 func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
@@ -291,15 +299,20 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
+	statsLimit, err := getStatsLimitParameter(r)
+	if err != nil {
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
 	if getAllTenantStats {
-		return h.options.TSDBStats.TenantStats(statsByLabelName), nil
+		return h.options.TSDBStats.TenantStats(statsLimit, statsByLabelName), nil
 	}
 
 	if tenantID == "" {
 		tenantID = h.options.DefaultTenantID
 	}
 
-	return h.options.TSDBStats.TenantStats(statsByLabelName, tenantID), nil
+	return h.options.TSDBStats.TenantStats(statsLimit, statsByLabelName, tenantID), nil
 }
 
 // Close stops the Handler.
@@ -404,35 +417,14 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	return h.forward(ctx, tenant, r, wreq)
 }
 
-func (h *Handler) isTenantValid(tenant string) error {
-	if tenant != path.Base(tenant) {
-		return errors.New("Tenant name not valid")
-	}
-	return nil
-}
-
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
-	tenant := r.Header.Get(h.options.TenantHeader)
-	if tenant == "" {
-		tenant = h.options.DefaultTenantID
-	}
-
-	if h.options.TenantField != "" {
-		tenant, err = h.getTenantFromCertificate(r)
-		if err != nil {
-			// This must hard fail to ensure hard tenancy when feature is enabled.
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-
-	err = h.isTenantValid(tenant)
+	tenant, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
 	if err != nil {
-		level.Error(h.logger).Log("msg", "tenant name not valid", "tenant", tenant)
+		level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1147,43 +1139,4 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
-}
-
-// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
-// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
-func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
-	var tenant string
-
-	if len(r.TLS.PeerCertificates) == 0 {
-		return "", errors.New("could not get required certificate field from client cert")
-	}
-
-	// First cert is the leaf authenticated against.
-	cert := r.TLS.PeerCertificates[0]
-
-	switch h.options.TenantField {
-
-	case CertificateFieldOrganization:
-		if len(cert.Subject.Organization) == 0 {
-			return "", errors.New("could not get organization field from client cert")
-		}
-		tenant = cert.Subject.Organization[0]
-
-	case CertificateFieldOrganizationalUnit:
-		if len(cert.Subject.OrganizationalUnit) == 0 {
-			return "", errors.New("could not get organizationalUnit field from client cert")
-		}
-		tenant = cert.Subject.OrganizationalUnit[0]
-
-	case CertificateFieldCommonName:
-		if cert.Subject.CommonName == "" {
-			return "", errors.New("could not get commonName field from client cert")
-		}
-		tenant = cert.Subject.CommonName
-
-	default:
-		return "", errors.New("tls client cert field requested is not supported")
-	}
-
-	return tenant, nil
 }

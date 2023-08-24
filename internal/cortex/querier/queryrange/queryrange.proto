@@ -48,6 +48,7 @@ message PrometheusData {
   string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
   repeated SampleStream Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
+  Explanation Explanation = 4 [(gogoproto.jsontag) = "explanation"];
 }
 
 message PrometheusInstantQueryResponse {
@@ -62,6 +63,7 @@ message PrometheusInstantQueryData {
   string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
   PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
+  Explanation Explanation = 4 [(gogoproto.jsontag) = "explanation"];
 }
 
 message PrometheusInstantQueryResult {
@@ -149,4 +151,9 @@ message Extent  {
 
 message CachingOptions {
   bool disabled = 1;
+}
+
+message Explanation {
+  string name = 1 [(gogoproto.jsontag) = "name"];
+  repeated Explanation children = 2 [(gogoproto.jsontag) = "children"];
 }

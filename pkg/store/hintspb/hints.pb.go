@@ -29,7 +29,8 @@ type SeriesRequestHints struct {
 	/// block_matchers is a list of label matchers that are evaluated against each single block's
 	/// labels to filter which blocks get queried. If the list is empty, no per-block filtering
 	/// is applied.
-	BlockMatchers []storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers"`
+	BlockMatchers    []storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers"`
+	EnableQueryStats bool                   `protobuf:"varint,2,opt,name=enable_query_stats,json=enableQueryStats,proto3" json:"enable_query_stats,omitempty"`
 }
 
 func (m *SeriesRequestHints) Reset()         { *m = SeriesRequestHints{} }
@@ -68,6 +69,8 @@ var xxx_messageInfo_SeriesRequestHints proto.InternalMessageInfo
 type SeriesResponseHints struct {
 	/// queried_blocks is the list of blocks that have been queried.
 	QueriedBlocks []Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks"`
+	/// query_stats contains statistics of querying store gateway.
+	QueryStats *QueryStats `protobuf:"bytes,2,opt,name=query_stats,json=queryStats,proto3" json:"query_stats,omitempty"`
 }
 
 func (m *SeriesResponseHints) Reset()         { *m = SeriesResponseHints{} }
@@ -296,6 +299,63 @@ func (m *LabelValuesResponseHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesResponseHints proto.InternalMessageInfo
 
+// / QueryStats fields are unstable and might change in the future.
+type QueryStats struct {
+	BlocksQueried          int64 `protobuf:"varint,1,opt,name=blocks_queried,json=blocksQueried,proto3" json:"blocks_queried,omitempty"`
+	MergedSeriesCount      int64 `protobuf:"varint,2,opt,name=merged_series_count,json=mergedSeriesCount,proto3" json:"merged_series_count,omitempty"`
+	MergedChunksCount      int64 `protobuf:"varint,3,opt,name=merged_chunks_count,json=mergedChunksCount,proto3" json:"merged_chunks_count,omitempty"`
+	PostingsTouched        int64 `protobuf:"varint,4,opt,name=postings_touched,json=postingsTouched,proto3" json:"postings_touched,omitempty"`
+	PostingsTouchedSizeSum int64 `protobuf:"varint,5,opt,name=postings_touched_size_sum,json=postingsTouchedSizeSum,proto3" json:"postings_touched_size_sum,omitempty"`
+	PostingsToFetch        int64 `protobuf:"varint,6,opt,name=postings_to_fetch,json=postingsToFetch,proto3" json:"postings_to_fetch,omitempty"`
+	PostingsFetched        int64 `protobuf:"varint,7,opt,name=postings_fetched,json=postingsFetched,proto3" json:"postings_fetched,omitempty"`
+	PostingsFetchedSizeSum int64 `protobuf:"varint,8,opt,name=postings_fetched_size_sum,json=postingsFetchedSizeSum,proto3" json:"postings_fetched_size_sum,omitempty"`
+	PostingsFetchCount     int64 `protobuf:"varint,9,opt,name=postings_fetch_count,json=postingsFetchCount,proto3" json:"postings_fetch_count,omitempty"`
+	SeriesTouched          int64 `protobuf:"varint,10,opt,name=series_touched,json=seriesTouched,proto3" json:"series_touched,omitempty"`
+	SeriesTouchedSizeSum   int64 `protobuf:"varint,11,opt,name=series_touched_size_sum,json=seriesTouchedSizeSum,proto3" json:"series_touched_size_sum,omitempty"`
+	SeriesFetched          int64 `protobuf:"varint,12,opt,name=series_fetched,json=seriesFetched,proto3" json:"series_fetched,omitempty"`
+	SeriesFetchedSizeSum   int64 `protobuf:"varint,13,opt,name=series_fetched_size_sum,json=seriesFetchedSizeSum,proto3" json:"series_fetched_size_sum,omitempty"`
+	SeriesFetchCount       int64 `protobuf:"varint,14,opt,name=series_fetch_count,json=seriesFetchCount,proto3" json:"series_fetch_count,omitempty"`
+	ChunksTouched          int64 `protobuf:"varint,15,opt,name=chunks_touched,json=chunksTouched,proto3" json:"chunks_touched,omitempty"`
+	ChunksTouchedSizeSum   int64 `protobuf:"varint,16,opt,name=chunks_touched_size_sum,json=chunksTouchedSizeSum,proto3" json:"chunks_touched_size_sum,omitempty"`
+	ChunksFetched          int64 `protobuf:"varint,17,opt,name=chunks_fetched,json=chunksFetched,proto3" json:"chunks_fetched,omitempty"`
+	ChunksFetchedSizeSum   int64 `protobuf:"varint,18,opt,name=chunks_fetched_size_sum,json=chunksFetchedSizeSum,proto3" json:"chunks_fetched_size_sum,omitempty"`
+	ChunksFetchCount       int64 `protobuf:"varint,19,opt,name=chunks_fetch_count,json=chunksFetchCount,proto3" json:"chunks_fetch_count,omitempty"`
+	DataDownloadedSizeSum  int64 `protobuf:"varint,20,opt,name=data_downloaded_size_sum,json=dataDownloadedSizeSum,proto3" json:"data_downloaded_size_sum,omitempty"`
+}
+
+func (m *QueryStats) Reset()         { *m = QueryStats{} }
+func (m *QueryStats) String() string { return proto.CompactTextString(m) }
+func (*QueryStats) ProtoMessage()    {}
+func (*QueryStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b82aa23c4c11e83f, []int{7}
+}
+func (m *QueryStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryStats.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryStats.Merge(m, src)
+}
+func (m *QueryStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryStats proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*SeriesRequestHints)(nil), "hintspb.SeriesRequestHints")
 	proto.RegisterType((*SeriesResponseHints)(nil), "hintspb.SeriesResponseHints")
@@ -304,31 +364,54 @@ func init() {
 	proto.RegisterType((*LabelNamesResponseHints)(nil), "hintspb.LabelNamesResponseHints")
 	proto.RegisterType((*LabelValuesRequestHints)(nil), "hintspb.LabelValuesRequestHints")
 	proto.RegisterType((*LabelValuesResponseHints)(nil), "hintspb.LabelValuesResponseHints")
+	proto.RegisterType((*QueryStats)(nil), "hintspb.QueryStats")
 }
 
 func init() { proto.RegisterFile("store/hintspb/hints.proto", fileDescriptor_b82aa23c4c11e83f) }
 
 var fileDescriptor_b82aa23c4c11e83f = []byte{
-	// 295 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2c, 0x2e, 0xc9, 0x2f,
-	0x4a, 0xd5, 0xcf, 0xc8, 0xcc, 0x2b, 0x29, 0x2e, 0x48, 0x82, 0xd0, 0x7a, 0x05, 0x45, 0xf9, 0x25,
-	0xf9, 0x42, 0xec, 0x50, 0x41, 0x29, 0x91, 0xf4, 0xfc, 0xf4, 0x7c, 0xb0, 0x98, 0x3e, 0x88, 0x05,
-	0x91, 0x96, 0x82, 0xea, 0x04, 0x93, 0x05, 0x49, 0xfa, 0x25, 0x95, 0x05, 0xa9, 0x50, 0x9d, 0x4a,
-	0xe1, 0x5c, 0x42, 0xc1, 0xa9, 0x45, 0x99, 0xa9, 0xc5, 0x41, 0xa9, 0x85, 0xa5, 0xa9, 0xc5, 0x25,
-	0x1e, 0x20, 0x83, 0x84, 0x1c, 0xb9, 0xf8, 0x92, 0x72, 0xf2, 0x93, 0xb3, 0xe3, 0x73, 0x13, 0x4b,
-	0x92, 0x33, 0x52, 0x8b, 0x8a, 0x25, 0x18, 0x15, 0x98, 0x35, 0xb8, 0x8d, 0x44, 0xf4, 0x4a, 0x32,
-	0x12, 0xf3, 0xf2, 0x8b, 0xf5, 0x7c, 0x12, 0x93, 0x52, 0x73, 0x7c, 0x21, 0x92, 0x4e, 0x2c, 0x27,
-	0xee, 0xc9, 0x33, 0x04, 0xf1, 0x82, 0x75, 0x40, 0xc5, 0x8a, 0x95, 0x82, 0xb8, 0x84, 0x61, 0x06,
-	0x17, 0x17, 0xe4, 0xe7, 0x15, 0xa7, 0x42, 0x4c, 0xb6, 0xe6, 0xe2, 0x2b, 0x2c, 0x05, 0x89, 0xa7,
-	0xc4, 0x83, 0xd5, 0xc3, 0x4c, 0xe6, 0xd3, 0x83, 0x7a, 0x41, 0xcf, 0x09, 0x24, 0x0c, 0x33, 0x13,
-	0xaa, 0x16, 0x2c, 0x56, 0xac, 0x24, 0xce, 0xc5, 0x0a, 0x66, 0x09, 0xf1, 0x71, 0x31, 0x65, 0xa6,
-	0x48, 0x30, 0x2a, 0x30, 0x6a, 0x70, 0x06, 0x31, 0x65, 0xa6, 0x28, 0x45, 0x73, 0x89, 0x81, 0x5d,
-	0xe4, 0x97, 0x98, 0x4b, 0x7d, 0x9f, 0x84, 0x71, 0x89, 0x23, 0x1b, 0x4e, 0x35, 0xdf, 0xc4, 0x40,
-	0xcd, 0x0d, 0x4b, 0xcc, 0x29, 0xa5, 0xbe, 0xab, 0xc3, 0xb9, 0x24, 0x50, 0x4c, 0xa7, 0x96, 0xb3,
-	0x9d, 0x54, 0x4f, 0x3c, 0x94, 0x63, 0x38, 0xf1, 0x48, 0x8e, 0xf1, 0xc2, 0x23, 0x39, 0xc6, 0x07,
-	0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8, 0xf0, 0x58, 0x8e, 0xe1, 0xc6, 0x63, 0x39, 0x86,
-	0x28, 0x58, 0x4a, 0x4c, 0x62, 0x03, 0xa7, 0x2f, 0x63, 0x40, 0x00, 0x00, 0x00, 0xff, 0xff, 0x47,
-	0x2f, 0x08, 0x1f, 0xb6, 0x02, 0x00, 0x00,
+	// 652 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0xcd, 0x4f, 0x13, 0x41,
+	0x1c, 0xed, 0x52, 0x3e, 0x7f, 0x95, 0x52, 0xa6, 0x15, 0x16, 0x0e, 0x2b, 0x69, 0x42, 0x82, 0x86,
+	0x14, 0x83, 0x31, 0x46, 0x3d, 0x09, 0x86, 0x78, 0x50, 0x13, 0x5a, 0x83, 0x89, 0x9a, 0x4c, 0xf6,
+	0x63, 0xec, 0x6e, 0x68, 0x77, 0x96, 0x9d, 0xd9, 0x18, 0xb8, 0x7b, 0x35, 0xfe, 0x59, 0xc4, 0x13,
+	0x47, 0x4f, 0x46, 0xe1, 0x1f, 0x31, 0x3b, 0x1f, 0xec, 0x4c, 0xb9, 0xf6, 0x02, 0xcd, 0xfb, 0xbd,
+	0xf7, 0xe6, 0xbd, 0xdf, 0x4c, 0xb2, 0xb0, 0xc1, 0x38, 0xcd, 0xc9, 0x5e, 0x9c, 0xa4, 0x9c, 0x65,
+	0x81, 0xfc, 0xdf, 0xcb, 0x72, 0xca, 0x29, 0x5a, 0x50, 0xe0, 0x66, 0x67, 0x48, 0x87, 0x54, 0x60,
+	0x7b, 0xe5, 0x2f, 0x39, 0xde, 0x54, 0x4a, 0xf1, 0x37, 0x0b, 0xf6, 0xf8, 0x79, 0x46, 0x94, 0xb2,
+	0xfb, 0xdd, 0x01, 0x34, 0x20, 0x79, 0x42, 0x58, 0x9f, 0x9c, 0x15, 0x84, 0xf1, 0x37, 0xa5, 0x13,
+	0x7a, 0x05, 0xcd, 0x60, 0x44, 0xc3, 0x53, 0x3c, 0xf6, 0x79, 0x18, 0x93, 0x9c, 0xb9, 0xce, 0x56,
+	0x7d, 0xa7, 0xb1, 0xdf, 0xe9, 0xf1, 0xd8, 0x4f, 0x29, 0xeb, 0xbd, 0xf5, 0x03, 0x32, 0x7a, 0x27,
+	0x87, 0x07, 0xb3, 0x97, 0x7f, 0x1e, 0xd4, 0xfa, 0xcb, 0x42, 0xa1, 0x30, 0x86, 0x76, 0x01, 0x91,
+	0xd4, 0x0f, 0x46, 0x04, 0x9f, 0x15, 0x24, 0x3f, 0xc7, 0x8c, 0xfb, 0x9c, 0xb9, 0x33, 0x5b, 0xce,
+	0xce, 0x62, 0xbf, 0x25, 0x27, 0xc7, 0xe5, 0x60, 0x50, 0xe2, 0xdd, 0x1f, 0x0e, 0xb4, 0x75, 0x0e,
+	0x96, 0xd1, 0x94, 0x11, 0x19, 0xe4, 0x25, 0x34, 0x4b, 0x79, 0x42, 0x22, 0x2c, 0xec, 0x75, 0x90,
+	0x66, 0x4f, 0x55, 0xee, 0x1d, 0x94, 0xb0, 0x8e, 0xa0, 0xb8, 0x02, 0x63, 0xe8, 0x05, 0x34, 0x26,
+	0xcf, 0x6e, 0xec, 0xb7, 0x6f, 0x95, 0xd5, 0xf1, 0x42, 0xee, 0xf4, 0xe1, 0xac, 0x0a, 0xb4, 0x0e,
+	0x73, 0xc2, 0x05, 0x35, 0x61, 0x26, 0x89, 0x5c, 0x67, 0xcb, 0xd9, 0x59, 0xea, 0xcf, 0x24, 0x51,
+	0xf7, 0x33, 0xac, 0x89, 0xf2, 0xef, 0xfd, 0xf1, 0xd4, 0x97, 0xd6, 0x3d, 0x81, 0x75, 0xd3, 0x7c,
+	0x5a, 0x9b, 0xe8, 0x7e, 0x51, 0xbe, 0x27, 0xfe, 0xa8, 0x98, 0x7e, 0xea, 0x8f, 0xe0, 0x5a, 0xee,
+	0x53, 0x8b, 0xfd, 0x6b, 0x01, 0xa0, 0xba, 0x25, 0xb4, 0xad, 0xa2, 0x32, 0xac, 0x68, 0xe2, 0x5a,
+	0xea, 0x2a, 0x0e, 0x3b, 0x96, 0x20, 0xea, 0x41, 0x7b, 0x4c, 0xf2, 0x21, 0x89, 0x30, 0x13, 0x2f,
+	0x0a, 0x87, 0xb4, 0x48, 0xb9, 0xb8, 0xfe, 0x7a, 0x7f, 0x55, 0x8e, 0xe4, 0x5b, 0x3b, 0x2c, 0x07,
+	0x06, 0x3f, 0x8c, 0x8b, 0xf4, 0x54, 0xf3, 0xeb, 0x26, 0xff, 0x50, 0x4c, 0x24, 0xff, 0x21, 0xb4,
+	0x32, 0xca, 0x78, 0x92, 0x0e, 0x19, 0xe6, 0xb4, 0x08, 0x63, 0x12, 0xb9, 0xb3, 0x82, 0xbc, 0xa2,
+	0xf1, 0x0f, 0x12, 0x46, 0xcf, 0x61, 0x63, 0x92, 0x8a, 0x59, 0x72, 0x41, 0x30, 0x2b, 0xc6, 0xee,
+	0x9c, 0xd0, 0xac, 0x4d, 0x68, 0x06, 0xc9, 0x05, 0x19, 0x14, 0x63, 0xf4, 0x08, 0x56, 0x0d, 0x29,
+	0xfe, 0x4a, 0x78, 0x18, 0xbb, 0xf3, 0x93, 0xc7, 0x1c, 0x95, 0xb0, 0x95, 0x48, 0x10, 0x49, 0xe4,
+	0x2e, 0xd8, 0xd4, 0x23, 0x09, 0x5b, 0x89, 0x14, 0xb5, 0x4a, 0xb4, 0x68, 0x27, 0x52, 0x1a, 0x9d,
+	0xe8, 0x31, 0x74, 0x6c, 0xa9, 0x5a, 0xd4, 0x92, 0x50, 0x21, 0x4b, 0x25, 0x37, 0xb5, 0x0d, 0x4d,
+	0x75, 0x05, 0x7a, 0x4f, 0x20, 0x2f, 0x4c, 0xa2, 0x7a, 0x4b, 0x4f, 0x61, 0xdd, 0xa6, 0x55, 0x89,
+	0x1a, 0x82, 0xdf, 0xb1, 0xf8, 0x3a, 0x4f, 0xe5, 0xae, 0x3b, 0xdf, 0x33, 0xdd, 0x75, 0xe3, 0xca,
+	0xfd, 0x4e, 0xdf, 0x65, 0xd3, 0x7d, 0xa2, 0xed, 0x2e, 0x20, 0x53, 0xa6, 0xba, 0x36, 0x85, 0xa2,
+	0x65, 0x28, 0x6e, 0x9b, 0xaa, 0xc7, 0xa3, 0x9b, 0xae, 0xc8, 0x2c, 0x12, 0x35, 0x9a, 0xda, 0xb4,
+	0x2a, 0x4b, 0x4b, 0x66, 0xb1, 0xf8, 0x46, 0x53, 0x25, 0xd3, 0x4d, 0x57, 0x4d, 0x77, 0xa3, 0xa9,
+	0x4d, 0xab, 0xdc, 0x91, 0xe9, 0x7e, 0xb7, 0xa9, 0x29, 0x53, 0x4d, 0xdb, 0xb2, 0xa9, 0xa1, 0x90,
+	0x4d, 0x9f, 0x81, 0x1b, 0xf9, 0xdc, 0xc7, 0x11, 0xfd, 0x96, 0x8e, 0xa8, 0x1f, 0x99, 0xa7, 0x74,
+	0x84, 0xe6, 0x7e, 0x39, 0x7f, 0x7d, 0x3b, 0x56, 0xc7, 0x1c, 0x6c, 0x5f, 0xfe, 0xf3, 0x6a, 0x97,
+	0xd7, 0x9e, 0x73, 0x75, 0xed, 0x39, 0x7f, 0xaf, 0x3d, 0xe7, 0xe7, 0x8d, 0x57, 0xbb, 0xba, 0xf1,
+	0x6a, 0xbf, 0x6f, 0xbc, 0xda, 0x27, 0xfd, 0x09, 0x0b, 0xe6, 0xc5, 0x87, 0xe9, 0xc9, 0xff, 0x00,
+	0x00, 0x00, 0xff, 0xff, 0x4e, 0x26, 0x0a, 0x60, 0xef, 0x06, 0x00, 0x00,
 }
 
 func (m *SeriesRequestHints) Marshal() (dAtA []byte, err error) {
@@ -351,6 +434,16 @@ func (m *SeriesRequestHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.EnableQueryStats {
+		i--
+		if m.EnableQueryStats {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
 	if len(m.BlockMatchers) > 0 {
 		for iNdEx := len(m.BlockMatchers) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -388,6 +481,18 @@ func (m *SeriesResponseHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.QueryStats != nil {
+		{
+			size, err := m.QueryStats.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintHints(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
 	if len(m.QueriedBlocks) > 0 {
 		for iNdEx := len(m.QueriedBlocks) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -583,6 +688,139 @@ func (m *LabelValuesResponseHints) MarshalToSizedBuffer(dAtA []byte) (int, error
 	return len(dAtA) - i, nil
 }
 
+func (m *QueryStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryStats) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.DataDownloadedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.DataDownloadedSizeSum))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xa0
+	}
+	if m.ChunksFetchCount != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.ChunksFetchCount))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x98
+	}
+	if m.ChunksFetchedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.ChunksFetchedSizeSum))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x90
+	}
+	if m.ChunksFetched != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.ChunksFetched))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x88
+	}
+	if m.ChunksTouchedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.ChunksTouchedSizeSum))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x80
+	}
+	if m.ChunksTouched != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.ChunksTouched))
+		i--
+		dAtA[i] = 0x78
+	}
+	if m.SeriesFetchCount != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.SeriesFetchCount))
+		i--
+		dAtA[i] = 0x70
+	}
+	if m.SeriesFetchedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.SeriesFetchedSizeSum))
+		i--
+		dAtA[i] = 0x68
+	}
+	if m.SeriesFetched != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.SeriesFetched))
+		i--
+		dAtA[i] = 0x60
+	}
+	if m.SeriesTouchedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.SeriesTouchedSizeSum))
+		i--
+		dAtA[i] = 0x58
+	}
+	if m.SeriesTouched != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.SeriesTouched))
+		i--
+		dAtA[i] = 0x50
+	}
+	if m.PostingsFetchCount != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.PostingsFetchCount))
+		i--
+		dAtA[i] = 0x48
+	}
+	if m.PostingsFetchedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.PostingsFetchedSizeSum))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.PostingsFetched != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.PostingsFetched))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.PostingsToFetch != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.PostingsToFetch))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.PostingsTouchedSizeSum != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.PostingsTouchedSizeSum))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.PostingsTouched != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.PostingsTouched))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.MergedChunksCount != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.MergedChunksCount))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.MergedSeriesCount != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.MergedSeriesCount))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.BlocksQueried != 0 {
+		i = encodeVarintHints(dAtA, i, uint64(m.BlocksQueried))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintHints(dAtA []byte, offset int, v uint64) int {
 	offset -= sovHints(v)
 	base := offset
@@ -606,6 +844,9 @@ func (m *SeriesRequestHints) Size() (n int) {
 			n += 1 + l + sovHints(uint64(l))
 		}
 	}
+	if m.EnableQueryStats {
+		n += 2
+	}
 	return n
 }
 
@@ -620,6 +861,10 @@ func (m *SeriesResponseHints) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovHints(uint64(l))
 		}
+	}
+	if m.QueryStats != nil {
+		l = m.QueryStats.Size()
+		n += 1 + l + sovHints(uint64(l))
 	}
 	return n
 }
@@ -697,6 +942,75 @@ func (m *LabelValuesResponseHints) Size() (n int) {
 	return n
 }
 
+func (m *QueryStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.BlocksQueried != 0 {
+		n += 1 + sovHints(uint64(m.BlocksQueried))
+	}
+	if m.MergedSeriesCount != 0 {
+		n += 1 + sovHints(uint64(m.MergedSeriesCount))
+	}
+	if m.MergedChunksCount != 0 {
+		n += 1 + sovHints(uint64(m.MergedChunksCount))
+	}
+	if m.PostingsTouched != 0 {
+		n += 1 + sovHints(uint64(m.PostingsTouched))
+	}
+	if m.PostingsTouchedSizeSum != 0 {
+		n += 1 + sovHints(uint64(m.PostingsTouchedSizeSum))
+	}
+	if m.PostingsToFetch != 0 {
+		n += 1 + sovHints(uint64(m.PostingsToFetch))
+	}
+	if m.PostingsFetched != 0 {
+		n += 1 + sovHints(uint64(m.PostingsFetched))
+	}
+	if m.PostingsFetchedSizeSum != 0 {
+		n += 1 + sovHints(uint64(m.PostingsFetchedSizeSum))
+	}
+	if m.PostingsFetchCount != 0 {
+		n += 1 + sovHints(uint64(m.PostingsFetchCount))
+	}
+	if m.SeriesTouched != 0 {
+		n += 1 + sovHints(uint64(m.SeriesTouched))
+	}
+	if m.SeriesTouchedSizeSum != 0 {
+		n += 1 + sovHints(uint64(m.SeriesTouchedSizeSum))
+	}
+	if m.SeriesFetched != 0 {
+		n += 1 + sovHints(uint64(m.SeriesFetched))
+	}
+	if m.SeriesFetchedSizeSum != 0 {
+		n += 1 + sovHints(uint64(m.SeriesFetchedSizeSum))
+	}
+	if m.SeriesFetchCount != 0 {
+		n += 1 + sovHints(uint64(m.SeriesFetchCount))
+	}
+	if m.ChunksTouched != 0 {
+		n += 1 + sovHints(uint64(m.ChunksTouched))
+	}
+	if m.ChunksTouchedSizeSum != 0 {
+		n += 2 + sovHints(uint64(m.ChunksTouchedSizeSum))
+	}
+	if m.ChunksFetched != 0 {
+		n += 2 + sovHints(uint64(m.ChunksFetched))
+	}
+	if m.ChunksFetchedSizeSum != 0 {
+		n += 2 + sovHints(uint64(m.ChunksFetchedSizeSum))
+	}
+	if m.ChunksFetchCount != 0 {
+		n += 2 + sovHints(uint64(m.ChunksFetchCount))
+	}
+	if m.DataDownloadedSizeSum != 0 {
+		n += 2 + sovHints(uint64(m.DataDownloadedSizeSum))
+	}
+	return n
+}
+
 func sovHints(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
@@ -766,6 +1080,26 @@ func (m *SeriesRequestHints) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EnableQueryStats", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.EnableQueryStats = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipHints(dAtA[iNdEx:])
@@ -847,6 +1181,42 @@ func (m *SeriesResponseHints) Unmarshal(dAtA []byte) error {
 			}
 			m.QueriedBlocks = append(m.QueriedBlocks, Block{})
 			if err := m.QueriedBlocks[len(m.QueriedBlocks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field QueryStats", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthHints
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthHints
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.QueryStats == nil {
+				m.QueryStats = &QueryStats{}
+			}
+			if err := m.QueryStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1268,6 +1638,436 @@ func (m *LabelValuesResponseHints) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHints(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthHints
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHints
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BlocksQueried", wireType)
+			}
+			m.BlocksQueried = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.BlocksQueried |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MergedSeriesCount", wireType)
+			}
+			m.MergedSeriesCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MergedSeriesCount |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MergedChunksCount", wireType)
+			}
+			m.MergedChunksCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MergedChunksCount |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PostingsTouched", wireType)
+			}
+			m.PostingsTouched = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PostingsTouched |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PostingsTouchedSizeSum", wireType)
+			}
+			m.PostingsTouchedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PostingsTouchedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PostingsToFetch", wireType)
+			}
+			m.PostingsToFetch = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PostingsToFetch |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PostingsFetched", wireType)
+			}
+			m.PostingsFetched = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PostingsFetched |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PostingsFetchedSizeSum", wireType)
+			}
+			m.PostingsFetchedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PostingsFetchedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PostingsFetchCount", wireType)
+			}
+			m.PostingsFetchCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PostingsFetchCount |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SeriesTouched", wireType)
+			}
+			m.SeriesTouched = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SeriesTouched |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 11:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SeriesTouchedSizeSum", wireType)
+			}
+			m.SeriesTouchedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SeriesTouchedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SeriesFetched", wireType)
+			}
+			m.SeriesFetched = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SeriesFetched |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 13:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SeriesFetchedSizeSum", wireType)
+			}
+			m.SeriesFetchedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SeriesFetchedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SeriesFetchCount", wireType)
+			}
+			m.SeriesFetchCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SeriesFetchCount |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 15:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChunksTouched", wireType)
+			}
+			m.ChunksTouched = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ChunksTouched |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 16:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChunksTouchedSizeSum", wireType)
+			}
+			m.ChunksTouchedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ChunksTouchedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 17:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChunksFetched", wireType)
+			}
+			m.ChunksFetched = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ChunksFetched |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 18:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChunksFetchedSizeSum", wireType)
+			}
+			m.ChunksFetchedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ChunksFetchedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 19:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChunksFetchCount", wireType)
+			}
+			m.ChunksFetchCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ChunksFetchCount |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 20:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DataDownloadedSizeSum", wireType)
+			}
+			m.DataDownloadedSizeSum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHints
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DataDownloadedSizeSum |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipHints(dAtA[iNdEx:])

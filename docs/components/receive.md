@@ -32,7 +32,7 @@ The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-
 
 ## TSDB stats
 
-Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. Use the `limit` query parameter to tweak the number of stats to return (the default is 10). The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
 
 Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
 
@@ -94,6 +94,47 @@ The example content of `hashring.json`:
 ```
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
+
+### AZ-aware Ketama hashring (experimental)
+
+In order to ensure even spread for replication over nodes in different availability-zones, you can choose to include az definition in your hashring config. If we for example have a 6 node cluster, spread over 3 different availability zones; A, B and C, we could use the following example `hashring.json`:
+
+```json
+[
+    {
+        "endpoints": [
+          {
+            "address": "127.0.0.1:10907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:11907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:12907",
+            "az": "C"
+          },
+          {
+            "address": "127.0.0.1:13907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:14907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:15907",
+            "az": "C"
+          }
+        ]
+    }
+]
+```
+
+This is only supported for the Ketama algorithm.
+
+**NOTE:** This feature is made available from v0.32 onwards. Receive can still operate with `endpoints` set to an array of IP strings in ketama mode. But to use AZ-aware hashring, you would need to migrate your existing hashring (and surrounding automation) to the new JSON structure mentioned above.
 
 ## Limits & gates (experimental)
 
@@ -200,7 +241,7 @@ Under `global`:
 - `meta_monitoring_http_client`: Optional YAML field specifying HTTP client config for meta-monitoring.
 
 Under `default` and per `tenant`:
-- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive. Set to 0 for unlimited.
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.

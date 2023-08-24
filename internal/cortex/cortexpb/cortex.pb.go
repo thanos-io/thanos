@@ -495,10 +495,6 @@ func (m *Exemplar) GetTimestampMs() int64 {
 }
 
 func init() {
-	proto.RegisterEnum("cortexpb.WriteRequest_SourceEnum", WriteRequest_SourceEnum_name, WriteRequest_SourceEnum_value)
-	proto.RegisterEnum("cortexpb.MetricMetadata_MetricType", MetricMetadata_MetricType_name, MetricMetadata_MetricType_value)
-	proto.RegisterType((*WriteRequest)(nil), "cortexpb.WriteRequest")
-	proto.RegisterType((*WriteResponse)(nil), "cortexpb.WriteResponse")
 	proto.RegisterType((*TimeSeries)(nil), "cortexpb.TimeSeries")
 	proto.RegisterType((*LabelPair)(nil), "cortexpb.LabelPair")
 	proto.RegisterType((*Sample)(nil), "cortexpb.Sample")

@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -234,17 +235,6 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
 	)
 
-	// TODO(bwplotka): If that causes problems (obj store rate limits), add longer ttl to cached items.
-	// For 1y and 100 block sources this generates ~1.5-3k HEAD RPM. AWS handles 330k RPM per prefix.
-	// TODO(bwplotka): Consider filtering by consistency delay here (can't do until compactor healthyOverride work).
-	ok, err := f.bkt.Exists(ctx, metaFile)
-	if err != nil {
-		return nil, errors.Wrapf(err, "meta.json file exists: %v", metaFile)
-	}
-	if !ok {
-		return nil, ErrorSyncMetaNotFound
-	}
-
 	if m, seen := f.cached[id]; seen {
 		return m, nil
 	}
@@ -360,14 +350,24 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		})
 	}
 
+	partialBlocks := make(map[ulid.ULID]bool)
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
 		defer close(ch)
 		return f.bkt.Iter(ctx, "", func(name string) error {
-			id, ok := IsBlockDir(name)
+			parts := strings.Split(name, "/")
+			dir, file := parts[0], parts[len(parts)-1]
+			id, ok := IsBlockDir(dir)
 			if !ok {
 				return nil
 			}
+			if _, ok := partialBlocks[id]; !ok {
+				partialBlocks[id] = true
+			}
+			if !IsBlockMetaFile(file) {
+				return nil
+			}
+			partialBlocks[id] = false
 
 			select {
 			case <-ctx.Done():
@@ -376,12 +376,21 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 			}
 
 			return nil
-		})
+		}, objstore.WithRecursiveIter)
 	})
 
 	if err := eg.Wait(); err != nil {
 		return nil, errors.Wrap(err, "BaseFetcher: iter bucket")
 	}
+
+	mtx.Lock()
+	for blockULID, isPartial := range partialBlocks {
+		if isPartial {
+			resp.partial[blockULID] = errors.Errorf("block %s has no meta file", blockULID)
+			resp.noMetas++
+		}
+	}
+	mtx.Unlock()
 
 	if len(resp.metaErrs) > 0 {
 		return resp, nil
@@ -577,24 +586,28 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 	return nil
 }
 
-var _ MetadataFilter = &DeduplicateFilter{}
+var _ MetadataFilter = &DefaultDeduplicateFilter{}
 
-// DeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
+type DeduplicateFilter interface {
+	DuplicateIDs() []ulid.ULID
+}
+
+// DefaultDeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
 // Not go-routine safe.
-type DeduplicateFilter struct {
+type DefaultDeduplicateFilter struct {
 	duplicateIDs []ulid.ULID
 	concurrency  int
 	mu           sync.Mutex
 }
 
-// NewDeduplicateFilter creates DeduplicateFilter.
-func NewDeduplicateFilter(concurrency int) *DeduplicateFilter {
-	return &DeduplicateFilter{concurrency: concurrency}
+// NewDeduplicateFilter creates DefaultDeduplicateFilter.
+func NewDeduplicateFilter(concurrency int) *DefaultDeduplicateFilter {
+	return &DefaultDeduplicateFilter{concurrency: concurrency}
 }
 
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
-func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	f.duplicateIDs = f.duplicateIDs[:0]
 
 	var wg sync.WaitGroup
@@ -626,7 +639,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	return nil
 }
 
-func (f *DeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec) {
+func (f *DefaultDeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -668,8 +681,8 @@ childLoop:
 	f.mu.Unlock()
 }
 
-// DuplicateIDs returns slice of block ids that are filtered out by DeduplicateFilter.
-func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
+// DuplicateIDs returns slice of block ids that are filtered out by DefaultDeduplicateFilter.
+func (f *DefaultDeduplicateFilter) DuplicateIDs() []ulid.ULID {
 	return f.duplicateIDs
 }
 

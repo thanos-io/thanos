@@ -117,10 +117,6 @@ config:
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
-  pool_size: 100
-  min_idle_conns: 10
-  idle_timeout: 5m0s
-  max_conn_age: 0s
   max_get_multi_concurrency: 100
   get_multi_batch_size: 100
   max_set_multi_concurrency: 100
@@ -134,6 +130,8 @@ config:
     insecure_skip_verify: false
   cache_size: 0
   master_name: ""
+  max_async_buffer_size: 10000
+  max_async_concurrency: 20
   expiration: 24h0m0s
 ```
 

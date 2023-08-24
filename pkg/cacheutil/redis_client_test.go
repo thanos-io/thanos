@@ -223,8 +223,10 @@ func TestMultipleRedisClient(t *testing.T) {
 	cfg.Addr = s.Addr()
 	logger := log.NewLogfmtLogger(os.Stderr)
 	reg := prometheus.NewRegistry()
-	_, err = NewRedisClientWithConfig(logger, "test1", cfg, reg)
+	cl, err := NewRedisClientWithConfig(logger, "test1", cfg, reg)
 	testutil.Ok(t, err)
-	_, err = NewRedisClientWithConfig(logger, "test2", cfg, reg)
+	t.Cleanup(cl.Stop)
+	cl, err = NewRedisClientWithConfig(logger, "test2", cfg, reg)
 	testutil.Ok(t, err)
+	t.Cleanup(cl.Stop)
 }

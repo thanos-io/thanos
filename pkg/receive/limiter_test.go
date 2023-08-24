@@ -32,7 +32,7 @@ func TestLimiter_StartConfigReloader(t *testing.T) {
 		t.Fatalf("could not load test content at %s: %s", invalidLimitsPath, err)
 	}
 
-	limiter, err := NewLimiter(goodLimits, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout))
+	limiter, err := NewLimiter(goodLimits, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout), 1*time.Second)
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,7 +88,7 @@ func TestLimiter_CanReload(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			configFile := tt.args.configFilePath
-			limiter, err := NewLimiter(configFile, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout))
+			limiter, err := NewLimiter(configFile, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout), 1*time.Second)
 			testutil.Ok(t, err)
 			if tt.wantReload {
 				testutil.Assert(t, limiter.CanReload())

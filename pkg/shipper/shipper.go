@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -39,7 +40,7 @@ type metrics struct {
 	uploadedCompacted prometheus.Gauge
 }
 
-func newMetrics(reg prometheus.Registerer, uploadCompacted bool) *metrics {
+func newMetrics(reg prometheus.Registerer) *metrics {
 	var m metrics
 
 	m.dirSyncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -58,15 +59,10 @@ func newMetrics(reg prometheus.Registerer, uploadCompacted bool) *metrics {
 		Name: "thanos_shipper_upload_failures_total",
 		Help: "Total number of block upload failures",
 	})
-	uploadCompactedGaugeOpts := prometheus.GaugeOpts{
+	m.uploadedCompacted = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_shipper_upload_compacted_done",
 		Help: "If 1 it means shipper uploaded all compacted blocks from the filesystem.",
-	}
-	if uploadCompacted {
-		m.uploadedCompacted = promauto.With(reg).NewGauge(uploadCompactedGaugeOpts)
-	} else {
-		m.uploadedCompacted = promauto.With(nil).NewGauge(uploadCompactedGaugeOpts)
-	}
+	})
 	return &m
 }
 
@@ -77,12 +73,14 @@ type Shipper struct {
 	dir     string
 	metrics *metrics
 	bucket  objstore.Bucket
-	labels  func() labels.Labels
 	source  metadata.SourceType
 
-	uploadCompacted        bool
+	uploadCompactedFunc    func() bool
 	allowOutOfOrderUploads bool
 	hashFunc               metadata.HashFunc
+
+	labels func() labels.Labels
+	mtx    sync.RWMutex
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
@@ -95,7 +93,7 @@ func New(
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
 	source metadata.SourceType,
-	uploadCompacted bool,
+	uploadCompactedFunc func() bool,
 	allowOutOfOrderUploads bool,
 	hashFunc metadata.HashFunc,
 ) *Shipper {
@@ -106,17 +104,36 @@ func New(
 		lbls = func() labels.Labels { return nil }
 	}
 
+	if uploadCompactedFunc == nil {
+		uploadCompactedFunc = func() bool {
+			return false
+		}
+	}
 	return &Shipper{
 		logger:                 logger,
 		dir:                    dir,
 		bucket:                 bucket,
 		labels:                 lbls,
-		metrics:                newMetrics(r, uploadCompacted),
+		metrics:                newMetrics(r),
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
-		uploadCompacted:        uploadCompacted,
+		uploadCompactedFunc:    uploadCompactedFunc,
 		hashFunc:               hashFunc,
 	}
+}
+
+func (s *Shipper) SetLabels(lbls labels.Labels) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.labels = func() labels.Labels { return lbls }
+}
+
+func (s *Shipper) getLabels() labels.Labels {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.labels()
 }
 
 // Timestamps returns the minimum timestamp for which data is available and the highest timestamp
@@ -251,10 +268,11 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta.Uploaded = nil
 
 	var (
-		checker    = newLazyOverlapChecker(s.logger, s.bucket, s.labels)
+		checker    = newLazyOverlapChecker(s.logger, s.bucket, s.getLabels)
 		uploadErrs int
 	)
 
+	uploadCompacted := s.uploadCompactedFunc()
 	metas, err := s.blockMetasFromOldest()
 	if err != nil {
 		return 0, err
@@ -275,7 +293,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 
 		// We only ship of the first compacted block level as normal flow.
 		if m.Compaction.Level > 1 {
-			if !s.uploadCompacted {
+			if !uploadCompacted {
 				continue
 			}
 		}
@@ -322,8 +340,10 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		return uploaded, errors.Errorf("failed to sync %v blocks", uploadErrs)
 	}
 
-	if s.uploadCompacted {
+	if uploadCompacted {
 		s.metrics.uploadedCompacted.Set(1)
+	} else {
+		s.metrics.uploadedCompacted.Set(0)
 	}
 	return uploaded, nil
 }
@@ -355,7 +375,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 		return errors.Wrap(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
-	if lset := s.labels(); lset != nil {
+	if lset := s.getLabels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
 	}
 	meta.Thanos.Source = s.source

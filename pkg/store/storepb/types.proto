@@ -24,6 +24,7 @@ message Chunk {
   enum Encoding {
     XOR = 0;
     HISTOGRAM = 1;
+    FLOAT_HISTOGRAM = 2;
   }
   Encoding type  = 1;
   bytes data     = 2;

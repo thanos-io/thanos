@@ -183,14 +183,12 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := QueryEngineFactory{
-		engineOpts: promql.EngineOpts{
-			Logger:     nil,
-			Reg:        nil,
-			MaxSamples: 10000,
-			Timeout:    timeout,
-		},
-	}
+	ef := NewQueryEngineFactory(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	}, nil)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -204,7 +202,9 @@ func TestQueryEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &store.NoopSeriesStatsAggregator{},
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
 	}
 
 	start := time.Unix(0, 0)
@@ -727,14 +727,12 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := QueryEngineFactory{
-		engineOpts: promql.EngineOpts{
-			Logger:     nil,
-			Reg:        nil,
-			MaxSamples: 10000,
-			Timeout:    timeout,
-		},
-	}
+	ef := NewQueryEngineFactory(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	}, nil)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -747,7 +745,9 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &store.NoopSeriesStatsAggregator{},
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
 	}
 	apiWithLabelLookback := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -762,7 +762,9 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &store.NoopSeriesStatsAggregator{},
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
 	}
 
 	var tests = []endpointTestCase{
@@ -1233,6 +1235,8 @@ func TestStoresEndpoint(t *testing.T) {
 				},
 			}
 		},
+		tenantHeader:  "thanos-tenant",
+		defaultTenant: "default-tenant",
 	}
 	apiWithInvalidEndpoint := &QueryAPI{
 		endpointStatus: func() []query.EndpointStatus {

@@ -31,7 +31,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"downsample": {
 			"resolution": 0
 		},
-		"source": ""
+		"source": "",
+		"index_stats": {}
 	}
 }
 `, b.String())
@@ -72,6 +73,10 @@ func TestMeta_ReadWrite(t *testing.T) {
 				},
 				Downsample: ThanosDownsample{
 					Resolution: 123144,
+				},
+				IndexStats: IndexStats{
+					SeriesMaxSize: 2000,
+					ChunkMaxSize:  1000,
 				},
 			},
 		}
@@ -121,7 +126,11 @@ func TestMeta_ReadWrite(t *testing.T) {
 			{
 				"rel_path": "meta.json"
 			}
-		]
+		],
+		"index_stats": {
+			"series_max_size": 2000,
+			"chunk_max_size": 1000
+		}
 	}
 }
 `, b.String())
@@ -199,7 +208,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 				"rel_path": "index",
 				"size_bytes": 1313
 			}
-		]
+		],
+		"index_stats": {}
 	}
 }
 `, b.String())
@@ -211,4 +221,127 @@ func TestMeta_ReadWrite(t *testing.T) {
 		m1.Thanos.Labels = map[string]string{}
 		testutil.Equals(t, m1, *retMeta)
 	})
+
+	t.Run("extensions write/read/write", func(t *testing.T) {
+		b := bytes.Buffer{}
+		m1 := Meta{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(5, nil),
+				MinTime: 2424,
+				MaxTime: 134,
+				Version: 1,
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: 123,
+				},
+				Stats: tsdb.BlockStats{NumChunks: 14, NumSamples: 245, NumSeries: 4},
+			},
+			Thanos: Thanos{
+				Labels: map[string]string{"ext": "lset1"},
+				Source: ReceiveSource,
+				Downsample: ThanosDownsample{
+					Resolution: 123144,
+				},
+				Extensions: &TestExtensions{
+					Field1: 1,
+					Field2: "test_string",
+				},
+			},
+		}
+		testutil.Ok(t, m1.Write(&b))
+		testutil.Equals(t, `{
+	"ulid": "00000000050000000000000000",
+	"minTime": 2424,
+	"maxTime": 134,
+	"stats": {
+		"numSamples": 245,
+		"numSeries": 4,
+		"numChunks": 14
+	},
+	"compaction": {
+		"level": 123
+	},
+	"version": 1,
+	"thanos": {
+		"labels": {
+			"ext": "lset1"
+		},
+		"downsample": {
+			"resolution": 123144
+		},
+		"source": "receive",
+		"index_stats": {},
+		"extensions": {
+			"field1": 1,
+			"field2": "test_string"
+		}
+	}
+}
+`, b.String())
+		retMeta, err := Read(io.NopCloser(&b))
+		testutil.Ok(t, err)
+		retExtensions, err := retMeta.Thanos.ParseExtensions(&TestExtensions{})
+		_, ok := retExtensions.(*TestExtensions)
+		testutil.Equals(t, true, ok)
+		testutil.Ok(t, err)
+		testutil.Equals(t, m1.Thanos.Extensions, retExtensions)
+	})
+
+	t.Run("empty extensions write/read/write", func(t *testing.T) {
+		b := bytes.Buffer{}
+		m1 := Meta{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(5, nil),
+				MinTime: 2424,
+				MaxTime: 134,
+				Version: 1,
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: 123,
+				},
+				Stats: tsdb.BlockStats{NumChunks: 14, NumSamples: 245, NumSeries: 4},
+			},
+			Thanos: Thanos{
+				Labels: map[string]string{"ext": "lset1"},
+				Source: ReceiveSource,
+				Downsample: ThanosDownsample{
+					Resolution: 123144,
+				},
+			},
+		}
+		testutil.Ok(t, m1.Write(&b))
+		testutil.Equals(t, `{
+	"ulid": "00000000050000000000000000",
+	"minTime": 2424,
+	"maxTime": 134,
+	"stats": {
+		"numSamples": 245,
+		"numSeries": 4,
+		"numChunks": 14
+	},
+	"compaction": {
+		"level": 123
+	},
+	"version": 1,
+	"thanos": {
+		"labels": {
+			"ext": "lset1"
+		},
+		"downsample": {
+			"resolution": 123144
+		},
+		"source": "receive",
+		"index_stats": {}
+	}
+}
+`, b.String())
+		retMeta, err := Read(io.NopCloser(&b))
+		testutil.Ok(t, err)
+		retExtensions, err := retMeta.Thanos.ParseExtensions(&TestExtensions{})
+		testutil.Ok(t, err)
+		testutil.Equals(t, m1.Thanos.Extensions, retExtensions)
+	})
+}
+
+type TestExtensions struct {
+	Field1 int    `json:"field1"`
+	Field2 string `json:"field2"`
 }

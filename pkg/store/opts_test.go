@@ -24,6 +24,15 @@ func TestFindSetMatches(t *testing.T) {
 				"baz",
 			},
 		},
+		// Simple sets with group wrapper.
+		{
+			pattern: "(foo|bar|baz)",
+			exp: []string{
+				"foo",
+				"bar",
+				"baz",
+			},
+		},
 		// Simple sets containing escaped characters.
 		{
 			pattern: "fo\\.o|bar\\?|\\^baz",
@@ -39,10 +48,19 @@ func TestFindSetMatches(t *testing.T) {
 			exp:     nil,
 		},
 		{
+			pattern: "(fool|bar)|(baz)",
+			exp:     nil,
+		},
+		{
 			pattern: "foo\\|bar\\|baz",
 			exp: []string{
 				"foo|bar|baz",
 			},
+		},
+		// empty pattern
+		{
+			pattern: "",
+			exp:     nil,
 		},
 	}
 

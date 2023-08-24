@@ -897,6 +897,43 @@ func TestDecodeResponse(t *testing.T) {
 		expectedErr      error
 	}{
 		{
+			name: "with explanation",
+			body: `{
+  "status":"success",
+  "data":{
+	"resultType":"vector",
+	"result":[],
+	"explanation": {
+		"name":"[*concurrencyOperator(buff=2)]",
+		"children":[{"name":"[*aggregate] sum by ([])", "children": []}]
+    }
+}
+}`,
+			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
+				Status:  queryrange.StatusSuccess,
+				Headers: headers,
+				Data: queryrange.PrometheusInstantQueryData{
+					Explanation: &queryrange.Explanation{
+						Name: "[*concurrencyOperator(buff=2)]",
+						Children: []*queryrange.Explanation{
+							{
+								Name:     "[*aggregate] sum by ([])",
+								Children: []*queryrange.Explanation{},
+							},
+						},
+					},
+					ResultType: model.ValVector.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "empty vector",
 			body: `{
   "status": "success",

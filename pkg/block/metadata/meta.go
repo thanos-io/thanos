@@ -90,6 +90,37 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	// IndexStats contains stats info related to block index.
+	IndexStats IndexStats `json:"index_stats,omitempty"`
+
+	// Extensions are used for plugin any arbitrary additional information for block. Optional.
+	Extensions any `json:"extensions,omitempty"`
+}
+
+type IndexStats struct {
+	SeriesMaxSize int64 `json:"series_max_size,omitempty"`
+	ChunkMaxSize  int64 `json:"chunk_max_size,omitempty"`
+}
+
+func (m *Thanos) ParseExtensions(v any) (any, error) {
+	return ConvertExtensions(m.Extensions, v)
+}
+
+// ConvertExtensions converts extensions with `any` type into specific type `v`
+// that the caller expects.
+func ConvertExtensions(extensions any, v any) (any, error) {
+	if extensions == nil {
+		return nil, nil
+	}
+	extensionsContent, err := json.Marshal(extensions)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(extensionsContent, v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 type Rewrite struct {
@@ -151,10 +182,15 @@ func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *
 	return newMeta, nil
 }
 
-// Returns a unique identifier for the compaction group the block belongs to.
+// GroupKey returns a unique identifier for the compaction group the block belongs to.
 // It considers the downsampling resolution and the block's labels.
 func (m *Thanos) GroupKey() string {
 	return fmt.Sprintf("%d@%v", m.Downsample.Resolution, labels.FromMap(m.Labels).Hash())
+}
+
+// ResolutionString returns a the block's resolution as a string.
+func (m *Thanos) ResolutionString() string {
+	return fmt.Sprintf("%d", m.Downsample.Resolution)
 }
 
 // WriteToDir writes the encoded meta into <dir>/meta.json.
