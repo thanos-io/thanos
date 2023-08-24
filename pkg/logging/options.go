@@ -11,7 +11,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"google.golang.org/grpc/codes"
 )
 
@@ -175,7 +174,8 @@ func ParseHTTPOptions(reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
+
+func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]grpc_logging.Option, error) {
 	// Default Option: No Logging.
 	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
 		return grpc_logging.NoLogCall
@@ -183,13 +183,12 @@ func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grp
 
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return []tags.Option{}, logOpts, fmt.Errorf("getting request logging config failed. %v", err)
+		return logOpts, fmt.Errorf("getting request logging config failed. %v", err)
 	}
 
-	tagOpts, logOpts, err := NewGRPCOption(configYAML)
+	logOpts, err = NewGRPCOption(configYAML)
 	if err != nil {
-		return []tags.Option{}, logOpts, err
+		return logOpts, err
 	}
-	return tagOpts, logOpts, nil
-
+	return logOpts, nil
 }
