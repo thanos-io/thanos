@@ -223,7 +223,6 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 2,
 					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
@@ -238,7 +237,6 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 0.333,
 					T: timestamp.FromTime(start.Add(123 * time.Second)),
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
@@ -253,7 +251,6 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 0.333,
 					T: timestamp.FromTime(start.Add(123 * time.Second)),
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Query endpoint without deduplication.
@@ -339,7 +336,6 @@ func TestQueryEndpoints(t *testing.T) {
 						F: 2,
 					},
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 
@@ -401,7 +397,6 @@ func TestQueryEndpoints(t *testing.T) {
 						F: 2,
 					},
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Query endpoint with multiple deduplication label.
@@ -444,7 +439,6 @@ func TestQueryEndpoints(t *testing.T) {
 						F: 2,
 					},
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
@@ -458,7 +452,6 @@ func TestQueryEndpoints(t *testing.T) {
 					V: 0.333,
 					T: timestamp.FromTime(now),
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Bad dedup parameter.
@@ -492,7 +485,6 @@ func TestQueryEndpoints(t *testing.T) {
 						Metric: nil,
 					},
 				},
-				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		// Use default step when missing.
@@ -743,7 +735,8 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 			},
 			response: &queryData{
 				QueryAnalysis: queryTelemetry{
-					OperatorName: "[*numberLiteralSelector] 2",
+					OperatorName: "[*numberLiteralSelector] ",
+					Execution:    "0s",
 				},
 			},
 		},
@@ -758,7 +751,8 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 			},
 			response: &queryData{
 				QueryAnalysis: queryTelemetry{
-					OperatorName: "[*numberLiteralSelector] 2",
+					OperatorName: "[*numberLiteralSelector] ",
+					Execution:    "0s",
 				},
 			},
 		},

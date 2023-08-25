@@ -20,7 +20,9 @@ describe('ExpressionInput', () => {
     enableAutocomplete: true,
     enableHighlighting: true,
     enableLinter: true,
-    getExplain: (): void => {},
+    getExplain: (): void => {
+      // Do nothing.
+    },
     type: 'table',
   };
 

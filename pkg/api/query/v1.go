@@ -440,7 +440,7 @@ func (qapi *QueryAPI) parseShardInfo(r *http.Request) (*storepb.ShardInfo, *api.
 	return &info, nil
 }
 
-func (qapi *QueryAPI) getQueryExplain(r *http.Request, query promql.Query) (*engine.ExplainOutputNode, *api.ApiError) {
+func (qapi *QueryAPI) getQueryExplain(query promql.Query) (*engine.ExplainOutputNode, *api.ApiError) {
 	if eq, ok := query.(engine.ExplainableQuery); ok {
 		return eq.Explain(), nil
 	}
@@ -564,7 +564,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	explanation, apiErr := qapi.getQueryExplain(r, qry)
+	explanation, apiErr := qapi.getQueryExplain(qry)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
@@ -837,7 +837,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	explanation, apiErr := qapi.getQueryExplain(r, qry)
+	explanation, apiErr := qapi.getQueryExplain(qry)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
