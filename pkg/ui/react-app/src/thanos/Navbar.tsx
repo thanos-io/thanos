@@ -107,7 +107,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
             if ('uri' in config)
               return (
                 <NavItem key={config.uri}>
-                  <NavLink tag={Link} to={`${pathPrefix}${config.uri}`}>
+                  <NavLink tag={Link} to={`${pathPrefix}${config.uri}`} onClick={toggle}>
                     {config.name}
                   </NavLink>
                 </NavItem>
@@ -120,7 +120,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
                 </DropdownToggle>
                 <DropdownMenu>
                   {config.children.map((c) => (
-                    <DropdownItem key={c.uri} tag={Link} to={`${pathPrefix}${c.uri}`}>
+                    <DropdownItem key={c.uri} tag={Link} to={`${pathPrefix}${c.uri}`} onClick={toggle}>
                       {c.name}
                     </DropdownItem>
                   ))}
