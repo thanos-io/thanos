@@ -19,12 +19,12 @@ const Checkbox: FC<CheckboxProps> = ({ children, wrapperStyles, id, disabled, is
     setShowMessage(false);
   };
   return (
-    <FormGroup className="custom-control custom-checkbox" style={wrapperStyles}>
-      <Input {...rest} id={id} type="checkbox" className="custom-control-input" />
+    <FormGroup className="custom-control custom-checkbox" style={wrapperStyles} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      <Input {...rest} id={id} type="checkbox" className="custom-control-input" disabled={disabled} />
       <Label style={{ userSelect: 'none' }} className="custom-control-label" for={id}>
         {children}
       </Label>
-      {isExplainCheckbox && showMessage && <div className="popup-message">Your message here</div>}
+      {isExplainCheckbox && showMessage && <div className="popup-message">This functionality is only available when using the Thanos engine</div>}
     </FormGroup>
   );
 };

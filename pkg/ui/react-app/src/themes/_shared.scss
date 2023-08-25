@@ -339,15 +339,20 @@
   }
 
   .popup-message {
-    background-color: rgba(0, 0, 0, 0.7); 
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
     color: #ffffff;
-    padding: 8px 12px; 
-    border-radius: 4px; 
-    position: absolute; 
-    top: 0; 
-    left: 100%;
-    margin-left: 10px; 
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-right: 10px;
+    min-width: 120px;
+    max-width: 200px;
+    width: max-content;
+    white-space: normal;
     font-size: 14px;
-    z-index: 1000; 
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
 }
+

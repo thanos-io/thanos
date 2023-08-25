@@ -438,7 +438,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 disabled={options.disableExplainCheckbox}
                 isExplainCheckbox={true}
               >
-                Explaine
+                Explain3
               </Checkbox>
             </div>
           </Col>
