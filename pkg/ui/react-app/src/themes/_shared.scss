@@ -339,6 +339,7 @@
   }
 
   .popup-message {
+    display: none;
     position: absolute;
     top: 50%;
     right: 100%;
@@ -353,6 +354,9 @@
     width: max-content;
     white-space: normal;
     font-size: 14px;
+}
 
+.custom-control-label:hover .popup-message {
+  display: block; 
 }
 
