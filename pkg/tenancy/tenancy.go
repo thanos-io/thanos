@@ -24,6 +24,8 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// This key is used to pass tenant information using Context.
 	TenantKey contextKey = 0
+	// MetricLabel is the label name used for adding tenant information to exported metrics.
+	MetricLabel = "tenant"
 )
 
 // Allowed fields in client certificates.

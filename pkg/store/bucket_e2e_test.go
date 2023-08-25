@@ -59,28 +59,28 @@ func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
 	c.ptr = ptr2
 }
 
-func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
-	c.ptr.StorePostings(blockID, l, v)
+func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
+	c.ptr.StorePostings(blockID, l, v, tenant)
 }
 
-func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
+func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (map[labels.Label][]byte, []labels.Label) {
+	return c.ptr.FetchMultiPostings(ctx, blockID, keys, tenant)
 }
 
-func (c *swappableCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte) {
-	c.ptr.StoreExpandedPostings(blockID, matchers, v)
+func (c *swappableCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string) {
+	c.ptr.StoreExpandedPostings(blockID, matchers, v, tenant)
 }
 
-func (c *swappableCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
-	return c.ptr.FetchExpandedPostings(ctx, blockID, matchers)
+func (c *swappableCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher, tenant string) ([]byte, bool) {
+	return c.ptr.FetchExpandedPostings(ctx, blockID, matchers, tenant)
 }
 
-func (c *swappableCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
-	c.ptr.StoreSeries(blockID, id, v)
+func (c *swappableCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
+	c.ptr.StoreSeries(blockID, id, v, tenant)
 }
 
-func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
-	return c.ptr.FetchMultiSeries(ctx, blockID, ids)
+func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef, tenant string) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
+	return c.ptr.FetchMultiSeries(ctx, blockID, ids, tenant)
 }
 
 type storeSuite struct {

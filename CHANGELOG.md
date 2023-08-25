@@ -18,6 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6308](https://github.com/thanos-io/thanos/pull/6308) Ruler: Support configuration flag that allows customizing template for alert message.
 - [#6760](https://github.com/thanos-io/thanos/pull/6760) Query Frontend: Added TLS support in `--query-frontend.downstream-tripper-config` and `--query-frontend.downstream-tripper-config-file`
 - [#6749](https://github.com/thanos-io/thanos/pull/6308) Store Gateway: Added `thanos_store_index_cache_fetch_duration_seconds` histogram for tracking latency of fetching data from index cache.
+- [#6690](https://github.com/thanos-io/thanos/pull/6690) Store: Add tenant label to relevant exported metrics
 
 ### Changed
 
