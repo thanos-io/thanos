@@ -12,6 +12,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#6650](https://github.com/thanos-io/thanos/pull/6650) Store: fix error handling in decodePostings
+- [#6655](https://github.com/thanos-io/thanos/pull/6655) Store: fix bufio pool handling
+
 ### Added
 
 - [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
