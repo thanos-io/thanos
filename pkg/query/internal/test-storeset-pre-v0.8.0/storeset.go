@@ -58,13 +58,15 @@ type StoreStatus struct {
 }
 
 type grpcStoreSpec struct {
-	addr string
+	addr           string
+	isAgentEnabled bool
 }
 
 // NewGRPCStoreSpec creates store pure gRPC spec.
 // It uses Info gRPC call to get Metadata.
-func NewGRPCStoreSpec(addr string) StoreSpec {
-	return &grpcStoreSpec{addr: addr}
+func NewGRPCStoreSpec(addr string, isAgentEnabled bool) StoreSpec {
+	return &grpcStoreSpec{addr: addr,
+		isAgentEnabled: isAgentEnabled}
 }
 
 func (s *grpcStoreSpec) Addr() string {
