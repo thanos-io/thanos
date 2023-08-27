@@ -117,10 +117,10 @@ func (s *testStores) CloseOne(addr string) {
 	delete(s.srvs, addr)
 }
 
-func specsFromAddrFunc(addrs []string) func() []StoreSpec {
+func specsFromAddrFunc(addrs []string, IsAgentEnabled bool) func() []StoreSpec {
 	return func() (specs []StoreSpec) {
 		for _, addr := range addrs {
-			specs = append(specs, NewGRPCStoreSpec(addr))
+			specs = append(specs, NewGRPCStoreSpec(addr, IsAgentEnabled))
 		}
 		return specs
 	}
@@ -186,7 +186,7 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
-	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(st.StoreAddresses()), testGRPCOpts, time.Minute)
+	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(st.StoreAddresses(), IsAgentEnabled), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
