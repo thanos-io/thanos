@@ -2569,6 +2569,18 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
 	if m.Type == labels.MatchRegexp {
+		// Shortcut for =~ ".*". It matches all series.
+		if m.Value == ".*" {
+			return newPostingGroup(true, m.Name, nil, nil), nil, nil
+		}
+		// Shortcut for =~ ".+". It matches all values that has the label name.
+		if m.Value == ".+" {
+			vals, err := lvalsFn(m.Name)
+			if err != nil {
+				return nil, nil, err
+			}
+			return newPostingGroup(false, m.Name, vals, nil), vals, nil
+		}
 		if vals := findSetMatches(m.Value); len(vals) > 0 {
 			sort.Strings(vals)
 			return newPostingGroup(false, m.Name, vals, nil), nil, nil
