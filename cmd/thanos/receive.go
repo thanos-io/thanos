@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/wlog"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
@@ -85,7 +86,7 @@ func registerReceive(app *extkingpin.App) {
 			OutOfOrderTimeWindow:           int64(time.Duration(*conf.tsdbOutOfOrderTimeWindow) / time.Millisecond),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
-			WALCompression:                 conf.walCompression,
+			WALCompression:                 wlog.ParseCompressionType(conf.walCompression, string(wlog.CompressionSnappy)),
 			MaxExemplars:                   conf.tsdbMaxExemplars,
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
