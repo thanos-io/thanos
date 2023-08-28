@@ -1693,6 +1693,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 }
 
 func (s *BucketStore) UpdateLabelNames() {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
 	newSet := stringset.New()
 	for _, b := range s.blocks {
 		labelNames, err := b.indexHeaderReader.LabelNames()
