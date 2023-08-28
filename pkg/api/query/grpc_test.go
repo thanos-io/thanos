@@ -100,11 +100,11 @@ type engineStub struct {
 	warns []error
 }
 
-func (e engineStub) NewInstantQuery(_ context.Context, q storage.Queryable, opts *promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+func (e engineStub) NewInstantQuery(_ context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
-func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 

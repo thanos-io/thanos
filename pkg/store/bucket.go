@@ -1693,6 +1693,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 }
 
 func (s *BucketStore) UpdateLabelNames() {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
 	newSet := stringset.New()
 	for _, b := range s.blocks {
 		labelNames, err := b.indexHeaderReader.LabelNames()
@@ -2792,12 +2795,12 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		// We assume index does not have any ptrs that has 0 length.
 		length := int64(part.End) - start
 
-		brdr := bufioReaderPool.Get().(*bufio.Reader)
-		defer bufioReaderPool.Put(brdr)
-
 		// Fetch from object storage concurrently and update stats and posting list.
 		g.Go(func() error {
 			begin := time.Now()
+
+			brdr := bufioReaderPool.Get().(*bufio.Reader)
+			defer bufioReaderPool.Put(brdr)
 
 			partReader, err := r.block.bkt.GetRange(ctx, r.block.indexFilename(), start, length)
 			if err != nil {

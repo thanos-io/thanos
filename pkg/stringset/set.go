@@ -10,6 +10,10 @@ import (
 type Set interface {
 	Has(string) bool
 	HasAny([]string) bool
+	// Count returns the number of elements in the set.
+	// A value of -1 indicates infinite size and can be returned by a
+	// set representing all possible string values.
+	Count() int
 }
 
 type fixedSet struct {
@@ -38,6 +42,10 @@ func (f fixedSet) Has(s string) bool {
 	return f.cuckoo.Lookup([]byte(s))
 }
 
+func (f fixedSet) Count() int {
+	return int(f.cuckoo.Count())
+}
+
 type mutableSet struct {
 	cuckoo *cuckoo.ScalableCuckooFilter
 }
@@ -54,7 +62,7 @@ func New() MutableSet {
 }
 
 func (e mutableSet) Insert(s string) {
-	e.cuckoo.Insert([]byte(s))
+	e.cuckoo.InsertUnique([]byte(s))
 }
 
 func (e mutableSet) Has(s string) bool {
@@ -70,6 +78,10 @@ func (e mutableSet) HasAny(strings []string) bool {
 	return false
 }
 
+func (e mutableSet) Count() int {
+	return int(e.cuckoo.Count())
+}
+
 type allStringsSet struct{}
 
 func (e allStringsSet) HasAny(_ []string) bool {
@@ -82,4 +94,8 @@ func AllStrings() *allStringsSet {
 
 func (e allStringsSet) Has(_ string) bool {
 	return true
+}
+
+func (e allStringsSet) Count() int {
+	return -1
 }
