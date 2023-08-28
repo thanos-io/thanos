@@ -586,7 +586,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 
 	for j := 0; j < 3; j++ {
 		head, created := storetestutil.CreateHeadWithSeries(t, j, storetestutil.HeadGenOptions{
-			TSDBDir:          t.TempDir(),
+			TSDBDir:          tmpDir,
 			SamplesPerSeries: samplesPerSeriesPerBlock,
 			Series:           seriesPerBlock,
 			Random:           random,
