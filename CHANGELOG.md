@@ -18,7 +18,22 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-v0.32.0) - 23.08.2023
+## [v0.32.1](https://github.com/thanos-io/thanos/tree/release-0.32) - 28.08.2023
+
+### Fixed
+
+- [#6650](https://github.com/thanos-io/thanos/pull/6650) Store: fix error handling in decodePostings
+- [#6654](https://github.com/thanos-io/thanos/pull/6654) Store: fix ignored error in postings
+- [#6655](https://github.com/thanos-io/thanos/pull/6655) Store: fix bufio pool handling
+- [#6669](https://github.com/thanos-io/thanos/pull/6669) Store: Fix mutable stringset memory usage
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - 23.08.2023
 
 ### Added
 

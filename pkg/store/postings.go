@@ -83,6 +83,7 @@ func (r *postingsReaderBuilder) Next() bool {
 
 	_, err := r.r.Discard(int(from - r.lastOffset))
 	if err != nil {
+		r.e = err
 		return false
 	}
 	r.lastOffset += from - r.lastOffset
