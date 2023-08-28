@@ -37,6 +37,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
+	"github.com/prometheus/prometheus/tsdb/wlog"
 	"github.com/prometheus/prometheus/util/strutil"
 
 	"github.com/thanos-io/objstore"
@@ -166,11 +167,11 @@ func registerRule(app *extkingpin.App) {
 			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:        *noLockFile,
-			WALCompression:    *walCompression,
+			WALCompression:    wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: *walCompression,
+			WALCompression: wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
 			NoLockfile:     *noLockFile,
 		}
 

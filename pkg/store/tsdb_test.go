@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -595,10 +596,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 		}
 
 		_ = createBlockFromHead(t, tmpDir, head)
-		t.Cleanup(func() {
-			testutil.Ok(t, head.Close())
-		})
-
+		testutil.Ok(t, head.Close())
 	}
 
 	head2, created := storetestutil.CreateHeadWithSeries(t, 3, storetestutil.HeadGenOptions{
@@ -608,9 +606,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 		WithWAL:          true,
 		Random:           random,
 	})
-	t.Cleanup(func() {
-		testutil.Ok(t, head2.Close())
-	})
+	testutil.Ok(t, head2.Close())
 
 	for i := 0; i < len(created); i++ {
 		resps[3] = append(resps[3], storepb.NewSeriesResponse(created[i]))

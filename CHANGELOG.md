@@ -46,6 +46,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#6664](https://github.com/thanos-io/thanos/pull/6664) *: Update Prometheus to 2.46.1.
+
 ### Removed
 
 ## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - 23.08.2023
