@@ -13,6 +13,7 @@ import (
 	extflag "github.com/efficientgo/tools/extkingpin"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/tsdb/wlog"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 )
@@ -235,4 +236,11 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 		StringsVar(&ac.alertExcludeLabels)
 	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", extflag.WithEnvSubstitution())
 	return ac
+}
+
+func walCompressionType(compress bool) wlog.CompressionType {
+	if compress {
+		return wlog.CompressionSnappy
+	}
+	return wlog.CompressionNone
 }

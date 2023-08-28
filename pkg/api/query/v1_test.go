@@ -47,6 +47,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
+	"github.com/thanos-io/promql-engine/engine"
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -183,11 +184,13 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := NewQueryEngineFactory(promql.EngineOpts{
-		Logger:     nil,
-		Reg:        nil,
-		MaxSamples: 10000,
-		Timeout:    timeout,
+	ef := NewQueryEngineFactory(engine.Opts{
+		EngineOpts: promql.EngineOpts{
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    timeout,
+		},
 	}, nil)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -727,11 +730,13 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := NewQueryEngineFactory(promql.EngineOpts{
-		Logger:     nil,
-		Reg:        nil,
-		MaxSamples: 10000,
-		Timeout:    timeout,
+	ef := NewQueryEngineFactory(engine.Opts{
+		EngineOpts: promql.EngineOpts{
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    timeout,
+		},
 	}, nil)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{

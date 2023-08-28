@@ -88,7 +88,7 @@ const (
 )
 
 type QueryEngineFactory struct {
-	engineOpts            promql.EngineOpts
+	engineOpts            engine.Opts
 	remoteEngineEndpoints promqlapi.RemoteEndpoints
 
 	prometheusEngine v1.QueryEngine
@@ -96,12 +96,7 @@ type QueryEngineFactory struct {
 }
 
 func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
-	if f.prometheusEngine != nil {
-		return f.prometheusEngine
-	}
-
-	f.prometheusEngine = promql.NewEngine(f.engineOpts)
-	return f.prometheusEngine
+	return f.engineOpts.Engine
 }
 
 func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
@@ -110,16 +105,16 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 	}
 
 	if f.remoteEngineEndpoints == nil {
-		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine()})
+		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts.EngineOpts})
 	} else {
-		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine()}, f.remoteEngineEndpoints)
+		f.thanosEngine = engine.NewDistributedEngine(f.engineOpts, f.remoteEngineEndpoints)
 	}
 
 	return f.thanosEngine
 }
 
 func NewQueryEngineFactory(
-	engineOpts promql.EngineOpts,
+	engineOpts engine.Opts,
 	remoteEngineEndpoints promqlapi.RemoteEndpoints,
 ) *QueryEngineFactory {
 	return &QueryEngineFactory{
@@ -536,7 +531,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
-		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
 		ts,
 	)
@@ -708,7 +703,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
-		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
 		start,
 		end,
