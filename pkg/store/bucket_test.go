@@ -1141,7 +1141,6 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 func createBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
 	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil, nil)
 	testutil.Ok(t, err)
-
 	testutil.Ok(t, os.MkdirAll(dir, 0777))
 
 	// Add +1 millisecond to block maxt because block intervals are half-open: [b.MinTime, b.MaxTime).
@@ -3340,5 +3339,82 @@ func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
 	t.Run("should return error on broken cached postings with snappy prefix", func(t *testing.T) {
 		_, _, err := bir.decodeCachedPostings(append([]byte(codecHeaderSnappy), []byte("foo")...))
 		testutil.NotOk(t, err)
+	})
+}
+
+func TestBucketStore_LabelAPIs(t *testing.T) {
+	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+
+	testLabelAPIs(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		tmpDir := tt.TempDir()
+		bktDir := filepath.Join(tmpDir, "bkt")
+		auxDir := filepath.Join(tmpDir, "aux")
+		metaDir := filepath.Join(tmpDir, "meta")
+
+		testutil.Ok(tt, os.MkdirAll(metaDir, os.ModePerm))
+		testutil.Ok(tt, os.MkdirAll(auxDir, os.ModePerm))
+
+		bkt, err := filesystem.NewBucket(bktDir)
+		testutil.Ok(tt, err)
+		tt.Cleanup(func() { testutil.Ok(tt, bkt.Close()) })
+
+		headOpts := tsdb.DefaultHeadOptions()
+		headOpts.ChunkDirRoot = tmpDir
+		headOpts.ChunkRange = 1000
+		h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+		testutil.Ok(tt, err)
+		tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
+		logger := log.NewNopLogger()
+
+		appendFn(h.Appender(context.Background()))
+
+		if h.NumSeries() == 0 {
+			tt.Skip("Bucket Store cannot handle empty HEAD")
+		}
+
+		id := createBlockFromHead(tt, auxDir, h)
+
+		auxBlockDir := filepath.Join(auxDir, id.String())
+		_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
+			Labels:     extLset.Map(),
+			Downsample: metadata.ThanosDownsample{Resolution: 0},
+			Source:     metadata.TestSource,
+		}, nil)
+		testutil.Ok(tt, err)
+
+		testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+		testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+
+		chunkPool, err := NewDefaultChunkBytesPool(2e5)
+		testutil.Ok(tt, err)
+
+		metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
+			block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+		})
+		testutil.Ok(tt, err)
+
+		bucketStore, err := NewBucketStore(
+			objstore.WithNoopInstr(bkt),
+			metaFetcher,
+			"",
+			NewChunksLimiterFactory(10e6),
+			NewSeriesLimiterFactory(10e6),
+			NewBytesLimiterFactory(10e6),
+			NewGapBasedPartitioner(PartitionerMaxGapSize),
+			20,
+			true,
+			DefaultPostingOffsetInMemorySampling,
+			false,
+			false,
+			1*time.Minute,
+			WithChunkPool(chunkPool),
+			WithFilterConfig(allowAllFilterConf),
+		)
+		testutil.Ok(tt, err)
+		tt.Cleanup(func() { testutil.Ok(tt, bucketStore.Close()) })
+
+		testutil.Ok(tt, bucketStore.SyncBlocks(context.Background()))
+
+		return bucketStore
 	})
 }

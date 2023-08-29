@@ -38,7 +38,7 @@ type labelValuesCallCase struct {
 }
 
 // testLabelAPIs tests labels methods from StoreAPI from closed box perspective.
-func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append func(app storage.Appender)) storepb.StoreServer) {
+func testLabelAPIs(t *testing.T, startStore func(t *testing.T, extLset labels.Labels, append func(app storage.Appender)) storepb.StoreServer) {
 	t.Helper()
 
 	now := time.Now()
@@ -193,7 +193,8 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 			if appendFn == nil {
 				appendFn = func(storage.Appender) {}
 			}
-			store := startStore(extLset, appendFn)
+			store := startStore(t, extLset, appendFn)
+
 			for _, c := range tc.labelNameCalls {
 				t.Run("label_names", func(t *testing.T) {
 					resp, err := store.LabelNames(context.Background(), &storepb.LabelNamesRequest{
