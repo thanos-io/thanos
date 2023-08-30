@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -279,7 +278,7 @@ func (t *MultiTSDB) flushHead(db *tsdb.DB) error {
 		return err
 	}
 	// Flush the remainder of the head.
-	return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), math.MaxInt64))
+	return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1))
 }
 
 func (t *MultiTSDB) Close() error {
