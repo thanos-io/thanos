@@ -1373,7 +1373,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				if err := blockClient.ExpandPostings(sortedBlockMatchers, seriesLimiter); err != nil {
 					onClose()
 					span.Finish()
-					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
+					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
 				}
 
 				part := newLazyRespSet(
