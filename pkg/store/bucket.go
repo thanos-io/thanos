@@ -3528,6 +3528,7 @@ type queryStats struct {
 func (s queryStats) merge(o *queryStats) *queryStats {
 	s.blocksQueried += o.blocksQueried
 
+	s.postingsToFetch += o.postingsToFetch
 	s.postingsTouched += o.postingsTouched
 	s.PostingsTouchedSizeSum += o.PostingsTouchedSizeSum
 	s.postingsFetched += o.postingsFetched
