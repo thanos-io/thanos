@@ -13,7 +13,10 @@ const Checkbox: FC<CheckboxProps> = ({ children, wrapperStyles, id, disabled, is
       <Label style={{ userSelect: 'none' }} className="custom-control-label" for={id}>
         {children}
         {isExplainCheckbox && disabled && (
-          <div className="popup-message">This functionality is only available when using the Thanos engine</div>
+          <div className="popup-message">
+            Explain allows you to view an expandable query plan of the PromQL query similar to SQL EXPLAIN. This
+            functionality is only available when using the Thanos engine
+          </div>
         )}
       </Label>
     </FormGroup>
