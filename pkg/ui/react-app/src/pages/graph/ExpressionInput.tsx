@@ -212,7 +212,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
             Execute
           </Button>
         </InputGroupAddon>
-        <Button className="execute-btn ml-1" color="info" onClick={executeExplain} disabled={disableExplain}>
+        <Button className="ml-2" color="info" onClick={executeExplain} disabled={disableExplain}>
           Explain
         </Button>
       </InputGroup>
