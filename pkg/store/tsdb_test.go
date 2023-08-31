@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -230,10 +231,10 @@ func TestTSDBStore_Series(t *testing.T) {
 
 func TestTSDBStore_LabelAPIs(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
-	testLabelAPIs(t, func(extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	testLabelAPIs(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		db, err := e2eutil.NewTSDB()
-		testutil.Ok(t, err)
-		t.Cleanup(func() { testutil.Ok(t, db.Close()) })
+		testutil.Ok(tt, err)
+		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
 
 		tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
 
@@ -595,10 +596,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 		}
 
 		_ = createBlockFromHead(t, tmpDir, head)
-		t.Cleanup(func() {
-			testutil.Ok(t, head.Close())
-		})
-
+		testutil.Ok(t, head.Close())
 	}
 
 	head2, created := storetestutil.CreateHeadWithSeries(t, 3, storetestutil.HeadGenOptions{
@@ -608,9 +606,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 		WithWAL:          true,
 		Random:           random,
 	})
-	t.Cleanup(func() {
-		testutil.Ok(t, head2.Close())
-	})
+	testutil.Ok(t, head2.Close())
 
 	for i := 0; i < len(created); i++ {
 		resps[3] = append(resps[3], storepb.NewSeriesResponse(created[i]))
