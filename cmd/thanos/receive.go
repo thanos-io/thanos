@@ -74,7 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
