@@ -2850,7 +2850,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			r.stats.PostingsFetchDurationSum += time.Since(begin)
 			r.mtx.Unlock()
 
-			if rdr.Error() != nil {
+			if err := rdr.Error(); err != nil {
 				return errors.Wrap(err, "reading postings")
 			}
 			return nil
