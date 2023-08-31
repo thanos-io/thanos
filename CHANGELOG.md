@@ -257,8 +257,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - 23.08.2023
 
-## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - Release in progress
-
 ### Added
 
 - [#6437](https://github.com/thanos-io/thanos/pull/6437) Receive: make tenant stats limit configurable
