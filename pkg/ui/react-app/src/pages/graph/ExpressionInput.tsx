@@ -35,6 +35,7 @@ interface CMExpressionInputProps {
   enableLinter: boolean;
   getExplain: (explain: ExplainTree) => void;
   type: string;
+  disableExplain: boolean;
 }
 
 const dynamicConfigCompartment = new Compartment();
@@ -96,6 +97,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   enableLinter,
   getExplain,
   type,
+  disableExplain,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -239,7 +241,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
             Execute
           </Button>
         </InputGroupAddon>
-        <Button className="execute-btn ml-1" color="info" onClick={() => handleExplain(value)}>
+        <Button className="execute-btn ml-1" color="info" onClick={() => handleExplain(value)} disabled={disableExplain}>
           Explain
         </Button>
       </InputGroup>

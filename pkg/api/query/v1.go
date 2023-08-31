@@ -450,12 +450,13 @@ func (qapi *QueryAPI) getQueryExplain(query promql.Query) (*engine.ExplainOutput
 }
 
 func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query) (queryTelemetry, error) {
-	if r.FormValue(QueryAnalyzeParam) != "" {
+	if r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1" {
 		if eq, ok := query.(engine.ExplainableQuery); ok {
 			return processAnalysis(eq.Analyze()), nil
 		}
+		return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos'")
 	}
-	return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos' ")
+	return queryTelemetry{}, nil
 }
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {

@@ -383,6 +383,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               metricNames={metricNames}
               getExplain={getExplainOutput}
               type={this.props.options.type}
+              disableExplain={this.props.options.engine === 'prometheus'}
             />
           </Col>
         </Row>

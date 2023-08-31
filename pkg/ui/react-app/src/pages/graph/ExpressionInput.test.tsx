@@ -24,6 +24,7 @@ describe('ExpressionInput', () => {
       // Do nothing.
     },
     type: 'table',
+    disableExplain: false,
   };
 
   let expressionInput: ReactWrapper;
