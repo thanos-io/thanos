@@ -361,11 +361,78 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     }
   };
 
+  getExplainOutput = (): void => {
+    //We need to pass the same parameters as query endpoints, to the explain endpoints.
+    const endTime = this.getEndTime().valueOf() / 1000;
+    const startTime = endTime - this.props.options.range / 1000;
+    const resolution =
+      this.props.options.resolution ||
+      Math.max(Math.floor(this.props.options.range / 250000), (parseDuration(this.props.defaultStep) || 0) / 1000);
+    const abortController = new AbortController();
+    const params: URLSearchParams = new URLSearchParams({
+      query: this.state.exprInputValue,
+      dedup: this.props.options.useDeduplication.toString(),
+      partial_response: this.props.options.usePartialResponse.toString(),
+    });
+
+    // Add storeMatches to query params.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    this.props.options.storeMatches?.forEach((store: Store) =>
+      params.append('storeMatch[]', `{__address__="${store.name}"}`)
+    );
+
+    let path: string;
+    switch (this.props.options.type) {
+      case 'graph':
+        path = '/api/v1/query_range_explain';
+        params.append('start', startTime.toString());
+        params.append('end', endTime.toString());
+        params.append('step', resolution.toString());
+        params.append('max_source_resolution', this.props.options.maxSourceResolution);
+        params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        // TODO path prefix here and elsewhere.
+        break;
+      case 'table':
+        path = '/api/v1/query_explain';
+        params.append('time', endTime.toString());
+        params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        break;
+      default:
+        throw new Error('Invalid panel type "' + this.props.options.type + '"');
+    }
+
+    fetch(`${this.props.pathPrefix}${path}?${params}`, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: abortController.signal,
+    })
+      .then((resp) => resp.json())
+      .then((json) => {
+        if (json.status !== 'success') {
+          throw new Error(json.error || 'invalid response JSON');
+        }
+        let result = null;
+        if (json.data) {
+          result = json.data;
+        }
+        this.setState({ explainOutput: result });
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') {
+          // Aborts are expected, don't show an error for them.
+          return;
+        }
+        this.setState({
+          error: 'Error getting query explaination: ' + error.message,
+          loading: false,
+        });
+      });
+  };
+
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
-    const getExplainOutput = (explaination: ExplainTree) => {
-      this.setState({ explainOutput: explaination });
-    };
     return (
       <div className="panel">
         <Row>
@@ -381,8 +448,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               enableLinter={this.props.enableLinter}
               queryHistory={pastQueries}
               metricNames={metricNames}
-              getExplain={getExplainOutput}
-              type={this.props.options.type}
+              executeExplain={this.getExplainOutput}
               disableExplain={this.props.options.engine === 'prometheus'}
             />
           </Col>
@@ -480,7 +546,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </Alert>
           </Col>
         </Row>
-        <Row hidden={!this.state.explainOutput}>
+        <Row hidden={!(this.props.options.engine === 'thanos' && this.state.explainOutput)}>
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
               <ListTree id={`explain-tree-${id}`} node={this.state.explainOutput} />

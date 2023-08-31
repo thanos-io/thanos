@@ -33,8 +33,7 @@ interface CMExpressionInputProps {
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
   enableLinter: boolean;
-  getExplain: (explain: ExplainTree) => void;
-  type: string;
+  executeExplain: () => void;
   disableExplain: boolean;
 }
 
@@ -95,40 +94,12 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   enableAutocomplete,
   enableHighlighting,
   enableLinter,
-  getExplain,
-  type,
+  executeExplain,
   disableExplain,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { theme } = useTheme();
-  const handleExplain = async (query: string) => {
-    try {
-      const queryParams = new URLSearchParams({
-        query,
-        engine: 'thanos',
-      });
-      let endpoint = '/api/v1/query_explain';
-      if (type === 'graph') {
-        endpoint = '/api/v1/query_range_explain';
-      }
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: queryParams,
-      });
-      if (!response.ok) {
-        throw new Error(response.statusText);
-      } else {
-        const json = await response.json();
-        getExplain(json.data);
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  };
   // (Re)initialize editor based on settings / setting changes.
   useEffect(() => {
     // Build the dynamic part of the config.
@@ -241,7 +212,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
             Execute
           </Button>
         </InputGroupAddon>
-        <Button className="execute-btn ml-1" color="info" onClick={() => handleExplain(value)} disabled={disableExplain}>
+        <Button className="execute-btn ml-1" color="info" onClick={executeExplain} disabled={disableExplain}>
           Explain
         </Button>
       </InputGroup>
