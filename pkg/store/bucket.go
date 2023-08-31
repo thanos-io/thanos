@@ -1364,15 +1364,18 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
 				})
 
-				if err := blockClient.ExpandPostings(sortedBlockMatchers, seriesLimiter); err != nil {
-					span.Finish()
-					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
-				}
 				onClose := func() {
 					mtx.Lock()
 					stats = blockClient.MergeStats(stats)
 					mtx.Unlock()
 				}
+
+				if err := blockClient.ExpandPostings(sortedBlockMatchers, seriesLimiter); err != nil {
+					onClose()
+					span.Finish()
+					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
+				}
+
 				part := newLazyRespSet(
 					srv.Context(),
 					span,
@@ -3525,6 +3528,7 @@ type queryStats struct {
 func (s queryStats) merge(o *queryStats) *queryStats {
 	s.blocksQueried += o.blocksQueried
 
+	s.postingsToFetch += o.postingsToFetch
 	s.postingsTouched += o.postingsTouched
 	s.PostingsTouchedSizeSum += o.PostingsTouchedSizeSum
 	s.postingsFetched += o.postingsFetched
