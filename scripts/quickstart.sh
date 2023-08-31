@@ -41,7 +41,7 @@ if [ -n "${MINIO_ENABLED}" ]; then
   export MINIO_ENDPOINT="127.0.0.1:9000"
   export MINIO_BUCKET="thanos"
   export S3_ACCESS_KEY=${MINIO_ROOT_USER}
-  export S3_SECRET_KEY=${MINIO_ROOT_USER}
+  export S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
   export S3_BUCKET=${MINIO_BUCKET}
   export S3_ENDPOINT=${MINIO_ENDPOINT}
   export S3_INSECURE="true"

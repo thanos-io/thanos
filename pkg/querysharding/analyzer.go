@@ -113,7 +113,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		case *parser.BinaryExpr:
 			if n.VectorMatching != nil {
 				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
-				if !n.VectorMatching.On && len(shardingLabels) > 0 {
+				if !n.VectorMatching.On {
 					shardingLabels = append(shardingLabels, model.MetricNameLabel)
 				}
 				analysis = analysis.scopeToLabels(shardingLabels, n.VectorMatching.On)
