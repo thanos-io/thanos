@@ -360,6 +360,8 @@ Flags:
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
+      --query.default-tenant="default-tenant"
+                                 Name of the default tenant.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
@@ -404,6 +406,14 @@ Flags:
       --query.telemetry.request-series-seconds-quantiles=10... ...
                                  The quantiles for exporting metrics about the
                                  series count quantiles.
+      --query.tenant-certificate-field=
+                                 Use TLS client's certificate field to determine
+                                 tenant for write requests. Must be one of
+                                 organization, organizationalUnit or commonName.
+                                 This setting will cause the query.tenant-header
+                                 flag value to be ignored.
+      --query.tenant-header="THANOS-TENANT"
+                                 HTTP header to determine tenant.
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
