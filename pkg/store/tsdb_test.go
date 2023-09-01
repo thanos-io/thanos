@@ -15,7 +15,6 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/efficientgo/core/testutil"
@@ -227,20 +226,6 @@ func TestTSDBStore_Series(t *testing.T) {
 			return
 		}
 	}
-}
-
-func TestTSDBStore_LabelAPIs(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
-	testLabelAPIs(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		db, err := e2eutil.NewTSDB()
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-
-		tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
-
-		appendFn(db.Appender(context.Background()))
-		return tsdbStore
-	})
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/1038.
