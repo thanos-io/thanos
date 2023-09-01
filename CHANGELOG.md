@@ -22,6 +22,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
+- [#6686](https://github.com/thanos-io/thanos/pull/6686) Remove deprecated `--log.request.decision` flag. We now use `--request.logging-config` to set logging decisions.
+
 ## [v0.32.2](https://github.com/thanos-io/thanos/tree/release-0.32) - 31.08.2023
 
 ### Fixed
