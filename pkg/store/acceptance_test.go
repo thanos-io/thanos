@@ -214,7 +214,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 			},
 		},
 		{
-			// Tests mostly taken from https://github.com/prometheus/prometheus/blob/95e705612c1d557f1681bd081a841b78f93ee158/tsdb/querier_test.go#L1898, though some are still missing
+			// Testcases taken from https://github.com/prometheus/prometheus/blob/95e705612c1d557f1681bd081a841b78f93ee158/tsdb/querier_test.go#L1898
 			desc: "matching behavior",
 			appendFn: func(app storage.Appender) {
 				_, err := app.Append(0, labels.FromStrings("n", "1"), 0, 0)
@@ -396,6 +396,243 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					end:   timestamp.FromTime(maxTime),
 					matchers: []storepb.LabelMatcher{
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.*$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.+$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "^1$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1|2.5"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "(1|2.5)"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a?$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^.*$"},
+					},
+					expectedLabels: []labels.Labels{},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^.+$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
+						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: "b"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^(b|a).*$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "(1|2)"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "a|b"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(a|b)"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "x1|2"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "2|2\\.5"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "c||d"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(c||d)"},
 					},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "1", "region", "eu-west"),
