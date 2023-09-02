@@ -2574,13 +2574,6 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
-	if m.Type == labels.MatchRegexp {
-		if vals := findSetMatches(m.Value); len(vals) > 0 {
-			sort.Strings(vals)
-			return newPostingGroup(false, m.Name, vals, nil), nil, nil
-		}
-	}
-
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
@@ -2618,6 +2611,12 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		}
 
 		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
+	}
+	if m.Type == labels.MatchRegexp {
+		if vals := findSetMatches(m.Value); len(vals) > 0 {
+			sort.Strings(vals)
+			return newPostingGroup(false, m.Name, vals, nil), nil, nil
+		}
 	}
 
 	// Fast-path for equal matching.
