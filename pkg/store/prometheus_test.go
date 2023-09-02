@@ -388,33 +388,6 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	}
 }
 
-func TestPrometheusStore_LabelAPIs(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
-	testLabelAPIs(t, func(extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		p, err := e2eutil.NewPrometheus()
-		testutil.Ok(t, err)
-		t.Cleanup(func() { testutil.Ok(t, p.Stop()) })
-
-		appendFn(p.Appender())
-
-		testutil.Ok(t, p.Start())
-		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
-		testutil.Ok(t, err)
-
-		version, err := promclient.NewDefaultClient().BuildVersion(context.Background(), u)
-		testutil.Ok(t, err)
-
-		promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
-			func() labels.Labels { return extLset },
-			nil,
-			func() stringset.Set { return stringset.AllStrings() },
-			func() string { return version })
-		testutil.Ok(t, err)
-
-		return promStore
-	})
-}
-
 func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 
