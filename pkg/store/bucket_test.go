@@ -1141,7 +1141,6 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 func createBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
 	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil, nil)
 	testutil.Ok(t, err)
-
 	testutil.Ok(t, os.MkdirAll(dir, 0777))
 
 	// Add +1 millisecond to block maxt because block intervals are half-open: [b.MinTime, b.MaxTime).

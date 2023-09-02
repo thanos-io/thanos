@@ -355,6 +355,9 @@ Flags:
                                 block loaded, or compactor is ignoring the
                                 deletion because it's compacting the block at
                                 the same time.
+      --disable-admin-operations
+                                Disable UI/API admin operations like marking
+                                blocks for deletion and no compaction.
       --downsample.concurrency=1
                                 Number of goroutines to use when downsampling
                                 blocks.
