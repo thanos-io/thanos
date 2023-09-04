@@ -219,7 +219,7 @@ func registerStore(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
+		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
@@ -233,6 +233,7 @@ func registerStore(app *extkingpin.App) {
 			tracer,
 			httpLogOpts,
 			grpcLogOpts,
+			logFilterMethods,
 			*conf,
 			getFlagsMap(cmd.Flags()),
 		)
@@ -247,6 +248,7 @@ func runStore(
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpclogging.Option,
+	logFilterMethods []string,
 	conf storeConfig,
 	flagsMap map[string]string,
 ) error {
@@ -481,7 +483,7 @@ func runStore(
 		}
 
 		storeServer := store.NewInstrumentedStoreServer(reg, bs)
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, conf.component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, conf.component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),

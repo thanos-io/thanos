@@ -9,10 +9,11 @@ import (
 	"net"
 	"runtime/debug"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	logging_mw "github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -46,7 +48,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, logOpts []grpc_logging.Option, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, logOpts []grpc_logging.Option, logFilterMethods []string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -76,17 +78,45 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		// TODO(bwplotka): https://github.com/grpc-ecosystem/go-grpc-middleware/issues/462
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc.MaxRecvMsgSize(math.MaxInt32),
-		grpc_middleware.WithUnaryServerChain(
+		grpc.ChainUnaryInterceptor(
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),
 			tracing.UnaryServerInterceptor(tracer),
-			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
+			selector.UnaryServerInterceptor(grpc_logging.UnaryServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, c interceptors.CallMeta) bool {
+				//if RequestConfig.GRPC.Config was provided
+				for _, m := range logFilterMethods {
+					if m == c.FullMethod() {
+						return true
+					}
+				}
+				return false
+			})),
+			selector.UnaryServerInterceptor(grpc_logging.UnaryServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, _ interceptors.CallMeta) bool {
+				//if RequestConfig.Options only was provided
+				if len(logFilterMethods) == 0 && logOpts != nil {
+					return true
+				}
+				return false
+			})),
 		),
-		grpc_middleware.WithStreamServerChain(
+		grpc.ChainStreamInterceptor(
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.StreamServerInterceptor(),
 			tracing.StreamServerInterceptor(tracer),
-			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
+			selector.StreamServerInterceptor(grpc_logging.StreamServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, c interceptors.CallMeta) bool {
+				for _, m := range logFilterMethods {
+					if m == c.FullMethod() {
+						return true
+					}
+				}
+				return false
+			})),
+			selector.StreamServerInterceptor(grpc_logging.StreamServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, _ interceptors.CallMeta) bool {
+				if len(logFilterMethods) == 0 && logOpts != nil {
+					return true
+				}
+				return false
+			})),
 		),
 	}...)
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,17 +55,13 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 		// Current limit is ~2GB.
 		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-		grpc.WithUnaryInterceptor(
-			grpc_middleware.ChainUnaryClient(
-				grpcMets.UnaryClientInterceptor(),
-				tracing.UnaryClientInterceptor(tracer),
-			),
+		grpc.WithChainUnaryInterceptor(
+			grpcMets.UnaryClientInterceptor(),
+			tracing.UnaryClientInterceptor(tracer),
 		),
-		grpc.WithStreamInterceptor(
-			grpc_middleware.ChainStreamClient(
-				grpcMets.StreamClientInterceptor(),
-				tracing.StreamClientInterceptor(tracer),
-			),
+		grpc.WithChainStreamInterceptor(
+			grpcMets.StreamClientInterceptor(),
+			tracing.StreamClientInterceptor(tracer),
 		),
 	}
 	if reg != nil {
