@@ -17,7 +17,7 @@ import {
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
-import { Tooltip } from 'reactstrap';
+// import { Tooltip } from 'reactstrap';
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
 import { ExplainTree } from './ExpressionInput';
@@ -517,7 +517,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
               <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
-                id={`analyze-${id}`}
+                id={`analyze-${this.props.id}`}
                 onChange={this.handleChangeAnalyze}
                 checked={options.analyze}
                 disabled={options.disableAnalyzeCheckbox}
@@ -525,17 +525,17 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               >
                 Analyze
               </Checkbox>
-              <Tooltip
+              {/* <Tooltip
                 placement="bottom"
-                className="analyze-tooltip"
-                target={`analyze-${id}`}
+                className={`analyze-tooltip-${this.props.id}`}
+                target={`analyze-${this.props.id}`}
                 isOpen={this.state.isHovered && options.disableAnalyzeCheckbox}
                 delay={{ show: 0, hide: 0 }}
                 fade={false}
                 trigger="hover"
               >
                 Change engine to 'thanos'
-              </Tooltip>
+              </Tooltip> */}
             </div>
           </Col>
         </Row>
