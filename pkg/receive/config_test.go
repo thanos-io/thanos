@@ -5,11 +5,11 @@ package receive
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/pkg/errors"
 )
 
 func TestValidateConfig(t *testing.T) {
