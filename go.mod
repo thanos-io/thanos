@@ -34,7 +34,7 @@ require (
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grafana/regexp v0.0.0-20221122212121-6b5c0a4cb7fd // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20201002093600-73cf2ae9d891
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201207153454-9f6bf00c00a7
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/json-iterator/go v1.1.12
@@ -137,6 +137,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

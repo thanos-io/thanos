@@ -74,7 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
+		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
@@ -106,6 +106,7 @@ func registerReceive(app *extkingpin.App) {
 			reg,
 			tracer,
 			grpcLogOpts,
+			logFilterMethods,
 			tsdbOpts,
 			lset,
 			component.Receive,
@@ -123,6 +124,7 @@ func runReceive(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcLogOpts []grpc_logging.Option,
+	logFilterMethods []string,
 	tsdbOpts *tsdb.Options,
 	lset labels.Labels,
 	comp component.SourceStoreAPI,
@@ -362,7 +364,7 @@ func runReceive(
 			info.WithExemplarsInfoFunc(),
 		)
 
-		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, comp, grpcProbe,
+		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
