@@ -314,21 +314,23 @@ Flags:
                                  none
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
-                                 (lower priority). Content of file that contains
-                                 the hashring configuration.
+                                 (mutually exclusive). Content of Path to file
+                                 that contains the hashring configuration.
+                                 A watcher is initialized to watch changes and
+                                 update the hashring dynamically.
       --receive.hashrings-algorithm=hashmod
                                  The algorithm used when distributing series in
                                  the hashrings. Must be one of hashmod, ketama.
                                  Will be overwritten by the tenant-specific
                                  algorithm in the hashring config.
-      --receive.hashrings-file=<path>
-                                 Path to file that contains the hashring
+      --receive.hashrings-file=<file-path>
+                                 Path to Path to file that contains the hashring
                                  configuration. A watcher is initialized
                                  to watch changes and update the hashring
                                  dynamically.
       --receive.hashrings-file-refresh-interval=5m
-                                 Refresh interval to re-read the hashring
-                                 configuration file. (used as a fallback)
+                                 Interval to re-read the hashring configuration
+                                 file. (used as a fallback)
       --receive.local-endpoint=RECEIVE.LOCAL-ENDPOINT
                                  Endpoint of local receive node. Used to
                                  identify the local node in the hashring
