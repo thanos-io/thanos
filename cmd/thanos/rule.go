@@ -233,7 +233,7 @@ func registerRule(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		grpcLogOpts, err := logging.ParsegRPCOptions(reqLogConfig)
+		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(reqLogConfig)
 
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
@@ -250,6 +250,7 @@ func registerRule(app *extkingpin.App) {
 			getFlagsMap(cmd.Flags()),
 			httpLogOpts,
 			grpcLogOpts,
+			logFilterMethods,
 			tsdbOpts,
 			agentOpts,
 		)
@@ -313,6 +314,7 @@ func runRule(
 	flagsMap map[string]string,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
+	logFilterMethods []string,
 	tsdbOpts *tsdb.Options,
 	agentOpts *agent.Options,
 ) error {
@@ -760,7 +762,7 @@ func runRule(
 	options = append(options, grpcserver.WithServer(
 		info.RegisterInfoServer(info.NewInfoServer(component.Rule.String(), infoOptions...)),
 	))
-	s := grpcserver.New(logger, reg, tracer, grpcLogOpts, comp, grpcProbe, options...)
+	s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe, options...)
 
 	g.Add(func() error {
 		statusProber.Ready()
