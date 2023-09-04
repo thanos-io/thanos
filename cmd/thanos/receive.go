@@ -858,7 +858,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default(string(receive.AlgorithmHashmod)).
 		EnumVar(&rc.hashringsAlgorithm, string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama))
 
-	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "ParseConfig interval to re-read the hashring configuration file. (used as a fallback)").
+	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
