@@ -507,8 +507,13 @@ func setupHashring(g *run.Group,
 			return
 		}
 
-		parsedConfig, err := hashringConfigLoader.ParseConfig()
-		hashring, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, parsedConfig)
+		parsedConfig, err := hashringConfigLoader.ParseConfig() //nolint:ineffassign
+		if err != nil {
+			return
+		}
+
+		// nolint:ineffassign
+		hashring, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, parsedConfig) //nolint:ineffassign
 		if err != nil {
 			level.Error(logger).Log("msg", "unable to create new hashring from config", "err", err)
 			return
