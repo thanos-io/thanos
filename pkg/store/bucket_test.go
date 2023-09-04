@@ -3344,8 +3344,6 @@ func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
 }
 
 func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
-	t.Skip("Known Issue, Added for debugging in followup PR.")
-
 	logger := log.NewNopLogger()
 	tmpDir := t.TempDir()
 	bktDir := filepath.Join(tmpDir, "bkt")

@@ -51,6 +51,14 @@ func (r *resortingServer) Send(response *storepb.SeriesResponse) error {
 	}
 
 	series := response.GetSeries()
+
+	// Check if series already exists.
+	for _, s := range r.series {
+		if labels.Compare(labelpb.ZLabelsToPromLabels(series.Labels), labelpb.ZLabelsToPromLabels(s.Labels)) == 0 {
+			return nil
+		}
+	}
+
 	labelpb.ReAllocZLabelsStrings(&series.Labels, false)
 	r.series = append(r.series, series)
 	return nil
