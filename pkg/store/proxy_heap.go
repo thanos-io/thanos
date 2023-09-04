@@ -605,7 +605,8 @@ func newAsyncRespSet(
 			seriesCtx,
 			span,
 			frameTimeout,
-			st,
+			st.String(),
+			st.LabelSets(),
 			closeSeries,
 			cl,
 			shardMatcher,
@@ -639,12 +640,14 @@ type eagerRespSet struct {
 	ctx  context.Context
 
 	closeSeries  context.CancelFunc
-	st           Client
 	frameTimeout time.Duration
 
 	shardMatcher *storepb.ShardMatcher
 	removeLabels map[string]struct{}
-	storeLabels  map[string]struct{}
+
+	storeName      string
+	storeLabels    map[string]struct{}
+	storeLabelSets []labels.Labels
 
 	// Internal bookkeeping.
 	bufferedResponses []*storepb.SeriesResponse
@@ -656,7 +659,8 @@ func newEagerRespSet(
 	ctx context.Context,
 	span opentracing.Span,
 	frameTimeout time.Duration,
-	st Client,
+	storeName string,
+	storeLabelSets []labels.Labels,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
 	shardMatcher *storepb.ShardMatcher,
@@ -666,7 +670,6 @@ func newEagerRespSet(
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
-		st:                st,
 		closeSeries:       closeSeries,
 		cl:                cl,
 		frameTimeout:      frameTimeout,
@@ -675,9 +678,11 @@ func newEagerRespSet(
 		wg:                &sync.WaitGroup{},
 		shardMatcher:      shardMatcher,
 		removeLabels:      removeLabels,
+		storeName:         storeName,
+		storeLabelSets:    storeLabelSets,
 	}
 	ret.storeLabels = make(map[string]struct{})
-	for _, ls := range st.LabelSets() {
+	for _, ls := range storeLabelSets {
 		for _, l := range ls {
 			ret.storeLabels[l.Name] = struct{}{}
 		}
@@ -686,7 +691,7 @@ func newEagerRespSet(
 	ret.wg.Add(1)
 
 	// Start a goroutine and immediately buffer everything.
-	go func(st Client, l *eagerRespSet) {
+	go func(l *eagerRespSet) {
 		seriesStats := &storepb.SeriesStatsCounter{}
 		bytesProcessed := 0
 
@@ -715,7 +720,7 @@ func newEagerRespSet(
 
 			select {
 			case <-l.ctx.Done():
-				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
+				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", storeName)
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 				l.span.SetTag("err", err.Error())
 				return false
@@ -731,9 +736,9 @@ func newEagerRespSet(
 						// Most likely the per-Recv timeout has been reached.
 						// There's a small race between canceling and the Recv()
 						// but this is most likely true.
-						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st.String())
+						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, storeName)
 					} else {
-						rerr = errors.Wrapf(err, "receive series from %s", st.String())
+						rerr = errors.Wrapf(err, "receive series from %s", storeName)
 					}
 					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
 					l.span.SetTag("err", rerr.Error())
@@ -773,7 +778,7 @@ func newEagerRespSet(
 			sortWithoutLabels(l.bufferedResponses, l.removeLabels)
 		}
 
-	}(st, ret)
+	}(ret)
 
 	return ret
 }
@@ -845,6 +850,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 }
 
 func (l *eagerRespSet) Close() {
+	l.closeSeries()
 	l.shardMatcher.Close()
 }
 
@@ -873,11 +879,11 @@ func (l *eagerRespSet) Empty() bool {
 }
 
 func (l *eagerRespSet) StoreID() string {
-	return l.st.String()
+	return l.storeName
 }
 
 func (l *eagerRespSet) Labelset() string {
-	return labelpb.PromLabelSetsToString(l.st.LabelSets())
+	return labelpb.PromLabelSetsToString(l.storeLabelSets)
 }
 
 func (l *eagerRespSet) StoreLabels() map[string]struct{} {
