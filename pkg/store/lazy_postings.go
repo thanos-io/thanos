@@ -118,12 +118,16 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 	seriesBytesToFetch := postingGroups[0].cardinality * seriesMaxSize
 	p := float64(1)
 	i := 1 // Start from index 1 as we always need to fetch the smallest posting group.
+	hasAdd := !postingGroups[0].addAll
 	for i < len(postingGroups) {
 		pg := postingGroups[i]
 		// Need to fetch more data on postings than series we avoid fetching, stop here and lazy expanding rest of matchers.
-		if pg.cardinality*4 > int64(p*math.Ceil((1-seriesMatchRatio)*float64(seriesBytesToFetch))) {
+		// If there is no posting group with add keys, don't skip any posting group until we have one.
+		// Fetch posting group with addAll is much more expensive due to fetch all postings.
+		if hasAdd && pg.cardinality*4 > int64(p*math.Ceil((1-seriesMatchRatio)*float64(seriesBytesToFetch))) {
 			break
 		}
+		hasAdd = hasAdd || !pg.addAll
 		p = p * seriesMatchRatio
 		i++
 	}

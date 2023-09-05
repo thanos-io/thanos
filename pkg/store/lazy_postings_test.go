@@ -365,6 +365,8 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			},
 		},
 		{
+			// This test case won't be optimized in real case because it is add all
+			// so doesn't make sense to optimize postings fetching anyway.
 			name: "two posting groups with remove keys, small postings and large series size",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
@@ -373,12 +375,29 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			seriesMaxSize:    1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
-				{name: "foo", removeKeys: []string{"bar"}},
-				{name: "bar", removeKeys: []string{"foo"}},
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
+				{addAll: true, name: "bar", removeKeys: []string{"foo"}},
 			},
 			expectedPostingGroups: []*postingGroup{
-				{name: "bar", removeKeys: []string{"foo"}, cardinality: 1},
-				{name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
+				{addAll: true, name: "bar", removeKeys: []string{"foo"}, cardinality: 1},
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
+			},
+		},
+		{
+			name: "one group with remove keys and another one with add keys. Always add the addKeys posting group to avoid fetching all postings",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 8}},
+				"bar": {"foo": index.Range{Start: 8, End: 1000012}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
+				{name: "bar", addKeys: []string{"foo"}, cardinality: 250000},
 			},
 		},
 		{
@@ -445,14 +464,14 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			seriesMaxSize:    1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
-				{name: "foo", removeKeys: []string{"bar"}},
-				{name: "bar", removeKeys: []string{"foo"}},
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
+				{addAll: true, name: "bar", removeKeys: []string{"foo"}},
 				{name: "cluster", addKeys: []string{"us"}},
 			},
 			expectedPostingGroups: []*postingGroup{
 				{name: "cluster", addKeys: []string{"us"}, cardinality: 1},
-				{name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
-				{name: "bar", removeKeys: []string{"foo"}, cardinality: 250000, lazy: true},
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
+				{addAll: true, name: "bar", removeKeys: []string{"foo"}, cardinality: 250000, lazy: true},
 			},
 		},
 	} {
