@@ -913,6 +913,9 @@ type blockSeriesClient struct {
 	chunksLimiter  ChunksLimiter
 	bytesLimiter   BytesLimiter
 
+	lazyExpandedPostingEnabled bool
+	lazyExpandedPostingsCount  prometheus.Counter
+
 	skipChunks         bool
 	shardMatcher       *storepb.ShardMatcher
 	blockMatchers      []*labels.Matcher
@@ -944,6 +947,8 @@ func newBlockSeriesClient(
 	batchSize int,
 	chunkFetchDuration prometheus.Histogram,
 	extLsetToRemove map[string]struct{},
+	lazyExpandedPostingEnabled bool,
+	lazyExpandedPostingsCount prometheus.Counter,
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
@@ -969,6 +974,9 @@ func newBlockSeriesClient(
 		bytesLimiter:       bytesLimiter,
 		skipChunks:         req.SkipChunks,
 		chunkFetchDuration: chunkFetchDuration,
+
+		lazyExpandedPostingEnabled: lazyExpandedPostingEnabled,
+		lazyExpandedPostingsCount:  lazyExpandedPostingsCount,
 
 		loadAggregates:     req.Aggregates,
 		shardMatcher:       shardMatcher,
@@ -1014,10 +1022,8 @@ func newSortedMatchers(matchers []*labels.Matcher) sortedMatchers {
 func (b *blockSeriesClient) ExpandPostings(
 	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
-	lazyExpandedPostingEnabled bool,
-	lazyExpandedPostingsCount prometheus.Counter,
 ) error {
-	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, lazyExpandedPostingEnabled)
+	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled)
 	if err != nil {
 		return errors.Wrap(err, "expanded matching posting")
 	}
@@ -1040,7 +1046,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	if b.lazyPostings.lazyExpanded() {
 		// Assume lazy expansion could cut actual expanded postings length to 50%.
 		b.expandedPostings = make([]storage.SeriesRef, 0, len(b.lazyPostings.postings)/2)
-		lazyExpandedPostingsCount.Inc()
+		b.lazyExpandedPostingsCount.Inc()
 	}
 	b.entries = make([]seriesEntry, 0, b.batchSize)
 	return nil
@@ -1404,6 +1410,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
 				extLsetToRemove,
+				s.enabledLazyExpandedPostings,
+				s.metrics.lazyExpandedPostingsCount,
 			)
 
 			defer blockClient.Close()
@@ -1426,8 +1434,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				if err := blockClient.ExpandPostings(
 					sortedBlockMatchers,
 					seriesLimiter,
-					s.enabledLazyExpandedPostings,
-					s.metrics.lazyExpandedPostingsCount,
 				); err != nil {
 					onClose()
 					span.Finish()
@@ -1708,14 +1714,14 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					SeriesBatchSize,
 					s.metrics.chunkFetchDuration,
 					nil,
+					s.enabledLazyExpandedPostings,
+					s.metrics.lazyExpandedPostingsCount,
 				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
 					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
-					s.enabledLazyExpandedPostings,
-					s.metrics.lazyExpandedPostingsCount,
 				); err != nil {
 					return err
 				}
@@ -1939,14 +1945,14 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					SeriesBatchSize,
 					s.metrics.chunkFetchDuration,
 					nil,
+					s.enabledLazyExpandedPostings,
+					s.metrics.lazyExpandedPostingsCount,
 				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
 					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
-					s.enabledLazyExpandedPostings,
-					s.metrics.lazyExpandedPostingsCount,
 				); err != nil {
 					return err
 				}

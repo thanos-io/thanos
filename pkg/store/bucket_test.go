@@ -2768,8 +2768,10 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					SeriesBatchSize,
 					dummyHistogram,
 					nil,
+					false,
+					dummyCounter,
 				)
-				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter, false, dummyCounter))
+				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter))
 				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).
