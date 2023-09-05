@@ -2017,8 +2017,6 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 			replicaLabels: []string{"replica"},
 			expectedSeries: []labels.Labels{
 				labels.FromStrings("a", "1", "ext1", "0", "z", "1"),
-				labels.FromStrings("a", "1", "ext1", "0", "z", "1"),
-				labels.FromStrings("a", "1", "ext1", "0", "z", "2"),
 				labels.FromStrings("a", "1", "ext1", "0", "z", "2"),
 				labels.FromStrings("a", "1", "ext1", "1", "z", "1"),
 				labels.FromStrings("a", "1", "ext1", "1", "z", "2"),
@@ -3344,8 +3342,6 @@ func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
 }
 
 func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
-	t.Skip("Known Issue, Added for debugging in followup PR.")
-
 	logger := log.NewNopLogger()
 	tmpDir := t.TempDir()
 	bktDir := filepath.Join(tmpDir, "bkt")
