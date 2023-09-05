@@ -288,16 +288,23 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 			expected: &storage.ChunkSeriesEntry{
 				Lset: defaultLabels,
 				ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
+					samples := [][]tsdbutil.Sample{
+						{sample{299999, 3}, sample{540000, 5}},
+						{sample{299999, 540000}, sample{540000, 2100000}},
+						{sample{299999, 120000}, sample{540000, 300000}},
+						{sample{299999, 240000}, sample{540000, 540000}},
+						{sample{299999, 240000}, sample{299999, 240000}},
+					}
+					var chks [5]chunkenc.Chunk
+					for i, s := range samples {
+						chk, err := tsdbutil.ChunkFromSamples(s)
+						testutil.Ok(t, err)
+						chks[i] = chk.Chunk
+					}
 					return storage.NewListChunkSeriesIterator(chunks.Meta{
 						MinTime: 299999,
 						MaxTime: 540000,
-						Chunk: downsample.EncodeAggrChunk([5]chunkenc.Chunk{
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 3}, sample{540000, 5}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 540000}, sample{540000, 2100000}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 120000}, sample{540000, 300000}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 240000}, sample{540000, 540000}}).Chunk,
-							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 240000}, sample{299999, 240000}}).Chunk,
-						}),
+						Chunk:   downsample.EncodeAggrChunk(chks),
 					})
 				},
 			},
