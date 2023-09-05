@@ -670,7 +670,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*numberLiteralSelector]",
+				OperatorName: "[*numberLiteralSelector] 2",
 			},
 		},
 		{
@@ -724,6 +724,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 		tenantHeader:                 "thanos-tenant",
 		defaultTenant:                "default-tenant",
 	}
+	start := time.Unix(0, 0)
 
 	var tests = []endpointTestCase{
 		{
@@ -734,26 +735,37 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &queryData{
-				QueryAnalysis: queryTelemetry{
-					OperatorName: "[*numberLiteralSelector] ",
-					Execution:    "0s",
+				ResultType: parser.ValueTypeScalar,
+				Result: promql.Scalar{
+					V: 2,
+					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 		{
-			endpoint: api.query,
+			endpoint: api.queryRange,
 			query: url.Values{
-				"query":  []string{"time()"},
-				"start":  []string{"0"},
-				"end":    []string{"500"},
-				"step":   []string{"1"},
-				"engine": []string{"thanos"},
+				"query": []string{"time()"},
+				"start": []string{"0"},
+				"end":   []string{"500"},
+				"step":  []string{"1"},
 			},
 			response: &queryData{
-				QueryAnalysis: queryTelemetry{
-					OperatorName: "[*numberLiteralSelector] ",
-					Execution:    "0s",
+				ResultType: parser.ValueTypeMatrix,
+				Result: promql.Matrix{
+					promql.Series{
+						Floats: func(end, step float64) []promql.FPoint {
+							var res []promql.FPoint
+							for v := float64(0); v <= end; v += step {
+								res = append(res, promql.FPoint{F: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
+							}
+							return res
+						}(500, 1),
+						Metric: nil,
+					},
 				},
+				QueryAnalysis: queryTelemetry{},
 			},
 		},
 	}
