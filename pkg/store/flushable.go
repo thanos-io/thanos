@@ -9,7 +9,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 )
 
 // flushableServer is an extension of storepb.Store_SeriesServer with a Flush method.
@@ -20,22 +19,9 @@ type flushableServer interface {
 
 func newFlushableServer(
 	upstream storepb.Store_SeriesServer,
-	labelNames stringset.Set,
-	replicaLabels []string,
 ) flushableServer {
-	if labelNames.HasAny(replicaLabels) {
-		return &resortingServer{Store_SeriesServer: upstream}
-	}
-	return &passthroughServer{Store_SeriesServer: upstream}
+	return &resortingServer{Store_SeriesServer: upstream}
 }
-
-// passthroughServer is a flushableServer that forwards all data to
-// an upstream server without additional processing.
-type passthroughServer struct {
-	storepb.Store_SeriesServer
-}
-
-func (p *passthroughServer) Flush() error { return nil }
 
 // resortingServer is a flushableServer that resorts all series by their labels.
 // This is required if replica labels are stored internally in a TSDB.
