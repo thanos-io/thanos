@@ -502,7 +502,7 @@ func runRule(
 				if alrt.State == rules.StatePending {
 					continue
 				}
-				expressionURL, err := TableLinkForExpression(expr, *conf.alertmgr.alertSourceTemplate)
+				expressionURL, err := tableLinkForExpression(*conf.alertmgr.alertSourceTemplate, expr)
 				if err != nil {
 					level.Warn(logger).Log("msg", "failed to generate link for expression", "expr", expr, "err", err)
 				}
@@ -949,7 +949,7 @@ func reloadRules(logger log.Logger,
 	return errs.Err()
 }
 
-func TableLinkForExpression(expr string, tmpl string) (string, error) {
+func tableLinkForExpression(tmpl string, expr string) (string, error) {
 	// template example: "/graph?g0.expr={{.Expr}}&g0.tab=1"
 	escapedExpression := url.QueryEscape(expr)
 

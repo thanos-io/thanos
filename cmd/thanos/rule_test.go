@@ -72,3 +72,35 @@ func Test_validateTemplate(t *testing.T) {
 		testutil.Equals(t, err != nil, td.expectErr)
 	}
 }
+
+func Test_tableLinkForExpression(t *testing.T) {
+	tData := []struct {
+		template  string
+		expr      string
+		expectStr string
+		expectErr bool
+	}{
+		{
+			template:  `/graph?g0.expr={{.Expr}}&g0.tab=1`,
+			expr:      `up{app="foo"}`,
+			expectStr: `/graph?g0.expr=up%7Bapp%3D%22foo%22%7D&g0.tab=1`,
+			expectErr: false,
+		},
+		{
+			template:  `/graph?g0.expr={{.Expression}}&g0.tab=1`,
+			expr:      "test_expr",
+			expectErr: true,
+		},
+		{
+			template:  `another template includes {{.Expr}}`,
+			expr:      "test_expr",
+			expectStr: `another template includes test_expr`,
+			expectErr: false,
+		},
+	}
+	for _, td := range tData {
+		resStr, err := tableLinkForExpression(td.template, td.expr)
+		testutil.Equals(t, err != nil, td.expectErr)
+		testutil.Equals(t, resStr, td.expectStr)
+	}
+}
