@@ -1372,16 +1372,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		}
 		// Sort matchers to make sure we generate the same cache key
 		// when fetching expanded postings.
-		sort.Slice(blockMatchers, func(i, j int) bool {
-			if blockMatchers[i].Type == blockMatchers[j].Type {
-				if blockMatchers[i].Name == blockMatchers[j].Name {
-					return blockMatchers[i].Value < blockMatchers[j].Value
-				}
-				return blockMatchers[i].Name < blockMatchers[j].Name
-			}
-			return blockMatchers[i].Type < blockMatchers[j].Type
-		})
-
 		sortedBlockMatchers := newSortedMatchers(blockMatchers)
 
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
@@ -1408,7 +1398,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				req,
 				chunksLimiter,
 				bytesLimiter,
-				blockMatchers,
+				sortedBlockMatchers,
 				shardMatcher,
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
@@ -2657,16 +2647,7 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 			matchers = append(matchers, val)
 		}
 		// Set and sort matchers to be used when picking up posting fetch strategy.
-		mergedPG.matchers = matchers
-		slices.SortFunc(mergedPG.matchers, func(a, b *labels.Matcher) bool {
-			if a.Type == b.Type {
-				if a.Name == b.Name {
-					return a.Value < b.Value
-				}
-				return a.Name < b.Name
-			}
-			return a.Type < b.Type
-		})
+		mergedPG.matchers = newSortedMatchers(matchers)
 		pgs = append(pgs, mergedPG)
 	}
 	slices.SortFunc(pgs, func(a, b *postingGroup) bool {

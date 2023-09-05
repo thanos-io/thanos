@@ -60,6 +60,9 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			if r == indexheader.NotFoundRange {
 				continue
 			}
+			// Each range starts from the #entries field which is 4 bytes.
+			// Need to subtract it when calculating number of postings.
+			// https://github.com/prometheus/prometheus/blob/v2.46.0/tsdb/docs/format/index.md.
 			pg.cardinality += (r.End - r.Start - 4) / 4
 		}
 	}
