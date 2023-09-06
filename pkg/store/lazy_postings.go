@@ -151,18 +151,19 @@ func fetchLazyExpandedPostings(
 		emptyPostingGroup bool
 	)
 	/*
-		There are several cases that we skip postings fetch optimization:
-		- Lazy expanded posting disabled.
-		- Add all postings. This means we don't have a posting group with any add keys.
-		- `SeriesMaxSize` not set for this block then we have no way to estimate series size.
-		- Only one effective posting group available. We need to at least download postings from 1 posting group so no need to optimize.
+			There are several cases that we skip postings fetch optimization:
+			- Lazy expanded posting disabled.
+			- Add all postings. This means we don't have a posting group with any add keys.
+		    - Block estimated max series size not set which means we don't have a way to estimate series bytes downloaded.
+			- `SeriesMaxSize` not set for this block then we have no way to estimate series size.
+			- Only one effective posting group available. We need to at least download postings from 1 posting group so no need to optimize.
 	*/
 	if lazyExpandedPostingEnabled && !addAllPostings &&
-		r.block.meta.Thanos.IndexStats.SeriesMaxSize > 0 && len(postingGroups) > 1 {
+		r.block.estimatedMaxSeriesSize > 0 && len(postingGroups) > 1 {
 		postingGroups, emptyPostingGroup, err = optimizePostingsFetchByDownloadedBytes(
 			r,
 			postingGroups,
-			r.block.meta.Thanos.IndexStats.SeriesMaxSize,
+			int64(r.block.estimatedMaxSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
 		)
 		if err != nil {
