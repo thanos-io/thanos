@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { Component, useRef } from 'react';
 
 import {
   UncontrolledAlert,
@@ -17,7 +17,7 @@ import {
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
-// import { Tooltip } from 'reactstrap';
+import { UncontrolledTooltip } from 'reactstrap';
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
 import { ExplainTree } from './ExpressionInput';
@@ -261,6 +261,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           },
           loading: false,
           analysis: analysis,
+          explainOutput: null,
         });
         this.abortInFlightFetch = null;
       })
@@ -433,6 +434,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
+
     return (
       <div className="panel">
         <Row>
@@ -517,7 +519,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
               <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
-                id={`analyze-${this.props.id}`}
+                id={`analyze-${id}`}
                 onChange={this.handleChangeAnalyze}
                 checked={options.analyze}
                 disabled={options.disableAnalyzeCheckbox}
@@ -525,17 +527,28 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               >
                 Analyze
               </Checkbox>
-              {/* <Tooltip
-                placement="bottom"
-                className={`analyze-tooltip-${this.props.id}`}
-                target={`analyze-${this.props.id}`}
-                isOpen={this.state.isHovered && options.disableAnalyzeCheckbox}
-                delay={{ show: 0, hide: 0 }}
-                fade={false}
-                trigger="hover"
+              <div
+                style={{
+                  position: 'relative',
+                }}
               >
-                Change engine to 'thanos'
-              </Tooltip> */}
+                <div
+                  style={{
+                    display: this.state.isHovered && options.disableAnalyzeCheckbox ? 'block' : 'none',
+                    position: 'absolute',
+                    top: '-20px',
+                    left: '-5px',
+                    backgroundColor: '#333',
+                    color: '#fff',
+                    padding: '2px',
+                    borderRadius: '3px',
+                    fontSize: '15px',
+                    zIndex: 1,
+                  }}
+                >
+                  Change engine to 'thanos'
+                </div>
+              </div>
             </div>
           </Col>
         </Row>
