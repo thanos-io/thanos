@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#6692](https://github.com/thanos-io/thanos/pull/6692) Store: Fix matching bug when using empty alternative in regex matcher, for example (a||b).
 - [#6679](https://github.com/thanos-io/thanos/pull/6697) Store: fix block deduplication
+- [#6711](https://github.com/thanos-io/thanos/pull/6711) Tracing: Add possibility to configure the parent and non-parent sampler for OTLP exporter.
 
 ### Added
 
