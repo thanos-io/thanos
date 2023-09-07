@@ -100,6 +100,17 @@ config:
   sampler_type: ""
   sampler_param: ""
 ```
+*Note:* The `sampler_type` in the configuration above can have one of the following values:
+- `alwayssample`
+- `neversample`
+- `traceidratiobased`
+- `parentbasedalwayssample`
+- `parentbasedneversample`
+- `parentbasedtraceidratiobased`
+
+If the `sampler_type` is set to either `traceidratiobased` or `parentbasedtraceidratiobased`, then the 
+`sampler_param` in the above configuration can be configured in the range `[0.0,1.0]`, when not provided
+the rate will be set to `1.0`.
 
 ### Jaeger
 

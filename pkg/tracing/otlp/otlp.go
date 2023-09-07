@@ -24,11 +24,14 @@ import (
 )
 
 const (
-	TracingClientGRPC string = "grpc"
-	TracingClientHTTP string = "http"
-	AlwaysSample      string = "alwayssample"
-	NeverSample       string = "neversample"
-	RatioBasedSample  string = "traceidratiobased"
+	tracingClientGRPC           string = "grpc"
+	tracingClientHTTP           string = "http"
+	alwaysSample                string = "alwayssample"
+	neverSample                 string = "neversample"
+	ratioBasedSample            string = "traceidratiobased"
+	parentBasedAlwaysSample     string = "parentbasedalwayssample"
+	parentBasedNeverSample      string = "parentbasedneversample"
+	parentBasedRatioBasedSample string = "parentbasedtraceidratiobased"
 )
 
 // NewOTELTracer returns an OTLP exporter based tracer.
@@ -41,16 +44,15 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	var exporter *otlptrace.Exporter
 	var err error
 	switch strings.ToLower(config.ClientType) {
-	case TracingClientHTTP:
+	case tracingClientHTTP:
 		options := traceHTTPOptions(config)
-
 		client := otlptracehttp.NewClient(options...)
 		exporter, err = otlptrace.New(ctx, client)
 		if err != nil {
 			return nil, err
 		}
 
-	case TracingClientGRPC:
+	case tracingClientGRPC:
 		options := traceGRPCOptions(config)
 		client := otlptracegrpc.NewClient(options...)
 		exporter, err = otlptrace.New(ctx, client)
@@ -105,11 +107,21 @@ func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, log
 
 func getSampler(config Config) (tracesdk.Sampler, error) {
 	switch strings.ToLower(config.SamplerType) {
-	case AlwaysSample:
-		return tracesdk.ParentBased(tracesdk.AlwaysSample()), nil
-	case NeverSample:
+	case alwaysSample:
+		return tracesdk.AlwaysSample(), nil
+	case neverSample:
+		return tracesdk.NeverSample(), nil
+	case ratioBasedSample:
+		arg, err := strconv.ParseFloat(config.SamplerParam, 64)
+		if err != nil {
+			return tracesdk.TraceIDRatioBased(1.0), err
+		}
+		return tracesdk.TraceIDRatioBased(arg), nil
+	case parentBasedNeverSample:
 		return tracesdk.ParentBased(tracesdk.NeverSample()), nil
-	case RatioBasedSample:
+	case parentBasedAlwaysSample:
+		return tracesdk.ParentBased(tracesdk.AlwaysSample()), nil
+	case parentBasedRatioBasedSample:
 		arg, err := strconv.ParseFloat(config.SamplerParam, 64)
 		if err != nil {
 			return tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0)), err
