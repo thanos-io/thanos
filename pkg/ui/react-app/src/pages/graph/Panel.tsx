@@ -1,4 +1,4 @@
-import React, { Component, useRef } from 'react';
+import React, { Component } from 'react';
 
 import {
   UncontrolledAlert,
@@ -17,7 +17,6 @@ import {
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
-import { UncontrolledTooltip } from 'reactstrap';
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
 import { ExplainTree } from './ExpressionInput';
