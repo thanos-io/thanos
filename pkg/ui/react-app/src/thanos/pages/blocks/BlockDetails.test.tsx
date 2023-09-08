@@ -15,6 +15,7 @@ describe('BlockDetails', () => {
     selectBlock: (): void => {
       // do nothing
     },
+    disableAdminOperations: false,
   };
   window.URL.createObjectURL = jest.fn();
   const blockDetails = mount(<BlockDetails {...defaultProps} />);

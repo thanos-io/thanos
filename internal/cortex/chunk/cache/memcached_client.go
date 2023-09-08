@@ -19,7 +19,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sony/gobreaker"
-	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 )
 
@@ -146,7 +145,6 @@ func NewMemcachedClient(cfg MemcachedClientConfig, name string, r prometheus.Reg
 	}
 
 	if len(cfg.Addresses) > 0 {
-		util_log.WarnExperimentalUse("DNS-based memcached service discovery")
 		newClient.addresses = strings.Split(cfg.Addresses, ",")
 	}
 

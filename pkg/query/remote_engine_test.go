@@ -4,16 +4,40 @@
 package query
 
 import (
+	"context"
+	"io"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/grpc"
 
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
+
+func TestRemoteEngine_Warnings(t *testing.T) {
+	client := NewClient(&queryWarnClient{}, "", nil)
+	engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+		Timeout: 1 * time.Second,
+	})
+	var (
+		query = "up"
+		start = time.Unix(0, 0)
+		end   = time.Unix(120, 0)
+		step  = 30 * time.Second
+	)
+	qry, err := engine.NewRangeQuery(context.Background(), nil, query, start, end, step)
+	testutil.Ok(t, err)
+	res := qry.Exec(context.Background())
+	testutil.Ok(t, res.Err)
+	testutil.Equals(t, 1, len(res.Warnings))
+}
 
 func TestRemoteEngine_LabelSets(t *testing.T) {
 	tests := []struct {
@@ -163,4 +187,25 @@ func zLabelSetFromStrings(ss ...string) labelpb.ZLabelSet {
 	return labelpb.ZLabelSet{
 		Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings(ss...)),
 	}
+}
+
+type queryWarnClient struct {
+	querypb.QueryClient
+}
+
+func (m queryWarnClient) QueryRange(ctx context.Context, in *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
+	return &queryRangeWarnClient{}, nil
+}
+
+type queryRangeWarnClient struct {
+	querypb.Query_QueryRangeClient
+	warnSent bool
+}
+
+func (m *queryRangeWarnClient) Recv() (*querypb.QueryRangeResponse, error) {
+	if m.warnSent {
+		return nil, io.EOF
+	}
+	m.warnSent = true
+	return querypb.NewQueryRangeWarningsResponse(errors.New("warning")), nil
 }

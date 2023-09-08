@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/rueidis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +21,9 @@ func TestRedisClient(t *testing.T) {
 	cluster, err := mockRedisClientCluster()
 	require.Nil(t, err)
 	defer cluster.Close()
+
+	require.NoError(t, single.Ping(context.Background()))
+	require.NoError(t, cluster.Ping(context.Background()))
 
 	ctx := context.Background()
 
@@ -58,7 +61,7 @@ func TestRedisClient(t *testing.T) {
 
 			// get missing keys
 			values, err = tt.client.MGet(ctx, miss)
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.Len(t, values, len(miss))
 			for _, value := range values {
 				require.Nil(t, value)
@@ -72,12 +75,18 @@ func mockRedisClientSingle() (*RedisClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cl, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress:  []string{redisServer.Addr()},
+		DisableCache: true,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &RedisClient{
 		expiration: time.Minute,
 		timeout:    100 * time.Millisecond,
-		rdb: redis.NewClient(&redis.Options{
-			Addr: redisServer.Addr(),
-		}),
+		rdb:        cl,
 	}, nil
 }
 
@@ -90,14 +99,16 @@ func mockRedisClientCluster() (*RedisClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	cl, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress:  []string{redisServer1.Addr(), redisServer2.Addr()},
+		DisableCache: true,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &RedisClient{
 		expiration: time.Minute,
 		timeout:    100 * time.Millisecond,
-		rdb: redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: []string{
-				redisServer1.Addr(),
-				redisServer2.Addr(),
-			},
-		}),
+		rdb:        cl,
 	}, nil
 }

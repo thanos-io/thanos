@@ -10,21 +10,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
-	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
-	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 func TestWriter(t *testing.T) {
@@ -250,7 +251,7 @@ func TestWriter(t *testing.T) {
 						{
 							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
-								histogramToHistogramProto(9, testHistogram()),
+								prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 							},
 						},
 					},
@@ -261,7 +262,30 @@ func TestWriter(t *testing.T) {
 				{
 					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 					Histograms: []prompb.Histogram{
-						histogramToHistogramProto(10, testHistogram()),
+						prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
+					},
+				},
+			},
+		},
+		"should succeed on float histogram with valid labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Histograms: []prompb.Histogram{
+								prompb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
+							},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+					Histograms: []prompb.Histogram{
+						prompb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
 					},
 				},
 			},
@@ -273,7 +297,7 @@ func TestWriter(t *testing.T) {
 						{
 							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
-								histogramToHistogramProto(10, testHistogram()),
+								prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 							},
 						},
 					},
@@ -283,7 +307,7 @@ func TestWriter(t *testing.T) {
 						{
 							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
-								histogramToHistogramProto(9, testHistogram()),
+								prompb.HistogramToHistogramProto(9, tsdbutil.GenerateTestHistogram(0)),
 							},
 						},
 					},
@@ -294,7 +318,7 @@ func TestWriter(t *testing.T) {
 				{
 					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 					Histograms: []prompb.Histogram{
-						histogramToHistogramProto(10, testHistogram()),
+						prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 					},
 				},
 			},
@@ -329,7 +353,7 @@ func TestWriter(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			app, err := m.TenantAppendable(DefaultTenant)
+			app, err := m.TenantAppendable(tenancy.DefaultTenant)
 			testutil.Ok(t, err)
 
 			testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
@@ -340,7 +364,7 @@ func TestWriter(t *testing.T) {
 			w := NewWriter(logger, m, testData.opts)
 
 			for idx, req := range testData.reqs {
-				err = w.Write(context.Background(), DefaultTenant, req)
+				err = w.Write(context.Background(), tenancy.DefaultTenant, req)
 
 				// We expect no error on any request except the last one
 				// which may error (and in that case we assert on it).
@@ -479,7 +503,7 @@ func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bo
 		}
 
 		if generateHistograms {
-			ts[j].Histograms = []prompb.Histogram{histogramToHistogramProto(10, testHistogram())}
+			ts[j].Histograms = []prompb.Histogram{prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0))}
 			continue
 		}
 
@@ -487,43 +511,4 @@ func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bo
 	}
 
 	return ts
-}
-
-func testHistogram() *histogram.Histogram {
-	return &histogram.Histogram{
-		Count:         5,
-		ZeroCount:     2,
-		Sum:           18.4,
-		ZeroThreshold: 0.1,
-		Schema:        1,
-		PositiveSpans: []histogram.Span{
-			{Offset: 0, Length: 2},
-			{Offset: 1, Length: 2},
-		},
-		PositiveBuckets: []int64{1, 1, -1, 0}, // counts: 1, 2, 1, 1 (total 5)
-	}
-}
-
-func histogramToHistogramProto(timestamp int64, h *histogram.Histogram) prompb.Histogram {
-	return prompb.Histogram{
-		Count:          &prompb.Histogram_CountInt{CountInt: h.Count},
-		Sum:            h.Sum,
-		Schema:         h.Schema,
-		ZeroThreshold:  h.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountInt{ZeroCountInt: h.ZeroCount},
-		NegativeSpans:  spansToSpansProto(h.NegativeSpans),
-		NegativeDeltas: h.NegativeBuckets,
-		PositiveSpans:  spansToSpansProto(h.PositiveSpans),
-		PositiveDeltas: h.PositiveBuckets,
-		Timestamp:      timestamp,
-	}
-}
-
-func spansToSpansProto(s []histogram.Span) []*prompb.BucketSpan {
-	spans := make([]*prompb.BucketSpan, len(s))
-	for i := 0; i < len(s); i++ {
-		spans[i] = &prompb.BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
-	}
-
-	return spans
 }

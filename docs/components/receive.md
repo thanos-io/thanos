@@ -32,7 +32,7 @@ The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-
 
 ## TSDB stats
 
-Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. Use the `limit` query parameter to tweak the number of stats to return (the default is 10). The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
 
 Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
 
@@ -241,7 +241,7 @@ Under `global`:
 - `meta_monitoring_http_client`: Optional YAML field specifying HTTP client config for meta-monitoring.
 
 Under `default` and per `tenant`:
-- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive. Set to 0 for unlimited.
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.

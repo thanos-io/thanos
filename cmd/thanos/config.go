@@ -180,14 +180,15 @@ func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
 }
 
 type queryConfig struct {
-	addrs         []string
-	sdFiles       []string
-	sdInterval    time.Duration
-	configPath    *extflag.PathOrContent
-	dnsSDInterval time.Duration
-	httpMethod    string
-	dnsSDResolver string
-	step          time.Duration
+	addrs                []string
+	sdFiles              []string
+	sdInterval           time.Duration
+	configPath           *extflag.PathOrContent
+	dnsSDInterval        time.Duration
+	httpMethod           string
+	dnsSDResolver        string
+	step                 time.Duration
+	doNotAddThanosParams bool
 }
 
 func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
@@ -206,6 +207,8 @@ func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
 		Default("miekgdns").Hidden().StringVar(&qc.dnsSDResolver)
 	cmd.Flag("query.default-step", "Default range query step to use. This is only used in stateless Ruler and alert state restoration.").
 		Default("1s").DurationVar(&qc.step)
+	cmd.Flag("query.only-prometheus-params", "Disable adding Thanos parameters (e.g dedup, partial_response) when querying metrics. Some non-Thanos systems have strict API validation.").Hidden().
+		Default("false").BoolVar(&qc.doNotAddThanosParams)
 	return qc
 }
 

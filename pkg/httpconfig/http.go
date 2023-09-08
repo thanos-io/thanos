@@ -173,7 +173,11 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		return newRT(tlsConfig)
 	}
 
-	return config_util.NewTLSRoundTripper(tlsConfig, cfg.TLSConfig.CAFile, cfg.TLSConfig.CertFile, cfg.TLSConfig.KeyFile, newRT)
+	return config_util.NewTLSRoundTripper(tlsConfig, config_util.TLSRoundTripperSettings{
+		CAFile:   cfg.TLSConfig.CAFile,
+		CertFile: cfg.TLSConfig.CertFile,
+		KeyFile:  cfg.TLSConfig.KeyFile,
+	}, newRT)
 }
 
 // NewHTTPClient returns a new HTTP client.

@@ -21,8 +21,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -71,6 +73,7 @@ func RunDownsample(
 	dataDir string,
 	waitInterval time.Duration,
 	downsampleConcurrency int,
+	blockFilesConcurrency int,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
 	hashFunc metadata.HashFunc,
@@ -80,15 +83,16 @@ func RunDownsample(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Downsample.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, component.Downsample.String())
 	if err != nil {
 		return err
 	}
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	// While fetching blocks, filter out blocks that were marked for no downsample.
-	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
 		block.NewDeduplicateFilter(block.FetcherConcurrency),
-		downsample.NewGatherNoDownsampleMarkFilter(logger, bkt),
+		downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt),
 	})
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
@@ -97,7 +101,7 @@ func RunDownsample(
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
-			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 		}
 	}()
 
@@ -113,7 +117,7 @@ func RunDownsample(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 			statusProber.Ready()
 
 			return runutil.Repeat(waitInterval, ctx.Done(), func() error {
@@ -128,7 +132,7 @@ func RunDownsample(
 					metrics.downsamples.WithLabelValues(groupKey)
 					metrics.downsampleFailures.WithLabelValues(groupKey)
 				}
-				if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 
@@ -137,7 +141,7 @@ func RunDownsample(
 				if err != nil {
 					return errors.Wrap(err, "sync before second pass of downsampling")
 				}
-				if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 				return nil
@@ -176,6 +180,7 @@ func downsampleBucket(
 	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
 	downsampleConcurrency int,
+	blockFilesConcurrency int,
 	hashFunc metadata.HashFunc,
 	acceptMalformedIndex bool,
 ) (rerr error) {
@@ -255,7 +260,7 @@ func downsampleBucket(
 					resolution = downsample.ResLevel2
 					errMsg = "downsampling to 60 min"
 				}
-				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics, acceptMalformedIndex); err != nil {
+				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics, acceptMalformedIndex, blockFilesConcurrency); err != nil {
 					metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
 					errCh <- errors.Wrap(err, errMsg)
 
@@ -345,11 +350,12 @@ func processDownsampling(
 	hashFunc metadata.HashFunc,
 	metrics *DownsampleMetrics,
 	acceptMalformedIndex bool,
+	blockFilesConcurrency int,
 ) error {
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := block.Download(ctx, logger, bkt, m.ULID, bdir)
+	err := block.Download(ctx, logger, bkt, m.ULID, bdir, objstore.WithFetchConcurrency(blockFilesConcurrency))
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}
@@ -385,8 +391,27 @@ func processDownsampling(
 		"from", m.ULID, "to", id, "duration", downsampleDuration, "duration_ms", downsampleDuration.Milliseconds())
 	metrics.downsampleDuration.WithLabelValues(m.Thanos.GroupKey()).Observe(downsampleDuration.Seconds())
 
-	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil && !acceptMalformedIndex {
+	stats, err := block.GatherIndexHealthStats(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime)
+	if err == nil {
+		err = stats.AnyErr()
+	}
+	if err != nil && !acceptMalformedIndex {
 		return errors.Wrap(err, "output block index not valid")
+	}
+
+	meta, err := metadata.ReadFromDir(resdir)
+	if err != nil {
+		return errors.Wrap(err, "read meta")
+	}
+
+	if stats.ChunkMaxSize > 0 {
+		meta.Thanos.IndexStats.ChunkMaxSize = stats.ChunkMaxSize
+	}
+	if stats.SeriesMaxSize > 0 {
+		meta.Thanos.IndexStats.SeriesMaxSize = stats.SeriesMaxSize
+	}
+	if err := meta.WriteToDir(logger, resdir); err != nil {
+		return errors.Wrap(err, "write meta")
 	}
 
 	begin = time.Now()

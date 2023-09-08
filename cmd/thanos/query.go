@@ -55,6 +55,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
@@ -95,8 +96,6 @@ func registerQuery(app *extkingpin.App) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 	webDisableCORS := cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").Default("false").Bool()
-
-	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -218,6 +217,10 @@ func registerQuery(app *extkingpin.App) {
 	queryTelemetrySamplesQuantiles := cmd.Flag("query.telemetry.request-samples-quantiles", "The quantiles for exporting metrics about the samples count quantiles.").Default("100", "1000", "10000", "100000", "1000000").Float64List()
 	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Float64List()
 
+	tenantHeader := cmd.Flag("query.tenant-header", "HTTP header to determine tenant.").Default(tenancy.DefaultTenantHeader).Hidden().String()
+	defaultTenant := cmd.Flag("query.default-tenant", "Name of the default tenant.").Default(tenancy.DefaultTenant).Hidden().String()
+	tenantCertField := cmd.Flag("query.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query.tenant-header flag value to be ignored.").Default("").Hidden().Enum("", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
+
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -240,12 +243,12 @@ func registerQuery(app *extkingpin.App) {
 			}
 		}
 
-		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -337,6 +340,9 @@ func registerQuery(app *extkingpin.App) {
 			*defaultEngine,
 			storeRateLimits,
 			queryMode(*promqlQueryMode),
+			*tenantHeader,
+			*defaultTenant,
+			*tenantCertField,
 		)
 	})
 }
@@ -413,6 +419,9 @@ func runQuery(
 	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
+	tenantHeader string,
+	defaultTenant string,
+	tenantCertField string,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -740,13 +749,16 @@ func runQuery(
 				maxConcurrentQueries,
 				gate.Queries,
 			),
-			store.NewSeriesStatsAggregator(
+			store.NewSeriesStatsAggregatorFactory(
 				reg,
 				queryTelemetryDurationQuantiles,
 				queryTelemetrySamplesQuantiles,
 				queryTelemetrySeriesQuantiles,
 			),
 			reg,
+			tenantHeader,
+			defaultTenant,
+			tenantCertField,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)

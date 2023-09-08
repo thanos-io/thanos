@@ -177,7 +177,7 @@ func TestQueryRange_e2e(t *testing.T) {
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		res, _, err := NewDefaultClient().QueryRange(
+		res, _, _, err := NewDefaultClient().QueryRange(
 			ctx,
 			u,
 			`{a="b"}`,

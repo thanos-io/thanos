@@ -103,6 +103,16 @@ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
+### Deduplication on non-external labels
+
+In `v0.31.0` we have implemented an [optimization](../proposals-accepted/20221129-avoid-global-sort.md) which broke deduplication on non-external labels. We think that it was just a coincidence that deduplication worked at all on non-external labels in previous versions.
+
+External labels always override any labels a series might have and this makes it so that it is possible to remove replica labels on series returned by a StoreAPI as an optimization. If deduplication happens on internal labels then that might lead to unsorted series from a StoreAPI and that breaks deduplication.
+
+To fix this use-case, in 0.32.0 we've implemented a cuckoo filter on label names that is updated every 10 seconds. Using it we can detect whether deduplication was requested on internal labels. If that is the case then the series set is resorted before being sent off to the querier. It is strongly recommended to set replica labels which are external labels because otherwise the optimization cannot be applied and your queries will be slower by 20-30%.
+
+In the future we have plans to expose this cuckoo filter through the InfoAPI. This will allow better scoping queries to StoreAPIs.
+
 ## Experimental PromQL Engine
 
 By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
@@ -341,15 +351,6 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would
-                                 be soon deprecated, and replaced with
-                                 `request.logging-config`. Request Logging
-                                 for logging the start and end of requests. By
-                                 default this flag is disabled. LogFinishCall:
-                                 Logs the finish call of the requests.
-                                 LogStartAndFinishCall: Logs the start and
-                                 finish call of the requests. NoLogCall: Disable
-                                 request logging.
       --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
@@ -513,6 +514,8 @@ Thanos Query also exports metrics about its own performance. You can find a list
 
 **Disclaimer**: this list is incomplete. The remaining metrics will be added over time.
 
-| Name                                    | Type      | Labels                | Description                                                                                                       |
-|-----------------------------------------|-----------|-----------------------|-------------------------------------------------------------------------------------------------------------------|
-| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
+| Name                                    | Type      | Labels                                          | Description                                                                                                       |
+|-----------------------------------------|-----------|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| grpc_client_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC client requests handled by this query instance (including errors)                                  |
+| grpc_server_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC server requests handled by this query instance (including errors)                                  |
+| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le                           | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |

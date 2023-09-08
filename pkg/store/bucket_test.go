@@ -34,11 +34,14 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
+	"golang.org/x/exp/slices"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
@@ -57,6 +60,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
+	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -211,7 +215,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 			},
 		},
 	}
-	b, _ := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
+	b, _ := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	ms := []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
 	}
@@ -259,7 +263,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -1138,7 +1142,6 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 func createBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
 	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil, nil)
 	testutil.Ok(t, err)
-
 	testutil.Ok(t, os.MkdirAll(dir, 0777))
 
 	// Add +1 millisecond to block maxt because block intervals are half-open: [b.MinTime, b.MaxTime).
@@ -1158,16 +1161,14 @@ func benchmarkExpandedPostings(
 	series int,
 ) {
 	n1 := labels.MustNewMatcher(labels.MatchEqual, "n", "1"+storetestutil.LabelLongSuffix)
-
 	jFoo := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	jNotFoo := labels.MustNewMatcher(labels.MatchNotEqual, "j", "foo")
-
 	iStar := labels.MustNewMatcher(labels.MatchRegexp, "i", "^.*$")
 	iPlus := labels.MustNewMatcher(labels.MatchRegexp, "i", "^.+$")
 	i1Plus := labels.MustNewMatcher(labels.MatchRegexp, "i", "^1.+$")
 	iEmptyRe := labels.MustNewMatcher(labels.MatchRegexp, "i", "^$")
 	iNotEmpty := labels.MustNewMatcher(labels.MatchNotEqual, "i", "")
-	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+storetestutil.LabelLongSuffix)
+	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "i", "2"+storetestutil.LabelLongSuffix)
 	iNot2Star := labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")
 	iRegexSet := labels.MustNewMatcher(labels.MatchRegexp, "i", "0"+storetestutil.LabelLongSuffix+"|1"+storetestutil.LabelLongSuffix+"|2"+storetestutil.LabelLongSuffix)
 	bigValueSetSize := series / 10
@@ -1200,22 +1201,20 @@ func benchmarkExpandedPostings(
 		{`i=~""`, []*labels.Matcher{iEmptyRe}, 0},
 		{`i!=""`, []*labels.Matcher{iNotEmpty}, 5 * series},
 		{`n="1",i=~".*",j="foo"`, []*labels.Matcher{n1, iStar, jFoo}, int(float64(series) * 0.1)},
-		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(float64(series)/10 - 1)},
 		{`n="1",i!=""`, []*labels.Matcher{n1, iNotEmpty}, int(float64(series) * 0.2)},
 		{`n="1",i!="",j="foo"`, []*labels.Matcher{n1, iNotEmpty, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~"1.+",j="foo"`, []*labels.Matcher{n1, i1Plus, jFoo}, int(float64(series) * 0.011111)},
-		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series)/10 - 1)},
 		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
+		{`n="1",i=~".+",i=~".+",i=~".+",i=~".+",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, iPlus, iPlus, iPlus, iPlus, jFoo}, int(float64(series) * 0.1)},
 		{`i=~"0|1|2"`, []*labels.Matcher{iRegexSet}, 150}, // 50 series for "1", 50 for "2" and 50 for "3".
 		{`uniq=~"9|random-shuffled-values|1"`, []*labels.Matcher{iRegexBigValueSet}, bigValueSetSize},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t testutil.TB) {
-			if c.name != `i=~".*"` {
-				return
-			}
 			b := &bucketBlock{
 				logger:            log.NewNopLogger(),
 				metrics:           newBucketStoreMetrics(nil),
@@ -1230,12 +1229,44 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), c.matchers, NewBytesLimiterFactory(0)(nil))
+				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil))
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
 		})
 	}
+}
+
+func TestExpandedPostingsEmptyPostings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	id := uploadTestBlock(t, tmpDir, bkt, 100)
+
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling)
+	testutil.Ok(t, err)
+	b := &bucketBlock{
+		logger:            log.NewNopLogger(),
+		metrics:           newBucketStoreMetrics(nil),
+		indexHeaderReader: r,
+		indexCache:        noopCache{},
+		bkt:               bkt,
+		meta:              &metadata.Meta{BlockMeta: tsdb.BlockMeta{ULID: id}},
+		partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
+	}
+
+	indexr := newBucketIndexReader(b)
+	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
+	// Match nothing.
+	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
+	ps, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil))
+	testutil.Ok(t, err)
+	testutil.Equals(t, len(ps), 0)
+	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
+	testutil.Equals(t, 1, indexr.stats.cachedPostingsCompressions)
 }
 
 func TestBucketSeries(t *testing.T) {
@@ -1487,7 +1518,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 100e7)
 	testutil.Ok(t, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{
 		MaxItemSize: 3000,
 		// This is the exact size of cache needed for our *single request*.
 		// This is limited in order to make sure we test evictions.
@@ -1530,14 +1561,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b1 = &bucketBlock{
-			indexCache:  indexCache,
-			logger:      logger,
-			metrics:     newBucketStoreMetrics(nil),
-			bkt:         bkt,
-			meta:        meta,
-			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
-			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:   chunkPool,
+			indexCache:             indexCache,
+			logger:                 logger,
+			metrics:                newBucketStoreMetrics(nil),
+			bkt:                    bkt,
+			meta:                   meta,
+			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+			chunkObjs:              []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:              chunkPool,
+			estimatedMaxSeriesSize: EstimatedMaxSeriesSize,
+			estimatedMaxChunkSize:  EstimatedMaxChunkSize,
 		}
 		b1.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b1.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
@@ -1569,14 +1602,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b2 = &bucketBlock{
-			indexCache:  indexCache,
-			logger:      logger,
-			metrics:     newBucketStoreMetrics(nil),
-			bkt:         bkt,
-			meta:        meta,
-			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
-			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:   chunkPool,
+			indexCache:             indexCache,
+			logger:                 logger,
+			metrics:                newBucketStoreMetrics(nil),
+			bkt:                    bkt,
+			meta:                   meta,
+			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+			chunkObjs:              []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:              chunkPool,
+			estimatedMaxSeriesSize: EstimatedMaxSeriesSize,
+			estimatedMaxChunkSize:  EstimatedMaxChunkSize,
 		}
 		b2.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b2.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
@@ -1599,6 +1634,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 		bytesLimiterFactory:  NewBytesLimiterFactory(0),
+		labelNamesSet:        stringset.AllStrings(),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1786,7 +1822,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -1877,7 +1913,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -1954,6 +1990,168 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 			testutil.Assert(t, testData.expectedSamples == numSamples, "expected: %d, actual: %d", testData.expectedSamples, numSamples)
 		})
 	}
+}
+
+func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
+	tests := map[string]struct {
+		series         [][]labels.Labels
+		replicaLabels  []string
+		expectedSeries []labels.Labels
+	}{
+		"use TSDB label as replica label": {
+			series: [][]labels.Labels{
+				{
+					labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "2"),
+					labels.FromStrings("a", "2", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "2", "replica", "2", "z", "1"),
+				},
+				{
+					labels.FromStrings("a", "1", "replica", "3", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "3", "z", "2"),
+					labels.FromStrings("a", "2", "replica", "3", "z", "1"),
+				},
+			},
+			replicaLabels: []string{"replica"},
+			expectedSeries: []labels.Labels{
+				labels.FromStrings("a", "1", "ext1", "0", "z", "1"),
+				labels.FromStrings("a", "1", "ext1", "0", "z", "2"),
+				labels.FromStrings("a", "1", "ext1", "1", "z", "1"),
+				labels.FromStrings("a", "1", "ext1", "1", "z", "2"),
+				labels.FromStrings("a", "2", "ext1", "0", "z", "1"),
+				labels.FromStrings("a", "2", "ext1", "1", "z", "1"),
+			},
+		},
+		"use external label as replica label": {
+			series: [][]labels.Labels{
+				{
+					labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "2"),
+				},
+				{
+					labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+				},
+			},
+			replicaLabels: []string{"ext1"},
+			expectedSeries: []labels.Labels{
+				labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+				labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+				labels.FromStrings("a", "1", "replica", "2", "z", "1"),
+				labels.FromStrings("a", "1", "replica", "2", "z", "2"),
+			},
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			tb := testutil.NewTB(t)
+
+			tmpDir := t.TempDir()
+
+			bktDir := filepath.Join(tmpDir, "bucket")
+			bkt, err := filesystem.NewBucket(bktDir)
+			testutil.Ok(t, err)
+			defer testutil.Ok(t, bkt.Close())
+
+			instrBkt := objstore.WithNoopInstr(bkt)
+			logger := log.NewNopLogger()
+
+			for i, series := range testData.series {
+				replicaVal := strconv.Itoa(i)
+				head := uploadSeriesToBucket(t, bkt, replicaVal, filepath.Join(tmpDir, replicaVal), series)
+				defer testutil.Ok(t, head.Close())
+			}
+
+			// Instance a real bucket store we'll use to query the series.
+			fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
+			testutil.Ok(tb, err)
+
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+			testutil.Ok(tb, err)
+
+			store, err := NewBucketStore(
+				instrBkt,
+				fetcher,
+				tmpDir,
+				NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
+				NewSeriesLimiterFactory(0),
+				NewBytesLimiterFactory(0),
+				NewGapBasedPartitioner(PartitionerMaxGapSize),
+				10,
+				false,
+				DefaultPostingOffsetInMemorySampling,
+				true,
+				false,
+				0,
+				WithLogger(logger),
+				WithIndexCache(indexCache),
+			)
+			testutil.Ok(tb, err)
+			testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+			req := &storepb.SeriesRequest{
+				MinTime: math.MinInt,
+				MaxTime: math.MaxInt64,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
+				},
+				WithoutReplicaLabels: testData.replicaLabels,
+			}
+
+			srv := newStoreSeriesServer(context.Background())
+			err = store.Series(req, srv)
+			testutil.Ok(t, err)
+			testutil.Assert(t, len(srv.SeriesSet) == len(testData.expectedSeries))
+
+			var response []labels.Labels
+			for _, respSeries := range srv.SeriesSet {
+				promLabels := labelpb.ZLabelsToPromLabels(respSeries.Labels)
+				response = append(response, promLabels)
+			}
+
+			testutil.Equals(t, testData.expectedSeries, response)
+		})
+	}
+}
+
+func uploadSeriesToBucket(t *testing.T, bkt *filesystem.Bucket, replica string, path string, series []labels.Labels) *tsdb.Head {
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(path, "block")
+
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+
+	for _, s := range series {
+		for ts := int64(0); ts < 100; ts++ {
+			// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
+			// (except the last one, which could be smaller).
+			app := h.Appender(context.Background())
+			_, err := app.Append(0, s, ts, float64(ts))
+			testutil.Ok(t, err)
+			testutil.Ok(t, app.Commit())
+		}
+	}
+
+	blk := storetestutil.CreateBlockFromHead(t, headOpts.ChunkDirRoot, h)
+
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: replica}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(headOpts.ChunkDirRoot, blk.String()), thanosMeta, nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, block.Upload(context.Background(), log.NewNopLogger(), bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
+	testutil.Ok(t, err)
+
+	return h
 }
 
 func mustMarshalAny(pb proto.Message) *types.Any {
@@ -2059,7 +2257,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2275,7 +2473,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2397,7 +2595,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil)
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
 	testutil.Ok(b, err)
 
 	b.ResetTimer()
@@ -2482,11 +2680,11 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	// Create an index header reader.
 	indexHeaderReader, err := indexheader.NewBinaryReader(ctx, logger, bkt, tmpDir, blockMeta.ULID, DefaultPostingOffsetInMemorySampling)
 	testutil.Ok(b, err)
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.DefaultInMemoryIndexCacheConfig)
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner)
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
 	testutil.Ok(b, err)
 	return blk, blockMeta
 }
@@ -2528,6 +2726,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// TODO FIXME! testutil.Ok calls b.Fatalf under the hood, which
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
+				sortedMatchers := newSortedMatchers(matchers)
 
 				dummyHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{})
 				blockClient := newBlockSeriesClient(
@@ -2543,7 +2742,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					dummyHistogram,
 					nil,
 				)
-				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter))
+				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter))
 				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).
@@ -2567,4 +2766,671 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 			})
 		}
 	}
+}
+
+func TestExpandPostingsWithContextCancel(t *testing.T) {
+	p := index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cancel()
+	res, err := ExpandPostingsWithContext(ctx, p)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, context.Canceled, err)
+	testutil.Equals(t, []storage.SeriesRef(nil), res)
+}
+
+func TestMatchersToPostingGroup(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name        string
+		matchers    []*labels.Matcher
+		labelValues map[string][]string
+		expected    []*postingGroup
+	}{
+		{
+			name: "single equal matcher",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "deduplicate two equal matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "deduplicate multiple equal matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "two equal matchers with different label name, merge",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "bar", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+				"bar": {"baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "bar",
+					addAll:  false,
+					addKeys: []string{"baz"},
+				},
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "two different equal matchers with same label name, intersect",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: nil,
+		},
+		{
+			name: "Intersect equal and unequal matcher, no hit",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: nil,
+		},
+		{
+			name: "Intersect equal and unequal matcher, has result",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect equal and regex matcher, no result",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "x.*"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+		},
+		{
+			name: "Intersect equal and regex matcher, have result",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "b.*"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect equal and unequal inverse matcher",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", ""),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect equal and regexp matching non empty matcher",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", ".+"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Intersect two regex matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "bar|baz"),
+				labels.MustNewMatcher(labels.MatchRegexp, "foo", "bar|buzz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"bar", "baz", "buzz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    "foo",
+					addAll:  false,
+					addKeys: []string{"bar"},
+				},
+			},
+		},
+		{
+			name: "Merge inverse matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "foo", "baz"),
+			},
+			labelValues: map[string][]string{
+				"foo": {"buzz", "bar", "baz"},
+			},
+			expected: []*postingGroup{
+				{
+					name:       "foo",
+					addAll:     true,
+					removeKeys: []string{"bar", "baz"},
+				},
+			},
+		},
+		{
+			name: "Dedup match all regex matchers",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+			},
+			labelValues: map[string][]string{
+				labels.MetricName: {"up", "go_info"},
+			},
+			expected: []*postingGroup{
+				{
+					name:   labels.MetricName,
+					addAll: true,
+				},
+			},
+		},
+		{
+			name: "Multiple posting groups",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "up"),
+				labels.MustNewMatcher(labels.MatchRegexp, "job", ".*"),
+				labels.MustNewMatcher(labels.MatchNotEqual, "cluster", ""),
+			},
+			labelValues: map[string][]string{
+				labels.MetricName: {"up", "go_info"},
+				"cluster":         {"us-east-1", "us-west-2"},
+				"job":             {"prometheus", "thanos"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    labels.MetricName,
+					addAll:  false,
+					addKeys: []string{"up"},
+				},
+				{
+					name:    "cluster",
+					addAll:  false,
+					addKeys: []string{"us-east-1", "us-west-2"},
+				},
+				{
+					name:   "job",
+					addAll: true,
+				},
+			},
+		},
+		{
+			name: "Multiple unequal empty",
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotEqual, labels.MetricName, ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, labels.MetricName, ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "job", ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "job", ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "cluster", ""),
+				labels.MustNewMatcher(labels.MatchNotEqual, "cluster", ""),
+			},
+			labelValues: map[string][]string{
+				labels.MetricName: {"up", "go_info"},
+				"cluster":         {"us-east-1", "us-west-2"},
+				"job":             {"prometheus", "thanos"},
+			},
+			expected: []*postingGroup{
+				{
+					name:    labels.MetricName,
+					addAll:  false,
+					addKeys: []string{"go_info", "up"},
+				},
+				{
+					name:    "cluster",
+					addAll:  false,
+					addKeys: []string{"us-east-1", "us-west-2"},
+				},
+				{
+					name:    "job",
+					addAll:  false,
+					addKeys: []string{"prometheus", "thanos"},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := matchersToPostingGroups(ctx, func(name string) ([]string, error) {
+				sort.Strings(tc.labelValues[name])
+				return tc.labelValues[name], nil
+			}, tc.matchers)
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestPostingGroupMerge(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		group1   *postingGroup
+		group2   *postingGroup
+		expected *postingGroup
+	}{
+		{
+			name:     "empty group2",
+			group1:   &postingGroup{},
+			group2:   nil,
+			expected: &postingGroup{},
+		},
+		{
+			name:     "group different names, return group1",
+			group1:   &postingGroup{name: "bar"},
+			group2:   &postingGroup{name: "foo"},
+			expected: nil,
+		},
+		{
+			name:     "both same addKey",
+			group1:   &postingGroup{addKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"foo"}},
+			expected: &postingGroup{addKeys: []string{"foo"}},
+		},
+		{
+			name:     "both same addKeys, but different order",
+			group1:   &postingGroup{addKeys: []string{"foo", "bar"}},
+			group2:   &postingGroup{addKeys: []string{"bar", "foo"}},
+			expected: &postingGroup{addKeys: []string{"bar", "foo"}},
+		},
+		{
+			name:     "different addKeys",
+			group1:   &postingGroup{addKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"bar"}},
+			expected: &postingGroup{addKeys: []string{}},
+		},
+		{
+			name:     "intersect common add keys",
+			group1:   &postingGroup{addKeys: []string{"foo", "bar"}},
+			group2:   &postingGroup{addKeys: []string{"bar", "baz"}},
+			expected: &postingGroup{addKeys: []string{"bar"}},
+		},
+		{
+			name:     "both addAll, no remove keys",
+			group1:   &postingGroup{addAll: true},
+			group2:   &postingGroup{addAll: true},
+			expected: &postingGroup{addAll: true},
+		},
+		{
+			name:     "both addAll, one remove keys",
+			group1:   &postingGroup{addAll: true},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+		},
+		{
+			name:     "both addAll, same remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+		},
+		{
+			name:     "both addAll, merge different remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"bar"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"bar", "foo"}},
+		},
+		{
+			name:     "both addAll, multiple remove keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo", "zoo"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"a", "bar"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"a", "bar", "foo", "zoo"}},
+		},
+		{
+			name:     "both addAll, multiple remove keys 2",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"a", "bar"}},
+			group2:   &postingGroup{addAll: true, removeKeys: []string{"foo", "zoo"}},
+			expected: &postingGroup{addAll: true, removeKeys: []string{"a", "bar", "foo", "zoo"}},
+		},
+		{
+			name:     "one add and one remove, only keep addKeys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{""}},
+			expected: &postingGroup{addKeys: []string{""}},
+		},
+		{
+			name:     "one add and one remove, subtract common keys to add and remove",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"", "foo"}},
+			expected: &postingGroup{addKeys: []string{""}},
+		},
+		{
+			name:     "same add and remove key",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"foo"}},
+			group2:   &postingGroup{addKeys: []string{"foo"}},
+			expected: &postingGroup{addKeys: []string{}},
+		},
+		{
+			name:     "same add and remove key, multiple keys",
+			group1:   &postingGroup{addAll: true, removeKeys: []string{"2"}},
+			group2:   &postingGroup{addKeys: []string{"1", "2", "3", "4", "5", "6"}},
+			expected: &postingGroup{addKeys: []string{"1", "3", "4", "5", "6"}},
+		},
+		{
+			name:     "addAll and non addAll posting group merge with empty keys",
+			group1:   &postingGroup{addAll: true, removeKeys: nil},
+			group2:   &postingGroup{addKeys: nil},
+			expected: &postingGroup{addKeys: nil},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.group1 != nil {
+				slices.Sort(tc.group1.addKeys)
+				slices.Sort(tc.group1.removeKeys)
+			}
+			if tc.group2 != nil {
+				slices.Sort(tc.group2.addKeys)
+				slices.Sort(tc.group2.removeKeys)
+			}
+			res := tc.group1.merge(tc.group2)
+			testutil.Equals(t, tc.expected, res)
+		})
+	}
+}
+
+// TestExpandedPostings is a test whether there is a race between multiple ExpandPostings() calls.
+func TestExpandedPostingsRace(t *testing.T) {
+	const blockCount = 10
+
+	tmpDir := t.TempDir()
+	t.Cleanup(func() {
+		testutil.Ok(t, os.RemoveAll(tmpDir))
+	})
+
+	bkt := objstore.NewInMemBucket()
+	t.Cleanup(func() {
+		testutil.Ok(t, bkt.Close())
+	})
+
+	// Create a block.
+	head, _ := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
+		TSDBDir:          filepath.Join(tmpDir, "head"),
+		SamplesPerSeries: 10,
+		ScrapeInterval:   15 * time.Second,
+		Series:           1000,
+		PrependLabels:    nil,
+		Random:           rand.New(rand.NewSource(120)),
+		SkipChunks:       true,
+	})
+	blockID := createBlockFromHead(t, tmpDir, head)
+
+	bucketBlocks := make([]*bucketBlock, 0, blockCount)
+
+	for i := 0; i < blockCount; i++ {
+		ul := ulid.MustNew(uint64(i), rand.New(rand.NewSource(444)))
+
+		// Upload the block to the bucket.
+		thanosMeta := metadata.Thanos{
+			Labels:     labels.Labels{{Name: "ext1", Value: fmt.Sprintf("%d", i)}}.Map(),
+			Downsample: metadata.ThanosDownsample{Resolution: 0},
+			Source:     metadata.TestSource,
+		}
+		m, err := metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
+		testutil.Ok(t, err)
+
+		m.Thanos = thanosMeta
+		m.BlockMeta.ULID = ul
+
+		e2eutil.Copy(t, filepath.Join(tmpDir, blockID.String()), filepath.Join(tmpDir, ul.String()))
+		testutil.Ok(t, m.WriteToDir(log.NewLogfmtLogger(os.Stderr), filepath.Join(tmpDir, ul.String())))
+		testutil.Ok(t, err)
+		testutil.Ok(t, block.Upload(context.Background(), log.NewLogfmtLogger(os.Stderr), bkt, filepath.Join(tmpDir, ul.String()), metadata.NoneFunc))
+
+		r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, ul, DefaultPostingOffsetInMemorySampling)
+		testutil.Ok(t, err)
+
+		blk, err := newBucketBlock(
+			context.Background(),
+			log.NewLogfmtLogger(os.Stderr),
+			newBucketStoreMetrics(nil),
+			m,
+			bkt,
+			filepath.Join(tmpDir, ul.String()),
+			noopCache{},
+			nil,
+			r,
+			NewGapBasedPartitioner(PartitionerMaxGapSize),
+			nil,
+			nil,
+		)
+		testutil.Ok(t, err)
+
+		bucketBlocks = append(bucketBlocks, blk)
+	}
+
+	tm, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	t.Cleanup(cancel)
+
+	l := sync.Mutex{}
+	previousRefs := make(map[int][]storage.SeriesRef)
+
+	for {
+		if tm.Err() != nil {
+			break
+		}
+
+		m := []*labels.Matcher{
+			labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			labels.MustNewMatcher(labels.MatchRegexp, "j", ".+"),
+			labels.MustNewMatcher(labels.MatchRegexp, "i", ".+"),
+			labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			labels.MustNewMatcher(labels.MatchRegexp, "j", ".+"),
+			labels.MustNewMatcher(labels.MatchRegexp, "i", ".+"),
+			labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+		}
+
+		wg := &sync.WaitGroup{}
+		for i, bb := range bucketBlocks {
+			wg.Add(1)
+			i := i
+			bb := bb
+			go func(i int, bb *bucketBlock) {
+				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil))
+				testutil.Ok(t, err)
+				defer wg.Done()
+
+				l.Lock()
+				defer l.Unlock()
+				if previousRefs[i] != nil {
+					testutil.Equals(t, previousRefs[i], refs)
+				} else {
+					previousRefs[i] = refs
+				}
+			}(i, bb)
+		}
+		wg.Wait()
+	}
+}
+
+func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
+	bir := bucketIndexReader{stats: &queryStats{}}
+	t.Run("should return error on broken cached postings without snappy prefix", func(t *testing.T) {
+		_, _, err := bir.decodeCachedPostings([]byte("foo"))
+		testutil.NotOk(t, err)
+	})
+	t.Run("should return error on broken cached postings with snappy prefix", func(t *testing.T) {
+		_, _, err := bir.decodeCachedPostings(append([]byte(codecHeaderSnappy), []byte("foo")...))
+		testutil.NotOk(t, err)
+	})
+}
+
+func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+	bktDir := filepath.Join(tmpDir, "bkt")
+	auxDir := filepath.Join(tmpDir, "aux")
+	metaDir := filepath.Join(tmpDir, "meta")
+	extLset := labels.FromStrings("region", "eu-west")
+
+	testutil.Ok(t, os.MkdirAll(metaDir, os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(auxDir, os.ModePerm))
+
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	for i := 0; i < 2; i++ {
+		headOpts := tsdb.DefaultHeadOptions()
+		headOpts.ChunkDirRoot = tmpDir
+		headOpts.ChunkRange = 1000
+		h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+		testutil.Ok(t, err)
+		t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+		app := h.Appender(context.Background())
+		_, err = app.Append(0, labels.FromStrings("replica", "a", "z", "1"), 0, 1)
+		testutil.Ok(t, err)
+		_, err = app.Append(0, labels.FromStrings("replica", "a", "z", "2"), 0, 1)
+		testutil.Ok(t, err)
+		_, err = app.Append(0, labels.FromStrings("replica", "b", "z", "1"), 0, 1)
+		testutil.Ok(t, err)
+		_, err = app.Append(0, labels.FromStrings("replica", "b", "z", "2"), 0, 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, app.Commit())
+
+		id := createBlockFromHead(t, auxDir, h)
+
+		auxBlockDir := filepath.Join(auxDir, id.String())
+		_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
+			Labels:     extLset.Map(),
+			Downsample: metadata.ThanosDownsample{Resolution: 0},
+			Source:     metadata.TestSource,
+		}, nil)
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+	}
+
+	chunkPool, err := NewDefaultChunkBytesPool(2e5)
+	testutil.Ok(t, err)
+
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(
+		objstore.WithNoopInstr(bkt),
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(10e6),
+		NewSeriesLimiterFactory(10e6),
+		NewBytesLimiterFactory(10e6),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+
+	// make sure to have updated inner label names
+	bucketStore.UpdateLabelNames()
+
+	srv := newStoreSeriesServer(context.Background())
+	testutil.Ok(t, bucketStore.Series(&storepb.SeriesRequest{
+		WithoutReplicaLabels: []string{"replica"},
+		MinTime:              timestamp.FromTime(minTime),
+		MaxTime:              timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_NEQ, Name: "z", Value: ""},
+		},
+	}, srv))
+
+	testutil.Equals(t, 2, len(srv.SeriesSet))
 }

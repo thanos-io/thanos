@@ -37,8 +37,12 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
+	"github.com/prometheus/prometheus/tsdb/wlog"
 	"github.com/prometheus/prometheus/util/strutil"
+
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -140,8 +144,6 @@ func registerRule(app *extkingpin.App) {
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
-	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
-
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
@@ -163,11 +165,11 @@ func registerRule(app *extkingpin.App) {
 			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:        *noLockFile,
-			WALCompression:    *walCompression,
+			WALCompression:    wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: *walCompression,
+			WALCompression: wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
 			NoLockfile:     *noLockFile,
 		}
 
@@ -206,12 +208,12 @@ func registerRule(app *extkingpin.App) {
 			return err
 		}
 
-		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -522,7 +524,7 @@ func runRule(
 				OutageTolerance: conf.outageTolerance,
 				ForGracePeriod:  conf.forGracePeriod,
 			},
-			queryFuncCreator(logger, queryClients, promClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod),
+			queryFuncCreator(logger, queryClients, promClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -640,6 +642,21 @@ func runRule(
 		)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		level.Debug(logger).Log("msg", "setting up periodic update for label names")
+		g.Add(func() error {
+			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
+				level.Debug(logger).Log("msg", "Starting label names update")
+
+				tsdbStore.UpdateLabelNames(ctx)
+
+				level.Debug(logger).Log("msg", "Finished label names update")
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
 	}
 
 	options = append(options, grpcserver.WithServer(
@@ -716,10 +733,11 @@ func runRule(
 	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Rule.String())
 		if err != nil {
 			return err
 		}
+		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Ensure we close up everything properly.
 		defer func() {
@@ -728,7 +746,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, conf.dataDir, bkt, func() labels.Labels { return conf.lset }, metadata.RulerSource, false, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc))
+		s := shipper.New(logger, reg, conf.dataDir, bkt, func() labels.Labels { return conf.lset }, metadata.RulerSource, nil, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc))
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -804,6 +822,7 @@ func queryFuncCreator(
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
+	doNotAddThanosParams bool,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -831,6 +850,7 @@ func queryFuncCreator(
 						Deduplicate:             true,
 						PartialResponseStrategy: partialResponseStrategy,
 						Method:                  httpMethod,
+						DoNotAddThanosParams:    doNotAddThanosParams,
 					})
 					span.Finish()
 

@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -64,6 +65,14 @@ func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []by
 
 func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
+}
+
+func (c *swappableCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte) {
+	c.ptr.StoreExpandedPostings(blockID, matchers, v)
+}
+
+func (c *swappableCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
+	return c.ptr.FetchExpandedPostings(ctx, blockID, matchers)
 }
 
 func (c *swappableCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
@@ -487,7 +496,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		}
 
 		if ok := t.Run("with large, sufficient index cache", func(t *testing.T) {
-			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, nil, storecache.InMemoryIndexCacheConfig{
 				MaxItemSize: 1e5,
 				MaxSize:     2e5,
 			})
@@ -499,7 +508,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		}
 
 		t.Run("with small index cache", func(t *testing.T) {
-			indexCache2, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
+			indexCache2, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, nil, storecache.InMemoryIndexCacheConfig{
 				MaxItemSize: 50,
 				MaxSize:     100,
 			})
@@ -532,7 +541,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 
 		s := prepareStoreWithTestBlocks(t, dir, bkt, true, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
 
-		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
+		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, nil, storecache.InMemoryIndexCacheConfig{
 			MaxItemSize: 1e5,
 			MaxSize:     2e5,
 		})
@@ -767,6 +776,30 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 				testutil.Equals(t, tc.expected, vals.Names)
 			})
 		}
+	})
+}
+
+func TestBucketStore_LabelNamesSet_e2e(t *testing.T) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		dir := t.TempDir()
+
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s.cache.SwapWith(noopCache{})
+
+		mint, maxt := s.store.TimeRange()
+		testutil.Equals(t, s.minTime, mint)
+		testutil.Equals(t, s.maxTime, maxt)
+
+		s.store.UpdateLabelNames()
+		for _, b := range s.store.blocks {
+			waitTimeout(t, &b.pendingReaders, 5*time.Second)
+		}
+
+		filter := s.store.LabelNamesSet()
+		for _, n := range []string{"a", "b", "c"} {
+			testutil.Assert(t, filter.Has(n), "expected filter to have %s", n)
+		}
+		testutil.Equals(t, 3, filter.Count())
 	})
 }
 

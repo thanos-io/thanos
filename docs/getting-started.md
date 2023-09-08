@@ -121,6 +121,9 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Blog posts
 
+* 2023:
+  * [Thanos Ruler and Prometheus Rules — a match made in heaven.](https://medium.com/@helia.barroso/thanos-ruler-and-prometheus-rules-a-match-made-in-heaven-a4f08f2399ac)
+
 * 2022:
   * [Thanos at Medallia: A Hybrid Architecture Scaled to Support 1 Billion+ Series Across 40+ Data Centers](https://thanos.io/blog/2022-09-08-thanos-at-medallia/)
   * [Deploy Thanos Receive with native OCI Object Storage on Oracle Kubernetes Engine](https://medium.com/@lmukadam/deploy-thanos-receive-with-native-oci-object-storage-on-kubernetes-829326ea0bc6)

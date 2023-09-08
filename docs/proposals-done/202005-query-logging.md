@@ -131,8 +131,8 @@ For HTTP, all these nice middlewares are not present, so we need to code up our 
 
 **Policy of Request Logging** : We are going to use the following middleware decider for achieving the above objectives -
 
-* [`logging.WithDecider`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L51) - This `option` would help us in deciding the logic whether a given request should be logged or not. This should help in logging specific / all queries. It is all pre request interception.
-* [`logging.WithLevels`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L58) - This `option` would help us in fixating the level of query that we might want to log. So based on a query hitting a certain criteria, we can switch the levels of it.
+* [`logging.WithDecider`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2.0.0-rc.5/interceptors/logging/options.go#L51) - This `option` would help us in deciding the logic whether a given request should be logged or not. This should help in logging specific / all queries. It is all pre request interception.
+* [`logging.WithLevels`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2.0.0-rc.5/interceptors/logging/options.go#L58) - This `option` would help us in fixating the level of query that we might want to log. So based on a query hitting a certain criteria, we can switch the levels of it.
 * For using the request-id, we can store the request-id in the metadata of the `context`, and while logging, we can use it.
 * Same equivalent for the HTTP can be implemented for mirroring the logic of *gRPC middlewares*.
 * So we would generally have request logging and options:

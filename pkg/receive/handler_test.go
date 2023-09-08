@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -47,6 +48,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 type fakeTenantAppendable struct {
@@ -181,10 +183,10 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 	}
 
 	ag := addrGen{}
-	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger())
+	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
-			TenantHeader:      DefaultTenantHeader,
+			TenantHeader:      tenancy.DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Minute,
@@ -739,7 +741,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			testutil.Ok(t, os.WriteFile(tmpLimitsPath, tenantConfig, 0666))
 			limitConfig, _ := extkingpin.NewStaticPathContent(tmpLimitsPath)
 			handler.Limiter, _ = NewLimiter(
-				limitConfig, nil, RouterIngestor, log.NewNopLogger(),
+				limitConfig, nil, RouterIngestor, log.NewNopLogger(), 1*time.Second,
 			)
 
 			wreq := &prompb.WriteRequest{
@@ -1140,8 +1142,7 @@ func TestIsTenantValid(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			h := NewHandler(nil, &Options{})
-			err := h.isTenantValid(tcase.tenant)
+			err := tenancy.IsTenantValid(tcase.tenant)
 			if tcase.expectedErr != nil {
 				testutil.NotOk(t, err)
 				testutil.Equals(t, tcase.expectedErr.Error(), err.Error())
@@ -1519,4 +1520,51 @@ func TestRelabel(t *testing.T) {
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}
+}
+
+func TestGetStatsLimitParameter(t *testing.T) {
+	t.Run("invalid limit parameter, not integer", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, "abc")
+		r.URL.RawQuery = q.Encode()
+
+		_, err = getStatsLimitParameter(r)
+		testutil.NotOk(t, err)
+	})
+	t.Run("invalid limit parameter, too large", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, strconv.FormatUint(math.MaxInt+1, 10))
+		r.URL.RawQuery = q.Encode()
+
+		_, err = getStatsLimitParameter(r)
+		testutil.NotOk(t, err)
+	})
+	t.Run("not present returns default", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		limit, err := getStatsLimitParameter(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, limit, DefaultStatsLimit)
+	})
+	t.Run("if present and valid, the parameter is returned", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		const givenLimit = 20
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, strconv.FormatUint(givenLimit, 10))
+		r.URL.RawQuery = q.Encode()
+
+		limit, err := getStatsLimitParameter(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, limit, givenLimit)
+	})
 }

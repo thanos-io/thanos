@@ -45,6 +45,7 @@ import (
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
+
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -61,6 +62,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -160,12 +162,11 @@ type QueryAPI struct {
 
 	queryRangeHist prometheus.Histogram
 
-	seriesStatsAggregator seriesQueryPerformanceMetricsAggregator
-}
+	seriesStatsAggregatorFactory store.SeriesQueryPerformanceMetricsAggregatorFactory
 
-type seriesQueryPerformanceMetricsAggregator interface {
-	Aggregate(seriesStats storepb.SeriesStatsCounter)
-	Observe(duration float64)
+	tenantHeader    string
+	defaultTenant   string
+	tenantCertField string
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -194,11 +195,14 @@ func NewQueryAPI(
 	defaultMetadataTimeRange time.Duration,
 	disableCORS bool,
 	gate gate.Gate,
-	statsAggregator seriesQueryPerformanceMetricsAggregator,
+	statsAggregatorFactory store.SeriesQueryPerformanceMetricsAggregatorFactory,
 	reg *prometheus.Registry,
+	tenantHeader string,
+	defaultTenant string,
+	tenantCertField string,
 ) *QueryAPI {
-	if statsAggregator == nil {
-		statsAggregator = &store.NoopSeriesStatsAggregator{}
+	if statsAggregatorFactory == nil {
+		statsAggregatorFactory = &store.NoopSeriesStatsAggregatorFactory{}
 	}
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
@@ -225,7 +229,10 @@ func NewQueryAPI(
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
-		seriesStatsAggregator:                  statsAggregator,
+		seriesStatsAggregatorFactory:           statsAggregatorFactory,
+		tenantHeader:                           tenantHeader,
+		defaultTenant:                          defaultTenant,
+		tenantCertField:                        tenantCertField,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -505,6 +512,13 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
+	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	if err != nil {
+		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, apiErr, func() {}
+	}
+	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
@@ -523,7 +537,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
-		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
 		ts,
 	)
@@ -558,10 +572,12 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+
+	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator()
 	for i := range seriesStats {
-		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
+		aggregator.Aggregate(seriesStats[i])
 	}
-	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
+	aggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -665,6 +681,13 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
+	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	if err != nil {
+		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, apiErr, func() {}
+	}
+	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
+
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
@@ -686,7 +709,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
-		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
 		start,
 		end,
@@ -720,10 +743,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator()
 	for i := range seriesStats {
-		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
+		aggregator.Aggregate(seriesStats[i])
 	}
-	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
+	aggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -769,6 +793,13 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		}
 		matcherSets = append(matcherSets, matchers)
 	}
+
+	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	if err != nil {
+		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, apiErr, func() {}
+	}
+	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	q, err := qapi.queryableCreate(
 		true,
@@ -866,6 +897,13 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr, func() {}
 	}
 
+	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, "")
+	if err != nil {
+		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, apiErr, func() {}
+	}
+	ctx := context.WithValue(r.Context(), tenancy.TenantKey, tenant)
+
 	q, err := qapi.queryableCreate(
 		enableDedup,
 		replicaLabels,
@@ -876,7 +914,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -926,6 +964,13 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		matcherSets = append(matcherSets, matchers)
 	}
 
+	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, "")
+	if err != nil {
+		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, apiErr, func() {}
+	}
+	ctx := context.WithValue(r.Context(), tenancy.TenantKey, tenant)
+
 	q, err := qapi.queryableCreate(
 		true,
 		nil,
@@ -936,7 +981,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}

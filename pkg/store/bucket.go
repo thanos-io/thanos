@@ -20,11 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weaveworks/common/httpgrpc"
-
-	"github.com/cespare/xxhash"
-
 	"github.com/alecthomas/units"
+	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
@@ -38,8 +35,9 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/weaveworks/common/httpgrpc"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -61,7 +59,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -74,8 +74,8 @@ const (
 	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
 	MaxSamplesPerChunk = 120
 	// EstimatedMaxChunkSize is average max of chunk size. This can be exceeded though in very rare (valid) cases.
-	EstimatedMaxChunkSize = 16000
-	maxSeriesSize         = 64 * 1024
+	EstimatedMaxChunkSize  = 16000
+	EstimatedMaxSeriesSize = 64 * 1024
 	// Relatively large in order to reduce memory waste, yet small enough to avoid excessive allocations.
 	chunkBytesPoolMinSize = 64 * 1024        // 64 KiB
 	chunkBytesPoolMaxSize = 64 * 1024 * 1024 // 64 MiB
@@ -135,6 +135,7 @@ type bucketStoreMetrics struct {
 	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
+	chunkRefetches        prometheus.Counter
 	emptyPostingCount     prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
@@ -231,7 +232,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Name: "thanos_bucket_store_postings_size_bytes",
 		Help: "Size in bytes of the postings for a single series call.",
 		Buckets: []float64{
-			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024, 768 * 1024 * 1024, 1024 * 1024 * 1024,
 		},
 	})
 
@@ -241,7 +242,11 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	}, []string{"reason"})
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
-		Help: fmt.Sprintf("Total number of cases where %v bytes was not enough was to fetch series from index, resulting in refetch.", maxSeriesSize),
+		Help: "Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch.",
+	})
+	m.chunkRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_chunk_refetches_total",
+		Help: "Total number of cases where configured estimated chunk bytes was not enough was to fetch chunks from object store, resulting in refetch.",
 	})
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -275,13 +280,13 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.seriesFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_cached_series_fetch_duration_seconds",
+		Name:    "thanos_bucket_store_series_fetch_duration_seconds",
 		Help:    "The time it takes to fetch series to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
 	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_cached_postings_fetch_duration_seconds",
+		Name:    "thanos_bucket_store_postings_fetch_duration_seconds",
 		Help:    "The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
@@ -304,6 +309,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 type FilterConfig struct {
 	MinTime, MaxTime model.TimeOrDurationValue
 }
+
+type BlockEstimator func(meta metadata.Meta) uint64
 
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
@@ -358,6 +365,12 @@ type BucketStore struct {
 	enableSeriesResponseHints bool
 
 	enableChunkHashCalculation bool
+
+	bmtx          sync.Mutex
+	labelNamesSet stringset.Set
+
+	blockEstimatedMaxSeriesFunc BlockEstimator
+	blockEstimatedMaxChunkFunc  BlockEstimator
 }
 
 func (s *BucketStore) validate() error {
@@ -372,6 +385,11 @@ type noopCache struct{}
 func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte) {}
 func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
+}
+
+func (noopCache) StoreExpandedPostings(_ ulid.ULID, _ []*labels.Matcher, _ []byte) {}
+func (noopCache) FetchExpandedPostings(_ context.Context, _ ulid.ULID, _ []*labels.Matcher) ([]byte, bool) {
+	return []byte{}, false
 }
 
 func (noopCache) StoreSeries(ulid.ULID, storage.SeriesRef, []byte) {}
@@ -443,6 +461,18 @@ func WithSeriesBatchSize(seriesBatchSize int) BucketStoreOption {
 	}
 }
 
+func WithBlockEstimatedMaxSeriesFunc(f BlockEstimator) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.blockEstimatedMaxSeriesFunc = f
+	}
+}
+
+func WithBlockEstimatedMaxChunkFunc(f BlockEstimator) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.blockEstimatedMaxChunkFunc = f
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -485,6 +515,7 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
+		labelNamesSet:               stringset.AllStrings(),
 	}
 
 	for _, option := range options {
@@ -690,6 +721,8 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.chunkPool,
 		indexHeaderReader,
 		s.partitioner,
+		s.blockEstimatedMaxSeriesFunc,
+		s.blockEstimatedMaxChunkFunc,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
@@ -852,9 +885,10 @@ type seriesEntry struct {
 // single TSDB block in object storage.
 type blockSeriesClient struct {
 	grpc.ClientStream
-	ctx     context.Context
-	logger  log.Logger
-	extLset labels.Labels
+	ctx             context.Context
+	logger          log.Logger
+	extLset         labels.Labels
+	extLsetToRemove map[string]struct{}
 
 	mint           int64
 	maxt           int64
@@ -904,9 +938,11 @@ func newBlockSeriesClient(
 	}
 
 	return &blockSeriesClient{
-		ctx:                ctx,
-		logger:             logger,
-		extLset:            extLset,
+		ctx:             ctx,
+		logger:          logger,
+		extLset:         extLset,
+		extLsetToRemove: extLsetToRemove,
+
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -940,8 +976,24 @@ func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
 	return stats
 }
 
+type sortedMatchers []*labels.Matcher
+
+func newSortedMatchers(matchers []*labels.Matcher) sortedMatchers {
+	sort.Slice(matchers, func(i, j int) bool {
+		if matchers[i].Type == matchers[j].Type {
+			if matchers[i].Name == matchers[j].Name {
+				return matchers[i].Value < matchers[j].Value
+			}
+			return matchers[i].Name < matchers[j].Name
+		}
+		return matchers[i].Type < matchers[j].Type
+	})
+
+	return matchers
+}
+
 func (b *blockSeriesClient) ExpandPostings(
-	matchers []*labels.Matcher,
+	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
 	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter)
@@ -1029,6 +1081,10 @@ func (b *blockSeriesClient) nextBatch() error {
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
+		if b.extLsetToRemove != nil {
+			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
+		}
+
 		if !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
@@ -1197,7 +1253,8 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 }
 
 // Series implements the storepb.StoreServer interface.
-func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) (err error) {
+	srv := newFlushableServer(seriesSrv, s.LabelNamesSet(), req.WithoutReplicaLabels)
 	if s.queryGate != nil {
 		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
 			err = s.queryGate.Start(srv.Context())
@@ -1208,6 +1265,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 		defer s.queryGate.Done()
 	}
+
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(srv.Context())
+	level.Debug(s.logger).Log("msg", "Tenant for Series request", "tenant", tenant)
 
 	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
 	if err != nil {
@@ -1259,6 +1319,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			continue
 		}
 
+		sortedBlockMatchers := newSortedMatchers(blockMatchers)
+
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
 
 		if s.debugLogging {
@@ -1301,30 +1363,59 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
 				})
 
-				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter); err != nil {
-					span.Finish()
-					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
-				}
 				onClose := func() {
 					mtx.Lock()
 					stats = blockClient.MergeStats(stats)
 					mtx.Unlock()
 				}
-				part := newLazyRespSet(
-					srv.Context(),
-					span,
-					10*time.Minute,
-					blk.meta.ULID.String(),
-					[]labels.Labels{blk.extLset},
-					onClose,
-					blockClient,
-					shardMatcher,
-					false,
-					s.metrics.emptyPostingCount,
-				)
+
+				if err := blockClient.ExpandPostings(sortedBlockMatchers, seriesLimiter); err != nil {
+					onClose()
+					span.Finish()
+					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
+				}
+
+				// If we have inner replica labels we need to resort.
+				s.mtx.Lock()
+				needsEagerRetrival := len(req.WithoutReplicaLabels) > 0 && s.labelNamesSet.HasAny(req.WithoutReplicaLabels)
+				s.mtx.Unlock()
+
+				var resp respSet
+				if needsEagerRetrival {
+					labelsToRemove := make(map[string]struct{})
+					for _, replicaLabel := range req.WithoutReplicaLabels {
+						labelsToRemove[replicaLabel] = struct{}{}
+					}
+					resp = newEagerRespSet(
+						srv.Context(),
+						span,
+						10*time.Minute,
+						blk.meta.ULID.String(),
+						[]labels.Labels{blk.extLset},
+						onClose,
+						blockClient,
+						shardMatcher,
+						false,
+						s.metrics.emptyPostingCount,
+						labelsToRemove,
+					)
+				} else {
+					resp = newLazyRespSet(
+						srv.Context(),
+						span,
+						10*time.Minute,
+						blk.meta.ULID.String(),
+						[]labels.Labels{blk.extLset},
+						onClose,
+						blockClient,
+						shardMatcher,
+						false,
+						s.metrics.emptyPostingCount,
+					)
+				}
 
 				mtx.Lock()
-				respSets = append(respSets, part)
+				respSets = append(respSets, resp)
 				mtx.Unlock()
 
 				return nil
@@ -1441,7 +1532,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+	return srv.Flush()
 }
 
 func chunksSize(chks []storepb.AggrChunk) (size int) {
@@ -1457,6 +1551,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
+
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
+	level.Debug(s.logger).Log("msg", "Tenant for LabelNames request", "tenant", tenant)
 
 	resHints := &hintspb.LabelNamesResponseHints{}
 
@@ -1498,6 +1595,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		if !ok {
 			continue
 		}
+
+		sortedReqSeriesMatchersNoExtLabels := newSortedMatchers(reqSeriesMatchersNoExtLabels)
 
 		resHints.AddQueriedBlock(b.meta.ULID)
 
@@ -1553,7 +1652,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
-					reqSeriesMatchersNoExtLabels,
+					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
 				); err != nil {
 					return err
@@ -1621,6 +1720,38 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	}, nil
 }
 
+func (s *BucketStore) UpdateLabelNames() {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	newSet := stringset.New()
+	for _, b := range s.blocks {
+		labelNames, err := b.indexHeaderReader.LabelNames()
+		if err != nil {
+			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
+			s.updateLabelNamesSet(stringset.AllStrings())
+			return
+		}
+		for _, l := range labelNames {
+			newSet.Insert(l)
+		}
+	}
+	s.updateLabelNamesSet(newSet)
+}
+
+func (s *BucketStore) updateLabelNamesSet(newSet stringset.Set) {
+	s.bmtx.Lock()
+	s.labelNamesSet = newSet
+	s.bmtx.Unlock()
+}
+
+func (b *BucketStore) LabelNamesSet() stringset.Set {
+	b.bmtx.Lock()
+	defer b.bmtx.Unlock()
+
+	return b.labelNamesSet
+}
+
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
 	// We filter external labels from matchers so we won't try to match series on them.
 	var result []*labels.Matcher
@@ -1645,6 +1776,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
+
+	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
+	level.Debug(s.logger).Log("msg", "Tenant for LabelValues request", "tenant", tenant)
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
@@ -1696,6 +1830,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			reqSeriesMatchersNoExtLabels = append(reqSeriesMatchersNoExtLabels, m)
 		}
 
+		sortedReqSeriesMatchersNoExtLabels := newSortedMatchers(reqSeriesMatchersNoExtLabels)
+
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader()
@@ -1744,7 +1880,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
-					reqSeriesMatchersNoExtLabels,
+					sortedReqSeriesMatchersNoExtLabels,
 					seriesLimiter,
 				); err != nil {
 					return err
@@ -1971,6 +2107,9 @@ type bucketBlock struct {
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
 	relabelLabels labels.Labels
+
+	estimatedMaxChunkSize  int
+	estimatedMaxSeriesSize int
 }
 
 func newBucketBlock(
@@ -1984,7 +2123,17 @@ func newBucketBlock(
 	chunkPool pool.Bytes,
 	indexHeadReader indexheader.Reader,
 	p Partitioner,
+	maxSeriesSizeFunc BlockEstimator,
+	maxChunkSizeFunc BlockEstimator,
 ) (b *bucketBlock, err error) {
+	maxSeriesSize := EstimatedMaxSeriesSize
+	if maxSeriesSizeFunc != nil {
+		maxSeriesSize = int(maxSeriesSizeFunc(*meta))
+	}
+	maxChunkSize := EstimatedMaxChunkSize
+	if maxChunkSizeFunc != nil {
+		maxChunkSize = int(maxChunkSizeFunc(*meta))
+	}
 	b = &bucketBlock{
 		logger:            logger,
 		metrics:           metrics,
@@ -2002,6 +2151,8 @@ func newBucketBlock(
 			Name:  block.BlockIDLabel,
 			Value: meta.ULID.String(),
 		}),
+		estimatedMaxSeriesSize: maxSeriesSize,
+		estimatedMaxChunkSize:  maxChunkSize,
 	}
 	sort.Sort(b.extLset)
 	sort.Sort(b.relabelLabels)
@@ -2150,45 +2301,47 @@ func (r *bucketIndexReader) reset() {
 // Reminder: A posting is a reference (represented as a uint64) to a series reference, which in turn points to the first
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
-func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
+func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
+	// Shortcut the case of `len(postingGroups) == 0`. It will only happen when no
+	// matchers specified, and we don't need to fetch expanded postings from cache.
+	if len(ms) == 0 {
+		return nil, nil
+	}
+
+	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiter)
+	if err != nil {
+		return nil, err
+	}
+	if hit {
+		return postings, nil
+	}
 	var (
-		postingGroups []*postingGroup
-		allRequested  = false
-		hasAdds       = false
-		keys          []labels.Label
+		allRequested = false
+		hasAdds      = false
+		keys         []labels.Label
 	)
 
-	// NOTE: Derived from tsdb.PostingsForMatchers.
-	for _, m := range ms {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		// Each group is separate to tell later what postings are intersecting with what.
-		pg, err := toPostingGroup(ctx, r.block.indexHeaderReader.LabelValues, m)
-		if err != nil {
-			return nil, errors.Wrap(err, "toPostingGroup")
-		}
-
-		// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
-		// postings would return no postings anyway.
-		// E.g. label="non-existing-value" returns empty group.
-		if !pg.addAll && len(pg.addKeys) == 0 {
-			return nil, nil
-		}
-
-		postingGroups = append(postingGroups, pg)
+	postingGroups, err := matchersToPostingGroups(ctx, r.block.indexHeaderReader.LabelValues, ms)
+	if err != nil {
+		return nil, errors.Wrap(err, "matchersToPostingGroups")
+	}
+	if postingGroups == nil {
+		r.storeExpandedPostingsToCache(ms, index.EmptyPostings(), 0)
+		return nil, nil
+	}
+	for _, pg := range postingGroups {
 		allRequested = allRequested || pg.addAll
 		hasAdds = hasAdds || len(pg.addKeys) > 0
 
 		// Postings returned by fetchPostings will be in the same order as keys
 		// so it's important that we iterate them in the same order later.
 		// We don't have any other way of pairing keys and fetched postings.
-		keys = append(keys, pg.addKeys...)
-		keys = append(keys, pg.removeKeys...)
-	}
-
-	if len(postingGroups) == 0 {
-		return nil, nil
+		for _, key := range pg.addKeys {
+			keys = append(keys, labels.Label{Name: pg.name, Value: key})
+		}
+		for _, key := range pg.removeKeys {
+			keys = append(keys, labels.Label{Name: pg.name, Value: key})
+		}
 	}
 
 	// We only need special All postings if there are no other adds. If there are, we can skip fetching
@@ -2198,7 +2351,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		name, value := index.AllPostingsKey()
 		allPostingsLabel := labels.Label{Name: name, Value: value}
 
-		postingGroups = append(postingGroups, newPostingGroup(true, []labels.Label{allPostingsLabel}, nil))
+		postingGroups = append(postingGroups, newPostingGroup(true, name, []string{value}, nil))
 		keys = append(keys, allPostingsLabel)
 	}
 
@@ -2223,7 +2376,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		if len(g.addKeys) > 0 {
 			toMerge := make([]index.Postings, 0, len(g.addKeys))
 			for _, l := range g.addKeys {
-				toMerge = append(toMerge, checkNilPosting(l, fetchedPostings[postingIndex]))
+				toMerge = append(toMerge, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
 				postingIndex++
 			}
 
@@ -2231,147 +2384,355 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		}
 
 		for _, l := range g.removeKeys {
-			groupRemovals = append(groupRemovals, checkNilPosting(l, fetchedPostings[postingIndex]))
+			groupRemovals = append(groupRemovals, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
 			postingIndex++
 		}
 	}
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
-
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	ps, err := index.ExpandPostings(result)
+	ps, err := ExpandPostingsWithContext(ctx, result)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
+	r.storeExpandedPostingsToCache(ms, index.NewListPostings(ps), len(ps))
 
-	// As of version two all series entries are 16 byte padded. All references
-	// we get have to account for that to get the correct offset.
-	version, err := r.block.indexHeaderReader.IndexVersion()
-	if err != nil {
-		return nil, errors.Wrap(err, "get index version")
-	}
-	if version >= 2 {
-		for i, id := range ps {
-			ps[i] = id * 16
+	if len(ps) > 0 {
+		// As of version two all series entries are 16 byte padded. All references
+		// we get have to account for that to get the correct offset.
+		version, err := r.block.indexHeaderReader.IndexVersion()
+		if err != nil {
+			return nil, errors.Wrap(err, "get index version")
+		}
+		if version >= 2 {
+			for i, id := range ps {
+				ps[i] = id * 16
+			}
 		}
 	}
-
 	return ps, nil
 }
 
-// postingGroup keeps posting keys for single matcher. Logical result of the group is:
+// ExpandPostingsWithContext returns the postings expanded as a slice and considers context.
+func ExpandPostingsWithContext(ctx context.Context, p index.Postings) (res []storage.SeriesRef, err error) {
+	for p.Next() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		res = append(res, p.At())
+	}
+	return res, p.Err()
+}
+
+// postingGroup keeps posting keys for one or more matchers with the same label name. Logical result of the group is:
 // If addAll is set: special All postings minus postings for removeKeys labels. No need to merge postings for addKeys in this case.
 // If addAll is not set: Merge of postings for "addKeys" labels minus postings for removeKeys labels
 // This computation happens in ExpandedPostings.
 type postingGroup struct {
 	addAll     bool
-	addKeys    []labels.Label
-	removeKeys []labels.Label
+	name       string
+	addKeys    []string
+	removeKeys []string
 }
 
-func newPostingGroup(addAll bool, addKeys, removeKeys []labels.Label) *postingGroup {
+func newPostingGroup(addAll bool, name string, addKeys, removeKeys []string) *postingGroup {
 	return &postingGroup{
 		addAll:     addAll,
+		name:       name,
 		addKeys:    addKeys,
 		removeKeys: removeKeys,
 	}
 }
 
-func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
+func (pg postingGroup) merge(other *postingGroup) *postingGroup {
+	if other == nil {
+		return &pg
+	}
+	// This shouldn't happen, but add this as a safeguard.
+	if pg.name != other.name {
+		return nil
+	}
+	var i, j int
+	// Both add all, merge remove keys.
+	if pg.addAll && other.addAll {
+		// Fast path to not allocate output slice if no remove keys are specified.
+		// This is possible when matcher is `=~".*"`.
+		if len(pg.removeKeys) == 0 {
+			pg.removeKeys = other.removeKeys
+			return &pg
+		} else if len(other.removeKeys) == 0 {
+			return &pg
+		}
+		output := make([]string, 0, len(pg.removeKeys)+len(other.removeKeys))
+		for i < len(pg.removeKeys) && j < len(other.removeKeys) {
+			if pg.removeKeys[i] < other.removeKeys[j] {
+				output = append(output, pg.removeKeys[i])
+				i++
+			} else if pg.removeKeys[i] > other.removeKeys[j] {
+				output = append(output, other.removeKeys[j])
+				j++
+			} else {
+				output = append(output, pg.removeKeys[i])
+				i++
+				j++
+			}
+		}
+		if i < len(pg.removeKeys) {
+			output = append(output, pg.removeKeys[i:len(pg.removeKeys)]...)
+		}
+		if j < len(other.removeKeys) {
+			output = append(output, other.removeKeys[j:len(other.removeKeys)]...)
+		}
+		pg.removeKeys = output
+	} else if pg.addAll || other.addAll {
+		// Subtract the remove keys.
+		toRemove := other
+		toAdd := &pg
+		if pg.addAll {
+			toRemove = &pg
+			toAdd = other
+		}
+		var k int
+		for i < len(toAdd.addKeys) && j < len(toRemove.removeKeys) {
+			if toAdd.addKeys[i] < toRemove.removeKeys[j] {
+				toAdd.addKeys[k] = toAdd.addKeys[i]
+				k++
+				i++
+			} else if toAdd.addKeys[i] > toRemove.removeKeys[j] {
+				j++
+			} else {
+				i++
+				j++
+			}
+		}
+		for i < len(toAdd.addKeys) {
+			toAdd.addKeys[k] = toAdd.addKeys[i]
+			i++
+			k++
+		}
+		pg.addKeys = toAdd.addKeys[:k]
+		pg.addAll = false
+		pg.removeKeys = nil
+	} else {
+		addKeys := make([]string, 0, len(pg.addKeys)+len(other.addKeys))
+		for i < len(pg.addKeys) && j < len(other.addKeys) {
+			if pg.addKeys[i] == other.addKeys[j] {
+				addKeys = append(addKeys, pg.addKeys[i])
+				i++
+				j++
+			} else if pg.addKeys[i] < other.addKeys[j] {
+				i++
+			} else {
+				j++
+			}
+		}
+		pg.addKeys = addKeys
+	}
+	return &pg
+}
+
+func checkNilPosting(name, value string, p index.Postings) index.Postings {
 	if p == nil {
 		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
-		return index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
+		return index.ErrPostings(errors.Errorf("postings is nil for {%s=%s}. It was never fetched.", name, value))
 	}
 	return p
 }
 
-// NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
-	if m.Type == labels.MatchRegexp {
-		if vals := findSetMatches(m.Value); len(vals) > 0 {
-			return newPostingGroup(false, labelsFromSetMatchers(m.Name, vals), nil), nil
-		}
+func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]string, error), ms []*labels.Matcher) ([]*postingGroup, error) {
+	matchersMap := make(map[string][]*labels.Matcher)
+	for _, m := range ms {
+		matchersMap[m.Name] = append(matchersMap[m.Name], m)
 	}
 
+	pgs := make([]*postingGroup, 0)
+	// NOTE: Derived from tsdb.PostingsForMatchers.
+	for _, values := range matchersMap {
+		var (
+			mergedPG     *postingGroup
+			pg           *postingGroup
+			vals         []string
+			err          error
+			valuesCached bool
+		)
+		lvalsFunc := lvalsFn
+		// Merge PostingGroups with the same matcher into 1 to
+		//  avoid fetching duplicate postings.
+		for _, val := range values {
+			pg, vals, err = toPostingGroup(ctx, lvalsFunc, val)
+			if err != nil {
+				return nil, errors.Wrap(err, "toPostingGroup")
+			}
+			// Cache label values because label name is the same.
+			if !valuesCached && vals != nil {
+				lvalsFunc = func(_ string) ([]string, error) {
+					return vals, nil
+				}
+				valuesCached = true
+			}
+
+			// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
+			// postings would return no postings anyway.
+			// E.g. label="non-existing-value" returns empty group.
+			if !pg.addAll && len(pg.addKeys) == 0 {
+				return nil, nil
+			}
+			if mergedPG == nil {
+				mergedPG = pg
+			} else {
+				mergedPG = mergedPG.merge(pg)
+			}
+
+			// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
+			// postings would return no postings anyway.
+			// E.g. label="non-existing-value" returns empty group.
+			if !mergedPG.addAll && len(mergedPG.addKeys) == 0 {
+				return nil, nil
+			}
+		}
+		pgs = append(pgs, mergedPG)
+	}
+	slices.SortFunc(pgs, func(a, b *postingGroup) bool {
+		return a.name < b.name
+	})
+	return pgs, nil
+}
+
+// NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
+func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
-		var toRemove []labels.Label
+		var toRemove []string
 
 		// Fast-path for MatchNotRegexp matching.
 		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
 		// Fast-path for set matching.
 		if m.Type == labels.MatchNotRegexp {
 			if vals := findSetMatches(m.Value); len(vals) > 0 {
-				toRemove = labelsFromSetMatchers(m.Name, vals)
-				return newPostingGroup(true, nil, toRemove), nil
+				sort.Strings(vals)
+				return newPostingGroup(true, m.Name, nil, vals), nil, nil
 			}
 		}
 
 		// Fast-path for MatchNotEqual matching.
 		// Inverse of a MatchNotEqual is MatchEqual (double negation).
 		if m.Type == labels.MatchNotEqual {
-			return newPostingGroup(true, nil, []labels.Label{{Name: m.Name, Value: m.Value}}), nil
+			return newPostingGroup(true, m.Name, nil, []string{m.Value}), nil, nil
 		}
 
 		vals, err := lvalsFn(m.Name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		for _, val := range vals {
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 			if !m.Matches(val) {
-				toRemove = append(toRemove, labels.Label{Name: m.Name, Value: val})
+				toRemove = append(toRemove, val)
 			}
 		}
 
-		return newPostingGroup(true, nil, toRemove), nil
+		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
+	}
+	if m.Type == labels.MatchRegexp {
+		if vals := findSetMatches(m.Value); len(vals) > 0 {
+			sort.Strings(vals)
+			return newPostingGroup(false, m.Name, vals, nil), nil, nil
+		}
 	}
 
 	// Fast-path for equal matching.
 	if m.Type == labels.MatchEqual {
-		return newPostingGroup(false, []labels.Label{{Name: m.Name, Value: m.Value}}, nil), nil
+		return newPostingGroup(false, m.Name, []string{m.Value}, nil), nil, nil
 	}
 
 	vals, err := lvalsFn(m.Name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var toAdd []labels.Label
+	var toAdd []string
 	for _, val := range vals {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		if m.Matches(val) {
-			toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
+			toAdd = append(toAdd, val)
 		}
 	}
 
-	return newPostingGroup(false, toAdd, nil), nil
-}
-
-func labelsFromSetMatchers(name string, vals []string) []labels.Label {
-	// Sorting will improve the performance dramatically if the dataset is relatively large
-	// since entries in the postings offset table was sorted by label name and value,
-	// the sequential reading is much faster.
-	sort.Strings(vals)
-	toAdd := make([]labels.Label, 0, len(vals))
-	for _, val := range vals {
-		toAdd = append(toAdd, labels.Label{Name: name, Value: val})
-	}
-	return toAdd
+	return newPostingGroup(false, m.Name, toAdd, nil), vals, nil
 }
 
 type postingPtr struct {
 	keyID int
 	ptr   index.Range
+}
+
+func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter) (bool, []storage.SeriesRef, error) {
+	dataFromCache, hit := r.block.indexCache.FetchExpandedPostings(ctx, r.block.meta.ULID, ms)
+	if !hit {
+		return false, nil, nil
+	}
+	if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
+		return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
+	}
+	r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
+	r.stats.postingsTouched++
+	r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(dataFromCache))
+	p, closeFns, err := r.decodeCachedPostings(dataFromCache)
+	defer func() {
+		for _, closeFn := range closeFns {
+			closeFn()
+		}
+	}()
+	// If failed to decode or expand cached postings, return and expand postings again.
+	if err != nil {
+		level.Error(r.block.logger).Log("msg", "failed to decode cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
+		return false, nil, nil
+	}
+
+	ps, err := ExpandPostingsWithContext(ctx, p)
+	if err != nil {
+		level.Error(r.block.logger).Log("msg", "failed to expand cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
+		return false, nil, nil
+	}
+
+	if len(ps) > 0 {
+		// As of version two all series entries are 16 byte padded. All references
+		// we get have to account for that to get the correct offset.
+		version, err := r.block.indexHeaderReader.IndexVersion()
+		if err != nil {
+			return false, nil, errors.Wrap(err, "get index version")
+		}
+		if version >= 2 {
+			for i, id := range ps {
+				ps[i] = id * 16
+			}
+		}
+	}
+	return true, ps, nil
+}
+
+func (r *bucketIndexReader) storeExpandedPostingsToCache(ms []*labels.Matcher, ps index.Postings, length int) {
+	// Encode postings to cache. We compress and cache postings before adding
+	// 16 bytes padding in order to make compressed size smaller.
+	dataToCache, compressionDuration, compressionErrors, compressedSize := r.encodePostingsToCache(ps, length)
+	r.stats.cachedPostingsCompressions++
+	r.stats.cachedPostingsCompressionErrors += compressionErrors
+	r.stats.CachedPostingsCompressionTimeSum += compressionDuration
+	r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
+	r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(length * 4) // Estimate the posting list size.
+	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache)
+}
+
+var bufioReaderPool = sync.Pool{
+	New: func() any {
+		return bufio.NewReader(nil)
+	},
 }
 
 // fetchPostings fill postings requested by posting groups.
@@ -2393,43 +2754,27 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
 		}
+		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
 	}
 
 	// Iterate over all groups and fetch posting from cache.
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
 	// Overlaps are well handled by partitioner, so we don't need to deduplicate keys.
 	for ix, key := range keys {
+		if err := ctx.Err(); err != nil {
+			return nil, closeFns, err
+		}
 		// Get postings for the given key from cache first.
 		if b, ok := fromCache[key]; ok {
 			r.stats.postingsTouched++
 			r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(b))
 
-			// Even if this instance is not using compression, there may be compressed
-			// entries in the cache written by other stores.
-			var (
-				l   index.Postings
-				err error
-			)
-			if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
-				s := time.Now()
-				clPostings, err := decodePostings(b)
-				r.stats.cachedPostingsDecompressions += 1
-				r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
-				if err != nil {
-					r.stats.cachedPostingsDecompressionErrors += 1
-				} else {
-					closeFns = append(closeFns, clPostings.close)
-					l = clPostings
-				}
-			} else {
-				_, l, err = r.dec.Postings(b)
-			}
-
+			l, closer, err := r.decodeCachedPostings(b)
 			if err != nil {
 				return nil, closeFns, errors.Wrap(err, "decode postings")
 			}
-
 			output[ix] = l
+			closeFns = append(closeFns, closer...)
 			continue
 		}
 
@@ -2466,6 +2811,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		if err := bytesLimiter.Reserve(uint64(length)); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
 		}
+		r.stats.DataDownloadedSizeSum += units.Base2Bytes(length)
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -2480,63 +2826,56 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		g.Go(func() error {
 			begin := time.Now()
 
-			b, err := r.block.readIndexRange(ctx, start, length)
+			brdr := bufioReaderPool.Get().(*bufio.Reader)
+			defer bufioReaderPool.Put(brdr)
+
+			partReader, err := r.block.bkt.GetRange(ctx, r.block.indexFilename(), start, length)
 			if err != nil {
 				return errors.Wrap(err, "read postings range")
 			}
-			fetchTime := time.Since(begin)
+			defer runutil.CloseWithLogOnErr(r.block.logger, partReader, "readIndexRange close range reader")
+			brdr.Reset(partReader)
+
+			rdr := newPostingsReaderBuilder(ctx, brdr, ptrs[i:j], start, length)
 
 			r.mtx.Lock()
 			r.stats.postingsFetchCount++
 			r.stats.postingsFetched += j - i
-			r.stats.PostingsFetchDurationSum += fetchTime
 			r.stats.PostingsFetchedSizeSum += units.Base2Bytes(int(length))
 			r.mtx.Unlock()
 
-			for _, p := range ptrs[i:j] {
-				// index-header can estimate endings, which means we need to resize the endings.
-				pBytes, err := resizePostings(b[p.ptr.Start-start : p.ptr.End-start])
+			for rdr.Next() {
+				diffVarintPostings, postingsCount, keyID := rdr.AtDiffVarint()
+
+				output[keyID] = newDiffVarintPostings(diffVarintPostings, nil)
+
+				startCompression := time.Now()
+				dataToCache, err := snappyStreamedEncode(int(postingsCount), diffVarintPostings)
 				if err != nil {
-					return err
-				}
-
-				dataToCache := pBytes
-
-				compressionTime := time.Duration(0)
-				compressions, compressionErrors, compressedSize := 0, 0, 0
-
-				// Reencode postings before storing to cache. If that fails, we store original bytes.
-				// This can only fail, if postings data was somehow corrupted,
-				// and there is nothing we can do about it.
-				// Errors from corrupted postings will be reported when postings are used.
-				compressions++
-				s := time.Now()
-				bep := newBigEndianPostings(pBytes[4:])
-				data, err := diffVarintSnappyStreamedEncode(bep, bep.length())
-				compressionTime = time.Since(s)
-				if err == nil {
-					dataToCache = data
-					compressedSize = len(data)
-				} else {
-					compressionErrors = 1
+					r.mtx.Lock()
+					r.stats.cachedPostingsCompressionErrors += 1
+					r.mtx.Unlock()
+					return errors.Wrap(err, "encoding with snappy")
 				}
 
 				r.mtx.Lock()
-				// Return postings and fill LRU cache.
-				// Truncate first 4 bytes which are length of posting.
-				output[p.keyID] = newBigEndianPostings(pBytes[4:])
-
-				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache)
-
-				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
-				r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(pBytes))
-				r.stats.cachedPostingsCompressions += compressions
-				r.stats.cachedPostingsCompressionErrors += compressionErrors
-				r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(pBytes))
-				r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
-				r.stats.CachedPostingsCompressionTimeSum += compressionTime
+				r.stats.PostingsTouchedSizeSum += units.Base2Bytes(int(len(diffVarintPostings)))
+				r.stats.cachedPostingsCompressions += 1
+				r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(diffVarintPostings))
+				r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(len(dataToCache))
+				r.stats.CachedPostingsCompressionTimeSum += time.Since(startCompression)
 				r.mtx.Unlock()
+
+				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[keyID], dataToCache)
+			}
+
+			r.mtx.Lock()
+			r.stats.PostingsFetchDurationSum += time.Since(begin)
+			r.mtx.Unlock()
+
+			if err := rdr.Error(); err != nil {
+				return errors.Wrap(err, "reading postings")
 			}
 			return nil
 		})
@@ -2545,19 +2884,44 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	return output, closeFns, g.Wait()
 }
 
-func resizePostings(b []byte) ([]byte, error) {
-	d := encoding.Decbuf{B: b}
-	n := d.Be32int()
-	if d.Err() != nil {
-		return nil, errors.Wrap(d.Err(), "read postings list")
+func (r *bucketIndexReader) decodeCachedPostings(b []byte) (index.Postings, []func(), error) {
+	// Even if this instance is not using compression, there may be compressed
+	// entries in the cache written by other stores.
+	var (
+		l        index.Postings
+		err      error
+		closeFns []func()
+	)
+	if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
+		s := time.Now()
+		l, err = decodePostings(b)
+		r.stats.cachedPostingsDecompressions += 1
+		r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
+		if err != nil {
+			r.stats.cachedPostingsDecompressionErrors += 1
+		} else {
+			closeFns = append(closeFns, l.(closeablePostings).close)
+		}
+	} else {
+		_, l, err = r.dec.Postings(b)
 	}
+	return l, closeFns, err
+}
 
-	// 4 for postings number of entries, then 4, foreach each big endian posting.
-	size := 4 + n*4
-	if len(b) < size {
-		return nil, encoding.ErrInvalidSize
+func (r *bucketIndexReader) encodePostingsToCache(p index.Postings, length int) ([]byte, time.Duration, int, int) {
+	var dataToCache []byte
+	compressionTime := time.Duration(0)
+	compressionErrors, compressedSize := 0, 0
+	s := time.Now()
+	data, err := diffVarintSnappyStreamedEncode(p, length)
+	compressionTime = time.Since(s)
+	if err == nil {
+		dataToCache = data
+		compressedSize = len(data)
+	} else {
+		compressionErrors = 1
 	}
-	return b[:size], nil
+	return dataToCache, compressionTime, compressionErrors, compressedSize
 }
 
 // bigEndianPostings implements the Postings interface over a byte stream of
@@ -2626,10 +2990,11 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 		if err := bytesLimiter.Reserve(uint64(len(b))); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
 		}
+		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(b))
 	}
 
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
-		return uint64(ids[i]), uint64(ids[i] + maxSeriesSize)
+		return uint64(ids[i]), uint64(ids[i]) + uint64(r.block.estimatedMaxSeriesSize)
 	})
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -2651,6 +3016,9 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 		}
+		r.mtx.Lock()
+		r.stats.DataDownloadedSizeSum += units.Base2Bytes(end - start)
+		r.mtx.Unlock()
 	}
 
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
@@ -2679,7 +3047,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 
 			// Inefficient, but should be rare.
 			r.block.metrics.seriesRefetches.Inc()
-			level.Warn(r.block.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", maxSeriesSize)
+			level.Warn(r.block.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", r.block.estimatedMaxSeriesSize)
 
 			// Fetch plus to get the size of next one if exists.
 			return r.loadSeries(ctx, ids[i:], true, uint64(id), uint64(id)+uint64(n+int(l)+1), bytesLimiter)
@@ -2868,6 +3236,10 @@ type bucketChunkReader struct {
 	mtx        sync.Mutex
 	stats      *queryStats
 	chunkBytes []*[]byte // Byte slice to return to the chunk pool on close.
+
+	loadingChunksMtx  sync.Mutex
+	loadingChunks     bool
+	finishLoadingChks chan struct{}
 }
 
 func newBucketChunkReader(block *bucketBlock) *bucketChunkReader {
@@ -2882,9 +3254,22 @@ func (r *bucketChunkReader) reset() {
 	for i := range r.toLoad {
 		r.toLoad[i] = r.toLoad[i][:0]
 	}
+	r.loadingChunksMtx.Lock()
+	r.loadingChunks = false
+	r.finishLoadingChks = make(chan struct{})
+	r.loadingChunksMtx.Unlock()
 }
 
 func (r *bucketChunkReader) Close() error {
+	// NOTE(GiedriusS): we need to wait until loading chunks because loading
+	// chunks modifies r.block.chunkPool.
+	r.loadingChunksMtx.Lock()
+	loadingChks := r.loadingChunks
+	r.loadingChunksMtx.Unlock()
+
+	if loadingChks {
+		<-r.finishLoadingChks
+	}
 	r.block.pendingReaders.Done()
 
 	for _, b := range r.chunkBytes {
@@ -2909,6 +3294,18 @@ func (r *bucketChunkReader) addLoad(id chunks.ChunkRef, seriesEntry, chunk int) 
 
 // load loads all added chunks and saves resulting aggrs to refs.
 func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
+	r.loadingChunksMtx.Lock()
+	r.loadingChunks = true
+	r.loadingChunksMtx.Unlock()
+
+	defer func() {
+		r.loadingChunksMtx.Lock()
+		r.loadingChunks = false
+		r.loadingChunksMtx.Unlock()
+
+		close(r.finishLoadingChks)
+	}()
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	for seq, pIdxs := range r.toLoad {
@@ -2916,13 +3313,14 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			return pIdxs[i].offset < pIdxs[j].offset
 		})
 		parts := r.block.partitioner.Partition(len(pIdxs), func(i int) (start, end uint64) {
-			return uint64(pIdxs[i].offset), uint64(pIdxs[i].offset) + EstimatedMaxChunkSize
+			return uint64(pIdxs[i].offset), uint64(pIdxs[i].offset) + uint64(r.block.estimatedMaxChunkSize)
 		})
 
 		for _, p := range parts {
 			if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
 				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 			}
+			r.stats.DataDownloadedSizeSum += units.Base2Bytes(p.End - p.Start)
 		}
 
 		for _, p := range parts {
@@ -2940,9 +3338,14 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
+	var locked bool
 	fetchBegin := time.Now()
 	defer func() {
+		if !locked {
+			r.mtx.Lock()
+		}
 		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+		r.mtx.Unlock()
 	}()
 
 	// Get a reader for the required range.
@@ -2951,16 +3354,10 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		return errors.Wrap(err, "get range reader")
 	}
 	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
-	bufReader := bufio.NewReaderSize(reader, EstimatedMaxChunkSize)
+	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
-	locked := true
+	locked = true
 	r.mtx.Lock()
-
-	defer func() {
-		if locked {
-			r.mtx.Unlock()
-		}
-	}()
 
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(pIdxs)
@@ -2977,11 +3374,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		n        int
 	)
 
-	bufPooled, err := r.block.chunkPool.Get(EstimatedMaxChunkSize)
+	bufPooled, err := r.block.chunkPool.Get(r.block.estimatedMaxChunkSize)
 	if err == nil {
 		buf = *bufPooled
 	} else {
-		buf = make([]byte, EstimatedMaxChunkSize)
+		buf = make([]byte, r.block.estimatedMaxChunkSize)
 	}
 	defer r.block.chunkPool.Put(&buf)
 
@@ -2997,7 +3394,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// Presume chunk length to be reasonably large for common use cases.
 		// However, declaration for EstimatedMaxChunkSize warns us some chunks could be larger in some rare cases.
 		// This is handled further down below.
-		chunkLen = EstimatedMaxChunkSize
+		chunkLen = r.block.estimatedMaxChunkSize
 		if i+1 < len(pIdxs) {
 			if diff = pIdxs[i+1].offset - pIdx.offset; int(diff) < chunkLen {
 				chunkLen = int(diff)
@@ -3029,17 +3426,18 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			continue
 		}
 
+		r.block.metrics.chunkRefetches.Inc()
 		// If we didn't fetch enough data for the chunk, fetch more.
-		r.mtx.Unlock()
-		locked = false
-
 		fetchBegin = time.Now()
-
 		// Read entire chunk into new buffer.
 		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
 		if err := bytesLimiter.Reserve(uint64(chunkLen)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 		}
+		r.stats.DataDownloadedSizeSum += units.Base2Bytes(chunkLen)
+		r.mtx.Unlock()
+		locked = false
+
 		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}})
 		if err != nil {
 			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chunkLen)
@@ -3147,11 +3545,14 @@ type queryStats struct {
 	mergedSeriesCount int
 	mergedChunksCount int
 	MergeDuration     time.Duration
+
+	DataDownloadedSizeSum units.Base2Bytes
 }
 
 func (s queryStats) merge(o *queryStats) *queryStats {
 	s.blocksQueried += o.blocksQueried
 
+	s.postingsToFetch += o.postingsToFetch
 	s.postingsTouched += o.postingsTouched
 	s.PostingsTouchedSizeSum += o.PostingsTouchedSizeSum
 	s.postingsFetched += o.postingsFetched
@@ -3187,6 +3588,8 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.mergedChunksCount += o.mergedChunksCount
 	s.MergeDuration += o.MergeDuration
 
+	s.DataDownloadedSizeSum += o.DataDownloadedSizeSum
+
 	return &s
 }
 
@@ -3211,6 +3614,7 @@ func (s queryStats) toHints() *hintspb.QueryStats {
 		ChunksFetchCount:       int64(s.chunksFetchCount),
 		MergedSeriesCount:      int64(s.mergedSeriesCount),
 		MergedChunksCount:      int64(s.mergedChunksCount),
+		DataDownloadedSizeSum:  int64(s.DataDownloadedSizeSum),
 	}
 }
 

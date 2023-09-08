@@ -131,9 +131,9 @@ Below, we will set up a Thanos Querier to connect to our Sidecars, and expose it
 ```bash
 thanos query \
     --http-address 0.0.0.0:19192 \                                # HTTP Endpoint for Thanos Querier UI
-    --endpiont     1.2.3.4:19090 \                                # Static gRPC Store API Address for the query node to query
-    --endpiont     1.2.3.5:19090 \                                # Also repeatable
-    --endpiont     dnssrv+_grpc._tcp.thanos-store.monitoring.svc  # Supports DNS A & SRV records
+    --endpoint     1.2.3.4:19090 \                                # Static gRPC Store API Address for the query node to query
+    --endpoint     1.2.3.5:19090 \                                # Also repeatable
+    --endpoint     dnssrv+_grpc._tcp.thanos-store.monitoring.svc  # Supports DNS A & SRV records
 ```
 
 Go to the configured HTTP address, which should now show a UI similar to that of Prometheus. You can now query across all Prometheus instances within the cluster. You can also check out the Stores page, which shows all of your stores.

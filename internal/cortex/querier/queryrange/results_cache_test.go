@@ -24,8 +24,8 @@ import (
 
 const (
 	query                 = "/api/v1/query_range?end=1536716898&query=sum%28container_memory_rss%29+by+%28namespace%29&start=1536673680&stats=all&step=120"
-	responseBody          = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"foo":"bar"},"values":[[1536673680,"137"],[1536673780,"137"]]}]}}`
-	histogramResponseBody = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"fake":"histogram"},"histograms":[[1536673680,{"count":"5","sum":"18.4","buckets":[[3,"-0.001","0.001","2"],[0,"0.7071067811865475","1","1"],[0,"1","1.414213562373095","2"],[0,"2","2.82842712474619","1"],[0,"2.82842712474619","4","1"]]}]]}]}}`
+	responseBody          = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"foo":"bar"},"values":[[1536673680,"137"],[1536673780,"137"]]}],"explanation":null}}`
+	histogramResponseBody = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"fake":"histogram"},"histograms":[[1536673680,{"count":"5","sum":"18.4","buckets":[[3,"-0.001","0.001","2"],[0,"0.7071067811865475","1","1"],[0,"1","1.414213562373095","2"],[0,"2","2.82842712474619","1"],[0,"2.82842712474619","4","1"]]}]]}],"explanation":null}}`
 )
 
 var (

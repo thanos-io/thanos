@@ -9,7 +9,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
@@ -185,17 +184,8 @@ type memcachedClient struct {
 	// Address provider used to keep the memcached servers list updated.
 	addressProvider AddressProvider
 
-	// Channel used to notify internal goroutines when they should quit.
-	stop chan struct{}
-
-	// Channel used to enqueue async operations.
-	asyncQueue chan func()
-
 	// Gate used to enforce the max number of concurrent GetMulti() operations.
 	getMultiGate gate.Gate
-
-	// Wait group used to wait all workers on stopping.
-	workers sync.WaitGroup
 
 	// Tracked metrics.
 	clientInfo prometheus.GaugeFunc
@@ -204,6 +194,8 @@ type memcachedClient struct {
 	skipped    *prometheus.CounterVec
 	duration   *prometheus.HistogramVec
 	dataSize   *prometheus.HistogramVec
+
+	p *asyncOperationProcessor
 }
 
 // AddressProvider performs node address resolution given a list of clusters.
@@ -281,13 +273,12 @@ func newMemcachedClient(
 		client:          client,
 		selector:        selector,
 		addressProvider: addressProvider,
-		asyncQueue:      make(chan func(), config.MaxAsyncBufferSize),
-		stop:            make(chan struct{}, 1),
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
 			gate.Gets,
 		),
+		p: newAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
 	}
 
 	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
@@ -364,24 +355,14 @@ func newMemcachedClient(
 		return nil, err
 	}
 
-	c.workers.Add(1)
+	c.p.workers.Add(1)
 	go c.resolveAddrsLoop()
-
-	// Start a number of goroutines - processing async operations - equal
-	// to the max concurrency we have.
-	c.workers.Add(c.config.MaxAsyncConcurrency)
-	for i := 0; i < c.config.MaxAsyncConcurrency; i++ {
-		go c.asyncQueueProcessLoop()
-	}
 
 	return c, nil
 }
 
 func (c *memcachedClient) Stop() {
-	close(c.stop)
-
-	// Wait until all workers have terminated.
-	c.workers.Wait()
+	c.p.Stop()
 }
 
 func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
@@ -391,7 +372,7 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 		return nil
 	}
 
-	err := c.enqueueAsync(func() {
+	err := c.p.enqueueAsync(func() {
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
@@ -421,7 +402,7 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 
 	if err == errMemcachedAsyncBufferFull {
 		c.skipped.WithLabelValues(opSet, reasonAsyncBufferFull).Inc()
-		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.asyncQueue))
+		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.p.asyncQueue))
 		return nil
 	}
 	return err
@@ -612,30 +593,8 @@ func (c *memcachedClient) trackError(op string, err error) {
 	}
 }
 
-func (c *memcachedClient) enqueueAsync(op func()) error {
-	select {
-	case c.asyncQueue <- op:
-		return nil
-	default:
-		return errMemcachedAsyncBufferFull
-	}
-}
-
-func (c *memcachedClient) asyncQueueProcessLoop() {
-	defer c.workers.Done()
-
-	for {
-		select {
-		case op := <-c.asyncQueue:
-			op()
-		case <-c.stop:
-			return
-		}
-	}
-}
-
 func (c *memcachedClient) resolveAddrsLoop() {
-	defer c.workers.Done()
+	defer c.p.workers.Done()
 
 	ticker := time.NewTicker(c.config.DNSProviderUpdateInterval)
 	defer ticker.Stop()
@@ -647,7 +606,7 @@ func (c *memcachedClient) resolveAddrsLoop() {
 			if err != nil {
 				level.Warn(c.logger).Log("msg", "failed update memcached servers list", "err", err)
 			}
-		case <-c.stop:
+		case <-c.p.stop:
 			return
 		}
 	}

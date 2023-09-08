@@ -7,6 +7,7 @@ import (
 	"context"
 	"io"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/promql-engine/api"
 
@@ -82,6 +84,13 @@ type remoteEngine struct {
 	logger log.Logger
 
 	client Client
+
+	mintOnce      sync.Once
+	mint          int64
+	maxtOnce      sync.Once
+	maxt          int64
+	labelSetsOnce sync.Once
+	labelSets     []labels.Labels
 }
 
 func newRemoteEngine(logger log.Logger, queryClient Client, opts Opts) api.RemoteEngine {
@@ -98,43 +107,52 @@ func newRemoteEngine(logger log.Logger, queryClient Client, opts Opts) api.Remot
 // Calculating the MinT this way makes remote queries resilient to cases where one tsdb replica would delete
 // a block due to retention before other replicas did the same.
 // See https://github.com/thanos-io/promql-engine/issues/187.
-func (r remoteEngine) MinT() int64 {
-	var (
-		hashBuf               = make([]byte, 0, 128)
-		highestMintByLabelSet = make(map[uint64]int64)
-	)
-	for _, lset := range r.infosWithoutReplicaLabels() {
-		key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
-		lsetMinT, ok := highestMintByLabelSet[key]
-		if !ok {
-			highestMintByLabelSet[key] = lset.MinTime
-			continue
+func (r *remoteEngine) MinT() int64 {
+	r.mintOnce.Do(func() {
+		var (
+			hashBuf               = make([]byte, 0, 128)
+			highestMintByLabelSet = make(map[uint64]int64)
+		)
+		for _, lset := range r.infosWithoutReplicaLabels() {
+			key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+			lsetMinT, ok := highestMintByLabelSet[key]
+			if !ok {
+				highestMintByLabelSet[key] = lset.MinTime
+				continue
+			}
+
+			if lset.MinTime > lsetMinT {
+				highestMintByLabelSet[key] = lset.MinTime
+			}
 		}
 
-		if lset.MinTime > lsetMinT {
-			highestMintByLabelSet[key] = lset.MinTime
+		var mint int64 = math.MaxInt64
+		for _, m := range highestMintByLabelSet {
+			if m < mint {
+				mint = m
+			}
 		}
-	}
+		r.mint = mint
+	})
 
-	var mint int64 = math.MaxInt64
-	for _, m := range highestMintByLabelSet {
-		if m < mint {
-			mint = m
-		}
-	}
-
-	return mint
+	return r.mint
 }
 
-func (r remoteEngine) MaxT() int64 {
-	return r.client.tsdbInfos.MaxT()
+func (r *remoteEngine) MaxT() int64 {
+	r.maxtOnce.Do(func() {
+		r.maxt = r.client.tsdbInfos.MaxT()
+	})
+	return r.maxt
 }
 
-func (r remoteEngine) LabelSets() []labels.Labels {
-	return r.infosWithoutReplicaLabels().LabelSets()
+func (r *remoteEngine) LabelSets() []labels.Labels {
+	r.labelSetsOnce.Do(func() {
+		r.labelSets = r.infosWithoutReplicaLabels().LabelSets()
+	})
+	return r.labelSets
 }
 
-func (r remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
+func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 	replicaLabelSet := make(map[string]struct{})
 	for _, lbl := range r.opts.ReplicaLabels {
 		replicaLabelSet[lbl] = struct{}{}
@@ -161,7 +179,7 @@ func (r remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 	return infos
 }
 
-func (r remoteEngine) NewRangeQuery(_ context.Context, opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (r *remoteEngine) NewRangeQuery(_ context.Context, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
@@ -217,7 +235,11 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		return &promql.Result{Err: err}
 	}
 
-	result := make(promql.Matrix, 0)
+	var (
+		result   = make(promql.Matrix, 0)
+		warnings storage.Warnings
+	)
+
 	for {
 		msg, err := qry.Recv()
 		if err == io.EOF {
@@ -228,7 +250,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 
 		if warn := msg.GetWarnings(); warn != "" {
-			return &promql.Result{Err: errors.New(warn)}
+			warnings = append(warnings, errors.New(warn))
+			continue
 		}
 
 		ts := msg.GetTimeseries()
@@ -246,17 +269,17 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				F: s.Value,
 			})
 		}
-		for _, h := range ts.Histograms {
+		for _, hp := range ts.Histograms {
 			series.Histograms = append(series.Histograms, promql.HPoint{
-				T: h.Timestamp,
-				H: prompb.HistogramProtoToFloatHistogram(h),
+				T: hp.Timestamp,
+				H: prompb.FloatHistogramProtoToFloatHistogram(hp),
 			})
 		}
 		result = append(result, series)
 	}
 	level.Debug(r.logger).Log("Executed query", "query", r.qs, "time", time.Since(start))
 
-	return &promql.Result{Value: result}
+	return &promql.Result{Value: result, Warnings: warnings}
 }
 
 func (r *remoteQuery) Close() { r.Cancel() }

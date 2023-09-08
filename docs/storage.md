@@ -209,7 +209,7 @@ Example working AWS IAM policy for user:
 To test the policy, set env vars for S3 access for *empty, not used* bucket as well as:
 
 ```
-THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI
+THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 THANOS_ALLOW_EXISTING_BUCKET_USE=true
 ```
 
@@ -243,7 +243,7 @@ We need access to CreateBucket and DeleteBucket and access to all buckets:
 }
 ```
 
-With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI` and unset `S3_BUCKET` and run all tests using `make test`.
+With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS` and unset `S3_BUCKET` and run all tests using `make test`.
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 

@@ -4,13 +4,18 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	crand "crypto/rand"
+	"io"
 	"math"
 	"math/rand"
+	"os"
 	"sort"
 	"strconv"
 	"testing"
 
+	"github.com/klauspost/compress/s2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -19,6 +24,50 @@ import (
 	"github.com/efficientgo/core/testutil"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
+
+func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
+	t.Run("compressed", func(t *testing.T) {
+		b := make([]byte, 100)
+		for i := 0; i < 100; i++ {
+			b[i] = 0x42
+		}
+
+		snappyEncoded := &bytes.Buffer{}
+
+		sw := s2.NewWriter(snappyEncoded, s2.WriterSnappyCompat(), s2.WriterBestCompression())
+
+		_, err := sw.Write(b)
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, sw.Close())
+
+		maxLen, err := maximumDecodedLenSnappyStreamed(snappyEncoded.Bytes())
+		testutil.Ok(t, err)
+		t.Log(maxLen)
+		testutil.Assert(t, maxLen == 100)
+	})
+	t.Run("random", func(t *testing.T) {
+		for i := 10000; i < 30000; i++ {
+			b := make([]byte, i)
+			_, err := crand.Read(b)
+			testutil.Ok(t, err)
+
+			snappyEncoded := &bytes.Buffer{}
+
+			sw := s2.NewWriter(snappyEncoded, s2.WriterSnappyCompat())
+
+			_, err = sw.Write(b)
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, sw.Close())
+
+			maxLen, err := maximumDecodedLenSnappyStreamed(snappyEncoded.Bytes())
+			testutil.Ok(t, err)
+			testutil.Assert(t, maxLen > 100)
+			testutil.Assert(t, maxLen < 30000)
+		}
+	})
+}
 
 func TestDiffVarintCodec(t *testing.T) {
 	chunksDir := t.TempDir()
@@ -56,9 +105,11 @@ func TestDiffVarintCodec(t *testing.T) {
 
 	codecs := map[string]struct {
 		codingFunction   func(index.Postings, int) ([]byte, error)
-		decodingFunction func([]byte) (closeablePostings, error)
+		decodingFunction func([]byte, bool) (closeablePostings, error)
 	}{
-		"raw":            {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (closeablePostings, error) { return newDiffVarintPostings(bytes, nil), nil }},
+		"raw": {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte, disablePooling bool) (closeablePostings, error) {
+			return newDiffVarintPostings(bytes, nil), nil
+		}},
 		"snappy":         {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
 		"snappyStreamed": {codingFunction: diffVarintSnappyStreamedEncode, decodingFunction: diffVarintSnappyStreamedDecode},
 	}
@@ -81,7 +132,7 @@ func TestDiffVarintCodec(t *testing.T) {
 				t.Log("encoded size", len(data), "bytes")
 				t.Logf("ratio: %0.3f", float64(len(data))/float64(4*p.len()))
 
-				decodedPostings, err := codec.decodingFunction(data)
+				decodedPostings, err := codec.decodingFunction(data, false)
 				testutil.Ok(t, err)
 
 				p.reset()
@@ -212,21 +263,21 @@ func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 
 	codecs := map[string]struct {
 		codingFunction   func(index.Postings, int) ([]byte, error)
-		decodingFunction func([]byte) (closeablePostings, error)
+		decodingFunction func([]byte, bool) (closeablePostings, error)
 	}{
-		"raw":            {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (closeablePostings, error) { return newDiffVarintPostings(bytes, nil), nil }},
+		"raw": {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte, disablePooling bool) (closeablePostings, error) {
+			return newDiffVarintPostings(bytes, nil), nil
+		}},
 		"snappy":         {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
 		"snappyStreamed": {codingFunction: diffVarintSnappyStreamedEncode, decodingFunction: diffVarintSnappyStreamedDecode},
 	}
-
 	b.ReportAllocs()
 
 	for _, count := range []int{10000, 100000, 1000000} {
-		for codecName, codecFns := range codecs {
-			b.Run(strconv.Itoa(count), func(b *testing.B) {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			for codecName, codecFns := range codecs {
 				b.Run(codecName, func(b *testing.B) {
 					b.Run("encode", func(b *testing.B) {
-						b.ResetTimer()
 						for i := 0; i < b.N; i++ {
 							ps := &uint64Postings{vals: p[:count]}
 
@@ -243,19 +294,23 @@ func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-
 						b.ResetTimer()
+
 						for i := 0; i < b.N; i++ {
-							_, err := codecFns.decodingFunction(encoded)
+							decoded, err := codecFns.decodingFunction(encoded, true)
 							if err != nil {
 								b.Fatal(err)
 							}
+
+							for decoded.Next() {
+								var _ = decoded.At()
+							}
+							testutil.Ok(b, decoded.Err())
 						}
 					})
-
 				})
-			})
-		}
+			}
+		})
 	}
 }
 
@@ -284,4 +339,48 @@ func FuzzSnappyStreamEncoding(f *testing.F) {
 		_, err := diffVarintSnappyStreamedEncode(ps, ps.len())
 		testutil.Ok(t, err)
 	})
+}
+
+func TestRegressionIssue6545(t *testing.T) {
+	diffVarintPostings, err := os.ReadFile("6545postingsrepro")
+	testutil.Ok(t, err)
+
+	gotPostings := 0
+	dvp := newDiffVarintPostings(diffVarintPostings, nil)
+	decodedPostings := []storage.SeriesRef{}
+	for dvp.Next() {
+		decodedPostings = append(decodedPostings, dvp.At())
+		gotPostings++
+	}
+	testutil.Ok(t, dvp.Err())
+	testutil.Equals(t, 114024, gotPostings)
+
+	dataToCache, err := snappyStreamedEncode(114024, diffVarintPostings)
+	testutil.Ok(t, err)
+
+	// Check that the original decompressor works well.
+	sr := s2.NewReader(bytes.NewBuffer(dataToCache[3:]))
+	readBytes, err := io.ReadAll(sr)
+	testutil.Ok(t, err)
+	testutil.Equals(t, readBytes, diffVarintPostings)
+
+	dvp = newDiffVarintPostings(readBytes, nil)
+	gotPostings = 0
+	for dvp.Next() {
+		gotPostings++
+	}
+	testutil.Equals(t, 114024, gotPostings)
+
+	p, err := decodePostings(dataToCache)
+	testutil.Ok(t, err)
+
+	i := 0
+	for p.Next() {
+		post := p.At()
+		testutil.Equals(t, uint64(decodedPostings[i]), uint64(post))
+		i++
+	}
+
+	testutil.Ok(t, p.Err())
+	testutil.Equals(t, 114024, i)
 }

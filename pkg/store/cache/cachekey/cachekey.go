@@ -20,11 +20,12 @@ var (
 type VerbType string
 
 const (
-	ExistsVerb     VerbType = "exists"
-	ContentVerb    VerbType = "content"
-	IterVerb       VerbType = "iter"
-	AttributesVerb VerbType = "attrs"
-	SubrangeVerb   VerbType = "subrange"
+	ExistsVerb        VerbType = "exists"
+	ContentVerb       VerbType = "content"
+	IterVerb          VerbType = "iter"
+	IterRecursiveVerb VerbType = "iter-recursive"
+	AttributesVerb    VerbType = "attrs"
+	SubrangeVerb      VerbType = "subrange"
 )
 
 type BucketCacheKey struct {
@@ -50,6 +51,7 @@ func IsValidVerb(v VerbType) bool {
 		ExistsVerb,
 		ContentVerb,
 		IterVerb,
+		IterRecursiveVerb,
 		AttributesVerb,
 		SubrangeVerb:
 		return true

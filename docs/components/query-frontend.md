@@ -117,10 +117,6 @@ config:
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
-  pool_size: 100
-  min_idle_conns: 10
-  idle_timeout: 5m0s
-  max_conn_age: 0s
   max_get_multi_concurrency: 100
   get_multi_batch_size: 100
   max_set_multi_concurrency: 100
@@ -134,6 +130,8 @@ config:
     insecure_skip_verify: false
   cache_size: 0
   master_name: ""
+  max_async_buffer_size: 10000
+  max_async_concurrency: 20
   expiration: 24h0m0s
 ```
 
@@ -234,15 +232,6 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would
-                                 be soon deprecated, and replaced with
-                                 `request.logging-config`. Request Logging
-                                 for logging the start and end of requests.
-                                 By default this flag is disabled. LogFinishCall
-                                 : Logs the finish call of the requests.
-                                 LogStartAndFinishCall : Logs the start and
-                                 finish call of the requests. NoLogCall :
-                                 Disable request logging.
       --query-frontend.compress-responses
                                  Compress HTTP responses.
       --query-frontend.downstream-tripper-config=<content>

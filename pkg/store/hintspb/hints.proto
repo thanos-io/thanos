@@ -88,4 +88,6 @@ message QueryStats {
     int64 chunks_fetched = 17;
     int64 chunks_fetched_size_sum = 18;
     int64 chunks_fetch_count = 19;
+
+    int64 data_downloaded_size_sum = 20;
 }

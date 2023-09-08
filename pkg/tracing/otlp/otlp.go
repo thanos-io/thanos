@@ -73,17 +73,27 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 }
 
 func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, logger log.Logger, serviceName string, sampler tracesdk.Sampler) *tracesdk.TracerProvider {
-	resource, err := resource.New(
-		ctx,
-		resource.WithAttributes(semconv.ServiceNameKey.String(serviceName)),
+	var (
+		r   *resource.Resource
+		err error
 	)
+	if serviceName != "" {
+		r, err = resource.New(
+			ctx,
+			resource.WithAttributes(semconv.ServiceNameKey.String(serviceName)),
+		)
+	} else {
+		r, err = resource.New(
+			ctx,
+		)
+	}
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}
 
 	tp := tracesdk.NewTracerProvider(
 		tracesdk.WithSpanProcessor(processor),
-		tracesdk.WithResource(resource),
+		tracesdk.WithResource(r),
 		tracesdk.WithSampler(
 			migration.SamplerWithOverride(
 				sampler, migration.ForceTracingAttributeKey,

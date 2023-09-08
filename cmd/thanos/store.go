@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -18,12 +19,12 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/route"
-	"github.com/thanos-io/objstore/client"
-
 	commonmodel "github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
 
-	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -63,6 +64,8 @@ type storeConfig struct {
 	httpConfig                  httpConfig
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
+	estimatedMaxSeriesSize      uint64
+	estimatedMaxChunkSize       uint64
 	seriesBatchSize             int
 	storeRateLimits             store.SeriesSelectLimits
 	maxDownloadedBytes          units.Base2Bytes
@@ -139,6 +142,12 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("debug.series-batch-size", "The batch size when fetching series from TSDB blocks. Setting the number too high can lead to slower retrieval, while setting it too low can lead to throttling caused by too many calls made to object storage.").
 		Hidden().Default(strconv.Itoa(store.SeriesBatchSize)).IntVar(&sc.seriesBatchSize)
 
+	cmd.Flag("debug.estimated-max-series-size", "Estimated max series size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 64KB.").
+		Hidden().Default(strconv.Itoa(store.EstimatedMaxSeriesSize)).Uint64Var(&sc.estimatedMaxSeriesSize)
+
+	cmd.Flag("debug.estimated-max-chunk-size", "Estimated max chunk size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 16KiB.").
+		Hidden().Default(strconv.Itoa(store.EstimatedMaxChunkSize)).Uint64Var(&sc.estimatedMaxChunkSize)
+
 	sc.filterConf = &store.FilterConfig{}
 
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
@@ -202,12 +211,12 @@ func registerStore(app *extkingpin.App) {
 				conf.filterConf.MinTime, conf.filterConf.MaxTime)
 		}
 
-		httpLogOpts, err := logging.ParseHTTPOptions("", conf.reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -275,10 +284,11 @@ func runStore(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, conf.component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String())
 	if err != nil {
-		return errors.Wrap(err, "create bucket client")
+		return err
 	}
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	cachingBucketConfigYaml, err := conf.cachingBucketConfig.Content()
 	if err != nil {
@@ -288,7 +298,7 @@ func runStore(
 	r := route.New()
 
 	if len(cachingBucketConfigYaml) > 0 {
-		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg, r)
+		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r)
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
@@ -315,7 +325,7 @@ func runStore(
 	if len(indexCacheContentYaml) > 0 {
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
-		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
+		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, nil, reg, storecache.InMemoryIndexCacheConfig{
 			MaxSize:     model.Bytes(conf.indexCacheSizeBytes),
 			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})
@@ -324,8 +334,8 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
@@ -358,6 +368,20 @@ func runStore(
 		store.WithFilterConfig(conf.filterConf),
 		store.WithChunkHashCalculation(true),
 		store.WithSeriesBatchSize(conf.seriesBatchSize),
+		store.WithBlockEstimatedMaxSeriesFunc(func(m metadata.Meta) uint64 {
+			if m.Thanos.IndexStats.SeriesMaxSize > 0 &&
+				uint64(m.Thanos.IndexStats.SeriesMaxSize) < conf.estimatedMaxSeriesSize {
+				return uint64(m.Thanos.IndexStats.SeriesMaxSize)
+			}
+			return conf.estimatedMaxSeriesSize
+		}),
+		store.WithBlockEstimatedMaxChunkFunc(func(m metadata.Meta) uint64 {
+			if m.Thanos.IndexStats.ChunkMaxSize > 0 &&
+				uint64(m.Thanos.IndexStats.ChunkMaxSize) < conf.estimatedMaxChunkSize {
+				return uint64(m.Thanos.IndexStats.ChunkMaxSize)
+			}
+			return conf.estimatedMaxChunkSize
+		}),
 	}
 
 	if conf.debugLogging {
@@ -365,7 +389,7 @@ func runStore(
 	}
 
 	bs, err := store.NewBucketStore(
-		bkt,
+		insBkt,
 		metaFetcher,
 		dataDir,
 		store.NewChunksLimiterFactory(conf.storeRateLimits.SamplesPerRequest/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
@@ -389,7 +413,7 @@ func runStore(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
@@ -471,6 +495,24 @@ func runStore(
 			s.Shutdown(err)
 		})
 	}
+
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		level.Debug(logger).Log("msg", "setting up periodic update for label names")
+		g.Add(func() error {
+			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
+				level.Debug(logger).Log("msg", "Starting label names update")
+
+				bs.UpdateLabelNames()
+
+				level.Debug(logger).Log("msg", "Finished label names update")
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
+
+	}
 	// Add bucket UI for loaded blocks.
 	{
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
@@ -481,7 +523,7 @@ func runStore(
 
 			// Configure Request Logging for HTTP calls.
 			logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, conf.label, flagsMap, bkt)
+			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, conf.label, flagsMap, insBkt)
 			api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 			metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {

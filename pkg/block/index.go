@@ -85,6 +85,10 @@ type HealthStats struct {
 	ChunkAvgSize int64
 	ChunkMaxSize int64
 
+	SeriesMinSize int64
+	SeriesAvgSize int64
+	SeriesMaxSize int64
+
 	SingleSampleSeries int64
 	SingleSampleChunks int64
 
@@ -231,6 +235,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		seriesChunks                                = newMinMaxSumInt64()
 		chunkDuration                               = newMinMaxSumInt64()
 		chunkSize                                   = newMinMaxSumInt64()
+		seriesSize                                  = newMinMaxSumInt64()
 	)
 
 	lnames, err := r.LabelNames()
@@ -245,11 +250,25 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 	}
 	stats.MetricLabelValuesCount = int64(len(lvals))
 
+	// As of version two all series entries are 16 byte padded. All references
+	// we get have to account for that to get the correct offset.
+	offsetMultiplier := 1
+	version := r.Version()
+	if version >= 2 {
+		offsetMultiplier = 16
+	}
+
 	// Per series.
+	var prevId storage.SeriesRef
 	for p.Next() {
 		lastLset = append(lastLset[:0], lset...)
 
 		id := p.At()
+		if prevId != 0 {
+			// Approximate size.
+			seriesSize.Add(int64(id-prevId) * int64(offsetMultiplier))
+		}
+		prevId = id
 		stats.TotalSeries++
 
 		if err := r.Series(id, &builder, &chks); err != nil {
@@ -293,7 +312,12 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 
 			// Approximate size.
 			if i < len(chks)-2 {
-				chunkSize.Add(int64(chks[i+1].Ref - c.Ref))
+				sgmIndex, chkStart := chunks.BlockChunkRef(c.Ref).Unpack()
+				sgmIndex2, chkStart2 := chunks.BlockChunkRef(chks[i+1].Ref).Unpack()
+				// Skip the case where two chunks are spread into 2 files.
+				if sgmIndex == sgmIndex2 {
+					chunkSize.Add(int64(chkStart2 - chkStart))
+				}
 			}
 
 			// Chunk vs the block ranges.
@@ -361,6 +385,10 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 	stats.ChunkMaxSize = chunkSize.max
 	stats.ChunkAvgSize = chunkSize.Avg()
 	stats.ChunkMinSize = chunkSize.min
+
+	stats.SeriesMaxSize = seriesSize.max
+	stats.SeriesAvgSize = seriesSize.Avg()
+	stats.SeriesMinSize = seriesSize.min
 
 	stats.ChunkMaxDuration = time.Duration(chunkDuration.max) * time.Millisecond
 	stats.ChunkAvgDuration = time.Duration(chunkDuration.Avg()) * time.Millisecond

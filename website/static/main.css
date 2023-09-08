@@ -198,3 +198,7 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
         padding-bottom: 15px;
     }
 }
+
+.blog-post img {
+    width: 100%;
+}

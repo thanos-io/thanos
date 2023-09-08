@@ -8,17 +8,17 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.20-node
+      - image: cimg/go:1.21-node
   golang-test:
     docker:
-      - image: cimg/go:1.20-node
+      - image: cimg/go:1.21-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
   test:
     executor: golang-test
     environment:
-      GO111MODULE: 'on'
+      GO111MODULE: "on"
     steps:
       - git-shallow-clone/checkout
       - go/mod-download-cached
@@ -36,7 +36,7 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
-            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI
+            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
             OS_PASSWORD: s3cr3t

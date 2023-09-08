@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -72,6 +73,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
+		"",
 		nil,
 		relabel.Config{
 			Action:       relabel.Drop,
@@ -340,6 +342,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
+		"",
 		[]string{"--no-cache-index-header"},
 		relabel.Config{
 			Action:       relabel.Drop,
@@ -571,6 +574,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
+		"",
 		nil,
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
@@ -679,6 +683,7 @@ metafile_content_ttl: 0s`
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
+		"",
 		nil,
 	)
 	store2 := e2ethanos.NewStoreGW(
@@ -689,6 +694,7 @@ metafile_content_ttl: 0s`
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
+		"",
 		nil,
 	)
 	store3 := e2ethanos.NewStoreGW(
@@ -699,6 +705,7 @@ metafile_content_ttl: 0s`
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
+		"",
 		nil,
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(store1, store2, store3))
@@ -795,6 +802,7 @@ config:
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
+		"",
 		[]string{"--store.grpc.downloaded-bytes-limit=1B"},
 	)
 
@@ -806,6 +814,7 @@ config:
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
+		"",
 		[]string{"--store.grpc.downloaded-bytes-limit=100B"},
 	)
 	store3 := e2ethanos.NewStoreGW(
@@ -816,7 +825,8 @@ config:
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
-		[]string{"--store.grpc.downloaded-bytes-limit=196627B"},
+		"",
+		[]string{"--store.grpc.downloaded-bytes-limit=310176B"},
 	)
 
 	testutil.Ok(t, e2e.StartAndWaitReady(store1, store2, store3))
@@ -833,6 +843,7 @@ config:
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
 	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
+	extLset4 := labels.FromStrings("ext1", "value2", "replica", "4")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
@@ -844,7 +855,7 @@ config:
 	testutil.Ok(t, err)
 	id3, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset3, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0, metadata.NoneFunc)
+	id4, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset4, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
@@ -865,7 +876,7 @@ config:
 	t.Run("Series() limits", func(t *testing.T) {
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
-			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
+			if _, _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery, now, opts); err != nil {
 				e := err.Error()
 				if strings.Contains(e, "expanded matching posting: get postings") && strings.Contains(e, "exceeded bytes limit while fetching postings: limit 1 violated") {
 					return nil
@@ -876,7 +887,7 @@ config:
 		}))
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
-			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q2.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
+			if _, _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q2.Endpoint("http")), testQuery, now, opts); err != nil {
 				e := err.Error()
 				if strings.Contains(e, "preload series") && strings.Contains(e, "exceeded bytes limit while fetching series: limit 100 violated") {
 					return nil
@@ -887,9 +898,12 @@ config:
 		}))
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
-			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q3.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
+			if _, _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q3.Endpoint("http")), testQuery, now, opts); err != nil {
+				if err != nil {
+					t.Logf("got error: %s", err)
+				}
 				e := err.Error()
-				if strings.Contains(e, "load chunks") && strings.Contains(e, "exceeded bytes limit while fetching chunks: limit 196627 violated") {
+				if strings.Contains(e, "load chunks") && strings.Contains(e, "exceeded bytes limit while fetching chunks: limit 310176 violated") {
 					return nil
 				}
 				return err
@@ -910,14 +924,126 @@ func TestRedisClient_Rueidis(t *testing.T) {
 	testutil.Ok(t, r.Start())
 
 	redisClient, err := cacheutil.NewRedisClientWithConfig(log.NewLogfmtLogger(os.Stderr), "redis", cacheutil.RedisClientConfig{
-		Addr: r.Endpoint("redis"),
+		Addr:                r.Endpoint("redis"),
+		MaxAsyncBufferSize:  10,
+		MaxAsyncConcurrency: 1,
 	}, nil)
 	testutil.Ok(t, err)
 
-	err = redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute)
+	testutil.Ok(t, redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute))
+	testutil.Ok(t, runutil.Retry(1*time.Second, make(<-chan struct{}), func() error {
+		returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
+		if len(returnedVals) != 1 {
+			return fmt.Errorf("got zero responses")
+		}
+		if !bytes.Equal(returnedVals["foo"], []byte("bar")) {
+			return fmt.Errorf("got wrong response, expected bar: %v", returnedVals["foo"])
+		}
+		return nil
+	}))
+}
+
+func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("memcached-exp")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "store-gateway-memcached-index-cache-expanded-postings-test"
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	memcached := e2ethanos.NewMemcached(e, "1")
+	testutil.Ok(t, e2e.StartAndWaitReady(memcached))
+
+	indexCacheConfig := fmt.Sprintf(`type: MEMCACHED
+config:
+  addresses: [%s]
+  max_async_concurrency: 10
+  dns_provider_update_interval: 1s
+  auto_discovery: false`, memcached.InternalEndpoint("memcached"))
+
+	s1 := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+		},
+		"",
+		indexCacheConfig,
+		nil,
+	)
+	testutil.Ok(t, e2e.StartAndWaitReady(s1))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
+	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+	id, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
-	returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
-	testutil.Equals(t, 1, len(returnedVals))
-	testutil.Equals(t, []byte("bar"), returnedVals["foo"])
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
+
+	// Wait for store to sync blocks.
+	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_blocks_loaded"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_drops_total"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+
+	t.Run("query with cache miss", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+			},
+		)
+
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{`thanos_store_index_cache_requests_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{`thanos_store_index_cache_hits_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
+	})
+
+	t.Run("query with cache hit", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+			},
+		)
+
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{`thanos_store_index_cache_requests_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{`thanos_store_index_cache_hits_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
+	})
 }

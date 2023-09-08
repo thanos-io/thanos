@@ -31,8 +31,6 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
-	"github.com/thanos-io/thanos/internal/cortex/util/flagext"
-	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	"github.com/thanos-io/thanos/internal/cortex/util/validation"
 )
@@ -62,8 +60,6 @@ func (cfg *ResultsCacheConfig) RegisterFlags(f *flag.FlagSet) {
 
 	f.StringVar(&cfg.Compression, "frontend.compression", "", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).")
 	f.BoolVar(&cfg.CacheQueryableSamplesStats, "frontend.cache-queryable-samples-stats", false, "Cache Statistics queryable samples on results cache.")
-	//lint:ignore faillint Need to pass the global logger like this for warning on deprecated methods
-	flagext.DeprecatedFlag(f, "frontend.cache-split-interval", "Deprecated: The maximum interval expected for each request, results will be cached per single interval. This behavior is now determined by querier.split-queries-by-interval.", util_log.Logger)
 }
 
 func (cfg *ResultsCacheConfig) Validate(qCfg querier.Config) error {
@@ -98,9 +94,10 @@ func (PrometheusResponseExtractor) Extract(start, end int64, from Response) Resp
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType: promRes.Data.ResultType,
-			Result:     extractMatrix(start, end, promRes.Data.Result),
-			Stats:      extractStats(start, end, promRes.Data.Stats),
+			ResultType:  promRes.Data.ResultType,
+			Result:      extractMatrix(start, end, promRes.Data.Result),
+			Stats:       extractStats(start, end, promRes.Data.Stats),
+			Explanation: promRes.Data.Explanation,
 		},
 		Headers: promRes.Headers,
 	}
@@ -113,9 +110,10 @@ func (PrometheusResponseExtractor) ResponseWithoutHeaders(resp Response) Respons
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType: promRes.Data.ResultType,
-			Result:     promRes.Data.Result,
-			Stats:      promRes.Data.Stats,
+			ResultType:  promRes.Data.ResultType,
+			Result:      promRes.Data.Result,
+			Stats:       promRes.Data.Stats,
+			Explanation: promRes.Data.Explanation,
 		},
 	}
 }
@@ -126,8 +124,9 @@ func (PrometheusResponseExtractor) ResponseWithoutStats(resp Response) Response 
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType: promRes.Data.ResultType,
-			Result:     promRes.Data.Result,
+			ResultType:  promRes.Data.ResultType,
+			Result:      promRes.Data.Result,
+			Explanation: promRes.Data.Explanation,
 		},
 		Headers: promRes.Headers,
 	}

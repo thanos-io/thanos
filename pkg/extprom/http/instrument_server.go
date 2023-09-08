@@ -76,7 +76,7 @@ func httpInstrumentationHandler(baseLabels prometheus.Labels, metrics *defaultMe
 
 						requestLabels := prometheus.Labels{"code": wd.Status(), "method": strings.ToLower(r.Method)}
 						observer := metrics.requestDuration.MustCurryWith(baseLabels).With(requestLabels)
-						observer.Observe(time.Since(now).Seconds())
+						requestDuration := time.Since(now).Seconds()
 
 						// If we find a tracingID we'll expose it as Exemplar.
 						var (
@@ -104,11 +104,13 @@ func httpInstrumentationHandler(baseLabels prometheus.Labels, metrics *defaultMe
 
 						if traceID != "" {
 							observer.(prometheus.ExemplarObserver).ObserveWithExemplar(
-								time.Since(now).Seconds(),
+								requestDuration,
 								prometheus.Labels{
 									"traceID": traceID,
 								},
 							)
+						} else {
+							observer.Observe(requestDuration)
 						}
 					}),
 				),

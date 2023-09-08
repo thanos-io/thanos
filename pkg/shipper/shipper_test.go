@@ -29,7 +29,7 @@ import (
 func TestShipperTimestamps(t *testing.T) {
 	dir := t.TempDir()
 
-	s := New(nil, nil, dir, nil, nil, metadata.TestSource, false, false, metadata.NoneFunc)
+	s := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc)
 
 	// Missing thanos meta file.
 	_, _, err := s.Timestamps()
@@ -122,7 +122,7 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false, false, metadata.NoneFunc)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc)
 	metas, err := shipper.blockMetasFromOldest()
 	testutil.Ok(t, err)
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
@@ -153,7 +153,7 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false, false, metadata.NoneFunc)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc)
 
 	_, err := shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
@@ -165,7 +165,7 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	inmemory := objstore.NewInMemBucket()
 
 	lbls := []labels.Label{{Name: "test", Value: "test"}}
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, false, false, metadata.NoneFunc)
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, metadata.NoneFunc)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())

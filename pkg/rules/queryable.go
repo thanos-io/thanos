@@ -88,7 +88,7 @@ func (q *promClientsQuerier) Select(_ bool, _ *storage.SelectHints, matchers ...
 		promClient := q.promClients[i]
 		endpoints := RemoveDuplicateQueryEndpoints(q.logger, q.duplicatedQuery, q.queryClients[i].Endpoints())
 		for _, i := range rand.Perm(len(endpoints)) {
-			m, warns, err := promClient.QueryRange(q.ctx, endpoints[i], query, q.mint, q.maxt, q.step, promclient.QueryOptions{
+			m, warns, _, err := promClient.QueryRange(q.ctx, endpoints[i], query, q.mint, q.maxt, q.step, promclient.QueryOptions{
 				Deduplicate: true,
 				Method:      q.httpMethod,
 			})

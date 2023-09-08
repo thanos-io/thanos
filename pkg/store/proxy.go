@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -28,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -302,10 +304,23 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
+	// We may arrive here either via the promql engine
+	// or as a result of a grpc call in layered queries
+	ctx := srv.Context()
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
+	if !foundTenant {
+		if ctx.Value(tenancy.TenantKey) != nil {
+			tenant = ctx.Value(tenancy.TenantKey).(string)
+		}
+	}
+
+	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
+	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
+
 	stores := []Client{}
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(srv.Context(), st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
+		if ok, reason := storeMatches(ctx, st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
 			if s.debugLogging {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out: %v", st, reason))
 			}
@@ -328,7 +343,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 		}
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
@@ -449,6 +464,19 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 		storeDebugMsgs []string
 	)
 
+	// We may arrive here either via the promql engine
+	// or as a result of a grpc call in layered queries
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(gctx)
+	if !foundTenant {
+		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
+		if gctx.Value(tenancy.TenantKey) != nil {
+			tenant = gctx.Value(tenancy.TenantKey).(string)
+		}
+	}
+
+	gctx = metadata.AppendToOutgoingContext(gctx, tenancy.DefaultTenantHeader, tenant)
+	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
+
 	for _, st := range s.stores() {
 		st := st
 
@@ -514,6 +542,19 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		storeDebugMsgs []string
 		span           opentracing.Span
 	)
+
+	// We may arrive here either via the promql engine
+	// or as a result of a grpc call in layered queries
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(gctx)
+	if !foundTenant {
+		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
+		if gctx.Value(tenancy.TenantKey) != nil {
+			tenant = gctx.Value(tenancy.TenantKey).(string)
+		}
+	}
+
+	gctx = metadata.AppendToOutgoingContext(gctx, tenancy.DefaultTenantHeader, tenant)
+	level.Debug(s.logger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
 
 	for _, st := range s.stores() {
 		st := st

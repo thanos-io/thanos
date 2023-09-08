@@ -5,13 +5,11 @@ package extkingpin
 
 import (
 	"context"
-	"fmt"
+	"crypto/sha256"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -22,73 +20,61 @@ type fileContent interface {
 	Path() string
 }
 
-// PathContentReloader starts a file watcher that monitors the file indicated by fileContent.Path() and runs
-// reloadFunc whenever a change is detected.
-// A debounce timer can be configured via opts to handle situations where many "write" events are received together or
-// a "create" event is followed up by a "write" event, for example. Files will be effectively reloaded at the latest
-// after 2 times the debounce timer. By default the debouncer timer is 1 second.
-// To ensure renames and deletes are properly handled, the file watcher is put at the file's parent folder. See
-// https://github.com/fsnotify/fsnotify/issues/214 for more details.
+// PathContentReloader runs the reloadFunc when it detects that the contents of fileContent have changed.
 func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), debounceTime time.Duration) error {
 	filePath, err := filepath.Abs(fileContent.Path())
 	if err != nil {
 		return errors.Wrap(err, "getting absolute file path")
 	}
 
-	watcher, err := fsnotify.NewWatcher()
-	if filePath == "" {
-		level.Debug(logger).Log("msg", "no path detected for config reload")
+	engine := &pollingEngine{
+		filePath:   filePath,
+		logger:     logger,
+		debounce:   debounceTime,
+		reloadFunc: reloadFunc,
 	}
-	if err != nil {
-		return errors.Wrap(err, "creating file watcher")
+	return engine.start(ctx)
+}
+
+// pollingEngine keeps rereading the contents at filePath and when its checksum changes it runs the reloadFunc.
+type pollingEngine struct {
+	filePath         string
+	logger           log.Logger
+	debounce         time.Duration
+	reloadFunc       func()
+	previousChecksum [sha256.Size]byte
+}
+
+func (p *pollingEngine) start(ctx context.Context) error {
+	configReader := func() {
+		// check if file still exists
+		if _, err := os.Stat(p.filePath); os.IsNotExist(err) {
+			level.Error(p.logger).Log("msg", "file does not exist", "error", err)
+			return
+		}
+		file, err := os.ReadFile(p.filePath)
+		if err != nil {
+			level.Error(p.logger).Log("msg", "error opening file", "error", err)
+			return
+		}
+		checksum := sha256.Sum256(file)
+		if checksum == p.previousChecksum {
+			return
+		}
+		p.reloadFunc()
+		p.previousChecksum = checksum
+		level.Debug(p.logger).Log("msg", "configuration reloaded", "path", p.filePath)
 	}
 	go func() {
-		var reloadTimer *time.Timer
-		if debounceTime != 0 {
-			reloadTimer = time.AfterFunc(debounceTime, func() {
-				reloadFunc()
-				level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
-			})
-		}
-		defer watcher.Close()
 		for {
 			select {
 			case <-ctx.Done():
-				if reloadTimer != nil {
-					reloadTimer.Stop()
-				}
 				return
-			case event := <-watcher.Events:
-				// fsnotify sometimes sends a bunch of events without name or operation.
-				// It's unclear what they are and why they are sent - filter them out.
-				if event.Name == "" {
-					break
-				}
-				// We are watching the file's parent folder (more details on this is done can be found below), but are
-				// only interested in changed to the target file. Discard every other file as quickly as possible.
-				if event.Name != filePath {
-					break
-				}
-				// We only react to files being written or created.
-				// On chmod or remove we have nothing to do.
-				// On rename we have the old file name (not useful). A create event for the new file will come later.
-				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 {
-					break
-				}
-				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
-				if reloadTimer != nil {
-					reloadTimer.Reset(debounceTime)
-				}
-			case err := <-watcher.Errors:
-				level.Error(logger).Log("msg", "watcher error", "error", err)
+			case <-time.After(p.debounce):
+				configReader()
 			}
 		}
 	}()
-	// We watch the file's parent folder and not the file itself to better handle DELETE and RENAME events. Check
-	// https://github.com/fsnotify/fsnotify/issues/214 for more details.
-	if err := watcher.Add(path.Dir(filePath)); err != nil {
-		return errors.Wrapf(err, "adding path %s to file watcher", filePath)
-	}
 	return nil
 }
 

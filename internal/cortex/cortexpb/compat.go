@@ -15,10 +15,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/textparse"
-
 	"github.com/thanos-io/thanos/internal/cortex/util"
 )
 
@@ -32,47 +29,6 @@ func FromLabelAdaptersToLabels(ls []LabelAdapter) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&ls))
 }
 
-// FromLabelAdaptersToLabelsWithCopy converts []LabelAdapter to labels.Labels.
-// Do NOT use unsafe to convert between data types because this function may
-// get in input labels whose data structure is reused.
-func FromLabelAdaptersToLabelsWithCopy(input []LabelAdapter) labels.Labels {
-	return CopyLabels(FromLabelAdaptersToLabels(input))
-}
-
-// Efficiently copies labels input slice. To be used in cases where input slice
-// can be reused, but long-term copy is needed.
-func CopyLabels(input []labels.Label) labels.Labels {
-	result := make(labels.Labels, len(input))
-
-	size := 0
-	for _, l := range input {
-		size += len(l.Name)
-		size += len(l.Value)
-	}
-
-	// Copy all strings into the buffer, and use 'yoloString' to convert buffer
-	// slices to strings.
-	buf := make([]byte, size)
-
-	for i, l := range input {
-		result[i].Name, buf = copyStringToBuffer(l.Name, buf)
-		result[i].Value, buf = copyStringToBuffer(l.Value, buf)
-	}
-	return result
-}
-
-// Copies string to buffer (which must be big enough), and converts buffer slice containing
-// the string copy into new string.
-func copyStringToBuffer(in string, buf []byte) (string, []byte) {
-	l := len(in)
-	c := copy(buf, in)
-	if c != l {
-		panic("not copied full string")
-	}
-
-	return yoloString(buf[0:l]), buf[l:]
-}
-
 // FromLabelsToLabelAdapters casts labels.Labels to []LabelAdapter.
 // It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
 // This allows us to use labels.Labels directly in protos.
@@ -84,12 +40,6 @@ func FromLabelsToLabelAdapters(ls labels.Labels) []LabelAdapter {
 // Don't do this on any performance sensitive paths.
 func FromLabelAdaptersToMetric(ls []LabelAdapter) model.Metric {
 	return util.LabelsToMetric(FromLabelAdaptersToLabels(ls))
-}
-
-// FromLabelAdaptersToMetric converts []LabelAdapter to a model.Metric with copy.
-// Don't do this on any performance sensitive paths.
-func FromLabelAdaptersToMetricWithCopy(ls []LabelAdapter) model.Metric {
-	return util.LabelsToMetric(FromLabelAdaptersToLabelsWithCopy(ls))
 }
 
 // FromMetricsToLabelAdapters converts model.Metric to []LabelAdapter.
@@ -107,60 +57,11 @@ func FromMetricsToLabelAdapters(metric model.Metric) []LabelAdapter {
 	return result
 }
 
-func FromExemplarsToExemplarProtos(es []exemplar.Exemplar) []Exemplar {
-	result := make([]Exemplar, 0, len(es))
-	for _, e := range es {
-		result = append(result, Exemplar{
-			Labels:      FromLabelsToLabelAdapters(e.Labels),
-			Value:       e.Value,
-			TimestampMs: e.Ts,
-		})
-	}
-	return result
-}
-
-func FromExemplarProtosToExemplars(es []Exemplar) []exemplar.Exemplar {
-	result := make([]exemplar.Exemplar, 0, len(es))
-	for _, e := range es {
-		result = append(result, exemplar.Exemplar{
-			Labels: FromLabelAdaptersToLabels(e.Labels),
-			Value:  e.Value,
-			Ts:     e.TimestampMs,
-		})
-	}
-	return result
-}
-
 type byLabel []LabelAdapter
 
 func (s byLabel) Len() int           { return len(s) }
 func (s byLabel) Less(i, j int) bool { return strings.Compare(s[i].Name, s[j].Name) < 0 }
 func (s byLabel) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-// MetricMetadataMetricTypeToMetricType converts a metric type from our internal client
-// to a Prometheus one.
-func MetricMetadataMetricTypeToMetricType(mt MetricMetadata_MetricType) textparse.MetricType {
-	switch mt {
-	case UNKNOWN:
-		return textparse.MetricTypeUnknown
-	case COUNTER:
-		return textparse.MetricTypeCounter
-	case GAUGE:
-		return textparse.MetricTypeGauge
-	case HISTOGRAM:
-		return textparse.MetricTypeHistogram
-	case GAUGEHISTOGRAM:
-		return textparse.MetricTypeGaugeHistogram
-	case SUMMARY:
-		return textparse.MetricTypeSummary
-	case INFO:
-		return textparse.MetricTypeInfo
-	case STATESET:
-		return textparse.MetricTypeStateset
-	default:
-		return textparse.MetricTypeUnknown
-	}
-}
 
 // isTesting is only set from tests to get special behaviour to verify that custom sample encode and decode is used,
 // both when using jsonitor or standard json package.

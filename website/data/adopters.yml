@@ -1,5 +1,8 @@
 ---
 adopters:
+- name: Aiven
+  url: https://aiven.io
+  logo: aivenlogo.png
 - name: Infinite Devices
   url: https://infinimesh.io
   logo: infdevlogo.png
@@ -222,3 +225,6 @@ adopters:
 - name: DE-CIX
   url: https://www.de-cix.net
   logo: de-cix.png
+- name: Zenduty
+  url: https://www.zenduty.com
+  logo: zenduty.png

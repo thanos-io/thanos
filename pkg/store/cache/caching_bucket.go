@@ -132,7 +132,13 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	}
 
 	cb.operationRequests.WithLabelValues(objstore.OpIter, cfgName).Inc()
+
 	iterVerb := cachekey.BucketCacheKey{Verb: cachekey.IterVerb, Name: dir}
+	opts := objstore.ApplyIterOptions(options...)
+	if opts.Recursive {
+		iterVerb.Verb = cachekey.IterRecursiveVerb
+	}
+
 	key := iterVerb.String()
 	data := cfg.Cache.Fetch(ctx, []string{key})
 	if data[key] != nil {

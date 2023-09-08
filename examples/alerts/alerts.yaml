@@ -274,6 +274,33 @@ groups:
     for: 3h
     labels:
       severity: critical
+  - alert: ThanosReceiveLimitsConfigReloadFailure
+    annotations:
+      description: Thanos Receive {{$labels.job}} has not been able to reload the limits configuration.
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivelimitsconfigreloadfailure
+      summary: Thanos Receive has not been able to reload the limits configuration.
+    expr: sum by(job) (increase(thanos_receive_limits_config_reload_err_total{job=~".*thanos-receive.*"}[5m])) > 0
+    for: 5m
+    labels:
+      severity: warning
+  - alert: ThanosReceiveLimitsHighMetaMonitoringQueriesFailureRate
+    annotations:
+      description: Thanos Receive {{$labels.job}} is failing for {{$value | humanize}}% of meta monitoring queries.
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivelimitshighmetamonitoringqueriesfailurerate
+      summary: Thanos Receive has not been able to update the number of head series.
+    expr: (sum by(job) (increase(thanos_receive_metamonitoring_failed_queries_total{job=~".*thanos-receive.*"}[5m])) / 20) * 100 > 20
+    for: 5m
+    labels:
+      severity: warning
+  - alert: ThanosReceiveTenantLimitedByHeadSeries
+    annotations:
+      description: Thanos Receive tenant {{$labels.tenant}} is limited by head series.
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivetenantlimitedbyheadseries
+      summary: A Thanos Receive tenant is limited by head series.
+    expr: sum by(job, tenant) (increase(thanos_receive_head_series_limited_requests_total{job=~".*thanos-receive.*"}[5m])) > 0
+    for: 5m
+    labels:
+      severity: warning
 - name: thanos-sidecar
   rules:
   - alert: ThanosSidecarBucketOperationsFailed

@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -26,9 +24,13 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/wlog"
+	"google.golang.org/grpc"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
-	"gopkg.in/yaml.v2"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -47,6 +49,7 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
@@ -71,7 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -83,7 +86,7 @@ func registerReceive(app *extkingpin.App) {
 			OutOfOrderTimeWindow:           int64(time.Duration(*conf.tsdbOutOfOrderTimeWindow) / time.Millisecond),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
-			WALCompression:                 conf.walCompression,
+			WALCompression:                 wlog.ParseCompressionType(conf.walCompression, string(wlog.CompressionSnappy)),
 			MaxExemplars:                   conf.tsdbMaxExemplars,
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
@@ -174,10 +177,11 @@ func runReceive(
 			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
-			bkt, err = client.NewBucket(logger, confContentYaml, reg, comp.String())
+			bkt, err = client.NewBucket(logger, confContentYaml, comp.String())
 			if err != nil {
 				return err
 			}
+			bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 		} else {
 			level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		}
@@ -225,7 +229,7 @@ func runReceive(
 			return errors.Wrap(err, "parse limit configuration")
 		}
 	}
-	limiter, err := receive.NewLimiter(conf.writeLimitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
+	limiter, err := receive.NewLimiter(conf.writeLimitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"), conf.limitsConfigReloadTimer)
 	if err != nil {
 		return errors.Wrap(err, "creating limiter")
 	}
@@ -361,6 +365,21 @@ func runReceive(
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		level.Debug(logger).Log("msg", "setting up periodic update for label names")
+		g.Add(func() error {
+			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
+				level.Debug(logger).Log("msg", "Starting label names update")
+
+				dbs.UpdateLabelNames(ctx)
+
+				level.Debug(logger).Log("msg", "Finished label names update")
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
 
 		g.Add(
 			func() error {
@@ -707,12 +726,12 @@ func startTSDBAndUpload(g *run.Group,
 					case <-uploadC:
 						// Upload on demand.
 						if err := upload(ctx); err != nil {
-							level.Warn(logger).Log("msg", "on demand upload failed", "err", err)
+							level.Error(logger).Log("msg", "on demand upload failed", "err", err)
 						}
 						uploadDone <- struct{}{}
 					case <-tick.C:
 						if err := upload(ctx); err != nil {
-							level.Warn(logger).Log("msg", "recurring upload failed", "err", err)
+							level.Error(logger).Log("msg", "recurring upload failed", "err", err)
 						}
 					}
 				}
@@ -821,8 +840,9 @@ type receiveConfig struct {
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
 
-	writeLimitsConfig *extflag.PathOrContent
-	storeRateLimits   store.SeriesSelectLimits
+	writeLimitsConfig       *extflag.PathOrContent
+	storeRateLimits         store.SeriesSelectLimits
+	limitsConfigReloadTimer time.Duration
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -870,13 +890,13 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
 
-	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).StringVar(&rc.tenantHeader)
+	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(tenancy.DefaultTenantHeader).StringVar(&rc.tenantHeader)
 
-	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+receive.CertificateFieldOrganization+", "+receive.CertificateFieldOrganizationalUnit+" or "+receive.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", receive.CertificateFieldOrganization, receive.CertificateFieldOrganizationalUnit, receive.CertificateFieldCommonName)
+	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
-	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).StringVar(&rc.defaultTenantID)
+	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(tenancy.DefaultTenant).StringVar(&rc.defaultTenantID)
 
-	cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(receive.DefaultTenantLabel).StringVar(&rc.tenantLabelName)
+	cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(tenancy.DefaultTenantLabel).StringVar(&rc.tenantLabelName)
 
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
 
@@ -952,6 +972,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	rc.writeLimitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
+	cmd.Flag("receive.limits-config-reload-timer", "Minimum amount of time to pass for the limit configuration to be reloaded. Helps to avoid excessive reloads.").
+		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
