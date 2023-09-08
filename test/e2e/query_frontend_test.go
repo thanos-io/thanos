@@ -800,10 +800,10 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resultWithoutSharding, _ := instantQuery(t, ctx, q1.Endpoint("http"), tc.qryFunc, func() time.Time {
+			resultWithoutSharding := instantQuery(t, ctx, q1.Endpoint("http"), tc.qryFunc, func() time.Time {
 				return now.Time()
 			}, queryOpts, tc.expectedSeries)
-			resultWithSharding, _ := instantQuery(t, ctx, qfe.Endpoint("http"), tc.qryFunc, func() time.Time {
+			resultWithSharding := instantQuery(t, ctx, qfe.Endpoint("http"), tc.qryFunc, func() time.Time {
 				return now.Time()
 			}, queryOpts, tc.expectedSeries)
 			testutil.Equals(t, resultWithoutSharding, resultWithSharding)
