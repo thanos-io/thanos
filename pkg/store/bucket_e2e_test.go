@@ -779,30 +779,6 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 	})
 }
 
-func TestBucketStore_LabelNamesSet_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
-		dir := t.TempDir()
-
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
-		s.cache.SwapWith(noopCache{})
-
-		mint, maxt := s.store.TimeRange()
-		testutil.Equals(t, s.minTime, mint)
-		testutil.Equals(t, s.maxTime, maxt)
-
-		s.store.UpdateLabelNames()
-		for _, b := range s.store.blocks {
-			waitTimeout(t, &b.pendingReaders, 5*time.Second)
-		}
-
-		filter := s.store.LabelNamesSet()
-		for _, n := range []string{"a", "b", "c"} {
-			testutil.Assert(t, filter.Has(n), "expected filter to have %s", n)
-		}
-		testutil.Equals(t, 3, filter.Count())
-	})
-}
-
 func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
 	cases := map[string]struct {
 		maxSeriesLimit uint64

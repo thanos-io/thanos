@@ -59,7 +59,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -387,9 +386,6 @@ type BucketStore struct {
 
 	enabledLazyExpandedPostings bool
 
-	bmtx          sync.Mutex
-	labelNamesSet stringset.Set
-
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
 }
@@ -543,7 +539,6 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
-		labelNamesSet:               stringset.AllStrings(),
 	}
 
 	for _, option := range options {
@@ -1788,38 +1783,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		Names: strutil.MergeSlices(sets...),
 		Hints: anyHints,
 	}, nil
-}
-
-func (s *BucketStore) UpdateLabelNames() {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	newSet := stringset.New()
-	for _, b := range s.blocks {
-		labelNames, err := b.indexHeaderReader.LabelNames()
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
-			s.updateLabelNamesSet(stringset.AllStrings())
-			return
-		}
-		for _, l := range labelNames {
-			newSet.Insert(l)
-		}
-	}
-	s.updateLabelNamesSet(newSet)
-}
-
-func (s *BucketStore) updateLabelNamesSet(newSet stringset.Set) {
-	s.bmtx.Lock()
-	s.labelNamesSet = newSet
-	s.bmtx.Unlock()
-}
-
-func (b *BucketStore) LabelNamesSet() stringset.Set {
-	b.bmtx.Lock()
-	defer b.bmtx.Unlock()
-
-	return b.labelNamesSet
 }
 
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
