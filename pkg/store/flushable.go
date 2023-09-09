@@ -11,17 +11,42 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+type sortingStrategy uint64
+
+const (
+	sortingStrategyStore sortingStrategy = iota + 1
+	sortingStrategyNone
+)
+
 // flushableServer is an extension of storepb.Store_SeriesServer with a Flush method.
 type flushableServer interface {
 	storepb.Store_SeriesServer
+
 	Flush() error
 }
 
 func newFlushableServer(
 	upstream storepb.Store_SeriesServer,
+	sortingsortingStrategy sortingStrategy,
 ) flushableServer {
-	return &resortingServer{Store_SeriesServer: upstream}
+	switch sortingsortingStrategy {
+	case sortingStrategyStore:
+		return &resortingServer{Store_SeriesServer: upstream}
+	case sortingStrategyNone:
+		return &passthroughServer{Store_SeriesServer: upstream}
+	default:
+		// should not happen.
+		panic("unexpected sorting strategy")
+	}
 }
+
+// passthroughServer is a flushableServer that forwards all data to
+// an upstream server without additional processing.
+type passthroughServer struct {
+	storepb.Store_SeriesServer
+}
+
+func (p *passthroughServer) Flush() error { return nil }
 
 // resortingServer is a flushableServer that resorts all series by their labels.
 // This is required if replica labels are stored internally in a TSDB.

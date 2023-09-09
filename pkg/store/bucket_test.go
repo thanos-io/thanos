@@ -3484,5 +3484,8 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		},
 	}, srv))
 
+	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
+		return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+	}))
 	testutil.Equals(t, 2, len(srv.SeriesSet))
 }

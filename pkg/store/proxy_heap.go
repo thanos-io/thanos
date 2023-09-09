@@ -756,9 +756,9 @@ func newEagerRespSet(
 
 		// This should be used only for stores that does not support doing this on server side.
 		// See docs/proposals-accepted/20221129-avoid-global-sort.md for details.
-		if len(l.removeLabels) > 0 {
-			sortWithoutLabels(l.bufferedResponses, l.removeLabels)
-		}
+		// NOTE. Client is not guaranteed to give a sorted response when extLset is added
+		// Generally we need to resort here.
+		sortWithoutLabels(l.bufferedResponses, l.removeLabels)
 
 	}(ret)
 
@@ -785,7 +785,9 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 			continue
 		}
 
-		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		if len(labelsToRemove) > 0 {
+			ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		}
 	}
 
 	// With the re-ordered label sets, re-sorting all series aligns the same series

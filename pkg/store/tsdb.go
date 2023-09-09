@@ -175,7 +175,7 @@ type CloseDelegator interface {
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
-	srv := newFlushableServer(seriesSrv)
+	srv := newFlushableServer(seriesSrv, sortingStrategyStore)
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {

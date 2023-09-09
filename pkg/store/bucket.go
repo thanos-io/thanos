@@ -1334,7 +1334,8 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) (err error) {
-	srv := newFlushableServer(seriesSrv)
+	srv := newFlushableServer(seriesSrv, sortingStrategyNone)
+
 	if s.queryGate != nil {
 		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
 			err = s.queryGate.Start(srv.Context())
@@ -1464,44 +1465,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
 				}
 
-				// If we have inner replica labels we need to resort.
-				s.mtx.Lock()
-				needsEagerRetrival := len(req.WithoutReplicaLabels) > 0 && s.labelNamesSet.HasAny(req.WithoutReplicaLabels)
-				s.mtx.Unlock()
-
-				var resp respSet
-				if needsEagerRetrival {
-					labelsToRemove := make(map[string]struct{})
-					for _, replicaLabel := range req.WithoutReplicaLabels {
-						labelsToRemove[replicaLabel] = struct{}{}
-					}
-					resp = newEagerRespSet(
-						srv.Context(),
-						span,
-						10*time.Minute,
-						blk.meta.ULID.String(),
-						[]labels.Labels{blk.extLset},
-						onClose,
-						blockClient,
-						shardMatcher,
-						false,
-						s.metrics.emptyPostingCount,
-						labelsToRemove,
-					)
-				} else {
-					resp = newLazyRespSet(
-						srv.Context(),
-						span,
-						10*time.Minute,
-						blk.meta.ULID.String(),
-						[]labels.Labels{blk.extLset},
-						onClose,
-						blockClient,
-						shardMatcher,
-						false,
-						s.metrics.emptyPostingCount,
-					)
-				}
+				resp := newEagerRespSet(
+					srv.Context(),
+					span,
+					10*time.Minute,
+					blk.meta.ULID.String(),
+					[]labels.Labels{blk.extLset},
+					onClose,
+					blockClient,
+					shardMatcher,
+					false,
+					s.metrics.emptyPostingCount,
+					nil,
+				)
 
 				mtx.Lock()
 				respSets = append(respSets, resp)
