@@ -117,27 +117,30 @@ var (
 )
 
 type bucketStoreMetrics struct {
-	blocksLoaded              prometheus.Gauge
-	blockLoads                prometheus.Counter
-	blockLoadFailures         prometheus.Counter
-	lastLoadedBlock           prometheus.Gauge
-	blockDrops                prometheus.Counter
-	blockDropFailures         prometheus.Counter
-	seriesDataTouched         *prometheus.HistogramVec
-	seriesDataFetched         *prometheus.HistogramVec
-	seriesDataSizeTouched     *prometheus.HistogramVec
-	seriesDataSizeFetched     *prometheus.HistogramVec
-	seriesBlocksQueried       prometheus.Histogram
-	seriesGetAllDuration      prometheus.Histogram
-	seriesMergeDuration       prometheus.Histogram
-	resultSeriesCount         prometheus.Histogram
-	chunkSizeBytes            prometheus.Histogram
-	postingsSizeBytes         prometheus.Histogram
-	queriesDropped            *prometheus.CounterVec
-	seriesRefetches           prometheus.Counter
-	chunkRefetches            prometheus.Counter
-	emptyPostingCount         prometheus.Counter
-	lazyExpandedPostingsCount prometheus.Counter
+	blocksLoaded          prometheus.Gauge
+	blockLoads            prometheus.Counter
+	blockLoadFailures     prometheus.Counter
+	lastLoadedBlock       prometheus.Gauge
+	blockDrops            prometheus.Counter
+	blockDropFailures     prometheus.Counter
+	seriesDataTouched     *prometheus.HistogramVec
+	seriesDataFetched     *prometheus.HistogramVec
+	seriesDataSizeTouched *prometheus.HistogramVec
+	seriesDataSizeFetched *prometheus.HistogramVec
+	seriesBlocksQueried   prometheus.Histogram
+	seriesGetAllDuration  prometheus.Histogram
+	seriesMergeDuration   prometheus.Histogram
+	resultSeriesCount     prometheus.Histogram
+	chunkSizeBytes        prometheus.Histogram
+	postingsSizeBytes     prometheus.Histogram
+	queriesDropped        *prometheus.CounterVec
+	seriesRefetches       prometheus.Counter
+	chunkRefetches        prometheus.Counter
+	emptyPostingCount     prometheus.Counter
+
+	lazyExpandedPostingsCount                     prometheus.Counter
+	lazyExpandedPostingSizeBytes                  prometheus.Counter
+	lazyExpandedPostingSeriesOverfetchedSizeBytes prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
 	cachedPostingsCompressionErrors      *prometheus.CounterVec
@@ -305,7 +308,17 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 
 	m.lazyExpandedPostingsCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_lazy_expanded_postings_total",
-		Help: "Total number of lazy expanded postings when fetching block series.",
+		Help: "Total number of times when lazy expanded posting optimization applies.",
+	})
+
+	m.lazyExpandedPostingSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_lazy_expanded_posting_size_bytes_total",
+		Help: "Total number of lazy posting group size in bytes.",
+	})
+
+	m.lazyExpandedPostingSeriesOverfetchedSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_lazy_expanded_posting_series_overfetched_size_bytes_total",
+		Help: "Total number of series size in bytes overfetched due to posting lazy expansion.",
 	})
 
 	return &m
@@ -913,8 +926,10 @@ type blockSeriesClient struct {
 	chunksLimiter  ChunksLimiter
 	bytesLimiter   BytesLimiter
 
-	lazyExpandedPostingEnabled bool
-	lazyExpandedPostingsCount  prometheus.Counter
+	lazyExpandedPostingEnabled                    bool
+	lazyExpandedPostingsCount                     prometheus.Counter
+	lazyExpandedPostingSizeBytes                  prometheus.Counter
+	lazyExpandedPostingSeriesOverfetchedSizeBytes prometheus.Counter
 
 	skipChunks         bool
 	shardMatcher       *storepb.ShardMatcher
@@ -949,6 +964,8 @@ func newBlockSeriesClient(
 	extLsetToRemove map[string]struct{},
 	lazyExpandedPostingEnabled bool,
 	lazyExpandedPostingsCount prometheus.Counter,
+	lazyExpandedPostingSizeBytes prometheus.Counter,
+	lazyExpandedPostingSeriesOverfetchedSizeBytes prometheus.Counter,
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
@@ -975,8 +992,10 @@ func newBlockSeriesClient(
 		skipChunks:         req.SkipChunks,
 		chunkFetchDuration: chunkFetchDuration,
 
-		lazyExpandedPostingEnabled: lazyExpandedPostingEnabled,
-		lazyExpandedPostingsCount:  lazyExpandedPostingsCount,
+		lazyExpandedPostingEnabled:                    lazyExpandedPostingEnabled,
+		lazyExpandedPostingsCount:                     lazyExpandedPostingsCount,
+		lazyExpandedPostingSizeBytes:                  lazyExpandedPostingSizeBytes,
+		lazyExpandedPostingSeriesOverfetchedSizeBytes: lazyExpandedPostingSeriesOverfetchedSizeBytes,
 
 		loadAggregates:     req.Aggregates,
 		shardMatcher:       shardMatcher,
@@ -1023,7 +1042,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
-	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled)
+	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.lazyExpandedPostingSizeBytes)
 	if err != nil {
 		return errors.Wrap(err, "expanded matching posting")
 	}
@@ -1131,6 +1150,9 @@ OUTER:
 		for _, matcher := range b.lazyPostings.matchers {
 			val := b.lset.Get(matcher.Name)
 			if !matcher.Matches(val) {
+				// Series not matched means series we overfetched due to lazy posting expansion.
+				seriesBytes := b.indexr.loadedSeries[postingsBatch[i]]
+				b.lazyExpandedPostingSeriesOverfetchedSizeBytes.Add(float64(len(seriesBytes)))
 				continue OUTER
 			}
 		}
@@ -1412,6 +1434,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				extLsetToRemove,
 				s.enabledLazyExpandedPostings,
 				s.metrics.lazyExpandedPostingsCount,
+				s.metrics.lazyExpandedPostingSizeBytes,
+				s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 			)
 
 			defer blockClient.Close()
@@ -1716,6 +1740,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					nil,
 					s.enabledLazyExpandedPostings,
 					s.metrics.lazyExpandedPostingsCount,
+					s.metrics.lazyExpandedPostingSizeBytes,
+					s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 				)
 				defer blockClient.Close()
 
@@ -1947,6 +1973,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					nil,
 					s.enabledLazyExpandedPostings,
 					s.metrics.lazyExpandedPostingsCount,
+					s.metrics.lazyExpandedPostingSizeBytes,
+					s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 				)
 				defer blockClient.Close()
 
@@ -2388,7 +2416,7 @@ func (r *bucketIndexReader) reset() {
 // Reminder: A posting is a reference (represented as a uint64) to a series reference, which in turn points to the first
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
-func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiter BytesLimiter, lazyExpandedPostingEnabled bool) (*lazyExpandedPostings, error) {
+func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiter BytesLimiter, lazyExpandedPostingEnabled bool, lazyExpandedPostingSizeBytes prometheus.Counter) (*lazyExpandedPostings, error) {
 	// Shortcut the case of `len(postingGroups) == 0`. It will only happen when no
 	// matchers specified, and we don't need to fetch expanded postings from cache.
 	if len(ms) == 0 {
@@ -2440,7 +2468,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatch
 		postingGroups = append(postingGroups, newPostingGroup(true, name, []string{value}, nil))
 	}
 
-	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, addAllPostings, lazyExpandedPostingEnabled)
+	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, addAllPostings, lazyExpandedPostingEnabled, lazyExpandedPostingSizeBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch and expand postings")
 	}

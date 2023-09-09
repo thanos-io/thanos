@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/index"
@@ -36,7 +37,7 @@ func (p *lazyExpandedPostings) lazyExpanded() bool {
 	return p != nil && len(p.matchers) > 0
 }
 
-func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64) ([]*postingGroup, bool, error) {
+func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64, lazyExpandedPostingSizeBytes prometheus.Counter) ([]*postingGroup, bool, error) {
 	if len(postingGroups) <= 1 {
 		return postingGroups, false, nil
 	}
@@ -133,6 +134,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 	}
 	for i < len(postingGroups) {
 		postingGroups[i].lazy = true
+		lazyExpandedPostingSizeBytes.Add(float64(4 * postingGroups[i].cardinality))
 		i++
 	}
 	return postingGroups, false, nil
@@ -145,6 +147,7 @@ func fetchLazyExpandedPostings(
 	bytesLimiter BytesLimiter,
 	addAllPostings bool,
 	lazyExpandedPostingEnabled bool,
+	lazyExpandedPostingSizeBytes prometheus.Counter,
 ) (*lazyExpandedPostings, error) {
 	var (
 		err               error
@@ -165,6 +168,7 @@ func fetchLazyExpandedPostings(
 			postingGroups,
 			int64(r.block.estimatedMaxSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
+			lazyExpandedPostingSizeBytes,
 		)
 		if err != nil {
 			return nil, err

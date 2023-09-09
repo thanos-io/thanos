@@ -12,6 +12,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
@@ -477,16 +480,25 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			headerReader := &mockIndexHeaderReader{postings: tc.inputPostings, err: tc.inputError}
-			block, err := newBucketBlock(ctx, logger, newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
+			registry := prometheus.NewRegistry()
+			block, err := newBucketBlock(ctx, logger, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
 			testutil.Ok(t, err)
 			ir := newBucketIndexReader(block)
-			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio)
+			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
+			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, dummyCounter)
 			if err != nil {
 				testutil.Equals(t, tc.expectedError, err.Error())
 				return
 			}
 			testutil.Equals(t, tc.expectedEmptyPosting, emptyPosting)
 			testutil.Equals(t, tc.expectedPostingGroups, pgs)
+			var c int64
+			for _, pg := range pgs {
+				if pg.lazy {
+					c += pg.cardinality
+				}
+			}
+			testutil.Equals(t, float64(4*c), promtest.ToFloat64(dummyCounter))
 		})
 	}
 }

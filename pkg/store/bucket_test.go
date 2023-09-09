@@ -1221,6 +1221,7 @@ func benchmarkExpandedPostings(
 		{`uniq=~"9|random-shuffled-values|1"`, []*labels.Matcher{iRegexBigValueSet}, bigValueSetSize},
 	}
 
+	dummyCounter := promauto.NewCounter(prometheus.CounterOpts{Name: "test"})
 	for _, c := range cases {
 		t.Run(c.name, func(t testutil.TB) {
 			b := &bucketBlock{
@@ -1237,7 +1238,7 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false)
+				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false, dummyCounter)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p.postings))
 			}
@@ -1271,7 +1272,8 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	// Match nothing.
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
 	ctx := context.Background()
-	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false)
+	dummyCounter := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false, dummyCounter)
 	testutil.Ok(t, err)
 	testutil.Equals(t, ps, (*lazyExpandedPostings)(nil))
 	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
@@ -2727,7 +2729,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	wg := sync.WaitGroup{}
 	wg.Add(concurrency)
 
-	dummyCounter := promauto.NewCounter(prometheus.CounterOpts{})
+	dummyCounter := promauto.NewCounter(prometheus.CounterOpts{Name: "test"})
 	for w := 0; w < concurrency; w++ {
 		go func() {
 			defer wg.Done()
@@ -2769,6 +2771,8 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					dummyHistogram,
 					nil,
 					false,
+					dummyCounter,
+					dummyCounter,
 					dummyCounter,
 				)
 				testutil.Ok(b, blockClient.ExpandPostings(sortedMatchers, seriesLimiter))
@@ -3337,6 +3341,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 
 	l := sync.Mutex{}
 	previousRefs := make(map[int][]storage.SeriesRef)
+	dummyCounter := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
 
 	for {
 		if tm.Err() != nil {
@@ -3359,7 +3364,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 			i := i
 			bb := bb
 			go func(i int, bb *bucketBlock) {
-				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false)
+				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, dummyCounter)
 				testutil.Ok(t, err)
 				defer wg.Done()
 
