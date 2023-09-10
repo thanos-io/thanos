@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"os"
 	"sort"
 	"sync"
 	"text/template"
@@ -14,7 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
-
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -247,4 +248,27 @@ func (srv *rulesServer) Send(res *rulespb.RulesResponse) error {
 
 func (srv *rulesServer) Context() context.Context {
 	return srv.ctx
+}
+
+func CheckRulesFiles(filePaths []string) error {
+	var failed errutil.MultiError
+
+	for _, path := range filePaths {
+		f, er := os.Open(path)
+		if er != nil {
+			failed.Add(er)
+			continue
+		}
+		defer func() { _ = f.Close() }()
+
+		_, errs := ValidateAndCount(f)
+		if errs.Err() != nil {
+			for _, e := range errs {
+				failed.Add(e)
+			}
+			continue
+		}
+	}
+
+	return failed.Err()
 }
