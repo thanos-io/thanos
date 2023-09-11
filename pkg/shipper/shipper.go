@@ -38,7 +38,6 @@ type metrics struct {
 	uploads           prometheus.Counter
 	uploadFailures    prometheus.Counter
 	uploadedCompacted prometheus.Gauge
-	uploadedBytes     prometheus.Counter
 }
 
 func newMetrics(reg prometheus.Registerer) *metrics {
@@ -63,10 +62,6 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 	m.uploadedCompacted = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_shipper_upload_compacted_done",
 		Help: "If 1 it means shipper uploaded all compacted blocks from the filesystem.",
-	})
-	m.uploadedBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_shipper_uploaded_bytes_total",
-		Help: "Total number of uploaded bytes from TSDB blocks.",
 	})
 
 	return &m
@@ -389,23 +384,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-
-	err := block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
-	if err != nil {
-		return errors.Wrap(err, "while uploading the block")
-	}
-
-	fileStats, err := block.GatherFileStats(updir, s.hashFunc, s.logger)
-	if err != nil {
-		// The block upload should not stop due to issues gathering data for a metric.
-		return nil
-	}
-
-	for _, x := range fileStats {
-		s.metrics.uploadedBytes.Add(float64(x.SizeBytes))
-	}
-
-	return nil
+	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
 }
 
 // blockMetasFromOldest returns the block meta of each block found in dir
