@@ -1512,7 +1512,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	)
 
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
+		res, _, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
 		}
@@ -1523,22 +1523,22 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result
 }
 
-func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, error) {
-	res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
+	res, warnings, explanation, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(warnings) > 0 {
-		return nil, errors.Errorf("unexpected warnings %s", warnings)
+		return nil, nil, errors.Errorf("unexpected warnings %s", warnings)
 	}
 
 	if len(res) != expectedSeriesLen {
-		return nil, errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
+		return nil, nil, errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
 	}
 
 	sortResults(res)
-	return res, nil
+	return res, explanation, nil
 }
 
 func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
@@ -1553,7 +1553,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", len(expected), q()),
 	)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		res, warnings, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
 		}
