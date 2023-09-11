@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -37,8 +38,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -446,15 +445,16 @@ func createBlockWithDelay(ctx context.Context, dir string, series []labels.Label
 		return ulid.ULID{}, errors.Wrap(err, "create block id")
 	}
 
-	m, err := metadata.ReadFromDir(path.Join(dir, blockID.String()))
+	bdir := path.Join(dir, blockID.String())
+	m, err := metadata.ReadFromDir(bdir)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "open meta file")
 	}
 
+	logger := log.NewNopLogger()
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
-
-	if err := m.WriteToDir(log.NewNopLogger(), path.Join(dir, blockID.String())); err != nil {
+	if err := m.WriteToDir(logger, path.Join(dir, blockID.String())); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
 	}
 
@@ -555,6 +555,11 @@ func createBlock(
 	}
 
 	blockDir := filepath.Join(dir, id.String())
+	logger := log.NewNopLogger()
+	seriesSize, err := gatherMaxSeriesSize(filepath.Join(blockDir, "index"))
+	if err != nil {
+		return id, errors.Wrap(err, "gather max series size")
+	}
 
 	files := []metadata.File{}
 	if hashFunc != metadata.NoneFunc {
@@ -581,11 +586,12 @@ func createBlock(
 		}
 	}
 
-	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
+	if _, err = metadata.InjectThanos(logger, blockDir, metadata.Thanos{
 		Labels:     extLset.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,
 		Files:      files,
+		IndexStats: metadata.IndexStats{SeriesMaxSize: seriesSize},
 	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}
@@ -597,6 +603,49 @@ func createBlock(
 	}
 
 	return id, nil
+}
+
+func gatherMaxSeriesSize(fn string) (int64, error) {
+	r, err := index.NewFileReader(fn)
+	if err != nil {
+		return 0, errors.Wrap(err, "open index file")
+	}
+	defer runutil.CloseWithErrCapture(&err, r, "gather index issue file reader")
+
+	p, err := r.Postings(index.AllPostingsKey())
+	if err != nil {
+		return 0, errors.Wrap(err, "get all postings")
+	}
+
+	// As of version two all series entries are 16 byte padded. All references
+	// we get have to account for that to get the correct offset.
+	offsetMultiplier := 1
+	version := r.Version()
+	if version >= 2 {
+		offsetMultiplier = 16
+	}
+
+	// Per series.
+	var (
+		prevId        storage.SeriesRef
+		maxSeriesSize int64
+	)
+	for p.Next() {
+		id := p.At()
+		if prevId != 0 {
+			// Approximate size.
+			seriesSize := int64(id-prevId) * int64(offsetMultiplier)
+			if seriesSize > maxSeriesSize {
+				maxSeriesSize = seriesSize
+			}
+		}
+		prevId = id
+	}
+	if p.Err() != nil {
+		return 0, errors.Wrap(err, "walk postings")
+	}
+
+	return maxSeriesSize, nil
 }
 
 var indexFilename = "index"
