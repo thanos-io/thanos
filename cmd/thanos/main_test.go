@@ -77,7 +77,7 @@ func (b *erroringBucket) IsObjNotFoundErr(err error) bool {
 	return b.bkt.IsObjNotFoundErr(err)
 }
 
-// IsAccessDeniedErr returns true if error means that access was denied.
+// IsAccessDeniedErr returns true if error means that access to the object was denied.
 func (b *erroringBucket) IsAccessDeniedErr(err error) bool {
 	return b.bkt.IsAccessDeniedErr(err)
 }
