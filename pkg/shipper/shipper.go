@@ -63,7 +63,6 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 		Name: "thanos_shipper_upload_compacted_done",
 		Help: "If 1 it means shipper uploaded all compacted blocks from the filesystem.",
 	})
-
 	return &m
 }
 
