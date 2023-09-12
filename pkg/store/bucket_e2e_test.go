@@ -174,10 +174,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		true,
 		time.Minute,
-		WithLogger(s.logger),
+		WithLogger[BucketStore](s.logger),
 		WithIndexCache(s.cache),
 		WithFilterConfig(filterConf),
-		WithRegistry(reg),
+		WithRegistry[BucketStore](reg),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()

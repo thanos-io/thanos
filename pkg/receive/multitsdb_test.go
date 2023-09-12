@@ -687,7 +687,7 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 }
 
 func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
-	proxy := store.NewProxyStore(nil, nil, func() []store.Client {
+	proxy := store.NewProxyStore(func() []store.Client {
 		clients := m.TSDBLocalClients()
 		if len(clients) > 0 {
 			clients[0] = &slowClient{clients[0]}

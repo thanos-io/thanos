@@ -493,9 +493,12 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
-	options := []store.ProxyStoreOption{}
+	options := []store.StoreOption[store.ProxyStore]{
+		store.WithLogger[store.ProxyStore](logger),
+		store.WithRegistry[store.ProxyStore](reg),
+	}
 	if debugLogging {
-		options = append(options, store.WithProxyStoreDebugLogging())
+		options = append(options, store.WithDebugLogging[store.ProxyStore]())
 	}
 
 	var (
@@ -549,7 +552,7 @@ func runQuery(
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
+		proxy            = store.NewProxyStore(endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)

@@ -77,6 +77,7 @@ type Client interface {
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
+	reg            prometheus.Registerer
 	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
@@ -109,35 +110,18 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 	}
 }
 
-// BucketStoreOption are functions that configure BucketStore.
-type ProxyStoreOption func(s *ProxyStore)
-
-// WithProxyStoreDebugLogging enables debug logging.
-func WithProxyStoreDebugLogging() ProxyStoreOption {
-	return func(s *ProxyStore) {
-		s.debugLogging = true
-	}
-}
-
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
 func NewProxyStore(
-	logger log.Logger,
-	reg prometheus.Registerer,
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
 	retrievalStrategy RetrievalStrategy,
-	options ...ProxyStoreOption,
+	options ...StoreOption[ProxyStore],
 ) *ProxyStore {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-
-	metrics := newProxyStoreMetrics(reg)
 	s := &ProxyStore{
-		logger:         logger,
+		logger:         log.NewNopLogger(),
 		stores:         stores,
 		component:      component,
 		selectorLabels: selectorLabels,
@@ -146,13 +130,13 @@ func NewProxyStore(
 			return &b
 		}},
 		responseTimeout:   responseTimeout,
-		metrics:           metrics,
 		retrievalStrategy: retrievalStrategy,
 	}
 
 	for _, option := range options {
 		option(s)
 	}
+	s.metrics = newProxyStoreMetrics(s.reg)
 
 	return s
 }

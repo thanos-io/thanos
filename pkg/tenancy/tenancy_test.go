@@ -133,8 +133,7 @@ func TestTenantProxyPassing(t *testing.T) {
 			&storetestutil.TestClient{StoreClient: mockedStore},
 		}
 
-		q := store.NewProxyStore(nil,
-			nil,
+		q := store.NewProxyStore(
 			func() []store.Client { return cls },
 			component.Query,
 			nil, 0*time.Second, store.EagerRetrieval,
@@ -178,8 +177,7 @@ func TestTenantProxyPassing(t *testing.T) {
 			&storetestutil.TestClient{StoreClient: mockedStore},
 		}
 
-		q := store.NewProxyStore(nil,
-			nil,
+		q := store.NewProxyStore(
 			func() []store.Client { return cls },
 			component.Query,
 			nil, 0*time.Second, store.EagerRetrieval,

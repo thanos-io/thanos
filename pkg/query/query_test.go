@@ -36,7 +36,7 @@ func TestQuerier_Proxy(t *testing.T) {
 		q := NewQueryableCreator(
 			logger,
 			nil,
-			store.NewProxyStore(logger, nil, func() []store.Client { return clients },
+			store.NewProxyStore(func() []store.Client { return clients },
 				component.Debug, nil, 5*time.Minute, store.EagerRetrieval),
 			1000000,
 			5*time.Minute,
@@ -51,7 +51,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				// TODO(bwplotka): Parse external labels.
 				clients = append(clients, &storetestutil.TestClient{
 					Name:        fmt.Sprintf("store number %v", i),
-					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, nil), m, st.mint, st.maxt), 0),
+					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(st.storage.DB, component.Debug, nil), m, st.mint, st.maxt), 0),
 					MinTime:     st.mint,
 					MaxTime:     st.maxt,
 				})

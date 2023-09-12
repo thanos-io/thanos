@@ -848,8 +848,6 @@ func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 	}
 
 	return store.NewProxyStore(
-		nil,
-		nil,
 		func() []store.Client { return cls },
 		component.Query,
 		nil,

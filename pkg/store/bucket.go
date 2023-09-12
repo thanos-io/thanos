@@ -338,7 +338,7 @@ type BlockEstimator func(meta metadata.Meta) uint64
 // When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 type BucketStore struct {
 	logger          log.Logger
-	reg             prometheus.Registerer // TODO(metalmatze) remove and add via BucketStoreOption
+	reg             prometheus.Registerer // TODO(metalmatze) remove and add via Option
 	metrics         *bucketStoreMetrics
 	bkt             objstore.InstrumentedBucketReader
 	fetcher         block.MetadataFetcher
@@ -414,84 +414,60 @@ func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []storage.
 	return map[storage.SeriesRef][]byte{}, ids
 }
 
-// BucketStoreOption are functions that configure BucketStore.
-type BucketStoreOption func(s *BucketStore)
-
-// WithLogger sets the BucketStore logger to the one you pass.
-func WithLogger(logger log.Logger) BucketStoreOption {
-	return func(s *BucketStore) {
-		s.logger = logger
-	}
-}
-
-// WithRegistry sets a registry that BucketStore uses to register metrics with.
-func WithRegistry(reg prometheus.Registerer) BucketStoreOption {
-	return func(s *BucketStore) {
-		s.reg = reg
-	}
-}
-
 // WithIndexCache sets a indexCache to use instead of a noopCache.
-func WithIndexCache(cache storecache.IndexCache) BucketStoreOption {
+func WithIndexCache(cache storecache.IndexCache) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.indexCache = cache
 	}
 }
 
 // WithQueryGate sets a queryGate to use instead of a noopGate.
-func WithQueryGate(queryGate gate.Gate) BucketStoreOption {
+func WithQueryGate(queryGate gate.Gate) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.queryGate = queryGate
 	}
 }
 
 // WithChunkPool sets a pool.Bytes to use for chunks.
-func WithChunkPool(chunkPool pool.Bytes) BucketStoreOption {
+func WithChunkPool(chunkPool pool.Bytes) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.chunkPool = chunkPool
 	}
 }
 
 // WithFilterConfig sets a filter which Store uses for filtering metrics based on time.
-func WithFilterConfig(filter *FilterConfig) BucketStoreOption {
+func WithFilterConfig(filter *FilterConfig) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.filterConfig = filter
 	}
 }
 
-// WithDebugLogging enables debug logging.
-func WithDebugLogging() BucketStoreOption {
-	return func(s *BucketStore) {
-		s.debugLogging = true
-	}
-}
-
-func WithChunkHashCalculation(enableChunkHashCalculation bool) BucketStoreOption {
+func WithChunkHashCalculation(enableChunkHashCalculation bool) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.enableChunkHashCalculation = enableChunkHashCalculation
 	}
 }
 
-func WithSeriesBatchSize(seriesBatchSize int) BucketStoreOption {
+func WithSeriesBatchSize(seriesBatchSize int) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.seriesBatchSize = seriesBatchSize
 	}
 }
 
-func WithBlockEstimatedMaxSeriesFunc(f BlockEstimator) BucketStoreOption {
+func WithBlockEstimatedMaxSeriesFunc(f BlockEstimator) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.blockEstimatedMaxSeriesFunc = f
 	}
 }
 
-func WithBlockEstimatedMaxChunkFunc(f BlockEstimator) BucketStoreOption {
+func WithBlockEstimatedMaxChunkFunc(f BlockEstimator) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.blockEstimatedMaxChunkFunc = f
 	}
 }
 
 // WithLazyExpandedPostings enables lazy expanded postings.
-func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
+func WithLazyExpandedPostings(enabled bool) StoreOption[BucketStore] {
 	return func(s *BucketStore) {
 		s.enabledLazyExpandedPostings = enabled
 	}
@@ -513,7 +489,7 @@ func NewBucketStore(
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 	lazyIndexReaderEnabled bool,
 	lazyIndexReaderIdleTimeout time.Duration,
-	options ...BucketStoreOption,
+	options ...StoreOption[BucketStore],
 ) (*BucketStore, error) {
 	s := &BucketStore{
 		logger:     log.NewNopLogger(),

@@ -596,7 +596,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.hashFunc,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+	tenant.set(store.NewTSDBStore(s, component.Receive, lset, store.WithLogger[store.TSDBStore](logger)), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

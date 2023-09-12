@@ -63,8 +63,7 @@ func TestProxyStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q := NewProxyStore(nil,
-		nil,
+	q := NewProxyStore(
 		func() []Client { return nil },
 		component.Query,
 		nil, 0*time.Second, RetrievalStrategy(EagerRetrieval),
@@ -94,7 +93,7 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 			},
 		},
 	}
-	q := NewProxyStore(nil, nil,
+	q := NewProxyStore(
 		func() []Client { return stores },
 		component.Query, nil, 0*time.Second, EagerRetrieval,
 	)
@@ -632,8 +631,7 @@ func TestProxyStore_Series(t *testing.T) {
 					}
 					for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 						t.Run(string(strategy), func(t *testing.T) {
-							q := NewProxyStore(nil,
-								nil,
+							q := NewProxyStore(
 								func() []Client { return tc.storeAPIs },
 								component.Query,
 								tc.selectorLabels,
@@ -1165,8 +1163,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 				if ok := t.Run(string(strategy), func(t *testing.T) {
-					q := NewProxyStore(nil,
-						nil,
+					q := NewProxyStore(
 						func() []Client { return tc.storeAPIs },
 						component.Query,
 						tc.selectorLabels,
@@ -1223,8 +1220,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 			MaxTime:     300,
 		},
 	}
-	q := NewProxyStore(nil,
-		nil,
+	q := NewProxyStore(
 		func() []Client { return cls },
 		component.Query,
 		nil,
@@ -1284,8 +1280,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	}
 
-	q := NewProxyStore(nil,
-		nil,
+	q := NewProxyStore(
 		func() []Client { return cls },
 		component.Query,
 		labels.FromStrings("fed", "a"),
@@ -1331,8 +1326,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			MaxTime: timestamp.FromTime(time.Now()),
 		},
 	}
-	q := NewProxyStore(nil,
-		nil,
+	q := NewProxyStore(
 		func() []Client { return cls },
 		component.Query,
 		nil,
@@ -1531,8 +1525,6 @@ func TestProxyStore_LabelNames(t *testing.T) {
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(
-				nil,
-				nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				nil,

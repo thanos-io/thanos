@@ -823,7 +823,7 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 		version, err := promclient.NewDefaultClient().BuildVersion(context.Background(), u)
 		testutil.Ok(tt, err)
 
-		promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+		promStore, err := NewPrometheusStore(promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return extLset },
 			func() (int64, int64) { return timestamp.FromTime(minTime), timestamp.FromTime(maxTime) },
 			func() string { return version })
@@ -841,7 +841,7 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 		testutil.Ok(tt, err)
 		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
 
-		tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
+		tsdbStore := NewTSDBStore(db, component.Rule, extLset)
 
 		appendFn(db.Appender(context.Background()))
 		return tsdbStore

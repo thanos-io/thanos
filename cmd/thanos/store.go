@@ -363,9 +363,9 @@ func runStore(
 		return errors.Wrap(err, "create chunk pool")
 	}
 
-	options := []store.BucketStoreOption{
-		store.WithLogger(logger),
-		store.WithRegistry(reg),
+	options := []store.StoreOption[store.BucketStore]{
+		store.WithLogger[store.BucketStore](logger),
+		store.WithRegistry[store.BucketStore](reg),
 		store.WithIndexCache(indexCache),
 		store.WithQueryGate(queriesGate),
 		store.WithChunkPool(chunkPool),
@@ -390,7 +390,7 @@ func runStore(
 	}
 
 	if conf.debugLogging {
-		options = append(options, store.WithDebugLogging())
+		options = append(options, store.WithDebugLogging[store.BucketStore]())
 	}
 
 	bs, err := store.NewBucketStore(

@@ -631,13 +631,11 @@ func TestQueryEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil), 0),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(db, component.Query, nil), 0),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
 	return store.NewProxyStore(
-		nil,
-		nil,
 		func() []store.Client { return []store.Client{c} },
 		component.Query,
 		nil,

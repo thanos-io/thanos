@@ -315,14 +315,15 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		options := []store.ProxyStoreOption{}
+		options := []store.StoreOption[store.ProxyStore]{
+			store.WithLogger[store.ProxyStore](logger),
+			store.WithRegistry[store.ProxyStore](reg),
+		}
 		if debugLogging {
-			options = append(options, store.WithProxyStoreDebugLogging())
+			options = append(options, store.WithDebugLogging[store.ProxyStore]())
 		}
 
 		proxy := store.NewProxyStore(
-			logger,
-			reg,
 			dbs.TSDBLocalClients,
 			comp,
 			labels.Labels{},
