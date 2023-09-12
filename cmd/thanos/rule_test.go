@@ -68,7 +68,7 @@ func Test_validateTemplate(t *testing.T) {
 		},
 	}
 	for _, td := range tData {
-		err := validateTemplate(td.template, Expression{Expr: "test_expr"})
+		err := validateTemplate(td.template)
 		testutil.Equals(t, err != nil, td.expectErr)
 	}
 }

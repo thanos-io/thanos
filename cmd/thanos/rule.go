@@ -335,7 +335,7 @@ func runRule(
 		}
 	}
 
-	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate, Expression{Expr: "test_expr"}); err != nil {
+	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate); err != nil {
 		return errors.Wrap(err, "invalid alert source template")
 	}
 
@@ -966,14 +966,13 @@ func tableLinkForExpression(tmpl string, expr string) (string, error) {
 	return buf.String(), nil
 }
 
-func validateTemplate(tmplStr string, data Expression) error {
+func validateTemplate(tmplStr string) error {
 	tmpl, err := template.New("test").Parse(tmplStr)
 	if err != nil {
 		return fmt.Errorf("failed to parse the template: %w", err)
 	}
-
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, data)
+	err = tmpl.Execute(&buf, Expression{Expr: "test_expr"})
 	if err != nil {
 		return fmt.Errorf("failed to execute the template: %w", err)
 	}
