@@ -31,7 +31,7 @@ describe('Checkbox', () => {
     };
     const checkBox = shallow(<Checkbox {...checkBoxProps} id="1" />);
     const input = checkBox.find(Input);
-    expect(Object.keys(input.props())).toHaveLength(4);
+    expect(Object.keys(input.props())).toHaveLength(5);
     expect(input.prop('className')).toEqual('custom-control-input');
     expect(input.prop('id')).toMatch('1');
     expect(input.prop('type')).toEqual('checkbox');
