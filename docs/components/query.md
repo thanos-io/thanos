@@ -360,8 +360,9 @@ Flags:
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
-      --query.default-tenant="default-tenant"
-                                 Name of the default tenant.
+      --query.default-tenant-id="default-tenant"
+                                 Default tenant ID to use if tenant header is
+                                 not present
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
