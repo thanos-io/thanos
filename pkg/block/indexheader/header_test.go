@@ -141,6 +141,38 @@ func TestReaders(t *testing.T) {
 					testutil.Ok(t, err)
 					testutil.Equals(t, []string(nil), vals)
 
+					// single value
+					rngs, err := br.PostingsOffsets("a", "9")
+					testutil.Ok(t, err)
+					for _, rng := range rngs {
+						testutil.Assert(t, rng.End > rng.Start)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "2", "3", "4", "5", "6", "7", "8", "9")
+					testutil.Ok(t, err)
+					for _, rng := range rngs {
+						testutil.Assert(t, rng.End > rng.Start)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "0")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 1)
+					testutil.Equals(t, NotFoundRange, rngs[0])
+
+					rngs, err = br.PostingsOffsets("a", "0", "10", "99")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 3)
+					for _, rng := range rngs {
+						testutil.Equals(t, NotFoundRange, rng)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "1", "10", "9")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 3)
+					testutil.Assert(t, rngs[0].End > rngs[0].Start)
+					testutil.Assert(t, rngs[2].End > rngs[2].Start)
+					testutil.Equals(t, NotFoundRange, rngs[1])
+
 					// Regression tests for https://github.com/thanos-io/thanos/issues/2213.
 					// Most of not existing value was working despite bug, except in certain unlucky cases
 					// it was causing "invalid size" errors.
