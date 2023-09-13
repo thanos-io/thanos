@@ -117,7 +117,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
-	qry, err := engine.NewInstantQuery(ctx, queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
+	qry, err := engine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, ts)
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
-	qry, err := engine.NewRangeQuery(ctx, queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, startTime, endTime, interval)
+	qry, err := engine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, startTime, endTime, interval)
 	if err != nil {
 		return err
 	}

@@ -33,10 +33,6 @@ func TestAnalyzeQuery(t *testing.T) {
 			expression: "count(sum without (pod) (http_requests_total))",
 		},
 		{
-			name:       "binary expression",
-			expression: `http_requests_total{code="400"} / http_requests_total`,
-		},
-		{
 			name:       "binary expression with constant",
 			expression: `http_requests_total{code="400"} / 4`,
 		},
@@ -47,10 +43,6 @@ func TestAnalyzeQuery(t *testing.T) {
 		{
 			name:       "binary aggregation with different grouping labels",
 			expression: `sum by (pod) (http_requests_total{code="400"}) / sum by (cluster) (http_requests_total)`,
-		},
-		{
-			name:       "multiple binary expressions",
-			expression: `(http_requests_total{code="400"} + http_requests_total{code="500"}) / http_requests_total`,
 		},
 		{
 			name: "multiple binary expressions with empty vector matchers",
@@ -211,7 +203,7 @@ sum by (container) (
 		{
 			name:           "binary expression with outer without grouping",
 			expression:     `sum(http_requests_total{code="400"} * http_requests_total) without (pod)`,
-			shardingLabels: []string{"pod"},
+			shardingLabels: []string{"__name__", "pod"},
 		},
 		{
 			name:           "binary expression with vector matching and outer without grouping",
@@ -255,6 +247,26 @@ http_requests_total`,
 			name:           "aggregate without expression with label_replace",
 			expression:     `sum without (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
 			shardingLabels: []string{"pod", "dst_label"},
+		},
+		{
+			name:           "binary expression",
+			expression:     `http_requests_total{code="400"} / http_requests_total`,
+			shardingLabels: []string{model.MetricNameLabel},
+		},
+		{
+			name:           "binary expression among vector and scalar",
+			expression:     `aaaa - bbb > 1000`,
+			shardingLabels: []string{model.MetricNameLabel},
+		},
+		{
+			name:           "binary expression with set operation",
+			expression:     `aaaa and bbb`,
+			shardingLabels: []string{model.MetricNameLabel},
+		},
+		{
+			name:           "multiple binary expressions",
+			expression:     `(http_requests_total{code="400"} + http_requests_total{code="500"}) / http_requests_total`,
+			shardingLabels: []string{model.MetricNameLabel},
 		},
 	}
 

@@ -210,6 +210,9 @@ usage: thanos tools bucket web [<flags>]
 Web interface for remote storage bucket.
 
 Flags:
+      --disable-admin-operations
+                                Disable UI/API admin operations like marking
+                                blocks for deletion and no compaction.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"

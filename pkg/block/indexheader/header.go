@@ -20,10 +20,16 @@ type Reader interface {
 	// IndexVersion returns version of index.
 	IndexVersion() (int, error)
 
+	// PostingsOffsets returns start and end offsets for postings for given name and values.
+	// Input values need to be sorted.
+	// If the requested label name doesn't exist, then no posting and error will be returned.
+	// If the requested label name exists, but some values don't exist, the corresponding index range
+	// will be set to -1 for both start and end.
+	PostingsOffsets(name string, value ...string) ([]index.Range, error)
+
 	// PostingsOffset returns start and end offsets of postings for given name and value.
 	// The end offset might be bigger than the actual posting ending, but not larger than the whole index file.
 	// NotFoundRangeErr is returned when no index can be found for given name and value.
-	// TODO(bwplotka): Move to PostingsOffsets(name string, value ...string) []index.Range and benchmark.
 	PostingsOffset(name string, value string) (index.Range, error)
 
 	// LookupSymbol returns string based on given reference.
