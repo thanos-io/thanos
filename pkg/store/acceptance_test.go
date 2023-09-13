@@ -722,78 +722,86 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 func TestBucketStore_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 
-	testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		tmpDir := tt.TempDir()
-		bktDir := filepath.Join(tmpDir, "bkt")
-		auxDir := filepath.Join(tmpDir, "aux")
-		metaDir := filepath.Join(tmpDir, "meta")
+	for _, lazyExpandedPosting := range []bool{false, true} {
+		testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			tmpDir := tt.TempDir()
+			bktDir := filepath.Join(tmpDir, "bkt")
+			auxDir := filepath.Join(tmpDir, "aux")
+			metaDir := filepath.Join(tmpDir, "meta")
 
-		testutil.Ok(tt, os.MkdirAll(metaDir, os.ModePerm))
-		testutil.Ok(tt, os.MkdirAll(auxDir, os.ModePerm))
+			testutil.Ok(tt, os.MkdirAll(metaDir, os.ModePerm))
+			testutil.Ok(tt, os.MkdirAll(auxDir, os.ModePerm))
 
-		bkt, err := filesystem.NewBucket(bktDir)
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, bkt.Close()) })
+			bkt, err := filesystem.NewBucket(bktDir)
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, bkt.Close()) })
 
-		headOpts := tsdb.DefaultHeadOptions()
-		headOpts.ChunkDirRoot = tmpDir
-		headOpts.ChunkRange = 1000
-		h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
-		logger := log.NewNopLogger()
+			headOpts := tsdb.DefaultHeadOptions()
+			headOpts.ChunkDirRoot = tmpDir
+			headOpts.ChunkRange = 1000
+			h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
+			logger := log.NewNopLogger()
 
-		appendFn(h.Appender(context.Background()))
+			appendFn(h.Appender(context.Background()))
 
-		if h.NumSeries() == 0 {
-			tt.Skip("Bucket Store cannot handle empty HEAD")
-		}
+			if h.NumSeries() == 0 {
+				tt.Skip("Bucket Store cannot handle empty HEAD")
+			}
 
-		id := createBlockFromHead(tt, auxDir, h)
+			id := createBlockFromHead(tt, auxDir, h)
 
-		auxBlockDir := filepath.Join(auxDir, id.String())
-		_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
-			Labels:     extLset.Map(),
-			Downsample: metadata.ThanosDownsample{Resolution: 0},
-			Source:     metadata.TestSource,
-		}, nil)
-		testutil.Ok(tt, err)
+			auxBlockDir := filepath.Join(auxDir, id.String())
+			meta, err := metadata.ReadFromDir(auxBlockDir)
+			testutil.Ok(t, err)
+			stats, err := block.GatherIndexHealthStats(logger, filepath.Join(auxBlockDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+			testutil.Ok(t, err)
+			_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
+				Labels:     extLset.Map(),
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+				Source:     metadata.TestSource,
+				IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
+			}, nil)
+			testutil.Ok(tt, err)
 
-		testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
-		testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+			testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+			testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
 
-		chunkPool, err := NewDefaultChunkBytesPool(2e5)
-		testutil.Ok(tt, err)
+			chunkPool, err := NewDefaultChunkBytesPool(2e5)
+			testutil.Ok(tt, err)
 
-		metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
-			block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
+				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+			})
+			testutil.Ok(tt, err)
+
+			bucketStore, err := NewBucketStore(
+				objstore.WithNoopInstr(bkt),
+				metaFetcher,
+				"",
+				NewChunksLimiterFactory(10e6),
+				NewSeriesLimiterFactory(10e6),
+				NewBytesLimiterFactory(10e6),
+				NewGapBasedPartitioner(PartitionerMaxGapSize),
+				20,
+				true,
+				DefaultPostingOffsetInMemorySampling,
+				false,
+				false,
+				1*time.Minute,
+				WithChunkPool(chunkPool),
+				WithFilterConfig(allowAllFilterConf),
+				WithLazyExpandedPostings(lazyExpandedPosting),
+			)
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, bucketStore.Close()) })
+
+			testutil.Ok(tt, bucketStore.SyncBlocks(context.Background()))
+
+			return bucketStore
 		})
-		testutil.Ok(tt, err)
-
-		bucketStore, err := NewBucketStore(
-			objstore.WithNoopInstr(bkt),
-			metaFetcher,
-			"",
-			NewChunksLimiterFactory(10e6),
-			NewSeriesLimiterFactory(10e6),
-			NewBytesLimiterFactory(10e6),
-			NewGapBasedPartitioner(PartitionerMaxGapSize),
-			20,
-			true,
-			DefaultPostingOffsetInMemorySampling,
-			false,
-			false,
-			1*time.Minute,
-			WithChunkPool(chunkPool),
-			WithFilterConfig(allowAllFilterConf),
-		)
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, bucketStore.Close()) })
-
-		testutil.Ok(tt, bucketStore.SyncBlocks(context.Background()))
-
-		return bucketStore
-	})
+	}
 }
 
 func TestPrometheusStore_Acceptance(t *testing.T) {

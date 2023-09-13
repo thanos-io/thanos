@@ -516,7 +516,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               </Input>
             </div>
             <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
-            <Checkbox
+              <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
                 id={`analyze-${id}`}
                 onChange={this.handleChangeAnalyze}

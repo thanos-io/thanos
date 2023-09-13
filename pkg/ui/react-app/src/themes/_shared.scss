@@ -337,3 +337,25 @@
     display: block;
     font-family: monospace;
   }
+
+  .popup-message {
+    display: none;
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-right: 15px;
+    min-width: 120px;
+    max-width: 250px;
+    width: max-content;
+    white-space: normal;
+    font-size: 14px;
+}
+
+.custom-control-label:hover .popup-message {
+  display: block; 
+}
