@@ -150,7 +150,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.forward-header", "List of headers forwarded by the query-frontend to downstream queriers, default is empty").PlaceHolder("<http-header-name>").StringsVar(&cfg.ForwardHeaders)
 
 	cmd.Flag("query-frontend.tenant-header", "HTTP header to determine tenant").Default(tenancy.DefaultTenantHeader).Hidden().StringVar(&cfg.TenantHeader)
-	cmd.Flag("query-frontend.default-tenant", "Default tenant to use if tenant header is not present").Default(tenancy.DefaultTenant).Hidden().StringVar(&cfg.DefaultTenant)
+	cmd.Flag("query-frontend.default-tenant-id", "Default tenant ID to use if tenant header is not present").Default(tenancy.DefaultTenant).Hidden().StringVar(&cfg.DefaultTenant)
 	cmd.Flag("query-frontend.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query-frontend.tenant-header flag value to be ignored.").Hidden().Default("").EnumVar(&cfg.TenantCertField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
 	cmd.Flag("query-frontend.vertical-shards", "Number of shards to use when distributing shardable PromQL queries. For more details, you can refer to the Vertical query sharding proposal: https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md").IntVar(&cfg.NumShards)
