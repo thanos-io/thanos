@@ -372,8 +372,17 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 		for ; j < len(data) && data[j].t <= curW; j++ {
 		}
 
-		batch := data[:j]
+		batch := make([]sample, 0, j)
+		for _, s := range data[:j] {
+			if math.IsNaN(s.v) {
+				continue
+			}
+			batch = append(batch, s)
+		}
 		data = data[j:]
+		if len(batch) == 0 {
+			continue
+		}
 
 		ab := newAggrChunkBuilder()
 
