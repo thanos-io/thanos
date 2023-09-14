@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#6664](https://github.com/thanos-io/thanos/pull/6664) *: Update Prometheus to 2.46.1.
 - [#6698](https://github.com/thanos-io/thanos/pull/6608) Receive: Change write log level from warn to info.
+- [#6722](https://github.com/thanos-io/thanos/pull/6722) *: Optimize iterations on GCS buckets by requesting only object names.
 
 ### Removed
 
