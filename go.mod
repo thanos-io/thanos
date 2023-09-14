@@ -65,7 +65,7 @@ require (
 	github.com/prometheus/prometheus v0.46.1-0.20230818184859-4d8e380269da
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.4
-	github.com/thanos-io/objstore v0.0.0-20230908084555-8d397d4d88e7
+	github.com/thanos-io/objstore v0.0.0-20230913122821-eb06103887ab
 	github.com/thanos-io/promql-engine v0.0.0-20230821193351-e1ae4275b96e
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -246,7 +246,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect
 	golang.org/x/oauth2 v0.11.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
 	golang.org/x/tools v0.11.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/gonum v0.12.0 // indirect
