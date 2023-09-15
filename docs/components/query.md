@@ -103,16 +103,6 @@ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
-### Deduplication on non-external labels
-
-In `v0.31.0` we have implemented an [optimization](../proposals-accepted/20221129-avoid-global-sort.md) which broke deduplication on non-external labels. We think that it was just a coincidence that deduplication worked at all on non-external labels in previous versions.
-
-External labels always override any labels a series might have and this makes it so that it is possible to remove replica labels on series returned by a StoreAPI as an optimization. If deduplication happens on internal labels then that might lead to unsorted series from a StoreAPI and that breaks deduplication.
-
-To fix this use-case, in 0.32.0 we've implemented a cuckoo filter on label names that is updated every 10 seconds. Using it we can detect whether deduplication was requested on internal labels. If that is the case then the series set is resorted before being sent off to the querier. It is strongly recommended to set replica labels which are external labels because otherwise the optimization cannot be applied and your queries will be slower by 20-30%.
-
-In the future we have plans to expose this cuckoo filter through the InfoAPI. This will allow better scoping queries to StoreAPIs.
-
 ## Experimental PromQL Engine
 
 By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.

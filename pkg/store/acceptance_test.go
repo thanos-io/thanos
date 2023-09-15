@@ -28,7 +28,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -238,9 +237,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -251,7 +250,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -270,9 +269,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "missing", Value: ""},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
@@ -295,8 +294,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".+"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -306,9 +305,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".*"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
@@ -332,8 +331,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -352,8 +351,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -363,9 +362,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "^1$"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -376,7 +375,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^a$"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -387,8 +386,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^a?$"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
 					},
 				},
 				{
@@ -422,9 +421,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.*$"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -435,8 +434,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.+$"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -489,8 +488,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a$"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -501,7 +500,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a?$"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -512,8 +511,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^$"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -545,7 +544,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -557,7 +556,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^(b|a).*$"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -567,9 +566,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "(1|2)"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
 					},
 				},
@@ -580,8 +579,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "a|b"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -591,8 +590,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(a|b)"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -706,12 +705,15 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					}
 					testutil.Ok(t, err)
 
+					testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
+						return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+					}))
+
 					receivedLabels := make([]labels.Labels, 0)
 					for _, s := range srv.SeriesSet {
 						receivedLabels = append(receivedLabels, s.PromLabels())
 					}
-					slices.SortFunc(c.expectedLabels, func(a, b labels.Labels) bool { return labels.Compare(a, b) < 0 })
-					slices.SortFunc(receivedLabels, func(a, b labels.Labels) bool { return labels.Compare(a, b) < 0 })
+
 					testutil.Equals(t, c.expectedLabels, receivedLabels)
 				})
 			}
@@ -816,7 +818,6 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 		promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return extLset },
 			func() (int64, int64) { return timestamp.FromTime(minTime), timestamp.FromTime(maxTime) },
-			func() stringset.Set { return stringset.AllStrings() },
 			func() string { return version })
 		testutil.Ok(tt, err)
 
