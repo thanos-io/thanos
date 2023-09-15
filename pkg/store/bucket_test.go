@@ -61,7 +61,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -1661,7 +1660,6 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 		bytesLimiterFactory:  NewBytesLimiterFactory(0),
-		labelNamesSet:        stringset.AllStrings(),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -3471,9 +3469,6 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 
 	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
 
-	// make sure to have updated inner label names
-	bucketStore.UpdateLabelNames()
-
 	srv := newStoreSeriesServer(context.Background())
 	testutil.Ok(t, bucketStore.Series(&storepb.SeriesRequest{
 		WithoutReplicaLabels: []string{"replica"},
@@ -3484,5 +3479,8 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		},
 	}, srv))
 
+	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
+		return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+	}))
 	testutil.Equals(t, 2, len(srv.SeriesSet))
 }
