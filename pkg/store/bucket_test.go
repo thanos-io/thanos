@@ -44,7 +44,6 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 
-	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
 
 	"github.com/efficientgo/core/testutil"
@@ -2766,6 +2765,8 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					nil,
 					false,
 					SeriesBatchSize,
+					dummyHistogram,
+					dummyHistogram,
 					dummyHistogram,
 					nil,
 					false,
