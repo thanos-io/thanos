@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -44,9 +45,8 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
-
-	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
