@@ -199,6 +199,7 @@ type Flags struct {
 	TSDBMaxTime        model.Duration `json:"storage.tsdb.max-block-duration"`
 	WebEnableAdminAPI  bool           `json:"web.enable-admin-api"`
 	WebEnableLifecycle bool           `json:"web.enable-lifecycle"`
+	PromFeature        string         `json:"enable-feature"`
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
@@ -213,6 +214,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 		TSDBMaxTime        modelDuration `json:"storage.tsdb.max-block-duration"`
 		WebEnableAdminAPI  modelBool     `json:"web.enable-admin-api"`
 		WebEnableLifecycle modelBool     `json:"web.enable-lifecycle"`
+		PromAgentEnabled   string        `json:"enable-feature"`
 	}{}
 
 	if err := json.Unmarshal(b, &parsableFlags); err != nil {

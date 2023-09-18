@@ -153,13 +153,21 @@ func runSidecar(
 	})
 
 	// Setup all the concurrent groups.
+	promAgentModeEnabled := false
 	{
 		promUp := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
-
 		ctx, cancel := context.WithCancel(context.Background())
+		promAgentModeEnabled, err = isPrometheusAgentModeEnabled(ctx, m.client, logger, m)
+		if err != nil {
+			return errors.Wrap(err, "validate Prometheus flags")
+		}
+		if promAgentModeEnabled && uploads {
+			return errors.New("uploading is not supported when Prometheus is running in agent mode")
+		}
+
 		g.Add(func() error {
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
@@ -286,19 +294,23 @@ func runSidecar(
 			info.WithMetricMetadataInfoFunc(),
 		)
 
-		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
-			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+		opts := []grpcserver.Option{
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
-			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
-			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
-			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
-		)
+		}
+		if !promAgentModeEnabled {
+			storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
+			opts = append(opts, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
+				grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+				grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
+				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
+				grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
+			)
+		}
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, opts...)
 		g.Add(func() error {
 			statusProber.Ready()
 			return s.ListenAndServe()
@@ -369,6 +381,33 @@ func runSidecar(
 
 	level.Info(logger).Log("msg", "starting sidecar")
 	return nil
+}
+
+func isPrometheusAgentModeEnabled(ctx context.Context, client *promclient.Client, logger log.Logger, m *promMetadata) (bool, error) {
+	var (
+		flagErr error
+		flags   promclient.Flags
+	)
+
+	if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+		if flags, flagErr = client.ConfiguredFlags(ctx, m.promURL); flagErr != nil && flagErr != promclient.ErrFlagEndpointNotFound {
+			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", flagErr)
+			return errors.Wrapf(flagErr, "fetch Prometheus flags")
+		}
+		return nil
+	}); err != nil {
+		return false, errors.Wrapf(err, "fetch Prometheus flags")
+	}
+
+	if flagErr != nil {
+		level.Warn(logger).Log("msg", "failed to check Prometheus flags, due to potentially older Prometheus. No extra validation is done.", "err", flagErr)
+		return false, nil
+	}
+	if flags.PromFeature == "agent" {
+		level.Warn(logger).Log("msg", "Prometheus is running in agent mode. StoreAPI will be disabled.")
+		return true, nil
+	}
+	return false, nil
 }
 
 func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
