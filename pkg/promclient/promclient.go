@@ -214,7 +214,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 		TSDBMaxTime        modelDuration `json:"storage.tsdb.max-block-duration"`
 		WebEnableAdminAPI  modelBool     `json:"web.enable-admin-api"`
 		WebEnableLifecycle modelBool     `json:"web.enable-lifecycle"`
-		PromAgentEnabled   string        `json:"enable-feature"`
+		PromFeature        string        `json:"enable-feature"`
 	}{}
 
 	if err := json.Unmarshal(b, &parsableFlags); err != nil {
@@ -228,6 +228,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 		TSDBMaxTime:        model.Duration(parsableFlags.TSDBMaxTime),
 		WebEnableAdminAPI:  bool(parsableFlags.WebEnableAdminAPI),
 		WebEnableLifecycle: bool(parsableFlags.WebEnableLifecycle),
+		PromFeature:        parsableFlags.PromFeature,
 	}
 	return nil
 }

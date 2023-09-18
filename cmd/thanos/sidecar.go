@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -160,22 +161,13 @@ func runSidecar(
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
 		ctx, cancel := context.WithCancel(context.Background())
-		promAgentModeEnabled, err = isPrometheusAgentModeEnabled(ctx, m.client, logger, m)
-		if err != nil {
+
+		// Check prometheus's flags to ensure same sidecar flags.
+		if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m, uploads, &promAgentModeEnabled); err != nil {
+			cancel()
 			return errors.Wrap(err, "validate Prometheus flags")
 		}
-		if promAgentModeEnabled && uploads {
-			return errors.New("uploading is not supported when Prometheus is running in agent mode")
-		}
-
 		g.Add(func() error {
-			// Only check Prometheus's flags when upload is enabled.
-			if uploads {
-				// Check prometheus's flags to ensure same sidecar flags.
-				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
-					return errors.Wrap(err, "validate Prometheus flags")
-				}
-			}
 
 			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
@@ -270,32 +262,40 @@ func runSidecar(
 
 		exemplarSrv := exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels)
 
-		infoSrv := info.NewInfoServer(
-			component.Sidecar.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+		var infoOptions []info.ServerOptionFunc
+		if !promAgentModeEnabled {
+			infoOptions = append(infoOptions, info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 				return promStore.LabelSet()
 			}),
-			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-				if httpProbe.IsReady() {
-					mint, maxt := promStore.Timestamps()
-					return &infopb.StoreInfo{
-						MinTime:                      mint,
-						MaxTime:                      maxt,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-						TsdbInfos:                    promStore.TSDBInfos(),
+				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+					if httpProbe.IsReady() {
+						mint, maxt := promStore.Timestamps()
+						return &infopb.StoreInfo{
+							MinTime:                      mint,
+							MaxTime:                      maxt,
+							SupportsSharding:             true,
+							SupportsWithoutReplicaLabels: true,
+							TsdbInfos:                    promStore.TSDBInfos(),
+						}
 					}
-				}
-				return nil
-			}),
-			info.WithExemplarsInfoFunc(),
+					return nil
+				}),
+				info.WithExemplarsInfoFunc())
+		}
+		infoOptions = append(infoOptions,
 			info.WithRulesInfoFunc(),
 			info.WithTargetsInfoFunc(),
 			info.WithMetricMetadataInfoFunc(),
 		)
+		infoSrv := info.NewInfoServer(
+			component.Sidecar.String(), infoOptions...,
+		)
 
 		opts := []grpcserver.Option{
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
+			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
@@ -304,10 +304,7 @@ func runSidecar(
 		if !promAgentModeEnabled {
 			storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
 			opts = append(opts, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
-				grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
-				grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
 				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
-				grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			)
 		}
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, opts...)
@@ -383,34 +380,7 @@ func runSidecar(
 	return nil
 }
 
-func isPrometheusAgentModeEnabled(ctx context.Context, client *promclient.Client, logger log.Logger, m *promMetadata) (bool, error) {
-	var (
-		flagErr error
-		flags   promclient.Flags
-	)
-
-	if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-		if flags, flagErr = client.ConfiguredFlags(ctx, m.promURL); flagErr != nil && flagErr != promclient.ErrFlagEndpointNotFound {
-			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", flagErr)
-			return errors.Wrapf(flagErr, "fetch Prometheus flags")
-		}
-		return nil
-	}); err != nil {
-		return false, errors.Wrapf(err, "fetch Prometheus flags")
-	}
-
-	if flagErr != nil {
-		level.Warn(logger).Log("msg", "failed to check Prometheus flags, due to potentially older Prometheus. No extra validation is done.", "err", flagErr)
-		return false, nil
-	}
-	if flags.PromFeature == "agent" {
-		level.Warn(logger).Log("msg", "Prometheus is running in agent mode. StoreAPI will be disabled.")
-		return true, nil
-	}
-	return false, nil
-}
-
-func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
+func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata, uploads bool, promAgentModeEnabled *bool) error {
 	var (
 		flagErr error
 		flags   promclient.Flags
@@ -431,19 +401,28 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 		return nil
 	}
 
-	// Check if compaction is disabled.
-	if flags.TSDBMinTime != flags.TSDBMaxTime {
-		if !ignoreBlockSize {
-			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
-				"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
-		}
-		level.Warn(logger).Log("msg", "flag to ignore Prometheus min/max block duration flags differing is being used. If the upload of a 2h block fails and a Prometheus compaction happens that block may be missing from your Thanos bucket storage.")
-	}
-	// Check if block time is 2h.
-	if flags.TSDBMinTime != model.Duration(2*time.Hour) {
-		level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
+	if strings.Contains(flags.PromFeature, "agent") {
+		*promAgentModeEnabled = true
+		level.Warn(logger).Log("msg", "Prometheus is running in agent mode. StoreAPI will be disabled.")
 	}
 
+	if uploads && *promAgentModeEnabled {
+		return errors.New("uploading is not supported when Prometheus is running in agent mode")
+	}
+	if uploads {
+		// Check if compaction is disabled.
+		if flags.TSDBMinTime != flags.TSDBMaxTime {
+			if !ignoreBlockSize {
+				return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+					"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
+			}
+			level.Warn(logger).Log("msg", "flag to ignore Prometheus min/max block duration flags differing is being used. If the upload of a 2h block fails and a Prometheus compaction happens that block may be missing from your Thanos bucket storage.")
+		}
+		// Check if block time is 2h.
+		if flags.TSDBMinTime != model.Duration(2*time.Hour) {
+			level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
+		}
+	}
 	return nil
 }
 
