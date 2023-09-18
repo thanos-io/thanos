@@ -202,17 +202,21 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	dbs := receive.NewMultiTSDB(
+	dbs, err := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
 		reg,
 		tsdbOpts,
 		lset,
 		conf.tenantLabelName,
+		conf.defaultTenantID,
 		bkt,
 		conf.allowOutOfOrderUpload,
 		hashFunc,
 	)
+	if err != nil {
+		return errors.Wrap(err, "creating multi tsdb")
+	}
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,
 		TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
