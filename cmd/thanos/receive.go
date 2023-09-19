@@ -531,6 +531,9 @@ func setupHashring(g *run.Group,
 	if conf.hashringsPathContent.Path() != "" {
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			if enableIngestion {
+				defer close(hashringChangedChan)
+			}
 			err := extkingpin.PathContentReloader(
 				ctx,
 				conf.hashringsPathContent,
