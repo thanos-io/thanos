@@ -3647,6 +3647,8 @@ func (s queryStats) toHints() *hintspb.QueryStats {
 		MergedSeriesCount:      int64(s.mergedSeriesCount),
 		MergedChunksCount:      int64(s.mergedChunksCount),
 		DataDownloadedSizeSum:  int64(s.DataDownloadedSizeSum),
+		GetAllDuration:         s.GetAllDuration,
+		MergeDuration:          s.MergeDuration,
 	}
 }
 
