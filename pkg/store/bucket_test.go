@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -46,8 +47,6 @@ import (
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
-
-	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -2766,6 +2765,8 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					nil,
 					false,
 					SeriesBatchSize,
+					dummyHistogram,
+					dummyHistogram,
 					dummyHistogram,
 					nil,
 					false,
