@@ -181,8 +181,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Timestamp when last block got loaded.",
 	})
 	m.blockLoadDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_bucket_store_block_load_duration_seconds",
-		Help: "The total time taken to load a block in seconds.",
+		Name:    "thanos_bucket_store_block_load_duration_seconds",
+		Help:    "The total time taken to load a block in seconds.",
 		Buckets: []float64{0.1, 0.5, 1, 10, 20, 30, 60, 120},
 	})
 
