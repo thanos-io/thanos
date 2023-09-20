@@ -365,8 +365,6 @@ type BucketStore struct {
 
 	enableChunkHashCalculation bool
 
-	enabledLazyExpandedPostings bool
-
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
 }
