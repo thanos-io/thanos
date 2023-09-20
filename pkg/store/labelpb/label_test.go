@@ -63,6 +63,9 @@ func TestExtendLabels(t *testing.T) {
 	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
 		ExtendSortedLabels(labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "NOT01"}, {Name: "xb", Value: "2"}}, labels.FromStrings("replica", "01")))
 
+	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "xb", Value: "2"}},
+		ExtendSortedLabels(labels.Labels{{Name: "a", Value: "1"}, {Name: "xb", Value: "2"}}, labels.EmptyLabels()))
+
 	testInjectExtLabels(testutil.NewTB(t))
 }
 
