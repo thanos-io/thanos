@@ -32,3 +32,6 @@ validators:
   # 403 when requested my mdox in GH actions.
   - regex: 'nginx\.com'
     type: 'ignore'
+  # 403 when requested my mdox in GH actions.
+  - regex: 'servicenow\.com'
+    type: 'ignore'
