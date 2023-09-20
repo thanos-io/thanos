@@ -3655,7 +3655,7 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.ChunksFetchedSizeSum += o.ChunksFetchedSizeSum
 	s.chunksFetchCount += o.chunksFetchCount
 	s.ChunksFetchDurationSum += o.ChunksFetchDurationSum
-	s.ChunksDownloadLatencySum += s.ChunksDownloadLatencySum
+	s.ChunksDownloadLatencySum += o.ChunksDownloadLatencySum
 
 	s.GetAllDuration += o.GetAllDuration
 	s.mergedSeriesCount += o.mergedSeriesCount
