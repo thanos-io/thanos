@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/wlog"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
@@ -85,7 +86,7 @@ func registerReceive(app *extkingpin.App) {
 			OutOfOrderTimeWindow:           int64(time.Duration(*conf.tsdbOutOfOrderTimeWindow) / time.Millisecond),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
-			WALCompression:                 conf.walCompression,
+			WALCompression:                 wlog.ParseCompressionType(conf.walCompression, string(wlog.CompressionSnappy)),
 			MaxExemplars:                   conf.tsdbMaxExemplars,
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
@@ -364,21 +365,6 @@ func runReceive(
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		level.Debug(logger).Log("msg", "setting up periodic update for label names")
-		g.Add(func() error {
-			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
-				level.Debug(logger).Log("msg", "Starting label names update")
-
-				dbs.UpdateLabelNames(ctx)
-
-				level.Debug(logger).Log("msg", "Finished label names update")
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
 
 		g.Add(
 			func() error {

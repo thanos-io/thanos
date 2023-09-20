@@ -48,7 +48,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -113,9 +112,8 @@ func runSidecar(
 		mint: conf.limitMinTime.PrometheusTimestamp(),
 		maxt: math.MaxInt64,
 
-		limitMinTime:  conf.limitMinTime,
-		client:        promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
-		labelNamesSet: stringset.AllStrings(),
+		limitMinTime: conf.limitMinTime,
+		client:       promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
 	}
 
 	confContentYaml, err := conf.objStore.Content()
@@ -239,19 +237,6 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 		})
-
-		g.Add(func() error {
-			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
-				level.Debug(logger).Log("msg", "Starting label names update")
-
-				m.UpdateLabelNames(context.Background())
-
-				level.Debug(logger).Log("msg", "Finished label names update")
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
 	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -264,7 +249,7 @@ func runSidecar(
 	{
 		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.LabelNamesSet, m.Version)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -434,8 +419,6 @@ type promMetadata struct {
 	limitMinTime thanosmodel.TimeOrDurationValue
 
 	client *promclient.Client
-
-	labelNamesSet stringset.Set
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context) error {
@@ -461,30 +444,6 @@ func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
 
 	s.mint = mint
 	s.maxt = maxt
-}
-
-func (s *promMetadata) UpdateLabelNames(ctx context.Context) {
-	mint, _ := s.Timestamps()
-	labelNames, err := s.client.LabelNamesInGRPC(ctx, s.promURL, nil, mint, time.Now().UnixMilli())
-	if err != nil {
-		s.mtx.Lock()
-		defer s.mtx.Unlock()
-
-		s.labelNamesSet = stringset.AllStrings()
-		return
-	}
-
-	filter := stringset.NewFromStrings(labelNames...)
-	s.mtx.Lock()
-	s.labelNamesSet = filter
-	s.mtx.Unlock()
-}
-
-func (s *promMetadata) LabelNamesSet() stringset.Set {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	return s.labelNamesSet
 }
 
 func (s *promMetadata) Labels() labels.Labels {

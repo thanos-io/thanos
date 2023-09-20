@@ -45,6 +45,7 @@ import (
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
+
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -536,7 +537,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
-		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
 		ts,
 	)
@@ -708,7 +709,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
-		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
 		start,
 		end,
