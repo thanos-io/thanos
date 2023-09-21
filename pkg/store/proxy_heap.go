@@ -164,9 +164,7 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 // tournament trees need n-1 auxiliary nodes so there
 // might not be much of a difference.
 type ProxyResponseHeap struct {
-	nodes        []ProxyResponseHeapNode
-	iLblsScratch labels.Labels
-	jLblsScratch labels.Labels
+	nodes []ProxyResponseHeapNode
 }
 
 func (h *ProxyResponseHeap) Less(i, j int) bool {
@@ -174,26 +172,10 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	jResp := h.nodes[j].rs.At()
 
 	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
-		// Response sets are sorted before adding external labels.
-		// This comparison excludes those labels to keep the same order.
-		iStoreLbls := h.nodes[i].rs.StoreLabels()
-		jStoreLbls := h.nodes[j].rs.StoreLabels()
-
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
 
-		copyLabels(&h.iLblsScratch, iLbls)
-		copyLabels(&h.jLblsScratch, jLbls)
-
-		var iExtLbls, jExtLbls labels.Labels
-		h.iLblsScratch, iExtLbls = dropLabels(h.iLblsScratch, iStoreLbls)
-		h.jLblsScratch, jExtLbls = dropLabels(h.jLblsScratch, jStoreLbls)
-
-		c := labels.Compare(h.iLblsScratch, h.jLblsScratch)
-		if c != 0 {
-			return c < 0
-		}
-		return labels.Compare(iExtLbls, jExtLbls) < 0
+		return labels.Compare(iLbls, jLbls) < 0
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
@@ -774,9 +756,9 @@ func newEagerRespSet(
 
 		// This should be used only for stores that does not support doing this on server side.
 		// See docs/proposals-accepted/20221129-avoid-global-sort.md for details.
-		if len(l.removeLabels) > 0 {
-			sortWithoutLabels(l.bufferedResponses, l.removeLabels)
-		}
+		// NOTE. Client is not guaranteed to give a sorted response when extLset is added
+		// Generally we need to resort here.
+		sortWithoutLabels(l.bufferedResponses, l.removeLabels)
 
 	}(ret)
 
@@ -794,34 +776,6 @@ func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels
 	return l
 }
 
-// dropLabels removes labels from the given label set and returns the removed labels.
-func dropLabels(l labels.Labels, labelsToDrop map[string]struct{}) (labels.Labels, labels.Labels) {
-	cutoff := len(l)
-	for i := 0; i < len(l); i++ {
-		if i == cutoff {
-			break
-		}
-		if _, ok := labelsToDrop[l[i].Name]; !ok {
-			continue
-		}
-
-		lbl := l[i]
-		l = append(append(l[:i], l[i+1:]...), lbl)
-		cutoff--
-		i--
-	}
-
-	return l[:cutoff], l[cutoff:]
-}
-
-func copyLabels(dest *labels.Labels, src labels.Labels) {
-	if len(*dest) < cap(src) {
-		*dest = make([]labels.Label, len(src))
-	}
-	*dest = (*dest)[:len(src)]
-	copy(*dest, src)
-}
-
 // sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
 // series with different labels are coming right after each other. Other types of responses are moved to front.
 func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]struct{}) {
@@ -831,7 +785,9 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 			continue
 		}
 
-		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		if len(labelsToRemove) > 0 {
+			ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		}
 	}
 
 	// With the re-ordered label sets, re-sorting all series aligns the same series

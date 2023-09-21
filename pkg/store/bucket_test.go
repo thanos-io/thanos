@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -47,8 +48,6 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
 
-	"github.com/efficientgo/core/testutil"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -61,7 +60,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -1661,7 +1659,6 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 		bytesLimiterFactory:  NewBytesLimiterFactory(0),
-		labelNamesSet:        stringset.AllStrings(),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -2769,6 +2766,8 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					false,
 					SeriesBatchSize,
 					dummyHistogram,
+					dummyHistogram,
+					dummyHistogram,
 					nil,
 					false,
 					dummyCounter,
@@ -3471,9 +3470,6 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 
 	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
 
-	// make sure to have updated inner label names
-	bucketStore.UpdateLabelNames()
-
 	srv := newStoreSeriesServer(context.Background())
 	testutil.Ok(t, bucketStore.Series(&storepb.SeriesRequest{
 		WithoutReplicaLabels: []string{"replica"},
@@ -3484,5 +3480,128 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		},
 	}, srv))
 
+	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
+		return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+	}))
 	testutil.Equals(t, 2, len(srv.SeriesSet))
+}
+
+func TestQueryStatsMerge(t *testing.T) {
+	s := &queryStats{
+		blocksQueried:                      1,
+		postingsTouched:                    1,
+		PostingsTouchedSizeSum:             1,
+		postingsToFetch:                    1,
+		postingsFetched:                    1,
+		PostingsFetchedSizeSum:             1,
+		postingsFetchCount:                 1,
+		PostingsFetchDurationSum:           1,
+		cachedPostingsCompressions:         1,
+		cachedPostingsCompressionErrors:    1,
+		CachedPostingsOriginalSizeSum:      1,
+		CachedPostingsCompressedSizeSum:    1,
+		CachedPostingsCompressionTimeSum:   1,
+		cachedPostingsDecompressions:       1,
+		cachedPostingsDecompressionErrors:  1,
+		CachedPostingsDecompressionTimeSum: 1,
+		seriesTouched:                      1,
+		SeriesTouchedSizeSum:               1,
+		seriesFetched:                      1,
+		SeriesFetchedSizeSum:               1,
+		seriesFetchCount:                   1,
+		SeriesFetchDurationSum:             1,
+		SeriesDownloadLatencySum:           1,
+		chunksTouched:                      1,
+		ChunksTouchedSizeSum:               1,
+		chunksFetched:                      1,
+		ChunksFetchedSizeSum:               1,
+		chunksFetchCount:                   1,
+		ChunksFetchDurationSum:             1,
+		ChunksDownloadLatencySum:           1,
+		GetAllDuration:                     1,
+		mergedSeriesCount:                  1,
+		mergedChunksCount:                  1,
+		MergeDuration:                      1,
+		DataDownloadedSizeSum:              1,
+	}
+
+	o := &queryStats{
+		blocksQueried:                      100,
+		postingsTouched:                    100,
+		PostingsTouchedSizeSum:             100,
+		postingsToFetch:                    100,
+		postingsFetched:                    100,
+		PostingsFetchedSizeSum:             100,
+		postingsFetchCount:                 100,
+		PostingsFetchDurationSum:           100,
+		cachedPostingsCompressions:         100,
+		cachedPostingsCompressionErrors:    100,
+		CachedPostingsOriginalSizeSum:      100,
+		CachedPostingsCompressedSizeSum:    100,
+		CachedPostingsCompressionTimeSum:   100,
+		cachedPostingsDecompressions:       100,
+		cachedPostingsDecompressionErrors:  100,
+		CachedPostingsDecompressionTimeSum: 100,
+		seriesTouched:                      100,
+		SeriesTouchedSizeSum:               100,
+		seriesFetched:                      100,
+		SeriesFetchedSizeSum:               100,
+		seriesFetchCount:                   100,
+		SeriesFetchDurationSum:             100,
+		SeriesDownloadLatencySum:           100,
+		chunksTouched:                      100,
+		ChunksTouchedSizeSum:               100,
+		chunksFetched:                      100,
+		ChunksFetchedSizeSum:               100,
+		chunksFetchCount:                   100,
+		ChunksFetchDurationSum:             100,
+		ChunksDownloadLatencySum:           100,
+		GetAllDuration:                     100,
+		mergedSeriesCount:                  100,
+		mergedChunksCount:                  100,
+		MergeDuration:                      100,
+		DataDownloadedSizeSum:              100,
+	}
+
+	// Expected stats.
+	e := &queryStats{
+		blocksQueried:                      101,
+		postingsTouched:                    101,
+		PostingsTouchedSizeSum:             101,
+		postingsToFetch:                    101,
+		postingsFetched:                    101,
+		PostingsFetchedSizeSum:             101,
+		postingsFetchCount:                 101,
+		PostingsFetchDurationSum:           101,
+		cachedPostingsCompressions:         101,
+		cachedPostingsCompressionErrors:    101,
+		CachedPostingsOriginalSizeSum:      101,
+		CachedPostingsCompressedSizeSum:    101,
+		CachedPostingsCompressionTimeSum:   101,
+		cachedPostingsDecompressions:       101,
+		cachedPostingsDecompressionErrors:  101,
+		CachedPostingsDecompressionTimeSum: 101,
+		seriesTouched:                      101,
+		SeriesTouchedSizeSum:               101,
+		seriesFetched:                      101,
+		SeriesFetchedSizeSum:               101,
+		seriesFetchCount:                   101,
+		SeriesFetchDurationSum:             101,
+		SeriesDownloadLatencySum:           101,
+		chunksTouched:                      101,
+		ChunksTouchedSizeSum:               101,
+		chunksFetched:                      101,
+		ChunksFetchedSizeSum:               101,
+		chunksFetchCount:                   101,
+		ChunksFetchDurationSum:             101,
+		ChunksDownloadLatencySum:           101,
+		GetAllDuration:                     101,
+		mergedSeriesCount:                  101,
+		mergedChunksCount:                  101,
+		MergeDuration:                      101,
+		DataDownloadedSizeSum:              101,
+	}
+
+	output := s.merge(o)
+	testutil.Equals(t, e, output)
 }

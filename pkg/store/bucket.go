@@ -59,7 +59,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -148,9 +147,15 @@ type bucketStoreMetrics struct {
 	cachedPostingsOriginalSizeBytes      prometheus.Counter
 	cachedPostingsCompressedSizeBytes    prometheus.Counter
 
-	seriesFetchDuration   prometheus.Histogram
-	postingsFetchDuration prometheus.Histogram
-	chunkFetchDuration    prometheus.Histogram
+	seriesFetchDuration prometheus.Histogram
+	// Counts time for fetching series across all batches.
+	seriesFetchDurationSum prometheus.Histogram
+	postingsFetchDuration  prometheus.Histogram
+	// chunkFetchDuration counts total time loading chunks, but since we spawn
+	// multiple goroutines the actual latency is usually much lower than it.
+	chunkFetchDuration prometheus.Histogram
+	// Actual absolute total time for loading chunks.
+	chunkFetchDurationSum prometheus.Histogram
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -289,6 +294,12 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
+	m.seriesFetchDurationSum = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_fetch_duration_sum_seconds",
+		Help:    "The total time it takes to fetch series to respond to a request sent to a store gateway across all series batches. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
+
 	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_postings_fetch_duration_seconds",
 		Help:    "The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
@@ -297,7 +308,13 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 
 	m.chunkFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_chunks_fetch_duration_seconds",
-		Help:    "The total time spent fetching chunks within a single request a store gateway.",
+		Help:    "The total time spent fetching chunks within a single request for one block.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
+
+	m.chunkFetchDurationSum = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_chunks_fetch_duration_sum_seconds",
+		Help:    "The total absolute time spent fetching chunks within a single request for one block.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
@@ -386,9 +403,6 @@ type BucketStore struct {
 	enableChunkHashCalculation bool
 
 	enabledLazyExpandedPostings bool
-
-	bmtx          sync.Mutex
-	labelNamesSet stringset.Set
 
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
@@ -543,7 +557,6 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
-		labelNamesSet:               stringset.AllStrings(),
 	}
 
 	for _, option := range options {
@@ -931,11 +944,13 @@ type blockSeriesClient struct {
 	lazyExpandedPostingSizeBytes                  prometheus.Counter
 	lazyExpandedPostingSeriesOverfetchedSizeBytes prometheus.Counter
 
-	skipChunks         bool
-	shardMatcher       *storepb.ShardMatcher
-	blockMatchers      []*labels.Matcher
-	calculateChunkHash bool
-	chunkFetchDuration prometheus.Histogram
+	skipChunks             bool
+	shardMatcher           *storepb.ShardMatcher
+	blockMatchers          []*labels.Matcher
+	calculateChunkHash     bool
+	seriesFetchDurationSum prometheus.Histogram
+	chunkFetchDuration     prometheus.Histogram
+	chunkFetchDurationSum  prometheus.Histogram
 
 	// Internal state.
 	i                uint64
@@ -960,7 +975,9 @@ func newBlockSeriesClient(
 	shardMatcher *storepb.ShardMatcher,
 	calculateChunkHash bool,
 	batchSize int,
+	seriesFetchDurationSum prometheus.Histogram,
 	chunkFetchDuration prometheus.Histogram,
+	chunkFetchDurationSum prometheus.Histogram,
 	extLsetToRemove map[string]struct{},
 	lazyExpandedPostingEnabled bool,
 	lazyExpandedPostingsCount prometheus.Counter,
@@ -983,14 +1000,16 @@ func newBlockSeriesClient(
 		extLset:         extLset,
 		extLsetToRemove: extLsetToRemove,
 
-		mint:               req.MinTime,
-		maxt:               req.MaxTime,
-		indexr:             b.indexReader(),
-		chunkr:             chunkr,
-		chunksLimiter:      limiter,
-		bytesLimiter:       bytesLimiter,
-		skipChunks:         req.SkipChunks,
-		chunkFetchDuration: chunkFetchDuration,
+		mint:                   req.MinTime,
+		maxt:                   req.MaxTime,
+		indexr:                 b.indexReader(),
+		chunkr:                 chunkr,
+		chunksLimiter:          limiter,
+		bytesLimiter:           bytesLimiter,
+		skipChunks:             req.SkipChunks,
+		seriesFetchDurationSum: seriesFetchDurationSum,
+		chunkFetchDuration:     chunkFetchDuration,
+		chunkFetchDurationSum:  chunkFetchDurationSum,
 
 		lazyExpandedPostingEnabled:                    lazyExpandedPostingEnabled,
 		lazyExpandedPostingsCount:                     lazyExpandedPostingsCount,
@@ -1079,8 +1098,10 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	}
 
 	if len(b.entries) == 0 {
+		b.seriesFetchDurationSum.Observe(b.indexr.stats.SeriesDownloadLatencySum.Seconds())
 		if b.chunkr != nil {
 			b.chunkFetchDuration.Observe(b.chunkr.stats.ChunksFetchDurationSum.Seconds())
+			b.chunkFetchDurationSum.Observe(b.chunkr.stats.ChunksDownloadLatencySum.Seconds())
 		}
 		return nil, io.EOF
 	}
@@ -1334,7 +1355,8 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) (err error) {
-	srv := newFlushableServer(seriesSrv, s.LabelNamesSet(), req.WithoutReplicaLabels)
+	srv := newFlushableServer(seriesSrv, sortingStrategyNone)
+
 	if s.queryGate != nil {
 		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
 			err = s.queryGate.Start(srv.Context())
@@ -1430,7 +1452,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				shardMatcher,
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
+				s.metrics.seriesFetchDurationSum,
 				s.metrics.chunkFetchDuration,
+				s.metrics.chunkFetchDurationSum,
 				extLsetToRemove,
 				s.enabledLazyExpandedPostings,
 				s.metrics.lazyExpandedPostingsCount,
@@ -1464,44 +1488,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
 				}
 
-				// If we have inner replica labels we need to resort.
-				s.mtx.Lock()
-				needsEagerRetrival := len(req.WithoutReplicaLabels) > 0 && s.labelNamesSet.HasAny(req.WithoutReplicaLabels)
-				s.mtx.Unlock()
-
-				var resp respSet
-				if needsEagerRetrival {
-					labelsToRemove := make(map[string]struct{})
-					for _, replicaLabel := range req.WithoutReplicaLabels {
-						labelsToRemove[replicaLabel] = struct{}{}
-					}
-					resp = newEagerRespSet(
-						srv.Context(),
-						span,
-						10*time.Minute,
-						blk.meta.ULID.String(),
-						[]labels.Labels{blk.extLset},
-						onClose,
-						blockClient,
-						shardMatcher,
-						false,
-						s.metrics.emptyPostingCount,
-						labelsToRemove,
-					)
-				} else {
-					resp = newLazyRespSet(
-						srv.Context(),
-						span,
-						10*time.Minute,
-						blk.meta.ULID.String(),
-						[]labels.Labels{blk.extLset},
-						onClose,
-						blockClient,
-						shardMatcher,
-						false,
-						s.metrics.emptyPostingCount,
-					)
-				}
+				resp := newEagerRespSet(
+					srv.Context(),
+					span,
+					10*time.Minute,
+					blk.meta.ULID.String(),
+					[]labels.Labels{blk.extLset},
+					onClose,
+					blockClient,
+					shardMatcher,
+					false,
+					s.metrics.emptyPostingCount,
+					nil,
+				)
 
 				mtx.Lock()
 				respSets = append(respSets, resp)
@@ -1736,7 +1735,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					nil,
 					true,
 					SeriesBatchSize,
-					s.metrics.chunkFetchDuration,
+					s.metrics.seriesFetchDurationSum,
+					nil,
+					nil,
 					nil,
 					s.enabledLazyExpandedPostings,
 					s.metrics.lazyExpandedPostingsCount,
@@ -1812,38 +1813,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		Names: strutil.MergeSlices(sets...),
 		Hints: anyHints,
 	}, nil
-}
-
-func (s *BucketStore) UpdateLabelNames() {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	newSet := stringset.New()
-	for _, b := range s.blocks {
-		labelNames, err := b.indexHeaderReader.LabelNames()
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
-			s.updateLabelNamesSet(stringset.AllStrings())
-			return
-		}
-		for _, l := range labelNames {
-			newSet.Insert(l)
-		}
-	}
-	s.updateLabelNamesSet(newSet)
-}
-
-func (s *BucketStore) updateLabelNamesSet(newSet stringset.Set) {
-	s.bmtx.Lock()
-	s.labelNamesSet = newSet
-	s.bmtx.Unlock()
-}
-
-func (b *BucketStore) LabelNamesSet() stringset.Set {
-	b.bmtx.Lock()
-	defer b.bmtx.Unlock()
-
-	return b.labelNamesSet
 }
 
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
@@ -1969,7 +1938,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					nil,
 					true,
 					SeriesBatchSize,
-					s.metrics.chunkFetchDuration,
+					s.metrics.seriesFetchDurationSum,
+					nil,
+					nil,
 					nil,
 					s.enabledLazyExpandedPostings,
 					s.metrics.lazyExpandedPostingsCount,
@@ -3073,7 +3044,10 @@ func (it *bigEndianPostings) length() int {
 
 func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.SeriesRef, bytesLimiter BytesLimiter) error {
 	timer := prometheus.NewTimer(r.block.metrics.seriesFetchDuration)
-	defer timer.ObserveDuration()
+	defer func() {
+		d := timer.ObserveDuration()
+		r.stats.SeriesDownloadLatencySum += d
+	}()
 
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
@@ -3391,7 +3365,10 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 	r.loadingChunks = true
 	r.loadingChunksMtx.Unlock()
 
+	begin := time.Now()
 	defer func() {
+		r.stats.ChunksDownloadLatencySum += time.Since(begin)
+
 		r.loadingChunksMtx.Lock()
 		r.loadingChunks = false
 		r.loadingChunksMtx.Unlock()
@@ -3620,19 +3597,21 @@ type queryStats struct {
 	cachedPostingsDecompressionErrors  int
 	CachedPostingsDecompressionTimeSum time.Duration
 
-	seriesTouched          int
-	SeriesTouchedSizeSum   units.Base2Bytes
-	seriesFetched          int
-	SeriesFetchedSizeSum   units.Base2Bytes
-	seriesFetchCount       int
-	SeriesFetchDurationSum time.Duration
+	seriesTouched            int
+	SeriesTouchedSizeSum     units.Base2Bytes
+	seriesFetched            int
+	SeriesFetchedSizeSum     units.Base2Bytes
+	seriesFetchCount         int
+	SeriesFetchDurationSum   time.Duration
+	SeriesDownloadLatencySum time.Duration
 
-	chunksTouched          int
-	ChunksTouchedSizeSum   units.Base2Bytes
-	chunksFetched          int
-	ChunksFetchedSizeSum   units.Base2Bytes
-	chunksFetchCount       int
-	ChunksFetchDurationSum time.Duration
+	chunksTouched            int
+	ChunksTouchedSizeSum     units.Base2Bytes
+	chunksFetched            int
+	ChunksFetchedSizeSum     units.Base2Bytes
+	chunksFetchCount         int
+	ChunksFetchDurationSum   time.Duration
+	ChunksDownloadLatencySum time.Duration
 
 	GetAllDuration    time.Duration
 	mergedSeriesCount int
@@ -3668,6 +3647,7 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.SeriesFetchedSizeSum += o.SeriesFetchedSizeSum
 	s.seriesFetchCount += o.seriesFetchCount
 	s.SeriesFetchDurationSum += o.SeriesFetchDurationSum
+	s.SeriesDownloadLatencySum += o.SeriesDownloadLatencySum
 
 	s.chunksTouched += o.chunksTouched
 	s.ChunksTouchedSizeSum += o.ChunksTouchedSizeSum
@@ -3675,6 +3655,7 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.ChunksFetchedSizeSum += o.ChunksFetchedSizeSum
 	s.chunksFetchCount += o.chunksFetchCount
 	s.ChunksFetchDurationSum += o.ChunksFetchDurationSum
+	s.ChunksDownloadLatencySum += o.ChunksDownloadLatencySum
 
 	s.GetAllDuration += o.GetAllDuration
 	s.mergedSeriesCount += o.mergedSeriesCount
@@ -3708,6 +3689,8 @@ func (s queryStats) toHints() *hintspb.QueryStats {
 		MergedSeriesCount:      int64(s.mergedSeriesCount),
 		MergedChunksCount:      int64(s.mergedChunksCount),
 		DataDownloadedSizeSum:  int64(s.DataDownloadedSizeSum),
+		GetAllDuration:         s.GetAllDuration,
+		MergeDuration:          s.MergeDuration,
 	}
 }
 

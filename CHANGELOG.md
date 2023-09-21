@@ -12,9 +12,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#6692](https://github.com/thanos-io/thanos/pull/6692) Store: Fix matching bug when using empty alternative in regex matcher, for example (a||b).
-- [#6679](https://github.com/thanos-io/thanos/pull/6697) Store: fix block deduplication
-
 ### Added
 
 - [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
@@ -22,13 +19,30 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
-- [#6664](https://github.com/thanos-io/thanos/pull/6664) *: Update Prometheus to 2.46.1.
 - [#6698](https://github.com/thanos-io/thanos/pull/6608) Receive: Change write log level from warn to info.
 - [#6699](https://github.com/thanos-io/thanos/pull/6699) Receive: Use new file reloading logic for hashring configuration.
 
 ### Removed
 
 - [#6686](https://github.com/thanos-io/thanos/pull/6686) Remove deprecated `--log.request.decision` flag. We now use `--request.logging-config` to set logging decisions.
+
+## [v0.32.3](https://github.com/thanos-io/thanos/tree/release-0.32) - 20.09.2023
+
+### Fixed
+
+- [#6692](https://github.com/thanos-io/thanos/pull/6692) Store: Fix matching bug when using empty alternative in regex matcher, for example (a||b).
+- [#6679](https://github.com/thanos-io/thanos/pull/6697) Store: Fix block deduplication
+- [#6706](https://github.com/thanos-io/thanos/pull/6706) Store: Series responses should always be sorted
+
+### Added
+
+### Changed
+
+- [#6664](https://github.com/thanos-io/thanos/pull/6664) *: Update Prometheus to 2.46.1.
+- [#6722](https://github.com/thanos-io/thanos/pull/6722) *: Optimize iterations on GCS buckets by requesting only object names.
+- [#6544](https://github.com/thanos-io/thanos/pull/6500) Objstore: Update objstore to latest version which adds a new metric regarding uploaded TSDB bytes
+
+### Removed
 
 ## [v0.32.2](https://github.com/thanos-io/thanos/tree/release-0.32) - 31.08.2023
 
@@ -57,6 +71,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 ### Changed
+
+- [#6664](https://github.com/thanos-io/thanos/pull/6664) *: Update Prometheus to 2.46.1.
 
 ### Removed
 
