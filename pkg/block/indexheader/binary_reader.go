@@ -925,15 +925,6 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 }
 
 func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
-	cacheIndex := o % valueSymbolsCacheSize
-	r.valueSymbolsMx.Lock()
-	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
-		v := cached.symbol
-		r.valueSymbolsMx.Unlock()
-		return v, nil
-	}
-	r.valueSymbolsMx.Unlock()
-
 	if s, ok := r.nameSymbols[o]; ok {
 		return s, nil
 	}
@@ -943,6 +934,15 @@ func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
 		// of the header length difference between two files.
 		o += headerLen - index.HeaderLen
 	}
+
+	cacheIndex := o % valueSymbolsCacheSize
+	r.valueSymbolsMx.Lock()
+	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
+		v := cached.symbol
+		r.valueSymbolsMx.Unlock()
+		return v, nil
+	}
+	r.valueSymbolsMx.Unlock()
 
 	s, err := r.symbols.Lookup(o)
 	if err != nil {
