@@ -46,7 +46,9 @@ const (
 	MagicIndex = 0xBAAAD792
 
 	postingLengthFieldSize = 4
-	partitionSize          = 64 * 1024 * 1024 // 64 MB
+
+	// partitionSize is used for splitting range reads for index-header.
+	partitionSize = 64 * 1024 * 1024 // 64 MiB
 )
 
 var NotFoundRange = index.Range{Start: -1, End: -1}
@@ -246,16 +248,18 @@ func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err e
 func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
 	g, qctx := errgroup.WithContext(ctx)
 
-	numParts := int64(math.Ceil(float64(length) / float64(r.partSize)))
+	numParts := length / r.partSize
+	if length%r.partSize > 0 {
+		// A partial partition is remaining
+		numParts += 1
+	}
+
 	parts := make([]io.ReadCloser, numParts)
 
 	i := 0
 	for o := off; o < off+length; o += r.partSize {
 		l := r.partSize
 		if o+l > off+length {
-			// l = 1024
-			//
-			// expected = (i * partSize )
 			l = length - (int64(i) * r.partSize)
 		}
 
