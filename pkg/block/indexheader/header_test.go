@@ -36,6 +36,8 @@ func TestReaders(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
+	partSize := int64(10)
+
 	// Create block index version 2.
 	id1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
@@ -97,7 +99,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn)
+				_, err := WriteBinary(ctx, bkt, id, fn, partSize)
 				testutil.Ok(t, err)
 
 				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
@@ -203,7 +205,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("lazy binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn)
+				_, err := WriteBinary(ctx, bkt, id, fn, partSize)
 				testutil.Ok(t, err)
 
 				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), nil)
@@ -378,7 +380,7 @@ func BenchmarkBinaryWrite(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		_, err := WriteBinary(ctx, bkt, m.ULID, fn)
+		_, err := WriteBinary(ctx, bkt, m.ULID, fn, partitionSize)
 		testutil.Ok(t, err)
 	}
 }
@@ -392,7 +394,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn, partitionSize)
 	testutil.Ok(t, err)
 
 	t.ResetTimer()

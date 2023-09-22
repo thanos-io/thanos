@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/objstore"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -45,6 +46,7 @@ const (
 	MagicIndex = 0xBAAAD792
 
 	postingLengthFieldSize = 4
+	partitionSize          = 64 * 1024 * 1024 // 64 MB
 )
 
 var NotFoundRange = index.Range{Start: -1, End: -1}
@@ -73,8 +75,8 @@ type BinaryTOC struct {
 }
 
 // WriteBinary build index header from the pieces of index in object storage, and cached in file if necessary.
-func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string) ([]byte, error) {
-	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id)
+func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string, partSize int64) ([]byte, error) {
+	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id, partSize)
 	if err != nil {
 		return nil, errors.Wrap(err, "new index reader")
 	}
@@ -133,14 +135,15 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 }
 
 type chunkedIndexReader struct {
-	ctx  context.Context
-	path string
-	size uint64
-	bkt  objstore.BucketReader
-	toc  *index.TOC
+	ctx      context.Context
+	path     string
+	size     uint64
+	bkt      objstore.BucketReader
+	toc      *index.TOC
+	partSize int64
 }
 
-func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID) (*chunkedIndexReader, int, error) {
+func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, partSize int64) (*chunkedIndexReader, int, error) {
 	indexFilepath := filepath.Join(id.String(), block.IndexFilename)
 	attrs, err := bkt.Attributes(ctx, indexFilepath)
 	if err != nil {
@@ -173,10 +176,11 @@ func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ul
 	}
 
 	ir := &chunkedIndexReader{
-		ctx:  ctx,
-		path: indexFilepath,
-		size: uint64(attrs.Size),
-		bkt:  bkt,
+		ctx:      ctx,
+		path:     indexFilepath,
+		size:     uint64(attrs.Size),
+		bkt:      bkt,
+		partSize: partSize,
 	}
 
 	toc, err := ir.readTOC()
@@ -212,7 +216,7 @@ func (r *chunkedIndexReader) readTOC() (*index.TOC, error) {
 }
 
 func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
-	rc, err := r.bkt.GetRange(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols))
+	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols))
 	if err != nil {
 		return errors.Wrapf(err, "get symbols from object storage of %s", r.path)
 	}
@@ -226,7 +230,7 @@ func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
 }
 
 func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err error) {
-	rc, err := r.bkt.GetRange(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable))
+	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable))
 	if err != nil {
 		return errors.Wrapf(err, "get posting offset table from object storage of %s", r.path)
 	}
@@ -236,6 +240,74 @@ func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err e
 		return errors.Wrap(err, "copy posting offsets")
 	}
 
+	return nil
+}
+
+func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
+	g, qctx := errgroup.WithContext(ctx)
+
+	numParts := int64(math.Ceil(float64(length) / float64(r.partSize)))
+	parts := make([]io.ReadCloser, numParts)
+
+	i := 0
+	for o := off; o < off+length; o += r.partSize {
+		l := r.partSize
+		if o+l > off+length {
+			// l = 1024
+			//
+			// expected = (i * partSize )
+			l = length - (int64(i) * r.partSize)
+		}
+
+		partOff := o
+		partLength := l
+		partId := i
+
+		g.Go(func() error {
+			rc, err := r.bkt.GetRange(qctx, name, partOff, partLength)
+			if err != nil {
+				return err
+			}
+			parts[partId] = rc
+			return nil
+		})
+
+		i += 1
+	}
+
+	// Wait until all parts complete.
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return newMultiReadCloser(parts), nil
+}
+
+type multiReadCloser struct {
+	readerClosers []io.ReadCloser
+	multiReader   io.Reader
+}
+
+func newMultiReadCloser(rcs []io.ReadCloser) *multiReadCloser {
+	rs := make([]io.Reader, 0, len(rcs))
+	for _, rc := range rcs {
+		rs = append(rs, rc)
+	}
+	return &multiReadCloser{
+		readerClosers: rcs,
+		multiReader:   io.MultiReader(rs...),
+	}
+}
+
+func (m *multiReadCloser) Read(p []byte) (n int, err error) {
+	return m.multiReader.Read(p)
+}
+
+func (m *multiReadCloser) Close() (err error) {
+	for _, r := range m.readerClosers {
+		if err := r.Close(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -539,14 +611,14 @@ func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 		level.Debug(logger).Log("msg", "failed to read index-header from disk; recreating", "path", binfn, "err", err)
 
 		start := time.Now()
-		if _, err := WriteBinary(ctx, bkt, id, binfn); err != nil {
+		if _, err := WriteBinary(ctx, bkt, id, binfn, partitionSize); err != nil {
 			return nil, errors.Wrap(err, "write index header")
 		}
 
 		level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
 		return newFileBinaryReader(binfn, postingOffsetsInMemSampling)
 	} else {
-		buf, err := WriteBinary(ctx, bkt, id, "")
+		buf, err := WriteBinary(ctx, bkt, id, "", partitionSize)
 		if err != nil {
 			return nil, errors.Wrap(err, "generate index header")
 		}
