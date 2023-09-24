@@ -678,8 +678,8 @@ test_metric{a="2", b="2"} 1`)
 		r1Runnable := r1.WithRouting(1, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable))
 
-		rp1 := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
-		rp2 := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
+		rp1 := e2ethanos.NewDefaultReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
+		rp2 := e2ethanos.NewDefaultReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
 		testutil.Ok(t, e2e.StartAndWaitReady(rp1, rp2))
 
 		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, "http://"+rp1.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
