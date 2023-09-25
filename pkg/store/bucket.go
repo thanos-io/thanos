@@ -122,6 +122,7 @@ type bucketStoreMetrics struct {
 	lastLoadedBlock       prometheus.Gauge
 	blockDrops            prometheus.Counter
 	blockDropFailures     prometheus.Counter
+	blockLoadDuration     prometheus.Histogram
 	seriesDataTouched     *prometheus.HistogramVec
 	seriesDataFetched     *prometheus.HistogramVec
 	seriesDataSizeTouched *prometheus.HistogramVec
@@ -184,6 +185,11 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.lastLoadedBlock = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_bucket_store_blocks_last_loaded_timestamp_seconds",
 		Help: "Timestamp when last block got loaded.",
+	})
+	m.blockLoadDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_block_load_duration_seconds",
+		Help:    "The total time taken to load a block in seconds.",
+		Buckets: []float64{0.1, 0.5, 1, 10, 20, 30, 60, 120},
 	})
 
 	m.seriesDataTouched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
@@ -727,6 +733,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 			level.Warn(s.logger).Log("msg", "loading block failed", "elapsed", time.Since(start), "id", meta.ULID, "err", err)
 		} else {
 			level.Info(s.logger).Log("msg", "loaded new block", "elapsed", time.Since(start), "id", meta.ULID)
+			s.metrics.blockLoadDuration.Observe(time.Since(start).Seconds())
 		}
 	}()
 	s.metrics.blockLoads.Inc()
