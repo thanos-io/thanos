@@ -61,6 +61,7 @@ type commonMetrics struct {
 	requestTotal  *prometheus.CounterVec
 	hitsTotal     *prometheus.CounterVec
 	dataSizeBytes *prometheus.HistogramVec
+	fetchLatency  *prometheus.HistogramVec
 }
 
 func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
@@ -79,6 +80,11 @@ func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
 			Buckets: []float64{
 				32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 64 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 			},
+		}, []string{"item_type"}),
+		fetchLatency: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "thanos_store_index_cache_fetch_duration_seconds",
+			Help:    "Histogram to track latency to fetch items from index cache",
+			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 10, 15, 20, 30, 45, 60, 90, 120},
 		}, []string{"item_type"}),
 	}
 }

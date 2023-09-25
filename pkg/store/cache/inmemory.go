@@ -7,6 +7,7 @@ import (
 	"context"
 	"reflect"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/go-kit/log"
@@ -302,6 +303,9 @@ func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
 func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+	begin := time.Now()
+	defer c.commonMetrics.fetchLatency.WithLabelValues(cacheTypePostings).Observe(float64(time.Since(begin)))
+
 	hits = map[labels.Label][]byte{}
 
 	blockIDKey := blockID.String()
@@ -325,6 +329,9 @@ func (c *InMemoryIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers [
 
 // FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
 func (c *InMemoryIndexCache) FetchExpandedPostings(_ context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
+	begin := time.Now()
+	defer c.commonMetrics.fetchLatency.WithLabelValues(cacheTypeExpandedPostings).Observe(float64(time.Since(begin)))
+
 	if b, ok := c.get(cacheTypeExpandedPostings, cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers)), ""}); ok {
 		return b, true
 	}
@@ -341,6 +348,9 @@ func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 // and returns a map containing cache hits, along with a list of missing IDs.
 func (c *InMemoryIndexCache) FetchMultiSeries(_ context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
+	begin := time.Now()
+	defer c.commonMetrics.fetchLatency.WithLabelValues(cacheTypeSeries).Observe(float64(time.Since(begin)))
+
 	hits = map[storage.SeriesRef][]byte{}
 
 	blockIDKey := blockID.String()
