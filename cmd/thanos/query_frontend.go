@@ -180,7 +180,9 @@ func parseTransportConfiguration(downstreamTripperConfContentYaml []byte) (*http
 		if err := yaml.UnmarshalStrict(downstreamTripperConfContentYaml, tripperConfig); err != nil {
 			return nil, errors.Wrap(err, "parsing downstream tripper config YAML file")
 		}
-
+		if tripperConfig.TLSConfig != nil {
+			downstreamTripper.TLSClientConfig = tripperConfig.TLSConfig
+		}
 		if tripperConfig.IdleConnTimeout > 0 {
 			downstreamTripper.IdleConnTimeout = time.Duration(tripperConfig.IdleConnTimeout)
 		}

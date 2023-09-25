@@ -4,6 +4,7 @@
 package queryfrontend
 
 import (
+	"crypto/tls"
 	"strings"
 	"time"
 
@@ -186,6 +187,7 @@ type DownstreamTripperConfig struct {
 	MaxIdleConns          *int               `yaml:"max_idle_conns"`
 	MaxIdleConnsPerHost   *int               `yaml:"max_idle_conns_per_host"`
 	MaxConnsPerHost       *int               `yaml:"max_conns_per_host"`
+	TLSConfig             *tls.Config        `yaml:"tls_config"`
 
 	CachePathOrContent extflag.PathOrContent
 }
