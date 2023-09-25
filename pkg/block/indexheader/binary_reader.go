@@ -307,10 +307,17 @@ func (m *multiReadCloser) Read(p []byte) (n int, err error) {
 }
 
 func (m *multiReadCloser) Close() (err error) {
+	var firstErr error
 	for _, r := range m.readerClosers {
 		if err := r.Close(); err != nil {
-			return err
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
+	}
+
+	if firstErr != nil {
+		return firstErr
 	}
 	return nil
 }
