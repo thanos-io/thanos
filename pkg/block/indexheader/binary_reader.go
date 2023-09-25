@@ -246,7 +246,7 @@ func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err e
 }
 
 func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
-	g, qctx := errgroup.WithContext(ctx)
+	g := errgroup.Group{}
 
 	numParts := length / r.partSize
 	if length%r.partSize > 0 {
@@ -268,7 +268,7 @@ func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name strin
 		partId := i
 
 		g.Go(func() error {
-			rc, err := r.bkt.GetRange(qctx, name, partOff, partLength)
+			rc, err := r.bkt.GetRange(ctx, name, partOff, partLength)
 			if err != nil {
 				return err
 			}
