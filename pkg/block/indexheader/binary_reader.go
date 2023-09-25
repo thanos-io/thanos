@@ -45,6 +45,9 @@ const (
 	MagicIndex = 0xBAAAD792
 
 	postingLengthFieldSize = 4
+
+	// indexHeaderBufferSize is the size of the buffer used to read index-header parts from obj store.
+	indexHeaderBufferSize = 8 * 1024 * 1024 // 8 MB
 )
 
 var NotFoundRange = index.Range{Start: -1, End: -1}
@@ -211,31 +214,57 @@ func (r *chunkedIndexReader) readTOC() (*index.TOC, error) {
 	return toc, nil
 }
 
-func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
+func (r *chunkedIndexReader) CopySymbols(w io.Writer, wbuf []byte) (err error) {
 	rc, err := r.bkt.GetRange(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols))
 	if err != nil {
 		return errors.Wrapf(err, "get symbols from object storage of %s", r.path)
 	}
 	defer runutil.CloseWithErrCapture(&err, rc, "close symbol reader")
 
-	if _, err := io.CopyBuffer(w, rc, buf); err != nil {
+	// Using a larger buffer for reading from obj store.
+	rbuf := make([]byte, indexHeaderBufferSize)
+	if err := r.copyBuffer(w, rc, rbuf, wbuf); err != nil {
 		return errors.Wrap(err, "copy symbols")
 	}
-
 	return nil
 }
 
-func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err error) {
+func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, wbuf []byte) (err error) {
 	rc, err := r.bkt.GetRange(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable))
 	if err != nil {
 		return errors.Wrapf(err, "get posting offset table from object storage of %s", r.path)
 	}
 	defer runutil.CloseWithErrCapture(&err, rc, "close posting offsets reader")
 
-	if _, err := io.CopyBuffer(w, rc, buf); err != nil {
-		return errors.Wrap(err, "copy posting offsets")
+	// Using a larger buffer for reading from obj store.
+	rbuf := make([]byte, indexHeaderBufferSize)
+	if err := r.copyBuffer(w, rc, rbuf, wbuf); err != nil {
+		return errors.Wrap(err, "copy postings offsets")
 	}
+	return nil
+}
 
+func (r *chunkedIndexReader) copyBuffer(w io.Writer, rc io.ReadCloser, rbuf, wbuf []byte) error {
+	for {
+		n, err := rc.Read(rbuf)
+
+		if err != nil {
+			if err != io.EOF {
+				return errors.Wrap(err, "copyBuffer")
+			}
+			break
+		}
+
+		r := &io.LimitedReader{
+			R: bytes.NewReader(rbuf),
+			N: int64(n),
+		}
+
+		// Using a smaller buffer to write to fs.
+		if _, err := io.CopyBuffer(w, r, wbuf); err != nil {
+			return errors.Wrap(err, "copyBuffer")
+		}
+	}
 	return nil
 }
 
