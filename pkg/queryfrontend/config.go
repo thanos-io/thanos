@@ -4,7 +4,6 @@
 package queryfrontend
 
 import (
-	"crypto/tls"
 	"strings"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/util/flagext"
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/model"
 )
 
@@ -187,7 +187,7 @@ type DownstreamTripperConfig struct {
 	MaxIdleConns          *int               `yaml:"max_idle_conns"`
 	MaxIdleConnsPerHost   *int               `yaml:"max_idle_conns_per_host"`
 	MaxConnsPerHost       *int               `yaml:"max_conns_per_host"`
-	TLSConfig             *tls.Config        `yaml:"tls_config"`
+	TLSConfig             *exthttp.TLSConfig        `yaml:"tls_config"`
 
 	CachePathOrContent extflag.PathOrContent
 }
