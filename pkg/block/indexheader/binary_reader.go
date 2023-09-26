@@ -248,21 +248,22 @@ func (r *chunkedIndexReader) copyBuffer(w io.Writer, rc io.ReadCloser, rbuf, wbu
 	for {
 		n, err := rc.Read(rbuf)
 
+		if n > 0 {
+			rl := &io.LimitedReader{
+				R: bytes.NewReader(rbuf),
+				N: int64(n),
+			}
+			// Using a smaller buffer to write to fs.
+			if _, err := io.CopyBuffer(w, rl, wbuf); err != nil {
+				return errors.Wrap(err, "copyBuffer")
+			}
+		}
+
 		if err != nil {
 			if err != io.EOF {
 				return errors.Wrap(err, "copyBuffer")
 			}
 			break
-		}
-
-		r := &io.LimitedReader{
-			R: bytes.NewReader(rbuf),
-			N: int64(n),
-		}
-
-		// Using a smaller buffer to write to fs.
-		if _, err := io.CopyBuffer(w, r, wbuf); err != nil {
-			return errors.Wrap(err, "copyBuffer")
 		}
 	}
 	return nil
