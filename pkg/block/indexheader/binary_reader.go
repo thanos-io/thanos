@@ -333,7 +333,7 @@ func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name strin
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	return newMultiReadCloser(parts), nil
+	return newMultiReadCloser(parts)
 }
 
 type multiReadCloser struct {
@@ -341,18 +341,20 @@ type multiReadCloser struct {
 	multiReader io.Reader
 }
 
-func newMultiReadCloser(rcs []PosWriter) *multiReadCloser {
+func newMultiReadCloser(rcs []PosWriter) (*multiReadCloser, error) {
 	readers := make([]io.Reader, 0, len(rcs))
 	closers := make([]io.Closer, 0, len(rcs))
 	for _, rc := range rcs {
-		rc.Seek(0, io.SeekStart)
+		if _, err := rc.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
 		readers = append(readers, rc.(io.Reader))
 		closers = append(closers, rc.(io.Closer))
 	}
 	return &multiReadCloser{
 		closers:     closers,
 		multiReader: io.MultiReader(readers...),
-	}
+	}, nil
 }
 
 func (m *multiReadCloser) Read(p []byte) (n int, err error) {
