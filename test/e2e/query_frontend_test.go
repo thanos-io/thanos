@@ -1026,6 +1026,7 @@ func TestQueryFrontendTenantForward(t *testing.T) {
 			}
 
 			_, _, _ = v1api.QueryRange(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", r)
+			_, _, _ = v1api.Query(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", time.Now())
 		})
 	}
 }
