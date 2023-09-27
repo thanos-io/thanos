@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -48,7 +49,7 @@ const (
 	postingLengthFieldSize = 4
 
 	// partitionSize is used for splitting range reads for index-header.
-	partitionSize = 64 * 1024 * 1024 // 64 MiB
+	partitionSize = 8 * 1024 * 1024 // 8 MiB
 )
 
 var NotFoundRange = index.Range{Start: -1, End: -1}
@@ -78,7 +79,7 @@ type BinaryTOC struct {
 
 // WriteBinary build index header from the pieces of index in object storage, and cached in file if necessary.
 func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string, partSize int64) ([]byte, error) {
-	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id, partSize)
+	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id, filename, partSize)
 	if err != nil {
 		return nil, errors.Wrap(err, "new index reader")
 	}
@@ -143,9 +144,11 @@ type chunkedIndexReader struct {
 	bkt      objstore.BucketReader
 	toc      *index.TOC
 	partSize int64
+	blockId  ulid.ULID
+	filename string // Stores the temporary location of where to store the parts
 }
 
-func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, partSize int64) (*chunkedIndexReader, int, error) {
+func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string, partSize int64) (*chunkedIndexReader, int, error) {
 	indexFilepath := filepath.Join(id.String(), block.IndexFilename)
 	attrs, err := bkt.Attributes(ctx, indexFilepath)
 	if err != nil {
@@ -183,6 +186,8 @@ func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ul
 		size:     uint64(attrs.Size),
 		bkt:      bkt,
 		partSize: partSize,
+		filename: filename,
+		blockId:  id,
 	}
 
 	toc, err := ir.readTOC()
@@ -218,7 +223,8 @@ func (r *chunkedIndexReader) readTOC() (*index.TOC, error) {
 }
 
 func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
-	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols))
+	tmpFilePrefix := "symbols"
+	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols), tmpFilePrefix)
 	if err != nil {
 		return errors.Wrapf(err, "get symbols from object storage of %s", r.path)
 	}
@@ -228,11 +234,13 @@ func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
 		return errors.Wrap(err, "copy symbols")
 	}
 
-	return nil
+	// clean the temporary files
+	return r.cleanPartFiles(tmpFilePrefix)
 }
 
 func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err error) {
-	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable))
+	tmpFilePrefix := "posoffsets"
+	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable), tmpFilePrefix)
 	if err != nil {
 		return errors.Wrapf(err, "get posting offset table from object storage of %s", r.path)
 	}
@@ -242,11 +250,44 @@ func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err e
 		return errors.Wrap(err, "copy posting offsets")
 	}
 
-	return nil
+	// clean the temporary files
+	return r.cleanPartFiles(tmpFilePrefix)
 }
 
-func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
+func (r *chunkedIndexReader) cleanPartFiles(tmpFilename string) error {
+	if r.filename == "" {
+		return nil
+	}
+	files, err := filepath.Glob(fmt.Sprintf("%s.%s.part*", r.filename, tmpFilename))
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, f := range files {
+		if err := os.Remove(f); err != nil {
+			if firstErr != nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
+
+func (r *chunkedIndexReader) createPartFile(tmpFilename string, partId int, size int) (PosWriter, error) {
+	if r.filename == "" {
+		// We're buffering in memory.
+		NewMemoryWriter(r.blockId, size)
+	}
+	filename := fmt.Sprintf("%s.%s.part-%d", r.filename, tmpFilename, partId)
+	if err := os.RemoveAll(filename); err != nil {
+		return nil, errors.Wrap(err, "remove existing file")
+	}
+	return NewFileWriter(filename, 32*1024)
+}
+
+func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64, tmpFilePrefix string) (io.ReadCloser, error) {
 	g := errgroup.Group{}
+	g.SetLimit(10)
 
 	numParts := length / r.partSize
 	if length%r.partSize > 0 {
@@ -254,7 +295,7 @@ func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name strin
 		numParts += 1
 	}
 
-	parts := make([]io.ReadCloser, numParts)
+	parts := make([]PosWriter, 0, numParts)
 
 	i := 0
 	for o := off; o < off+length; o += r.partSize {
@@ -266,16 +307,25 @@ func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name strin
 		partOff := o
 		partLength := l
 		partId := i
+		partWriter, err := r.createPartFile(tmpFilePrefix, partId, int(partLength))
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, partWriter)
 
 		g.Go(func() error {
 			rc, err := r.bkt.GetRange(ctx, name, partOff, partLength)
+			defer runutil.CloseWithErrCapture(&err, rc, "close object")
 			if err != nil {
-				return err
+				return errors.Wrap(err, fmt.Sprintf("getRangePartitioned %v", partId))
 			}
-			parts[partId] = rc
+			buf := make([]byte, 32*1024)
+			if _, err := io.CopyBuffer(partWriter, rc, buf); err != nil {
+				return errors.Wrap(err, fmt.Sprintf("getRangePartitioned %v", partId))
+			}
+			partWriter.Flush()
 			return nil
 		})
-
 		i += 1
 	}
 
@@ -287,28 +337,32 @@ func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name strin
 }
 
 type multiReadCloser struct {
-	readerClosers []io.ReadCloser
-	multiReader   io.Reader
+	closers     []io.Closer
+	multiReader io.Reader
 }
 
-func newMultiReadCloser(rcs []io.ReadCloser) *multiReadCloser {
-	rs := make([]io.Reader, 0, len(rcs))
+func newMultiReadCloser(rcs []PosWriter) *multiReadCloser {
+	readers := make([]io.Reader, 0, len(rcs))
+	closers := make([]io.Closer, 0, len(rcs))
 	for _, rc := range rcs {
-		rs = append(rs, rc)
+		rc.Seek(0, io.SeekStart)
+		readers = append(readers, rc.(io.Reader))
+		closers = append(closers, rc.(io.Closer))
 	}
 	return &multiReadCloser{
-		readerClosers: rcs,
-		multiReader:   io.MultiReader(rs...),
+		closers:     closers,
+		multiReader: io.MultiReader(readers...),
 	}
 }
 
 func (m *multiReadCloser) Read(p []byte) (n int, err error) {
-	return m.multiReader.Read(p)
+	n, err = m.multiReader.Read(p)
+	return
 }
 
 func (m *multiReadCloser) Close() (err error) {
 	var firstErr error
-	for _, r := range m.readerClosers {
+	for _, r := range m.closers {
 		if err := r.Close(); err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -380,8 +434,9 @@ func newBinaryWriter(id ulid.ULID, cacheFilename string, buf []byte) (w *binaryW
 	w.buf.Reset()
 	w.buf.PutBE32(MagicIndex)
 	w.buf.PutByte(BinaryFormatV1)
+	_, err = w.writer.Write(w.buf.Get())
 
-	return w, w.writer.Write(w.buf.Get())
+	return w, err
 }
 
 type PosWriterWithBuffer interface {
@@ -391,7 +446,9 @@ type PosWriterWithBuffer interface {
 
 type PosWriter interface {
 	Pos() uint64
-	Write(bufs ...[]byte) error
+	Read(buf []byte) (int, error)
+	Write(buf []byte) (int, error)
+	Seek(offset int64, whence int) (int64, error)
 	Flush() error
 	Sync() error
 	Close() error
@@ -415,22 +472,28 @@ func (mw *MemoryWriter) Pos() uint64 {
 	return mw.pos
 }
 
-func (mw *MemoryWriter) Write(bufs ...[]byte) error {
-	for _, b := range bufs {
-		n, err := mw.buf.Write(b)
-		mw.pos += uint64(n)
-		if err != nil {
-			return err
-		}
-		// For now the index file must not grow beyond 64GiB. Some of the fixed-sized
-		// offset references in v1 are only 4 bytes large.
-		// Once we move to compressed/varint representations in those areas, this limitation
-		// can be lifted.
-		if mw.pos > 16*math.MaxUint32 {
-			return errors.Errorf("%q exceeding max size of 64GiB", mw.id)
-		}
+func (mw *MemoryWriter) Write(buf []byte) (int, error) {
+	n, err := mw.buf.Write(buf)
+	mw.pos += uint64(n)
+	if err != nil {
+		return n, err
 	}
-	return nil
+	// For now the index file must not grow beyond 64GiB. Some of the fixed-sized
+	// offset references in v1 are only 4 bytes large.
+	// Once we move to compressed/varint representations in those areas, this limitation
+	// can be lifted.
+	if mw.pos > 16*math.MaxUint32 {
+		return n, errors.Errorf("%q exceeding max size of 64GiB", mw.id)
+	}
+	return n, nil
+}
+
+func (mw *MemoryWriter) Read(buf []byte) (int, error) {
+	return mw.buf.Read(buf)
+}
+
+func (mw *MemoryWriter) Seek(offset int64, whence int) (int64, error) {
+	return 0, nil
 }
 
 func (mw *MemoryWriter) Buffer() []byte {
@@ -474,22 +537,29 @@ func (fw *FileWriter) Pos() uint64 {
 	return fw.pos
 }
 
-func (fw *FileWriter) Write(bufs ...[]byte) error {
-	for _, b := range bufs {
-		n, err := fw.fileWriter.Write(b)
-		fw.pos += uint64(n)
-		if err != nil {
-			return err
-		}
-		// For now the index file must not grow beyond 64GiB. Some of the fixed-sized
-		// offset references in v1 are only 4 bytes large.
-		// Once we move to compressed/varint representations in those areas, this limitation
-		// can be lifted.
-		if fw.pos > 16*math.MaxUint32 {
-			return errors.Errorf("%q exceeding max size of 64GiB", fw.name)
-		}
+func (fw *FileWriter) Write(buf []byte) (int, error) {
+	n, err := fw.fileWriter.Write(buf)
+	fw.pos += uint64(n)
+	if err != nil {
+		return n, err
 	}
-	return nil
+	// For now the index file must not grow beyond 64GiB. Some of the fixed-sized
+	// offset references in v1 are only 4 bytes large.
+	// Once we move to compressed/varint representations in those areas, this limitation
+	// can be lifted.
+	if fw.pos > 16*math.MaxUint32 {
+		return n, errors.Errorf("%q exceeding max size of 64GiB", fw.name)
+	}
+
+	return n, err
+}
+
+func (fw *FileWriter) Read(b []byte) (int, error) {
+	return fw.f.Read(b)
+}
+
+func (fw *FileWriter) Seek(offset int64, whence int) (int64, error) {
+	return fw.f.Seek(offset, whence)
 }
 
 func (fw *FileWriter) Flush() error {
@@ -518,7 +588,8 @@ func (w *binaryWriter) AddIndexMeta(indexVersion int, indexPostingOffsetTable ui
 	w.buf.Reset()
 	w.buf.PutByte(byte(indexVersion))
 	w.buf.PutBE64(indexPostingOffsetTable)
-	return w.writer.Write(w.buf.Get())
+	_, err := w.writer.Write(w.buf.Get())
+	return err
 }
 
 func (w *binaryWriter) SymbolsWriter() io.Writer {
@@ -539,12 +610,13 @@ func (w *binaryWriter) WriteTOC() error {
 
 	w.buf.PutHash(w.crc32)
 
-	return w.writer.Write(w.buf.Get())
+	_, err := w.writer.Write(w.buf.Get())
+	return err
 }
 
 func (w *binaryWriter) Write(p []byte) (int, error) {
 	n := w.writer.Pos()
-	err := w.writer.Write(p)
+	_, err := w.writer.Write(p)
 	return int(w.writer.Pos() - n), err
 }
 

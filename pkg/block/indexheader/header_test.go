@@ -543,7 +543,7 @@ func TestIndexHeaderV1LookupSymbols(t *testing.T) {
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
 
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn, 10)
 	testutil.Ok(t, err)
 
 	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, m.ULID, 3)
