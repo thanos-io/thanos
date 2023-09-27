@@ -363,6 +363,9 @@ Flags:
       --query.default-tenant-id="default-tenant"
                                  Default tenant ID to use if tenant header is
                                  not present
+      --query.enable-tenancy     Enable tenancy. Only responses where the value
+                                 of the configured tenant-label-name and value
+                                 of the tenant header matches are returned.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
@@ -415,6 +418,9 @@ Flags:
                                  flag value to be ignored.
       --query.tenant-header="THANOS-TENANT"
                                  HTTP header to determine tenant.
+      --query.tenant-label-name="tenant_id"
+                                 Label name to use when enforce tenancy when
+                                 -querier.tenancy is enabled
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'

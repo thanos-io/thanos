@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"path"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/pkg/errors"
+	"github.com/prometheus-community/prom-label-proxy/injectproxy"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
+	"google.golang.org/grpc/metadata"
 )
 
 type contextKey int
@@ -135,4 +137,31 @@ func GetTenantFromGRPCMetadata(ctx context.Context) (string, bool) {
 		return DefaultTenant, false
 	}
 	return md.Get(DefaultTenantHeader)[0], true
+}
+
+func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (string, error) {
+	labelMatcher := &labels.Matcher{
+		Name:  tenantLabel,
+		Type:  labels.MatchEqual,
+		Value: tenant,
+	}
+
+	e := injectproxy.NewEnforcer(false, labelMatcher)
+
+	expr, err := parser.ParseExpr(query)
+	if err != nil {
+		return "", errors.Wrap(err, "error parsing query string, when enforcing tenenacy")
+	}
+
+	if err := e.EnforceNode(expr); err != nil {
+		var illegalLabelMatcherError *injectproxy.IllegalLabelMatcherError
+		if errors.As(err, *illegalLabelMatcherError) {
+			return "", illegalLabelMatcherError
+		}
+		return "", errors.Wrap(err, "error enforcing label")
+	}
+
+	queryStr := expr.String()
+
+	return queryStr, nil
 }
