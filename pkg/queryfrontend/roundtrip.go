@@ -85,8 +85,6 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 			queryRangeTripperware(next),
 			labelsTripperware(next),
 			queryInstantTripperware(next),
-			config.TenantHeader,
-			config.DefaultTenant,
 			reg,
 		)
 		return tenancy.InternalTenancyConversionTripper(config.TenantHeader, config.TenantCertField, tripper)
@@ -96,19 +94,15 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 type roundTripper struct {
 	next, queryInstant, queryRange, labels http.RoundTripper
 
-	queriesCount  *prometheus.CounterVec
-	tenantHeader  string
-	defaultTenant string
+	queriesCount *prometheus.CounterVec
 }
 
-func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper, tenantHeader, defaultTenant string, reg prometheus.Registerer) roundTripper {
+func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper, reg prometheus.Registerer) roundTripper {
 	r := roundTripper{
-		next:          next,
-		queryInstant:  queryInstant,
-		queryRange:    queryRange,
-		labels:        metadata,
-		tenantHeader:  tenantHeader,
-		defaultTenant: defaultTenant,
+		next:         next,
+		queryInstant: queryInstant,
+		queryRange:   queryRange,
+		labels:       metadata,
 		queriesCount: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_query_frontend_queries_total",
 			Help: "Total queries passing through query frontend",
