@@ -33,15 +33,18 @@ type RemoteIndexCache struct {
 	compressionScheme string
 
 	// Metrics.
-	postingRequests              prometheus.Counter
-	seriesRequests               prometheus.Counter
-	expandedPostingRequests      prometheus.Counter
-	postingHits                  prometheus.Counter
-	seriesHits                   prometheus.Counter
-	expandedPostingHits          prometheus.Counter
-	postingDataSizeBytes         prometheus.Observer
-	expandedPostingDataSizeBytes prometheus.Observer
-	seriesDataSizeBytes          prometheus.Observer
+	postingRequests               prometheus.Counter
+	seriesRequests                prometheus.Counter
+	expandedPostingRequests       prometheus.Counter
+	postingHits                   prometheus.Counter
+	seriesHits                    prometheus.Counter
+	expandedPostingHits           prometheus.Counter
+	postingDataSizeBytes          prometheus.Observer
+	expandedPostingDataSizeBytes  prometheus.Observer
+	seriesDataSizeBytes           prometheus.Observer
+	postingsFetchDuration         prometheus.Observer
+	expandedPostingsFetchDuration prometheus.Observer
+	seriesFetchDuration           prometheus.Observer
 }
 
 // NewRemoteIndexCache makes a new RemoteIndexCache.
@@ -68,6 +71,10 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 	c.seriesDataSizeBytes = commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeSeries)
 	c.expandedPostingDataSizeBytes = commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeExpandedPostings)
 
+	c.postingsFetchDuration = commonMetrics.fetchLatency.WithLabelValues(cacheTypePostings)
+	c.seriesFetchDuration = commonMetrics.fetchLatency.WithLabelValues(cacheTypeSeries)
+	c.expandedPostingsFetchDuration = commonMetrics.fetchLatency.WithLabelValues(cacheTypeExpandedPostings)
+
 	level.Info(logger).Log("msg", "created index cache")
 
 	return c, nil
@@ -88,6 +95,9 @@ func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
 func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, lbls []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+	timer := prometheus.NewTimer(c.postingsFetchDuration)
+	defer timer.ObserveDuration()
+
 	keys := make([]string, 0, len(lbls))
 
 	blockIDKey := blockID.String()
@@ -138,6 +148,9 @@ func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labe
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
 func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, lbls []*labels.Matcher) ([]byte, bool) {
+	timer := prometheus.NewTimer(c.postingsFetchDuration)
+	defer timer.ObserveDuration()
+
 	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(lbls)), c.compressionScheme}.string()
 
 	// Fetch the keys from memcached in a single request.
@@ -169,6 +182,9 @@ func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, 
 // and returns a map containing cache hits, along with a list of missing IDs.
 // In case of error, it logs and return an empty cache hits map.
 func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
+	timer := prometheus.NewTimer(c.postingsFetchDuration)
+	defer timer.ObserveDuration()
+
 	keys := make([]string, 0, len(ids))
 
 	blockIDKey := blockID.String()
