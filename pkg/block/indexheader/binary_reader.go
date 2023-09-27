@@ -223,8 +223,8 @@ func (r *chunkedIndexReader) readTOC() (*index.TOC, error) {
 }
 
 func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
-	tmpFilePrefix := "symbols"
-	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols), tmpFilePrefix)
+	partFilePrefix := "symbols"
+	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.Symbols), int64(r.toc.Series-r.toc.Symbols), partFilePrefix)
 	if err != nil {
 		return errors.Wrapf(err, "get symbols from object storage of %s", r.path)
 	}
@@ -235,12 +235,12 @@ func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
 	}
 
 	// clean the temporary files
-	return r.cleanPartFiles(tmpFilePrefix)
+	return r.cleanPartFiles(partFilePrefix)
 }
 
 func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err error) {
-	tmpFilePrefix := "posoffsets"
-	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable), tmpFilePrefix)
+	partFilePrefix := "posoffsets"
+	rc, err := r.getRangePartitioned(r.ctx, r.path, int64(r.toc.PostingsTable), int64(r.size-r.toc.PostingsTable), partFilePrefix)
 	if err != nil {
 		return errors.Wrapf(err, "get posting offset table from object storage of %s", r.path)
 	}
@@ -251,14 +251,14 @@ func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err e
 	}
 
 	// clean the temporary files
-	return r.cleanPartFiles(tmpFilePrefix)
+	return r.cleanPartFiles(partFilePrefix)
 }
 
-func (r *chunkedIndexReader) cleanPartFiles(tmpFilename string) error {
+func (r *chunkedIndexReader) cleanPartFiles(partFilePrefix string) error {
 	if r.filename == "" {
 		return nil
 	}
-	files, err := filepath.Glob(fmt.Sprintf("%s.%s.part*", r.filename, tmpFilename))
+	files, err := filepath.Glob(fmt.Sprintf("%s.%s.part*", r.filename, partFilePrefix))
 	if err != nil {
 		return err
 	}
@@ -273,19 +273,19 @@ func (r *chunkedIndexReader) cleanPartFiles(tmpFilename string) error {
 	return firstErr
 }
 
-func (r *chunkedIndexReader) createPartFile(tmpFilename string, partId int, size int) (PosWriter, error) {
+func (r *chunkedIndexReader) createPartFile(partFilePrefix string, partId int, size int) (PosWriter, error) {
 	if r.filename == "" {
 		// We're buffering in memory.
 		NewMemoryWriter(r.blockId, size)
 	}
-	filename := fmt.Sprintf("%s.%s.part-%d", r.filename, tmpFilename, partId)
+	filename := fmt.Sprintf("%s.%s.part-%d", r.filename, partFilePrefix, partId)
 	if err := os.RemoveAll(filename); err != nil {
 		return nil, errors.Wrap(err, "remove existing file")
 	}
 	return NewFileWriter(filename, 32*1024)
 }
 
-func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64, tmpFilePrefix string) (io.ReadCloser, error) {
+func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64, partFilePrefix string) (io.ReadCloser, error) {
 	g := errgroup.Group{}
 	g.SetLimit(10)
 
@@ -307,7 +307,7 @@ func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name strin
 		partOff := o
 		partLength := l
 		partId := i
-		partWriter, err := r.createPartFile(tmpFilePrefix, partId, int(partLength))
+		partWriter, err := r.createPartFile(partFilePrefix, partId, int(partLength))
 		if err != nil {
 			return nil, err
 		}
