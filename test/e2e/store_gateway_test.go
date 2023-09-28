@@ -136,10 +136,13 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
+		tenant1Header := make(http.Header)
+		tenant1Header.Add("thanos-tenant", "test-tenant-1")
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return fmt.Sprintf("%s @ end()", testQuery) },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
-				HTTPHeaders: map[string]string{"thanos-tenant": "test-tenant-1"},
+				HTTPHeaders: tenant1Header,
+				// map[string][]string{"thanos-tenant": "test-tenant-1"},
 			},
 			[]model.Metric{
 				{
@@ -173,10 +176,12 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_fetched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
 
+		tenant2Header := make(http.Header)
+		tenant2Header.Add("thanos-tenant", "test-tenant-2")
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: true,
-				HTTPHeaders: map[string]string{"thanos-tenant": "test-tenant-2"},
+				HTTPHeaders: tenant2Header,
 			},
 			[]model.Metric{
 				{

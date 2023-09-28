@@ -105,7 +105,7 @@ func NewWithTracingClient(logger log.Logger, httpClient *http.Client, userAgent 
 
 // req2xx sends a request to the given url.URL. If method is http.MethodPost then
 // the raw query is encoded in the body and the appropriate Content-Type is set.
-func (c *Client) req2xx(ctx context.Context, u *url.URL, method string, headers map[string]string) (_ []byte, _ int, err error) {
+func (c *Client) req2xx(ctx context.Context, u *url.URL, method string, headers http.Header) (_ []byte, _ int, err error) {
 	var b io.Reader
 	if method == http.MethodPost {
 		rq := u.RawQuery
@@ -117,15 +117,15 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string, headers 
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "create %s request", method)
 	}
+	if headers != nil {
+		req.Header = headers
+	}
+
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-
-	for header, value := range headers {
-		req.Header.Set(header, value)
 	}
 
 	resp, err := c.Do(req.WithContext(ctx))
@@ -367,7 +367,7 @@ type QueryOptions struct {
 	MaxSourceResolution     string
 	Engine                  string
 	Explain                 bool
-	HTTPHeaders             map[string]string
+	HTTPHeaders             http.Header
 }
 
 func (p *QueryOptions) AddTo(values url.Values) error {
