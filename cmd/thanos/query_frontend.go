@@ -181,10 +181,13 @@ func parseTransportConfiguration(downstreamTripperConfContentYaml []byte) (*http
 		if err := yaml.UnmarshalStrict(downstreamTripperConfContentYaml, tripperConfig); err != nil {
 			return nil, errors.Wrap(err, "parsing downstream tripper config YAML file")
 		}
-		_, err := exthttp.NewTLSConfig(tripperConfig.TLSConfig)
+		if tripperConfig.TLSConfig != nil {
+			tlsConfig, err := exthttp.NewTLSConfig(tripperConfig.TLSConfig)
 			if err != nil {
-				downstreamTripper.TLSClientConfig, _ = exthttp.NewTLSConfig(tripperConfig.TLSConfig)
+				return nil, errors.Wrap(err, "parsing downstream tripper TLS config YAML")
 			}
+			downstreamTripper.TLSClientConfig = tlsConfig
+		}
 		if tripperConfig.IdleConnTimeout > 0 {
 			downstreamTripper.IdleConnTimeout = time.Duration(tripperConfig.IdleConnTimeout)
 		}
