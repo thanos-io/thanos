@@ -62,6 +62,8 @@ type HealthStats struct {
 	// of order labels, a bug present in Prometheus 2.8.0 and below.
 	OutOfOrderLabels int
 
+	// Refer to Prometheus #12874
+	DoplicatedSample int
 	// Debug Statistics.
 	SeriesMinLifeDuration time.Duration
 	SeriesAvgLifeDuration time.Duration
@@ -348,7 +350,13 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 				stats.DuplicatedChunks++
 				continue
 			}
+			// Refer to Prometheus #12874
+			if c.MinTime == c0.MaxTime {
+				stats.DoplicatedSample++
+				continue
+			}
 			// Chunks partly overlaps or out of order.
+			level.Debug(logger).Log("msg", "found out of order chucks", "labels", lset, "index", i, "chuck", c, "chuck_last_one", c0)
 			ooo++
 		}
 		if ooo > 0 {
