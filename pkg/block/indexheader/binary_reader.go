@@ -49,7 +49,7 @@ const (
 	postingLengthFieldSize = 4
 
 	// partitionSize is used for splitting range reads for index-header.
-	partitionSize = 8 * 1024 * 1024 // 8 MiB
+	partitionSize = 16 * 1024 * 1024 // 16 MiB
 )
 
 var NotFoundRange = index.Range{Start: -1, End: -1}
@@ -287,7 +287,6 @@ func (r *chunkedIndexReader) createPartFile(partFilePrefix string, partId int, s
 
 func (r *chunkedIndexReader) getRangePartitioned(ctx context.Context, name string, off int64, length int64, partFilePrefix string) (io.ReadCloser, error) {
 	g := errgroup.Group{}
-	g.SetLimit(10)
 
 	numParts := length / r.partSize
 	if length%r.partSize > 0 {
