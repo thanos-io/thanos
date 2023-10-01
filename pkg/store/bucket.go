@@ -1124,7 +1124,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 func (b *blockSeriesClient) nextBatch() error {
 	start := b.i
-	end := start + SeriesBatchSize
+	end := start + uint64(b.batchSize)
 	if end > uint64(len(b.lazyPostings.postings)) {
 		end = uint64(len(b.lazyPostings.postings))
 	}
