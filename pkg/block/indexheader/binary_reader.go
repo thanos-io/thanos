@@ -276,7 +276,7 @@ func (r *chunkedIndexReader) cleanPartFiles(partFilePrefix string) error {
 func (r *chunkedIndexReader) createPartFile(partFilePrefix string, partId int, size int) (PosWriter, error) {
 	if r.filename == "" {
 		// We're buffering in memory.
-		NewMemoryWriter(r.blockId, size)
+		return NewMemoryWriter(r.blockId, size), nil
 	}
 	filename := fmt.Sprintf("%s.%s.part-%d", r.filename, partFilePrefix, partId)
 	if err := os.RemoveAll(filename); err != nil {
