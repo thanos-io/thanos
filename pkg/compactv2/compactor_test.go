@@ -651,6 +651,8 @@ type seriesSamples struct {
 }
 
 func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
+	ctx := context.Background()
+
 	indexr, err := index.NewFileReader(filepath.Join(bDir, block.IndexFilename))
 	testutil.Ok(t, err)
 	defer indexr.Close()
@@ -659,7 +661,8 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 	testutil.Ok(t, err)
 	defer chunkr.Close()
 
-	all, err := indexr.Postings(index.AllPostingsKey())
+	k, v := index.AllPostingsKey()
+	all, err := indexr.Postings(ctx, k, v)
 	testutil.Ok(t, err)
 	all = indexr.SortedPostings(all)
 

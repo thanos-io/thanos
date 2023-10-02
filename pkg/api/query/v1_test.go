@@ -44,7 +44,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/util/annotations"
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
@@ -691,7 +692,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	var series []storage.Series
 
 	for _, lbl := range old {
-		var samples []tsdbutil.Sample
+		var samples []chunks.Sample
 
 		for i := int64(0); i < 10; i++ {
 			samples = append(samples, sample{
@@ -1797,7 +1798,7 @@ func TestRulesHandler(t *testing.T) {
 			}
 			res, errors, apiError, releaseResources := endpoint(req.WithContext(ctx))
 			defer releaseResources()
-			if errors != nil {
+			if len(errors) > 0 {
 				t.Fatalf("Unexpected errors: %s", errors)
 				return
 			}
@@ -1850,11 +1851,11 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 
 type mockedRulesClient struct {
 	g   map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup
-	w   storage.Warnings
+	w   annotations.Annotations
 	err error
 }
 
-func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
+func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, annotations.Annotations, error) {
 	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
 }
 

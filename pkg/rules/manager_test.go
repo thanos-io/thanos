@@ -59,7 +59,7 @@ func (n nopAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, metadata.M
 
 type nopQueryable struct{}
 
-func (n nopQueryable) Querier(_ context.Context, _, _ int64) (storage.Querier, error) {
+func (n nopQueryable) Querier(_, _ int64) (storage.Querier, error) {
 	return storage.NoopQuerier(), nil
 }
 

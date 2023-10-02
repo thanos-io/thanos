@@ -110,7 +110,7 @@ func TestReaders(t *testing.T) {
 					testutil.Equals(t, 2, br.indexVersion)
 					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 70}, br.toc)
 					testutil.Equals(t, int64(710), br.indexLastPostingEnd)
-					testutil.Equals(t, 8, br.symbols.(*index.Symbols).Size())
+					testutil.Equals(t, 8, br.symbols.Size())
 					testutil.Equals(t, 0, len(br.postingsV1))
 					testutil.Equals(t, 2, len(br.nameSymbols))
 					testutil.Equals(t, map[string]*postingValueOffsets{
@@ -219,6 +219,8 @@ func TestReaders(t *testing.T) {
 }
 
 func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerReader Reader) {
+	ctx := context.Background()
+
 	indexReader, err := index.NewReader(indexByteSlice)
 	testutil.Ok(t, err)
 	defer func() { _ = indexReader.Close() }()
@@ -232,14 +234,14 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		iter := indexReader.Symbols()
 		i := 0
 		for iter.Next() {
-			r, err := headerReader.LookupSymbol(uint32(i))
+			r, err := headerReader.LookupSymbol(ctx, uint32(i))
 			testutil.Ok(t, err)
 			testutil.Equals(t, iter.At(), r)
 
 			i++
 		}
 		testutil.Ok(t, iter.Err())
-		_, err := headerReader.LookupSymbol(uint32(i))
+		_, err := headerReader.LookupSymbol(ctx, uint32(i))
 		testutil.NotOk(t, err)
 
 	} else {
@@ -248,19 +250,19 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		testutil.Ok(t, err)
 
 		for refs, sym := range symbols {
-			r1, err := headerReader.LookupSymbol(refs)
+			r1, err := headerReader.LookupSymbol(ctx, refs)
 			testutil.Ok(t, err)
 			testutil.Equals(t, sym, r1)
 
-			r2, err := headerReader.LookupSymbol(refs)
+			r2, err := headerReader.LookupSymbol(ctx, refs)
 			testutil.Ok(t, err)
 			testutil.Equals(t, sym, r2)
 		}
-		_, err = headerReader.LookupSymbol(200000)
+		_, err = headerReader.LookupSymbol(ctx, 200000)
 		testutil.NotOk(t, err)
 	}
 
-	expLabelNames, err := indexReader.LabelNames()
+	expLabelNames, err := indexReader.LabelNames(ctx)
 	testutil.Ok(t, err)
 	actualLabelNames, err := headerReader.LabelNames()
 	testutil.Ok(t, err)
@@ -272,7 +274,7 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	minStart := int64(math.MaxInt64)
 	maxEnd := int64(math.MinInt64)
 	for il, lname := range expLabelNames {
-		expectedLabelVals, err := indexReader.SortedLabelValues(lname)
+		expectedLabelVals, err := indexReader.SortedLabelValues(ctx, lname)
 		testutil.Ok(t, err)
 
 		vals, err := headerReader.LabelValues(lname)
@@ -451,7 +453,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	for n := 0; n < b.N; n++ {
 		for i := 0; i < len(symbolsOffsets); i++ {
-			if _, err := reader.LookupSymbol(symbolsOffsets[i]); err != nil {
+			if _, err := reader.LookupSymbol(ctx, symbolsOffsets[i]); err != nil {
 				b.Fail()
 			}
 		}
@@ -518,79 +520,4 @@ func readSymbols(bs index.ByteSlice, version, off int) ([]string, map[uint32]str
 		cnt--
 	}
 	return symbolSlice, symbols, errors.Wrap(d.Err(), "read symbols")
-}
-
-func TestIndexHeaderV1LookupSymbols(t *testing.T) {
-	ctx := context.Background()
-
-	tmpDir := t.TempDir()
-	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bkt.Close()) }()
-
-	m, err := metadata.ReadFromDir("./testdata/index_format_v1")
-	testutil.Ok(t, err)
-	e2eutil.Copy(t, "./testdata/index_format_v1", filepath.Join(tmpDir, m.ULID.String()))
-
-	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String()), metadata.Thanos{
-		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
-		Downsample: metadata.ThanosDownsample{Resolution: 0},
-		Source:     metadata.TestSource,
-	}, &m.BlockMeta)
-	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
-
-	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
-	testutil.Ok(t, err)
-
-	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, m.ULID, 3)
-	testutil.Ok(t, err)
-
-	defer func() { testutil.Ok(t, br.Close()) }()
-
-	indexFile, err := fileutil.OpenMmapFile(filepath.Join(tmpDir, m.ULID.String(), block.IndexFilename))
-	testutil.Ok(t, err)
-	defer func() { _ = indexFile.Close() }()
-
-	// This should get the correct symbol table and its offset.
-	symbols, err := getSymbolTable(realByteSlice(indexFile.Bytes()))
-	testutil.Ok(t, err)
-
-	nameSymbolSet := make(map[string]struct{}, 0)
-	for _, symbol := range br.nameSymbols {
-		nameSymbolSet[symbol] = struct{}{}
-	}
-
-	// Make sure we can look up the correct symbol for values.
-	for o, sym := range symbols {
-		if _, ok := nameSymbolSet[sym]; !ok {
-			res, err := br.LookupSymbol(o)
-			testutil.Ok(t, err)
-			testutil.Equals(t, sym, res)
-		}
-	}
-
-	// For names, we want to always hit name cache so use
-	// `ErrorSymbols` to make sure no cache miss.
-	br.symbols = ErrorSymbols{}
-	for o, sym := range symbols {
-		if _, ok := nameSymbolSet[sym]; ok {
-			res, err := br.LookupSymbol(o)
-			testutil.Ok(t, err)
-			testutil.Equals(t, sym, res)
-		}
-	}
-}
-
-// ErrorSymbols will throw error if its methods are getting called.
-type ErrorSymbols struct {
-}
-
-func (s ErrorSymbols) Lookup(o uint32) (string, error) {
-	return "", errors.New("shouldn't be called")
-}
-
-func (s ErrorSymbols) ReverseLookup(sym string) (uint32, error) {
-	return 0, errors.New("shouldn't be called")
 }

@@ -41,6 +41,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	promqlapi "github.com/thanos-io/promql-engine/api"
@@ -589,7 +590,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		Result:           res.Value,
 		Stats:            qs,
 		QueryExplanation: explanation,
-	}, res.Warnings, nil, qry.Close
+	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
 func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -759,7 +760,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		Result:           res.Value,
 		Stats:            qs,
 		QueryExplanation: explanation,
-	}, res.Warnings, nil, qry.Close
+	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
 func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -811,7 +812,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
+	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}
@@ -819,17 +820,17 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 
 	var (
 		vals     []string
-		warnings storage.Warnings
+		warnings annotations.Annotations
 	)
 	if len(matcherSets) > 0 {
-		var callWarnings storage.Warnings
+		var callWarnings annotations.Annotations
 		labelValuesSet := make(map[string]struct{})
 		for _, matchers := range matcherSets {
-			vals, callWarnings, err = q.LabelValues(name, matchers...)
+			vals, callWarnings, err = q.LabelValues(ctx, name, matchers...)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 			}
-			warnings = append(warnings, callWarnings...)
+			warnings.Merge(callWarnings)
 			for _, val := range vals {
 				labelValuesSet[val] = struct{}{}
 			}
@@ -841,7 +842,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		}
 		sort.Strings(vals)
 	} else {
-		vals, warnings, err = q.LabelValues(name)
+		vals, warnings, err = q.LabelValues(ctx, name)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 		}
@@ -851,7 +852,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		vals = make([]string, 0)
 	}
 
-	return vals, warnings, nil, func() {}
+	return vals, warnings.AsErrors(), nil, func() {}
 }
 
 func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -914,7 +915,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
+	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -926,7 +927,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		sets    []storage.SeriesSet
 	)
 	for _, mset := range matcherSets {
-		sets = append(sets, q.Select(false, nil, mset...))
+		sets = append(sets, q.Select(ctx, false, nil, mset...))
 	}
 
 	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
@@ -936,7 +937,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	if set.Err() != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: set.Err()}, func() {}
 	}
-	return metrics, set.Warnings(), nil, func() {}
+	return metrics, set.Warnings().AsErrors(), nil, func() {}
 }
 
 func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -981,7 +982,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
+	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}
@@ -989,18 +990,18 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 
 	var (
 		names    []string
-		warnings storage.Warnings
+		warnings annotations.Annotations
 	)
 
 	if len(matcherSets) > 0 {
-		var callWarnings storage.Warnings
+		var callWarnings annotations.Annotations
 		labelNamesSet := make(map[string]struct{})
 		for _, matchers := range matcherSets {
-			names, callWarnings, err = q.LabelNames(matchers...)
+			names, callWarnings, err = q.LabelNames(ctx, matchers...)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 			}
-			warnings = append(warnings, callWarnings...)
+			warnings.Merge(callWarnings)
 			for _, val := range names {
 				labelNamesSet[val] = struct{}{}
 			}
@@ -1012,7 +1013,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		sort.Strings(names)
 	} else {
-		names, warnings, err = q.LabelNames()
+		names, warnings, err = q.LabelNames(ctx)
 	}
 
 	if err != nil {
@@ -1022,7 +1023,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		names = make([]string, 0)
 	}
 
-	return names, warnings, nil, func() {}
+	return names, warnings.AsErrors(), nil, func() {}
 }
 
 func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -1065,7 +1066,7 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving targets")}, func() {}
 		}
 
-		return t, warnings, nil, func() {}
+		return t, warnings.AsErrors(), nil, func() {}
 	}
 }
 
@@ -1083,7 +1084,7 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 
 		var (
 			groups   *rulespb.RuleGroups
-			warnings storage.Warnings
+			warnings annotations.Annotations
 			err      error
 		)
 
@@ -1111,7 +1112,7 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 				resp.Alerts = append(resp.Alerts, a.Alerts...)
 			}
 		}
-		return resp, warnings, nil, func() {}
+		return resp, warnings.AsErrors(), nil, func() {}
 	}
 }
 
@@ -1129,7 +1130,7 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 
 		var (
 			groups   *rulespb.RuleGroups
-			warnings storage.Warnings
+			warnings annotations.Annotations
 			err      error
 		)
 
@@ -1158,7 +1159,7 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}, func() {}
 		}
-		return groups, warnings, nil, func() {}
+		return groups, warnings.AsErrors(), nil, func() {}
 	}
 }
 
@@ -1176,7 +1177,7 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 
 		var (
 			data     []*exemplarspb.ExemplarData
-			warnings storage.Warnings
+			warnings annotations.Annotations
 			err      error
 		)
 
@@ -1203,7 +1204,7 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving exemplars")}, func() {}
 		}
-		return data, warnings, nil, func() {}
+		return data, warnings.AsErrors(), nil, func() {}
 	}
 }
 
@@ -1294,7 +1295,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 
 		var (
 			t        map[string][]metadatapb.Meta
-			warnings storage.Warnings
+			warnings annotations.Annotations
 			err      error
 		)
 
@@ -1321,6 +1322,6 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}, func() {}
 		}
 
-		return t, warnings, nil, func() {}
+		return t, warnings.AsErrors(), nil, func() {}
 	}
 }

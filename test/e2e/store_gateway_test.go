@@ -87,7 +87,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
 
-	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"promql-negative-offset", "promql-at-modifier"}).Init()
+	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
@@ -136,13 +136,10 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
-		tenant1Header := make(http.Header)
-		tenant1Header.Add("thanos-tenant", "test-tenant-1")
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return fmt.Sprintf("%s @ end()", testQuery) },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
-				HTTPHeaders: tenant1Header,
-				// map[string][]string{"thanos-tenant": "test-tenant-1"},
+				HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
 			},
 			[]model.Metric{
 				{
@@ -171,17 +168,20 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(9), "thanos_bucket_store_series_data_fetched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_series_blocks_queried"))
 
-		// Test per tenant store metrics
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_fetched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
+		tenant1Opts := []e2emon.MetricsOption{
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1")),
+			e2emon.WaitMissingMetrics(),
+		}
 
-		tenant2Header := make(http.Header)
-		tenant2Header.Add("thanos-tenant", "test-tenant-2")
+		// Test per tenant store metrics
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_fetched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, tenant1Opts...))
+
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: true,
-				HTTPHeaders: tenant2Header,
+				HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-2"}},
 			},
 			[]model.Metric{
 				{
@@ -197,19 +197,23 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			},
 		)
 
+		tenant2Opts := []e2emon.MetricsOption{
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-2")),
+			e2emon.WaitMissingMetrics(),
+		}
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(18), "thanos_bucket_store_series_data_touched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_fetched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3+3), "thanos_bucket_store_series_blocks_queried"))
 
 		// Test tenant some tenant specific store metrics
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-2"))))
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_data_fetched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-2"))))
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-2"))))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, tenant2Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_data_fetched"}, tenant2Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, tenant2Opts...))
 
 		// the first tenants metrics should be unaffected by the additional query
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_fetched"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
-		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1"))))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_fetched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_bucket_store_series_blocks_queried"}, tenant1Opts...))
 
 	})
 	t.Run("remove meta.json from id1 block", func(t *testing.T) {
@@ -815,7 +819,7 @@ config:
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	const bucket = "store-gateway-test"
+	const bucket = "store-gateway-test-bytes-limit"
 	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -971,7 +975,7 @@ func TestRedisClient_Rueidis(t *testing.T) {
 func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("memcached-exp")
+	e, err := e2e.NewDockerEnvironment("memcached-expand")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1076,7 +1080,7 @@ config:
 func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("memcached-exp")
+	e, err := e2e.NewDockerEnvironment("memcached-lazy")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

@@ -49,6 +49,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -871,7 +872,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-	const bucket = "store-gateway-test"
+	const bucket = "store-gateway-test-sidecar-pushdown"
 	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -1531,8 +1532,10 @@ func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func()
 		return nil, nil, err
 	}
 
-	if len(warnings) > 0 {
-		return nil, nil, errors.Errorf("unexpected warnings %s", warnings)
+	for _, w := range warnings {
+		if !extannotations.IsPromQLAnnotation(w) {
+			return nil, nil, errors.Errorf("unexpected warnings %s", warnings)
+		}
 	}
 
 	if len(res) != expectedSeriesLen {
@@ -1798,7 +1801,7 @@ func storeWriteRequest(ctx context.Context, rawRemoteWriteURL string, req *promp
 	}
 
 	compressed := snappy.Encode(buf, pBuf.Bytes())
-	return client.Store(ctx, compressed)
+	return client.Store(ctx, compressed, 0)
 }
 
 func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
