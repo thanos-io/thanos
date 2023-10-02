@@ -571,6 +571,9 @@ const filteredBlocks = [
         },
       ],
     },
+    '5': {
+      '1-0': [],
+    },
   },
 ];
 
@@ -588,7 +591,7 @@ describe('overlapping blocks', () => {
   });
 
   const rows = Object.values(sorted[source])[0];
-  it('has 5 rows', () => {
+  it('has 6 rows', () => {
     expect(rows).toHaveLength(5);
   });
 
@@ -610,6 +613,10 @@ describe('overlapping blocks', () => {
 
   it('renders 1 block in fifth row', () => {
     expect(rows[4]).toHaveLength(1);
+  });
+
+  it('renders 0 block in fifth row', () => {
+    expect(rows[5]).toHaveLength(0);
   });
 });
 

@@ -12,6 +12,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#6768](https://github.com/thanos-io/thanos/pull/6768) UI: Add null check to find overlapping blocks logic
+
 ### Added
 
 ### Changed
