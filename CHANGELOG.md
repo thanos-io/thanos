@@ -18,6 +18,18 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
+## [v0.32.4](https://github.com/thanos-io/thanos/tree/release-0.32) - 02.10.2023
+
+### Fixed
+
+- [#6746](https://github.com/thanos-io/thanos/pull/6746) Objstore: Upgrade with fixes [objstore#77](https://github.com/thanos-io/objstore/pull/77) and [objstore#78](https://github.com/thanos-io/objstore/pull/78).
+
+### Added
+
+### Changed
+
+### Removed
+
 ## [v0.32.3](https://github.com/thanos-io/thanos/tree/release-0.32) - 20.09.2023
 
 ### Fixed
