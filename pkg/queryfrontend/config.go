@@ -187,8 +187,7 @@ type DownstreamTripperConfig struct {
 	MaxIdleConns          *int               `yaml:"max_idle_conns"`
 	MaxIdleConnsPerHost   *int               `yaml:"max_idle_conns_per_host"`
 	MaxConnsPerHost       *int               `yaml:"max_conns_per_host"`
-	TLSConfig             *exthttp.TLSConfig        `yaml:"tls_config"`
-
+	TLSConfig             *exthttp.TLSConfig `yaml:"tls_config"`
 
 	CachePathOrContent extflag.PathOrContent
 }
