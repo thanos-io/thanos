@@ -176,6 +176,11 @@ Flags:
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by
                                  a query.
+      --store.enable-lazy-expanded-postings
+                                 If true, Store Gateway will estimate postings
+                                 size and try to lazily expand postings if
+                                 it downloads less data than expanding all
+                                 postings.
       --store.grpc.downloaded-bytes-limit=0
                                  Maximum amount of downloaded (either
                                  fetched or touched) bytes in a single
