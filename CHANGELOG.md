@@ -16,15 +16,29 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
 - [#6308](https://github.com/thanos-io/thanos/pull/6308) Ruler: Support configuration flag that allows customizing template for alert message.
-- [#6749](https://github.com/thanos-io/thanos/pull/6308) Store Gateway: Added `thanos_store_index_cache_fetch_duration_seconds` histogram for tracking latency of fetching data from index cache. 
+- [#6760](https://github.com/thanos-io/thanos/pull/6760) Query Frontend: Added TLS support in `--query-frontend.downstream-tripper-config` and `--query-frontend.downstream-tripper-config-file`
+- [#6749](https://github.com/thanos-io/thanos/pull/6308) Store Gateway: Added `thanos_store_index_cache_fetch_duration_seconds` histogram for tracking latency of fetching data from index cache.
 
 ### Changed
 
 - [#6698](https://github.com/thanos-io/thanos/pull/6608) Receive: Change write log level from warn to info.
+- [#6753](https://github.com/thanos-io/thanos/pull/6753) mixin(Rule): *breaking :warning:* Fixed the mixin rules with duplicate names and updated the promtool version from v0.37.0 to v0.47.0
 
 ### Removed
 
 - [#6686](https://github.com/thanos-io/thanos/pull/6686) Remove deprecated `--log.request.decision` flag. We now use `--request.logging-config` to set logging decisions.
+
+## [v0.32.4](https://github.com/thanos-io/thanos/tree/release-0.32) - 02.10.2023
+
+### Fixed
+
+- [#6746](https://github.com/thanos-io/thanos/pull/6746) Objstore: Upgrade with fixes [objstore#77](https://github.com/thanos-io/objstore/pull/77) and [objstore#78](https://github.com/thanos-io/objstore/pull/78).
+
+### Added
+
+### Changed
+
+### Removed
 
 ## [v0.32.3](https://github.com/thanos-io/thanos/tree/release-0.32) - 20.09.2023
 

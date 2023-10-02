@@ -25,6 +25,7 @@ import (
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -188,6 +189,13 @@ func parseTransportConfiguration(downstreamTripperConfContentYaml []byte) (*http
 			return nil, errors.Wrap(err, "parsing downstream tripper config YAML file")
 		}
 
+		if tripperConfig.TLSConfig != nil {
+			tlsConfig, err := exthttp.NewTLSConfig(tripperConfig.TLSConfig)
+			if err != nil {
+				return nil, errors.Wrap(err, "parsing downstream tripper TLS config YAML")
+			}
+			downstreamTripper.TLSClientConfig = tlsConfig
+		}
 		if tripperConfig.IdleConnTimeout > 0 {
 			downstreamTripper.IdleConnTimeout = time.Duration(tripperConfig.IdleConnTimeout)
 		}

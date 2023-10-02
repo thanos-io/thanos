@@ -148,7 +148,7 @@ func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labe
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
 func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, lbls []*labels.Matcher) ([]byte, bool) {
-	timer := prometheus.NewTimer(c.postingsFetchDuration)
+	timer := prometheus.NewTimer(c.expandedPostingsFetchDuration)
 	defer timer.ObserveDuration()
 
 	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(lbls)), c.compressionScheme}.string()
@@ -182,7 +182,7 @@ func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, 
 // and returns a map containing cache hits, along with a list of missing IDs.
 // In case of error, it logs and return an empty cache hits map.
 func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
-	timer := prometheus.NewTimer(c.postingsFetchDuration)
+	timer := prometheus.NewTimer(c.seriesFetchDuration)
 	defer timer.ObserveDuration()
 
 	keys := make([]string, 0, len(ids))
