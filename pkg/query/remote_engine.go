@@ -195,7 +195,7 @@ func (r *remoteEngine) NewRangeQuery(_ context.Context, opts promql.QueryOpts, q
 	}, nil
 }
 
-func (r *remoteEngine) NewInstantQuery(_ context.Context, _ *promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,

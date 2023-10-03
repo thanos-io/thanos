@@ -23,7 +23,7 @@ import (
 
 func TestRemoteEngine_Warnings(t *testing.T) {
 	client := NewClient(&queryWarnClient{}, "", nil)
-	engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
 	})
 	var (
