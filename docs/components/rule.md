@@ -556,7 +556,9 @@ Supported values for `api_version` are `v1` or `v2`.
 
 ### Query API
 
-The `--query.config` and `--query.config-file` flags allow specifying multiple query endpoints. Those entries are treated as a single HA group. This means that query failure is claimed only if the Ruler fails to query all instances.
+The `--query.config` and `--query.config-file` flags allow specifying multiple query endpoints. Those entries are treated as a single HA group, where HTTP endpoints are given priority over gRPC Query API endpoints. This means that query failure is claimed only if the Ruler fails to query all instances.
+
+Rules that produce native histograms (experimental feature) are exclusively supported through the gRPC Query API. However, for all other rules, there is no difference in functionality between HTTP and gRPC.
 
 The configuration format is the following:
 
