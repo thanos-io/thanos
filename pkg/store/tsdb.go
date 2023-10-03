@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -26,7 +25,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 )
 
 const RemoteReadFrameLimit = 1048576
@@ -45,9 +43,6 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	buffers          sync.Pool
 	maxBytesPerFrame int
-
-	lmx           sync.RWMutex
-	labelNamesSet stringset.Set
 
 	extLset labels.Labels
 	mtx     sync.RWMutex
@@ -77,7 +72,6 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		component:        component,
 		extLset:          extLset,
 		maxBytesPerFrame: RemoteReadFrameLimit,
-		labelNamesSet:    stringset.AllStrings(),
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
 			return &b
@@ -175,7 +169,7 @@ type CloseDelegator interface {
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
-	srv := newFlushableServer(seriesSrv, s.LabelNamesSet(), r.WithoutReplicaLabels)
+	srv := newFlushableServer(seriesSrv, sortingStrategyStore)
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
@@ -375,39 +369,4 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	}
 
 	return &storepb.LabelValuesResponse{Values: values}, nil
-}
-
-func (s *TSDBStore) UpdateLabelNames(ctx context.Context) {
-	newSet := stringset.New()
-	q, err := s.db.ChunkQuerier(ctx, math.MinInt64, math.MaxInt64)
-	if err != nil {
-		level.Warn(s.logger).Log("msg", "error creating tsdb querier", "err", err.Error())
-		s.setLabelNamesSet(stringset.AllStrings())
-		return
-	}
-	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
-
-	res, _, err := q.LabelNames()
-	if err != nil {
-		level.Warn(s.logger).Log("msg", "error getting label names", "err", err.Error())
-		s.setLabelNamesSet(stringset.AllStrings())
-		return
-	}
-	for _, l := range res {
-		newSet.Insert(l)
-	}
-	s.setLabelNamesSet(newSet)
-}
-
-func (s *TSDBStore) setLabelNamesSet(newSet stringset.Set) {
-	s.lmx.Lock()
-	s.labelNamesSet = newSet
-	s.lmx.Unlock()
-}
-
-func (b *TSDBStore) LabelNamesSet() stringset.Set {
-	b.lmx.RLock()
-	defer b.lmx.RUnlock()
-
-	return b.labelNamesSet
 }

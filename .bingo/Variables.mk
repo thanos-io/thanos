@@ -119,11 +119,11 @@ $(PROMETHEUS): $(BINGO_DIR)/prometheus.mod
 	@echo "(re)installing $(GOBIN)/prometheus-v0.37.0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v0.37.0 "github.com/prometheus/prometheus/cmd/prometheus"
 
-PROMTOOL := $(GOBIN)/promtool-v0.37.0
+PROMTOOL := $(GOBIN)/promtool-v0.47.0
 $(PROMTOOL): $(BINGO_DIR)/promtool.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/promtool-v0.37.0"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=promtool.mod -o=$(GOBIN)/promtool-v0.37.0 "github.com/prometheus/prometheus/cmd/promtool"
+	@echo "(re)installing $(GOBIN)/promtool-v0.47.0"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=promtool.mod -o=$(GOBIN)/promtool-v0.47.0 "github.com/prometheus/prometheus/cmd/promtool"
 
 PROMU := $(GOBIN)/promu-v0.5.0
 $(PROMU): $(BINGO_DIR)/promu.mod

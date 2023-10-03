@@ -4,7 +4,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"html/template"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -38,7 +41,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/tsdb/wlog"
-	"github.com/prometheus/prometheus/util/strutil"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -99,6 +101,10 @@ type ruleConfig struct {
 	lset              labels.Labels
 	ignoredLabelNames []string
 	storeRateLimits   store.SeriesSelectLimits
+}
+
+type Expression struct {
+	Expr string
 }
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -329,6 +335,10 @@ func runRule(
 		}
 	}
 
+	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate); err != nil {
+		return errors.Wrap(err, "invalid alert source template")
+	}
+
 	queryProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_rule_query_apis_", reg),
@@ -492,11 +502,15 @@ func runRule(
 				if alrt.State == rules.StatePending {
 					continue
 				}
+				expressionURL, err := tableLinkForExpression(*conf.alertmgr.alertSourceTemplate, expr)
+				if err != nil {
+					level.Warn(logger).Log("msg", "failed to generate link for expression", "expr", expr, "err", err)
+				}
 				a := &notifier.Alert{
 					StartsAt:     alrt.FiredAt,
 					Labels:       alrt.Labels,
 					Annotations:  alrt.Annotations,
-					GeneratorURL: conf.alertQueryURL.String() + strutil.TableLinkForExpression(expr),
+					GeneratorURL: conf.alertQueryURL.String() + expressionURL,
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
@@ -642,21 +656,6 @@ func runRule(
 		)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
-
-		ctx, cancel := context.WithCancel(context.Background())
-		level.Debug(logger).Log("msg", "setting up periodic update for label names")
-		g.Add(func() error {
-			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
-				level.Debug(logger).Log("msg", "Starting label names update")
-
-				tsdbStore.UpdateLabelNames(ctx)
-
-				level.Debug(logger).Log("msg", "Finished label names update")
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
 	}
 
 	options = append(options, grpcserver.WithServer(
@@ -933,4 +932,34 @@ func reloadRules(logger log.Logger,
 		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.OriginalFile, group.Name()).Set(float64(len(group.Rules())))
 	}
 	return errs.Err()
+}
+
+func tableLinkForExpression(tmpl string, expr string) (string, error) {
+	// template example: "/graph?g0.expr={{.Expr}}&g0.tab=1"
+	escapedExpression := url.QueryEscape(expr)
+
+	escapedExpr := Expression{Expr: escapedExpression}
+	t, err := template.New("url").Parse(tmpl)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse template")
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, escapedExpr); err != nil {
+		return "", errors.Wrap(err, "failed to execute template")
+	}
+	return buf.String(), nil
+}
+
+func validateTemplate(tmplStr string) error {
+	tmpl, err := template.New("test").Parse(tmplStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse the template: %w", err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, Expression{Expr: "test_expr"})
+	if err != nil {
+		return fmt.Errorf("failed to execute the template: %w", err)
+	}
+	return nil
 }

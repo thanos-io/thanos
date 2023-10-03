@@ -110,7 +110,7 @@ func TestReaders(t *testing.T) {
 					testutil.Equals(t, 2, br.indexVersion)
 					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 70}, br.toc)
 					testutil.Equals(t, int64(710), br.indexLastPostingEnd)
-					testutil.Equals(t, 8, br.symbols.Size())
+					testutil.Equals(t, 8, br.symbols.(*index.Symbols).Size())
 					testutil.Equals(t, 0, len(br.postingsV1))
 					testutil.Equals(t, 2, len(br.nameSymbols))
 					testutil.Equals(t, map[string]*postingValueOffsets{
@@ -140,6 +140,38 @@ func TestReaders(t *testing.T) {
 					vals, err := br.LabelValues("not-existing")
 					testutil.Ok(t, err)
 					testutil.Equals(t, []string(nil), vals)
+
+					// single value
+					rngs, err := br.PostingsOffsets("a", "9")
+					testutil.Ok(t, err)
+					for _, rng := range rngs {
+						testutil.Assert(t, rng.End > rng.Start)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "2", "3", "4", "5", "6", "7", "8", "9")
+					testutil.Ok(t, err)
+					for _, rng := range rngs {
+						testutil.Assert(t, rng.End > rng.Start)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "0")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 1)
+					testutil.Equals(t, NotFoundRange, rngs[0])
+
+					rngs, err = br.PostingsOffsets("a", "0", "10", "99")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 3)
+					for _, rng := range rngs {
+						testutil.Equals(t, NotFoundRange, rng)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "1", "10", "9")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 3)
+					testutil.Assert(t, rngs[0].End > rngs[0].Start)
+					testutil.Assert(t, rngs[2].End > rngs[2].Start)
+					testutil.Equals(t, NotFoundRange, rngs[1])
 
 					// Regression tests for https://github.com/thanos-io/thanos/issues/2213.
 					// Most of not existing value was working despite bug, except in certain unlucky cases
@@ -216,9 +248,13 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		testutil.Ok(t, err)
 
 		for refs, sym := range symbols {
-			r, err := headerReader.LookupSymbol(refs)
+			r1, err := headerReader.LookupSymbol(refs)
 			testutil.Ok(t, err)
-			testutil.Equals(t, sym, r)
+			testutil.Equals(t, sym, r1)
+
+			r2, err := headerReader.LookupSymbol(refs)
+			testutil.Ok(t, err)
+			testutil.Equals(t, sym, r2)
 		}
 		_, err = headerReader.LookupSymbol(200000)
 		testutil.NotOk(t, err)
@@ -482,4 +518,79 @@ func readSymbols(bs index.ByteSlice, version, off int) ([]string, map[uint32]str
 		cnt--
 	}
 	return symbolSlice, symbols, errors.Wrap(d.Err(), "read symbols")
+}
+
+func TestIndexHeaderV1LookupSymbols(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	m, err := metadata.ReadFromDir("./testdata/index_format_v1")
+	testutil.Ok(t, err)
+	e2eutil.Copy(t, "./testdata/index_format_v1", filepath.Join(tmpDir, m.ULID.String()))
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String()), metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, &m.BlockMeta)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
+
+	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
+	testutil.Ok(t, err)
+
+	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, m.ULID, 3)
+	testutil.Ok(t, err)
+
+	defer func() { testutil.Ok(t, br.Close()) }()
+
+	indexFile, err := fileutil.OpenMmapFile(filepath.Join(tmpDir, m.ULID.String(), block.IndexFilename))
+	testutil.Ok(t, err)
+	defer func() { _ = indexFile.Close() }()
+
+	// This should get the correct symbol table and its offset.
+	symbols, err := getSymbolTable(realByteSlice(indexFile.Bytes()))
+	testutil.Ok(t, err)
+
+	nameSymbolSet := make(map[string]struct{}, 0)
+	for _, symbol := range br.nameSymbols {
+		nameSymbolSet[symbol] = struct{}{}
+	}
+
+	// Make sure we can look up the correct symbol for values.
+	for o, sym := range symbols {
+		if _, ok := nameSymbolSet[sym]; !ok {
+			res, err := br.LookupSymbol(o)
+			testutil.Ok(t, err)
+			testutil.Equals(t, sym, res)
+		}
+	}
+
+	// For names, we want to always hit name cache so use
+	// `ErrorSymbols` to make sure no cache miss.
+	br.symbols = ErrorSymbols{}
+	for o, sym := range symbols {
+		if _, ok := nameSymbolSet[sym]; ok {
+			res, err := br.LookupSymbol(o)
+			testutil.Ok(t, err)
+			testutil.Equals(t, sym, res)
+		}
+	}
+}
+
+// ErrorSymbols will throw error if its methods are getting called.
+type ErrorSymbols struct {
+}
+
+func (s ErrorSymbols) Lookup(o uint32) (string, error) {
+	return "", errors.New("shouldn't be called")
+}
+
+func (s ErrorSymbols) ReverseLookup(sym string) (uint32, error) {
+	return 0, errors.New("shouldn't be called")
 }

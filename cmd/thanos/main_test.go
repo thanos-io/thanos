@@ -77,9 +77,9 @@ func (b *erroringBucket) IsObjNotFoundErr(err error) bool {
 	return b.bkt.IsObjNotFoundErr(err)
 }
 
-// IsCustomerManagedKeyError returns true if error means that customer managed key is invalid.
-func (b *erroringBucket) IsCustomerManagedKeyError(err error) bool {
-	return b.bkt.IsCustomerManagedKeyError(err)
+// IsAccessDeniedErr returns true if error means that access to the object was denied.
+func (b *erroringBucket) IsAccessDeniedErr(err error) bool {
+	return b.bkt.IsAccessDeniedErr(err)
 }
 
 // Attributes returns information about the specified object.

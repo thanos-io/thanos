@@ -47,6 +47,8 @@ const (
 	postingLengthFieldSize = 4
 )
 
+var NotFoundRange = index.Range{Start: -1, End: -1}
+
 // The table gets initialized with sync.Once but may still cause a race
 // with any other use of the crc32 package anywhere. Thus we initialize it
 // before.
@@ -503,7 +505,8 @@ type BinaryReader struct {
 	postingsV1 map[string]map[string]index.Range
 
 	// Symbols struct that keeps only 1/postingOffsetsInMemSampling in the memory, then looks up the rest via mmap.
-	symbols *index.Symbols
+	// Use Symbols as interface for ease of testing.
+	symbols Symbols
 	// Cache of the label name symbol lookups,
 	// as there are not many and they are half of all lookups.
 	nameSymbols map[uint32]string
@@ -747,13 +750,18 @@ func (r *BinaryReader) IndexVersion() (int, error) {
 	return r.indexVersion, nil
 }
 
+// PostingsOffsets implements Reader.
+func (r *BinaryReader) PostingsOffsets(name string, values ...string) ([]index.Range, error) {
+	return r.postingsOffset(name, values...)
+}
+
 // TODO(bwplotka): Get advantage of multi value offset fetch.
 func (r *BinaryReader) PostingsOffset(name, value string) (index.Range, error) {
 	rngs, err := r.postingsOffset(name, value)
 	if err != nil {
 		return index.Range{}, err
 	}
-	if len(rngs) != 1 {
+	if len(rngs) != 1 || rngs[0] == NotFoundRange {
 		return index.Range{}, NotFoundRangeErr
 	}
 	return rngs[0], nil
@@ -801,6 +809,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 	valueIndex := 0
 	for valueIndex < len(values) && values[valueIndex] < e.offsets[0].value {
 		// Discard values before the start.
+		rngs = append(rngs, NotFoundRange)
 		valueIndex++
 	}
 
@@ -811,6 +820,9 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 		i := sort.Search(len(e.offsets), func(i int) bool { return e.offsets[i].value >= wantedValue })
 		if i == len(e.offsets) {
 			// We're past the end.
+			for len(rngs) < len(values) {
+				rngs = append(rngs, NotFoundRange)
+			}
 			break
 		}
 		if i > 0 && e.offsets[i].value != wantedValue {
@@ -858,6 +870,8 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 				// Record on the way if wanted value is equal to the current value.
 				if string(value) == wantedValue {
 					newSameRngs = append(newSameRngs, index.Range{Start: postingOffset + postingLengthFieldSize})
+				} else {
+					rngs = append(rngs, NotFoundRange)
 				}
 				valueIndex++
 				if valueIndex == len(values) {
@@ -877,6 +891,10 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 			}
 
 			if valueIndex != len(values) && wantedValue <= e.offsets[i+1].value {
+				// Increment i when wanted value is same as next offset.
+				if wantedValue == e.offsets[i+1].value {
+					i++
+				}
 				// wantedValue is smaller or same as the next offset we know about, let's iterate further to add those.
 				continue
 			}
@@ -908,6 +926,16 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 }
 
 func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
+	if r.indexVersion == index.FormatV1 {
+		// For v1 little trick is needed. Refs are actual offset inside index, not index-header. This is different
+		// of the header length difference between two files.
+		o += headerLen - index.HeaderLen
+	}
+
+	if s, ok := r.nameSymbols[o]; ok {
+		return s, nil
+	}
+
 	cacheIndex := o % valueSymbolsCacheSize
 	r.valueSymbolsMx.Lock()
 	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
@@ -916,16 +944,6 @@ func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
 		return v, nil
 	}
 	r.valueSymbolsMx.Unlock()
-
-	if s, ok := r.nameSymbols[o]; ok {
-		return s, nil
-	}
-
-	if r.indexVersion == index.FormatV1 {
-		// For v1 little trick is needed. Refs are actual offset inside index, not index-header. This is different
-		// of the header length difference between two files.
-		o += headerLen - index.HeaderLen
-	}
 
 	s, err := r.symbols.Lookup(o)
 	if err != nil {
@@ -1029,4 +1047,9 @@ func (b realByteSlice) Range(start, end int) []byte {
 
 func (b realByteSlice) Sub(start, end int) index.ByteSlice {
 	return b[start:end]
+}
+
+type Symbols interface {
+	Lookup(o uint32) (string, error)
+	ReverseLookup(sym string) (uint32, error)
 }

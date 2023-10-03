@@ -5,8 +5,6 @@ package cacheutil
 
 import (
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 type asyncOperationProcessor struct {
@@ -54,13 +52,11 @@ func (p *asyncOperationProcessor) asyncQueueProcessLoop() {
 	}
 }
 
-var errAsyncBufferFull = errors.New("the async buffer is full")
-
 func (p *asyncOperationProcessor) enqueueAsync(op func()) error {
 	select {
 	case p.asyncQueue <- op:
 		return nil
 	default:
-		return errAsyncBufferFull
+		return errMemcachedAsyncBufferFull
 	}
 }
