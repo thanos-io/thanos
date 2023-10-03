@@ -28,7 +28,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -214,7 +213,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 			},
 		},
 		{
-			// Tests mostly taken from https://github.com/prometheus/prometheus/blob/95e705612c1d557f1681bd081a841b78f93ee158/tsdb/querier_test.go#L1898, though some are still missing
+			// Testcases taken from https://github.com/prometheus/prometheus/blob/95e705612c1d557f1681bd081a841b78f93ee158/tsdb/querier_test.go#L1898
 			desc: "matching behavior",
 			appendFn: func(app storage.Appender) {
 				_, err := app.Append(0, labels.FromStrings("n", "1"), 0, 0)
@@ -238,9 +237,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -251,7 +250,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -270,9 +269,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_EQ, Name: "missing", Value: ""},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
@@ -295,8 +294,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".+"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -306,9 +305,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".*"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
@@ -332,8 +331,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -352,8 +351,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -363,9 +362,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "^1$"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "b", "region", "eu-west"),
 					},
 				},
 				{
@@ -376,7 +375,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^a$"},
 					},
 					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -387,8 +386,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^a?$"},
 					},
 					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "1", "region", "eu-west"),
-						labels.FromStrings("n", "1", "i", "a", "region", "eu-west"),
 					},
 				},
 				{
@@ -396,6 +395,243 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					end:   timestamp.FromTime(maxTime),
 					matchers: []storepb.LabelMatcher{
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.*$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.+$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "^1$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1|2.5"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "(1|2.5)"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a?$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^.*$"},
+					},
+					expectedLabels: []labels.Labels{},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^.+$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
+						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: "b"},
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^(b|a).*$"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "(1|2)"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "a|b"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(a|b)"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "x1|2"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "2|2\\.5"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "c||d"},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "1", "region", "eu-west"),
+						labels.FromStrings("n", "2", "region", "eu-west"),
+						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(c||d)"},
 					},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "1", "region", "eu-west"),
@@ -469,12 +705,15 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					}
 					testutil.Ok(t, err)
 
+					testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
+						return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+					}))
+
 					receivedLabels := make([]labels.Labels, 0)
 					for _, s := range srv.SeriesSet {
 						receivedLabels = append(receivedLabels, s.PromLabels())
 					}
-					slices.SortFunc(c.expectedLabels, func(a, b labels.Labels) bool { return labels.Compare(a, b) < 0 })
-					slices.SortFunc(receivedLabels, func(a, b labels.Labels) bool { return labels.Compare(a, b) < 0 })
+
 					testutil.Equals(t, c.expectedLabels, receivedLabels)
 				})
 			}
@@ -485,78 +724,86 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 func TestBucketStore_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 
-	testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		tmpDir := tt.TempDir()
-		bktDir := filepath.Join(tmpDir, "bkt")
-		auxDir := filepath.Join(tmpDir, "aux")
-		metaDir := filepath.Join(tmpDir, "meta")
+	for _, lazyExpandedPosting := range []bool{false, true} {
+		testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			tmpDir := tt.TempDir()
+			bktDir := filepath.Join(tmpDir, "bkt")
+			auxDir := filepath.Join(tmpDir, "aux")
+			metaDir := filepath.Join(tmpDir, "meta")
 
-		testutil.Ok(tt, os.MkdirAll(metaDir, os.ModePerm))
-		testutil.Ok(tt, os.MkdirAll(auxDir, os.ModePerm))
+			testutil.Ok(tt, os.MkdirAll(metaDir, os.ModePerm))
+			testutil.Ok(tt, os.MkdirAll(auxDir, os.ModePerm))
 
-		bkt, err := filesystem.NewBucket(bktDir)
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, bkt.Close()) })
+			bkt, err := filesystem.NewBucket(bktDir)
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, bkt.Close()) })
 
-		headOpts := tsdb.DefaultHeadOptions()
-		headOpts.ChunkDirRoot = tmpDir
-		headOpts.ChunkRange = 1000
-		h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
-		logger := log.NewNopLogger()
+			headOpts := tsdb.DefaultHeadOptions()
+			headOpts.ChunkDirRoot = tmpDir
+			headOpts.ChunkRange = 1000
+			h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
+			logger := log.NewNopLogger()
 
-		appendFn(h.Appender(context.Background()))
+			appendFn(h.Appender(context.Background()))
 
-		if h.NumSeries() == 0 {
-			tt.Skip("Bucket Store cannot handle empty HEAD")
-		}
+			if h.NumSeries() == 0 {
+				tt.Skip("Bucket Store cannot handle empty HEAD")
+			}
 
-		id := createBlockFromHead(tt, auxDir, h)
+			id := createBlockFromHead(tt, auxDir, h)
 
-		auxBlockDir := filepath.Join(auxDir, id.String())
-		_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
-			Labels:     extLset.Map(),
-			Downsample: metadata.ThanosDownsample{Resolution: 0},
-			Source:     metadata.TestSource,
-		}, nil)
-		testutil.Ok(tt, err)
+			auxBlockDir := filepath.Join(auxDir, id.String())
+			meta, err := metadata.ReadFromDir(auxBlockDir)
+			testutil.Ok(t, err)
+			stats, err := block.GatherIndexHealthStats(logger, filepath.Join(auxBlockDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+			testutil.Ok(t, err)
+			_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
+				Labels:     extLset.Map(),
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+				Source:     metadata.TestSource,
+				IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
+			}, nil)
+			testutil.Ok(tt, err)
 
-		testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
-		testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+			testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+			testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
 
-		chunkPool, err := NewDefaultChunkBytesPool(2e5)
-		testutil.Ok(tt, err)
+			chunkPool, err := NewDefaultChunkBytesPool(2e5)
+			testutil.Ok(tt, err)
 
-		metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
-			block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
+				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+			})
+			testutil.Ok(tt, err)
+
+			bucketStore, err := NewBucketStore(
+				objstore.WithNoopInstr(bkt),
+				metaFetcher,
+				"",
+				NewChunksLimiterFactory(10e6),
+				NewSeriesLimiterFactory(10e6),
+				NewBytesLimiterFactory(10e6),
+				NewGapBasedPartitioner(PartitionerMaxGapSize),
+				20,
+				true,
+				DefaultPostingOffsetInMemorySampling,
+				false,
+				false,
+				1*time.Minute,
+				WithChunkPool(chunkPool),
+				WithFilterConfig(allowAllFilterConf),
+				WithLazyExpandedPostings(lazyExpandedPosting),
+			)
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, bucketStore.Close()) })
+
+			testutil.Ok(tt, bucketStore.SyncBlocks(context.Background()))
+
+			return bucketStore
 		})
-		testutil.Ok(tt, err)
-
-		bucketStore, err := NewBucketStore(
-			objstore.WithNoopInstr(bkt),
-			metaFetcher,
-			"",
-			NewChunksLimiterFactory(10e6),
-			NewSeriesLimiterFactory(10e6),
-			NewBytesLimiterFactory(10e6),
-			NewGapBasedPartitioner(PartitionerMaxGapSize),
-			20,
-			true,
-			DefaultPostingOffsetInMemorySampling,
-			false,
-			false,
-			1*time.Minute,
-			WithChunkPool(chunkPool),
-			WithFilterConfig(allowAllFilterConf),
-		)
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, bucketStore.Close()) })
-
-		testutil.Ok(tt, bucketStore.SyncBlocks(context.Background()))
-
-		return bucketStore
-	})
+	}
 }
 
 func TestPrometheusStore_Acceptance(t *testing.T) {
@@ -579,7 +826,6 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 		promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return extLset },
 			func() (int64, int64) { return timestamp.FromTime(minTime), timestamp.FromTime(maxTime) },
-			func() stringset.Set { return stringset.AllStrings() },
 			func() string { return version })
 		testutil.Ok(tt, err)
 

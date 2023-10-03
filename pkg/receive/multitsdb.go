@@ -867,19 +867,6 @@ func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Lab
 	return initialLset, nil
 }
 
-func (t *MultiTSDB) UpdateLabelNames(ctx context.Context) {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-
-	for _, tenant := range t.tenants {
-		db := tenant.storeTSDB
-		if db == nil {
-			continue
-		}
-		db.UpdateLabelNames(ctx)
-	}
-}
-
 // extendLabels extends external labels of the initial label set.
 // If an external label shares same name with a label in the initial label set,
 // use the label in the initial label set and inform user about it.
