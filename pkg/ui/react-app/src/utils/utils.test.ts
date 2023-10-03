@@ -332,6 +332,7 @@ describe('Utils', () => {
               resolution: 1,
               maxSourceResolution: 'raw',
               useDeduplication: true,
+              forceTracing: false,
               usePartialResponse: false,
               storeMatches: [],
               engine: 'prometheus',
