@@ -30,7 +30,7 @@ type IndexCacheConfig struct {
 	Config interface{}        `yaml:"config"`
 
 	// Available item types are Postings, Series and ExpandedPostings.
-	EnabledItems []string `yaml:"enabled_items,omitempty"`
+	EnabledItems []string `yaml:"enabled_items"`
 }
 
 // NewIndexCache initializes and returns new index cache.

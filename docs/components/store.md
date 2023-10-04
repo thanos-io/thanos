@@ -291,7 +291,7 @@ type: IN-MEMORY
 config:
   max_size: 0
   max_item_size: 0
-enabled_items: ""
+enabled_items: []
 ```
 
 All the settings are **optional**:
@@ -316,7 +316,7 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
-enabled_items: ""
+enabled_items: []
 ```
 
 The **required** settings are:
@@ -364,7 +364,7 @@ config:
   master_name: ""
   max_async_buffer_size: 10000
   max_async_concurrency: 20
-enabled_items: ""
+enabled_items: []
 ```
 
 The **required** settings are:
