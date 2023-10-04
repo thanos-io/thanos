@@ -13,13 +13,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
-
 	"github.com/thanos-io/thanos/pkg/querysharding"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // PromQLShardingMiddleware creates a new Middleware that shards PromQL aggregations using grouping labels.
-func PromQLShardingMiddleware(queryAnalyzer querysharding.Analyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
+func PromQLShardingMiddleware(queryAnalyzer querysharding.Analyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer, shardWithoutBy bool) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		queriesTotal := promauto.With(registerer).NewCounterVec(prometheus.CounterOpts{
 			Namespace: "thanos",
@@ -31,12 +30,13 @@ func PromQLShardingMiddleware(queryAnalyzer querysharding.Analyzer, numShards in
 		queriesTotal.WithLabelValues("false")
 
 		return querySharder{
-			next:          next,
-			limits:        limits,
-			queryAnalyzer: queryAnalyzer,
-			numShards:     numShards,
-			merger:        merger,
-			queriesTotal:  queriesTotal,
+			next:           next,
+			limits:         limits,
+			queryAnalyzer:  queryAnalyzer,
+			numShards:      numShards,
+			merger:         merger,
+			queriesTotal:   queriesTotal,
+			shardWithoutBy: shardWithoutBy,
 		}
 	})
 }
@@ -45,9 +45,10 @@ type querySharder struct {
 	next   queryrange.Handler
 	limits queryrange.Limits
 
-	queryAnalyzer querysharding.Analyzer
-	numShards     int
-	merger        queryrange.Merger
+	queryAnalyzer  querysharding.Analyzer
+	numShards      int
+	merger         queryrange.Merger
+	shardWithoutBy bool
 
 	// Metrics
 	queriesTotal *prometheus.CounterVec
@@ -56,7 +57,7 @@ type querySharder struct {
 func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
 	analysis, err := s.queryAnalyzer.Analyze(r.GetQuery())
 
-	if err != nil || !analysis.IsShardable() {
+	if err != nil || (!analysis.IsShardable() && !s.shardWithoutBy) {
 		s.queriesTotal.WithLabelValues("false").Inc()
 		return s.next.Do(ctx, r)
 	}

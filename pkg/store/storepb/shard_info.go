@@ -59,6 +59,10 @@ func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
 }
 
 func shardByLabel(labelSet map[string]struct{}, zlabel labelpb.ZLabel, groupingBy bool) bool {
+	// If no labels specified, then match all labels.
+	if len(labelSet) == 0 {
+		return true
+	}
 	_, shardHasLabel := labelSet[zlabel.Name]
 	if groupingBy && shardHasLabel {
 		return true

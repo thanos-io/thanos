@@ -60,7 +60,11 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryRangeLimits,
 		queryRangeCodec,
 		config.NumShards,
-		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders)
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg),
+		logger,
+		config.ForwardHeaders,
+		config.ShardWithoutBy,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +80,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryInstantCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
 		config.ForwardHeaders,
+		config.ShardWithoutBy,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
 		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
@@ -156,6 +161,7 @@ func newQueryRangeTripperware(
 	reg prometheus.Registerer,
 	logger log.Logger,
 	forwardHeaders []string,
+	shardWithoutBy bool,
 ) (queryrange.Tripperware, error) {
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.NewLimitsMiddleware(limits)}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -191,7 +197,7 @@ func newQueryRangeTripperware(
 		analyzer := querysharding.NewQueryAnalyzer()
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
+			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg, shardWithoutBy),
 		)
 	}
 
@@ -326,6 +332,7 @@ func newInstantQueryTripperware(
 	codec queryrange.Codec,
 	reg prometheus.Registerer,
 	forwardHeaders []string,
+	shardWithoutBy bool,
 ) queryrange.Tripperware {
 	instantQueryMiddlewares := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -334,7 +341,7 @@ func newInstantQueryTripperware(
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
 			queryrange.InstrumentMiddleware("sharding", m),
-			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
+			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg, shardWithoutBy),
 		)
 	}
 

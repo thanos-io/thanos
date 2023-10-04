@@ -51,7 +51,7 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 				By:          true,
 				Labels:      nil,
 			},
-			matches: false,
+			matches: true,
 		},
 		{
 			name:   "shard without empty sharding labels",
@@ -107,6 +107,17 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 				Labels:      []string{"node"},
 			},
 			matches: false,
+		},
+		{
+			name:   "shard info with no labels, matching for shard 0",
+			series: series,
+			shardInfo: &ShardInfo{
+				ShardIndex:  0,
+				TotalShards: 2,
+				By:          true,
+				Labels:      nil,
+			},
+			matches: true,
 		},
 	}
 
