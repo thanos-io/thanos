@@ -29,9 +29,8 @@ type IndexCacheConfig struct {
 	Type   IndexCacheProvider `yaml:"type"`
 	Config interface{}        `yaml:"config"`
 
-	// Comma separated strings to enable filtered index cache.
 	// Available item types are Postings, Series and ExpandedPostings.
-	EnabledItems string `yaml:"enabled_items"`
+	EnabledItems []string `yaml:"enabled_items,omitempty"`
 }
 
 // NewIndexCache initializes and returns new index cache.
@@ -72,11 +71,9 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 	}
 
 	if len(cacheConfig.EnabledItems) > 0 {
-		if items := strings.Split(cacheConfig.EnabledItems, ","); len(items) > 0 {
-			cache, err = NewFilteredIndexCache(cache, items)
-			if err != nil {
-				return nil, err
-			}
+		cache, err = NewFilteredIndexCache(cache, cacheConfig.EnabledItems)
+		if err != nil {
+			return nil, err
 		}
 	}
 
