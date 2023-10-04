@@ -149,11 +149,12 @@ func TestFilterCache(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			inMemoryCache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), nil, prometheus.NewRegistry(), DefaultInMemoryIndexCacheConfig)
 			testutil.Ok(t, err)
-			c, err := NewFilteredIndexCache(inMemoryCache, tc.enabledItems)
+			err = ValidateEnabledItems(tc.enabledItems)
 			if tc.expectedError != "" {
 				testutil.Equals(t, tc.expectedError, err.Error())
 			} else {
 				testutil.Ok(t, err)
+				c := NewFilteredIndexCache(inMemoryCache, tc.enabledItems)
 				tc.verifyFunc(t, c)
 			}
 		})

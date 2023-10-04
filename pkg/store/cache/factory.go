@@ -71,10 +71,10 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 	}
 
 	if len(cacheConfig.EnabledItems) > 0 {
-		cache, err = NewFilteredIndexCache(cache, cacheConfig.EnabledItems)
-		if err != nil {
+		if err = ValidateEnabledItems(cacheConfig.EnabledItems); err != nil {
 			return nil, err
 		}
+		cache = NewFilteredIndexCache(cache, cacheConfig.EnabledItems)
 	}
 
 	return cache, nil
