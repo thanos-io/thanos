@@ -6,6 +6,7 @@ package storecache
 import (
 	"context"
 	"fmt"
+
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
