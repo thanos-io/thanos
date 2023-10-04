@@ -120,8 +120,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     }
     this.handleEngine(this.props.options.engine);
 
-    this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this); //forcetracing
-    this.handleChangeForceTracing = this.handleChangeForceTracing.bind(this);
+    this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
+    this.handleChangeForceTracing = this.handleChangeForceTracing.bind(this); //forceTracing
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
@@ -426,7 +426,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 onChange={this.handleChangeForceTracing}
                 defaultchecked={options.forceTracing}
               >
-                Enable Force Tracing
+                Force Tracing
               </Checkbox>
               <Label
                 style={{ marginLeft: '10px', display: 'inline-block' }}
