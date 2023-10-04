@@ -28,10 +28,21 @@ func TestFilterCache(t *testing.T) {
 	testSeriesData := []byte("series")
 	ctx := context.TODO()
 	for _, tc := range []struct {
-		name         string
-		enabledItems []string
-		verifyFunc   func(t *testing.T, c IndexCache)
+		name          string
+		enabledItems  []string
+		expectedError string
+		verifyFunc    func(t *testing.T, c IndexCache)
 	}{
+		{
+			name:          "invalid item type",
+			expectedError: "unsupported item type foo",
+			enabledItems:  []string{"foo"},
+		},
+		{
+			name:          "invalid item type with 1 valid cache type",
+			expectedError: "unsupported item type foo",
+			enabledItems:  []string{cacheTypeExpandedPostings, "foo"},
+		},
 		{
 			name: "empty enabled items",
 			verifyFunc: func(t *testing.T, c IndexCache) {
@@ -138,8 +149,13 @@ func TestFilterCache(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			inMemoryCache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), nil, prometheus.NewRegistry(), DefaultInMemoryIndexCacheConfig)
 			testutil.Ok(t, err)
-			c := NewFilteredIndexCache(inMemoryCache, tc.enabledItems)
-			tc.verifyFunc(t, c)
+			c, err := NewFilteredIndexCache(inMemoryCache, tc.enabledItems)
+			if tc.expectedError != "" {
+				testutil.Equals(t, tc.expectedError, err.Error())
+			} else {
+				testutil.Ok(t, err)
+				tc.verifyFunc(t, c)
+			}
 		})
 	}
 }

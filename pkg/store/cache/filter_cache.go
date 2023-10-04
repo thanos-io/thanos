@@ -5,7 +5,7 @@ package storecache
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -18,11 +18,19 @@ type FilteredIndexCache struct {
 }
 
 // NewFilteredIndexCache creates a filtered index cache based on enabled items.
-func NewFilteredIndexCache(cache IndexCache, enabledItems []string) *FilteredIndexCache {
+func NewFilteredIndexCache(cache IndexCache, enabledItems []string) (*FilteredIndexCache, error) {
+	for _, item := range enabledItems {
+		switch item {
+		// valid
+		case cacheTypePostings, cacheTypeExpandedPostings, cacheTypeSeries:
+		default:
+			return nil, fmt.Errorf("unsupported item type %s", item)
+		}
+	}
 	return &FilteredIndexCache{
 		cache:        cache,
 		enabledItems: enabledItems,
-	}
+	}, nil
 }
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
