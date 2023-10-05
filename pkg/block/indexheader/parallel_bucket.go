@@ -37,10 +37,10 @@ func WrapWithParallel(b objstore.BucketReader, tmpDir string) objstore.BucketRea
 	}
 }
 
-// GetRange reads the range in parallel
+// GetRange reads the range in parallel.
 func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
 	partFilePrefix := uuid.New().String()
-	g := errgroup.Group{}
+	g, gctx := errgroup.WithContext(ctx)
 
 	numParts := length / b.partitionSize
 	if length%b.partitionSize > 0 {
@@ -67,7 +67,7 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 		parts = append(parts, part)
 
 		g.Go(func() error {
-			rc, err := b.BucketReader.GetRange(ctx, name, partOff, partLength)
+			rc, err := b.BucketReader.GetRange(gctx, name, partOff, partLength)
 			defer runutil.CloseWithErrCapture(&err, rc, "close object")
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("get range part %v", partId))
@@ -75,8 +75,7 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 			if _, err := io.Copy(part, rc); err != nil {
 				return errors.Wrap(err, fmt.Sprintf("get range part %v", partId))
 			}
-			part.Flush()
-			return part.Sync()
+			return part.Flush()
 		})
 		partId += 1
 	}
@@ -84,7 +83,7 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	return newPartMerger(parts)
+	return newPartMerger(parts), nil
 }
 
 func (b *parallelBucketReader) createPart(partFilePrefix string, partId int, size int) (Part, error) {
@@ -103,21 +102,17 @@ type partMerger struct {
 	multiReader io.Reader
 }
 
-func newPartMerger(parts []Part) (*partMerger, error) {
+func newPartMerger(parts []Part) *partMerger {
 	readers := make([]io.Reader, 0, len(parts))
 	closers := make([]io.Closer, 0, len(parts))
 	for _, p := range parts {
-		// Seek is necessary because the part was just written to.
-		if _, err := p.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
 		readers = append(readers, p.(io.Reader))
 		closers = append(closers, p.(io.Closer))
 	}
 	return &partMerger{
 		closers:     closers,
 		multiReader: io.MultiReader(readers...),
-	}, nil
+	}
 }
 
 func (m *partMerger) Read(b []byte) (n int, err error) {
@@ -126,7 +121,7 @@ func (m *partMerger) Read(b []byte) (n int, err error) {
 }
 
 func (m *partMerger) Close() (err error) {
-	var firstErr error
+	var firstErr error = nil
 	for _, c := range m.closers {
 		if err := c.Close(); err != nil {
 			if firstErr == nil {
@@ -134,23 +129,16 @@ func (m *partMerger) Close() (err error) {
 			}
 		}
 	}
-
-	if firstErr != nil {
-		return firstErr
-	}
-	return nil
+	return firstErr
 }
 
 type Part interface {
 	Read(buf []byte) (int, error)
 	Write(buf []byte) (int, error)
-	Seek(offset int64, whence int) (int64, error)
 	Flush() error
-	Sync() error
-	Close() error
 }
 
-// partFile stores parts in temporary files
+// partFile stores parts in temporary files.
 type partFile struct {
 	file       *os.File
 	fileWriter *bufio.Writer
@@ -196,26 +184,26 @@ func (p *partFile) Close() error {
 }
 
 func (p *partFile) Flush() error {
-	return p.fileWriter.Flush()
+	if err := p.fileWriter.Flush(); err != nil {
+		return err
+	}
+	if err := p.file.Sync(); err != nil {
+		return err
+	}
+	// Seek is necessary because the part was just written to.
+	_, err := p.file.Seek(0, io.SeekStart)
+	return err
 }
 
 func (p *partFile) Read(buf []byte) (int, error) {
 	return p.fileReader.Read(buf)
 }
 
-func (p *partFile) Seek(offset int64, whence int) (int64, error) {
-	return p.file.Seek(offset, whence)
-}
-
-func (p *partFile) Sync() error {
-	return p.file.Sync()
-}
-
 func (p *partFile) Write(buf []byte) (int, error) {
 	return p.fileWriter.Write(buf)
 }
 
-// partBuffer stores parts in memory
+// partBuffer stores parts in memory.
 type partBuffer struct {
 	buf *bytes.Buffer
 }
@@ -230,22 +218,14 @@ func (p *partBuffer) Close() error {
 	return nil
 }
 
-func (p *partBuffer) Flush() error {
-	return nil
-}
-
 func (p *partBuffer) Read(b []byte) (int, error) {
 	return p.buf.Read(b)
 }
 
-func (p *partBuffer) Seek(offset int64, whence int) (int64, error) {
-	return 0, nil
-}
-
-func (p *partBuffer) Sync() error {
-	return nil
-}
-
 func (p *partBuffer) Write(b []byte) (int, error) {
 	return p.buf.Write(b)
+}
+
+func (p *partBuffer) Flush() error {
+	return nil
 }
