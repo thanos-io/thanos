@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
@@ -177,8 +178,19 @@ type Part interface {
 
 func newPartFile(filename string) (*partFile, error) {
 	dir := filepath.Dir(filename)
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	df, err := fileutil.OpenDir(dir)
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return nil, err
+		}
+		df, err = fileutil.OpenDir(dir)
+	}
+	if err != nil {
 		return nil, err
+	}
+
+	if err := df.Sync(); err != nil {
+		return nil, errors.Wrap(err, "sync dir")
 	}
 
 	if err := os.RemoveAll(filename); err != nil {
