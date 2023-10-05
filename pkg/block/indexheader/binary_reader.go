@@ -74,7 +74,12 @@ type BinaryTOC struct {
 
 // WriteBinary build index header from the pieces of index in object storage, and cached in file if necessary.
 func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string) ([]byte, error) {
-	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id)
+	var tmpDir = ""
+	if filename != "" {
+		tmpDir = filepath.Dir(filename)
+	}
+	parallelBucket := WrapWithParallel(bkt, tmpDir)
+	ir, indexVersion, err := newChunkedIndexReader(ctx, parallelBucket, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "new index reader")
 	}
