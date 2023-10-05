@@ -77,6 +77,7 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 				return errors.Wrap(err, fmt.Sprintf("getRangePartitioned %v", partId))
 			}
 			part.Flush()
+			part.Sync()
 			return nil
 		})
 		i += 1
@@ -152,8 +153,8 @@ func (m *partMerger) Read(p []byte) (n int, err error) {
 
 func (m *partMerger) Close() (err error) {
 	var firstErr error
-	for _, r := range m.closers {
-		if err := r.Close(); err != nil {
+	for _, c := range m.closers {
+		if err := c.Close(); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -176,6 +177,11 @@ type Part interface {
 }
 
 func newPartFile(filename string) (*partFile, error) {
+	dir := filepath.Dir(filename)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return nil, err
+	}
+
 	if err := os.RemoveAll(filename); err != nil {
 		return nil, errors.Wrap(err, "remove existing file")
 	}
