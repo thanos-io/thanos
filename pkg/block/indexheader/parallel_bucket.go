@@ -20,26 +20,25 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// partitionSize is used for splitting range reads for index-header.
+// partitionSize is used for splitting range reads.
 const partitionSize = 16 * 1024 * 1024 // 16 MiB
 
 type parallelBucketReader struct {
-	bkt           objstore.BucketReader
+	objstore.BucketReader
 	tmpDir        string
 	partitionSize int64
 }
 
 func WrapWithParallel(b objstore.BucketReader, tmpDir string) objstore.BucketReader {
 	return &parallelBucketReader{
-		bkt:           b,
+		BucketReader:  b,
 		tmpDir:        tmpDir,
 		partitionSize: partitionSize,
 	}
 }
 
-// GetRange implements ParallelBucket.
+// GetRange reads the range in parallel
 func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
-	// id
 	partFilePrefix := uuid.New().String()
 	g := errgroup.Group{}
 
@@ -51,16 +50,16 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 
 	parts := make([]Part, 0, numParts)
 
-	i := 0
+	partId := 0
 	for o := off; o < off+length; o += b.partitionSize {
 		l := b.partitionSize
 		if o+l > off+length {
-			l = length - (int64(i) * b.partitionSize)
+			// Partial partition
+			l = length - (int64(partId) * b.partitionSize)
 		}
 
 		partOff := o
 		partLength := l
-		partId := i
 		part, err := b.createPart(partFilePrefix, partId, int(partLength))
 		if err != nil {
 			return nil, err
@@ -68,55 +67,29 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 		parts = append(parts, part)
 
 		g.Go(func() error {
-			rc, err := b.bkt.GetRange(ctx, name, partOff, partLength)
+			rc, err := b.BucketReader.GetRange(ctx, name, partOff, partLength)
 			defer runutil.CloseWithErrCapture(&err, rc, "close object")
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("getRangePartitioned %v", partId))
+				return errors.Wrap(err, fmt.Sprintf("get range part %v", partId))
 			}
-			buf := make([]byte, 32*1024)
-			if _, err := io.CopyBuffer(part, rc, buf); err != nil {
-				return errors.Wrap(err, fmt.Sprintf("getRangePartitioned %v", partId))
+			if _, err := io.Copy(part, rc); err != nil {
+				return errors.Wrap(err, fmt.Sprintf("get range part %v", partId))
 			}
 			part.Flush()
 			return part.Sync()
 		})
-		i += 1
+		partId += 1
 	}
 
-	// Wait until all parts complete.
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 	return newPartMerger(parts)
 }
 
-func (b *parallelBucketReader) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
-	return b.bkt.Attributes(ctx, name)
-}
-
-func (b *parallelBucketReader) Exists(ctx context.Context, name string) (bool, error) {
-	return b.bkt.Exists(ctx, name)
-}
-
-func (b *parallelBucketReader) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	return b.bkt.Get(ctx, name)
-}
-
-func (b *parallelBucketReader) IsAccessDeniedErr(err error) bool {
-	return b.bkt.IsAccessDeniedErr(err)
-}
-
-func (b *parallelBucketReader) IsObjNotFoundErr(err error) bool {
-	return b.bkt.IsObjNotFoundErr(err)
-}
-
-func (b *parallelBucketReader) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
-	return b.bkt.Iter(ctx, dir, f, options...)
-}
-
 func (b *parallelBucketReader) createPart(partFilePrefix string, partId int, size int) (Part, error) {
 	if b.tmpDir == "" {
-		// We're buffering in memory.
+		// Parts stored in memory
 		return newPartBuffer(size), nil
 	}
 
@@ -130,15 +103,16 @@ type partMerger struct {
 	multiReader io.Reader
 }
 
-func newPartMerger(rcs []Part) (*partMerger, error) {
-	readers := make([]io.Reader, 0, len(rcs))
-	closers := make([]io.Closer, 0, len(rcs))
-	for _, rc := range rcs {
-		if _, err := rc.Seek(0, io.SeekStart); err != nil {
+func newPartMerger(parts []Part) (*partMerger, error) {
+	readers := make([]io.Reader, 0, len(parts))
+	closers := make([]io.Closer, 0, len(parts))
+	for _, p := range parts {
+		// Seek is necessary because the part was just written to.
+		if _, err := p.Seek(0, io.SeekStart); err != nil {
 			return nil, err
 		}
-		readers = append(readers, rc.(io.Reader))
-		closers = append(closers, rc.(io.Closer))
+		readers = append(readers, p.(io.Reader))
+		closers = append(closers, p.(io.Closer))
 	}
 	return &partMerger{
 		closers:     closers,
@@ -146,8 +120,8 @@ func newPartMerger(rcs []Part) (*partMerger, error) {
 	}, nil
 }
 
-func (m *partMerger) Read(p []byte) (n int, err error) {
-	n, err = m.multiReader.Read(p)
+func (m *partMerger) Read(b []byte) (n int, err error) {
+	n, err = m.multiReader.Read(b)
 	return
 }
 
@@ -176,17 +150,24 @@ type Part interface {
 	Close() error
 }
 
+// partFile stores parts in temporary files
+type partFile struct {
+	file       *os.File
+	fileWriter *bufio.Writer
+	fileReader *bufio.Reader
+}
+
 func newPartFile(filename string) (*partFile, error) {
 	dir := filepath.Dir(filename)
 	df, err := fileutil.OpenDir(dir)
 	if os.IsNotExist(err) {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "create temp dir")
 		}
 		df, err = fileutil.OpenDir(dir)
 	}
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "open temp dir")
 	}
 
 	if err := df.Sync(); err != nil {
@@ -198,19 +179,13 @@ func newPartFile(filename string) (*partFile, error) {
 	}
 	f, err := os.OpenFile(filepath.Clean(filename), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "open temp file")
 	}
 	return &partFile{
 		file:       f,
 		fileWriter: bufio.NewWriterSize(f, 32*1024),
 		fileReader: bufio.NewReaderSize(f, 32*1024),
 	}, nil
-}
-
-type partFile struct {
-	file       *os.File
-	fileWriter *bufio.Writer
-	fileReader *bufio.Reader
 }
 
 func (p *partFile) Close() error {
@@ -240,14 +215,15 @@ func (p *partFile) Write(buf []byte) (int, error) {
 	return p.fileWriter.Write(buf)
 }
 
+// partBuffer stores parts in memory
+type partBuffer struct {
+	buf *bytes.Buffer
+}
+
 func newPartBuffer(size int) *partBuffer {
 	return &partBuffer{
 		buf: bytes.NewBuffer(make([]byte, 0, size)),
 	}
-}
-
-type partBuffer struct {
-	buf *bytes.Buffer
 }
 
 func (p *partBuffer) Close() error {

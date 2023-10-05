@@ -18,7 +18,7 @@ import (
 func TestParallelBucket_InMemoryBuffering(t *testing.T) {
 	bkt := objstore.NewInMemBucket()
 	parallelBucket := &parallelBucketReader{
-		bkt:           bkt,
+		BucketReader:  bkt,
 		tmpDir:        "",
 		partitionSize: 100,
 	}
@@ -28,7 +28,7 @@ func TestParallelBucket_InMemoryBuffering(t *testing.T) {
 func TestParallelBucket_TmpFileBuffering(t *testing.T) {
 	bkt := objstore.NewInMemBucket()
 	parallelBucket := &parallelBucketReader{
-		bkt:           bkt,
+		BucketReader:  bkt,
 		tmpDir:        t.TempDir(),
 		partitionSize: 100,
 	}
@@ -48,20 +48,30 @@ func testParallelBucket(t *testing.T, bkt objstore.Bucket, parallelBucket *paral
 	testutil.Ok(t, err)
 	length := l.Int64()
 
-	uploadedBytes := uploadRandom(t, ctx, bkt, name, size)
+	randBytes := uploadRandom(t, ctx, bkt, name, size)
 
-	rc, err := parallelBucket.GetRange(ctx, name, offset, length)
+	r1, err := parallelBucket.GetRange(ctx, name, offset, length)
 	testutil.Ok(t, err)
 
-	readBytes, err := io.ReadAll(rc)
+	parallelBytes, err := io.ReadAll(r1)
 	testutil.Ok(t, err)
-	testutil.Assert(t, length == int64(len(readBytes)))
+	testutil.Assert(t, length == int64(len(parallelBytes)))
 
-	expectedBytes := uploadedBytes[offset : offset+length]
+	expectedBytes := randBytes[offset : offset+length]
 	testutil.Assert(t, length == int64(len(expectedBytes)))
-	testutil.Equals(t, expectedBytes, readBytes)
+	testutil.Equals(t, expectedBytes, parallelBytes)
 
-	err = rc.Close()
+	r2, err := bkt.GetRange(ctx, name, offset, length)
+	testutil.Ok(t, err)
+	memoryBytes, err := io.ReadAll(r2)
+	testutil.Ok(t, err)
+	testutil.Assert(t, length == int64(len(memoryBytes)))
+	testutil.Equals(t, memoryBytes, parallelBytes)
+
+	err = r1.Close()
+	testutil.Ok(t, err)
+
+	err = r2.Close()
 	testutil.Ok(t, err)
 }
 
