@@ -77,8 +77,7 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 				return errors.Wrap(err, fmt.Sprintf("getRangePartitioned %v", partId))
 			}
 			part.Flush()
-			part.Sync()
-			return nil
+			return part.Sync()
 		})
 		i += 1
 	}
