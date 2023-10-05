@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#6756](https://github.com/thanos-io/thanos/pull/6756) Query: Add the following options to allow enforcement of tenancy on the query path: `query.enable-tenancy`, `query.tenant-label-name`.
+
 ### Changed
 
 ### Removed
