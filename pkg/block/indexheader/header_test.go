@@ -404,7 +404,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 }
 
 func BenchmarkBinaryReader_LookupSymbol(b *testing.B) {
-	for _, numSeries := range []int{valueSymbolsCacheSize, valueSymbolsCacheSize * 10} {
+	for _, numSeries := range []int{1024, 1024 * 10} {
 		b.Run(fmt.Sprintf("num series = %d", numSeries), func(b *testing.B) {
 			benchmarkBinaryReaderLookupSymbol(b, numSeries)
 		})
