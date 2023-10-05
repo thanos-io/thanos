@@ -64,6 +64,8 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
+const testQueryA = "{a=\"1\"}"
+
 func defaultWebConfig() string {
 	// username: test, secret: test(bcrypt hash)
 	return `
@@ -2533,7 +2535,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	)
 
 	// tenant-01 should only see part of the results
-	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
 		time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 			HTTPHeaders: tenant1Header,
@@ -2547,7 +2549,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	)
 
 	// With no enforcement enabled, default tenant can see everything
-	queryAndAssertSeries(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
+	queryAndAssertSeries(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return testQueryA },
 		time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		},
@@ -2560,7 +2562,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	)
 
 	// Default tenant don't see "a" when tenancy is enforced
-	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
 		time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		},
@@ -2568,7 +2570,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	)
 
 	// tenant-2 don't see "a" when tenancy is enforced
-	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
 		time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 			HTTPHeaders: tenant2Header,
@@ -2584,7 +2586,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		nil,
 	)
 
-	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
 		promclient.QueryOptions{
 			Deduplicate: true,
 		}, func(res model.Matrix) error {
@@ -2595,7 +2597,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 			}
 		})
 
-	rangeQuery(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+	rangeQuery(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
 		promclient.QueryOptions{
 			Deduplicate: true,
 		}, func(res model.Matrix) error {
