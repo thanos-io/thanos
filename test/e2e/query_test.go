@@ -2513,6 +2513,12 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querierEnforce, querierNoEnforce))
 	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(3), "thanos_blocks_meta_synced"))
 
+	tenant1Header := make(http.Header)
+	tenant1Header.Add("thanos-tenant", "tenant-01")
+
+	tenant2Header := make(http.Header)
+	tenant2Header.Add("thanos-tenant", "tenant-02")
+
 	// default-tenant should only see part of the results
 	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{c=\"3\"}" },
 		time.Now, promclient.QueryOptions{
@@ -2522,6 +2528,20 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 			{
 				"c":         "3",
 				"tenant_id": "default-tenant",
+			},
+		},
+	)
+
+	// tenant-01 should only see part of the results
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+			HTTPHeaders: tenant1Header,
+		},
+		[]model.Metric{
+			{
+				"a":         "1",
+				"tenant_id": "tenant-01",
 			},
 		},
 	)
@@ -2543,6 +2563,15 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
 		time.Now, promclient.QueryOptions{
 			Deduplicate: false,
+		},
+		nil,
+	)
+
+	// tenant-2 don't see "a" when tenancy is enforced
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{a=\"1\"}" },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+			HTTPHeaders: tenant2Header,
 		},
 		nil,
 	)
