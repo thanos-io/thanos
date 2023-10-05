@@ -33,6 +33,8 @@ type RemoteIndexCache struct {
 
 	compressionScheme string
 
+	ttl time.Duration
+
 	// Metrics.
 	requestTotal  *prometheus.CounterVec
 	hitsTotal     *prometheus.CounterVec
@@ -41,8 +43,9 @@ type RemoteIndexCache struct {
 }
 
 // NewRemoteIndexCache makes a new RemoteIndexCache.
-func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, commonMetrics *commonMetrics, reg prometheus.Registerer) (*RemoteIndexCache, error) {
+func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, commonMetrics *commonMetrics, reg prometheus.Registerer, ttl time.Duration) (*RemoteIndexCache, error) {
 	c := &RemoteIndexCache{
+		ttl:               ttl,
 		logger:            logger,
 		memcached:         cacheClient,
 		compressionScheme: compressionSchemeStreamedSnappy, // Hardcode it for now. Expose it once we support different types of compressions.
@@ -81,7 +84,7 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
 	c.dataSizeBytes.WithLabelValues(cacheTypePostings, tenant).Observe(float64(len(v)))
 	key := cacheKey{blockID.String(), cacheKeyPostings(l), c.compressionScheme}.string()
-	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
 	}
 }
@@ -134,7 +137,7 @@ func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labe
 	c.dataSizeBytes.WithLabelValues(cacheTypeExpandedPostings, tenant).Observe(float64(len(v)))
 	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(keys)), c.compressionScheme}.string()
 
-	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache expanded postings in memcached", "err", err)
 	}
 }
@@ -168,7 +171,7 @@ func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, 
 	c.dataSizeBytes.WithLabelValues(cacheTypeSeries, tenant).Observe(float64(len(v)))
 	key := cacheKey{blockID.String(), cacheKeySeries(id), ""}.string()
 
-	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache series in memcached", "err", err)
 	}
 }
@@ -215,5 +218,5 @@ func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.UL
 
 // NewMemcachedIndexCache is alias NewRemoteIndexCache for compatible.
 func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.RemoteCacheClient, reg prometheus.Registerer) (*RemoteIndexCache, error) {
-	return NewRemoteIndexCache(logger, memcached, nil, reg)
+	return NewRemoteIndexCache(logger, memcached, nil, reg, memcachedDefaultTTL)
 }

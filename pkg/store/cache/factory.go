@@ -6,6 +6,7 @@ package storecache
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -31,6 +32,9 @@ type IndexCacheConfig struct {
 
 	// Available item types are Postings, Series and ExpandedPostings.
 	EnabledItems []string `yaml:"enabled_items"`
+	// TTL for storing items in remote cache. Not supported for inmemory cache.
+	// Default value is 24h.
+	TTL time.Duration `yaml:"ttl"`
 }
 
 // NewIndexCache initializes and returns new index cache.
@@ -47,6 +51,10 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
 	}
 
+	if cacheConfig.TTL == 0 {
+		cacheConfig.TTL = memcachedDefaultTTL
+	}
+
 	var cache IndexCache
 	switch strings.ToUpper(string(cacheConfig.Type)) {
 	case string(INMEMORY):
@@ -55,13 +63,13 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 		var memcached cacheutil.RemoteCacheClient
 		memcached, err = cacheutil.NewMemcachedClient(logger, "index-cache", backendConfig, reg)
 		if err == nil {
-			cache, err = NewRemoteIndexCache(logger, memcached, cacheMetrics, reg)
+			cache, err = NewRemoteIndexCache(logger, memcached, cacheMetrics, reg, cacheConfig.TTL)
 		}
 	case string(REDIS):
 		var redisCache cacheutil.RemoteCacheClient
 		redisCache, err = cacheutil.NewRedisClient(logger, "index-cache", backendConfig, reg)
 		if err == nil {
-			cache, err = NewRemoteIndexCache(logger, redisCache, cacheMetrics, reg)
+			cache, err = NewRemoteIndexCache(logger, redisCache, cacheMetrics, reg, cacheConfig.TTL)
 		}
 	default:
 		return nil, errors.Errorf("index cache with type %s is not supported", cacheConfig.Type)

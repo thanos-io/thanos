@@ -88,7 +88,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil, memcachedDefaultTTL)
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
@@ -169,7 +169,7 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil, memcachedDefaultTTL)
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
@@ -264,7 +264,7 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil, memcachedDefaultTTL)
 			testutil.Ok(t, err)
 
 			// Store the series expected before running the test.
