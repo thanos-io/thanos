@@ -109,7 +109,7 @@ func NewLazyBinaryReader(
 			level.Debug(logger).Log("msg", "the index-header doesn't exist on disk; recreating", "path", indexHeaderFile)
 
 			start := time.Now()
-			if _, err := WriteBinary(ctx, bkt, id, indexHeaderFile, partitionSize); err != nil {
+			if _, err := WriteBinary(ctx, bkt, id, indexHeaderFile); err != nil {
 				return nil, errors.Wrap(err, "write index header")
 			}
 

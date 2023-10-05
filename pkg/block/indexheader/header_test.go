@@ -36,8 +36,6 @@ func TestReaders(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
-	partSize := int64(10)
-
 	// Create block index version 2.
 	id1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
@@ -99,7 +97,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn, partSize)
+				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
 				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
@@ -205,7 +203,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("lazy binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn, partSize)
+				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
 				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), nil)
@@ -380,7 +378,7 @@ func BenchmarkBinaryWrite(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		_, err := WriteBinary(ctx, bkt, m.ULID, fn, partitionSize)
+		_, err := WriteBinary(ctx, bkt, m.ULID, fn)
 		testutil.Ok(t, err)
 	}
 }
@@ -394,7 +392,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn, partitionSize)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
 	testutil.Ok(t, err)
 
 	t.ResetTimer()
@@ -543,7 +541,7 @@ func TestIndexHeaderV1LookupSymbols(t *testing.T) {
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
 
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn, 10)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
 	testutil.Ok(t, err)
 
 	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, m.ULID, 3)
