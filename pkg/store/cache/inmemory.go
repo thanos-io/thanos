@@ -21,6 +21,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 var (
@@ -115,9 +116,9 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 	c.added.WithLabelValues(cacheTypeSeries)
 	c.added.WithLabelValues(cacheTypeExpandedPostings)
 
-	c.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings)
-	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries)
-	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeExpandedPostings)
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeExpandedPostings, tenancy.DefaultTenant)
 
 	c.overflow = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_overflowed_total",
@@ -127,9 +128,9 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 	c.overflow.WithLabelValues(cacheTypeSeries)
 	c.overflow.WithLabelValues(cacheTypeExpandedPostings)
 
-	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings)
-	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries)
-	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings)
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings, tenancy.DefaultTenant)
 
 	c.current = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_items",
@@ -197,8 +198,8 @@ func (c *InMemoryIndexCache) onEvict(key, val interface{}) {
 	c.curSize -= entrySize
 }
 
-func (c *InMemoryIndexCache) get(typ string, key cacheKey) ([]byte, bool) {
-	c.commonMetrics.requestTotal.WithLabelValues(typ).Inc()
+func (c *InMemoryIndexCache) get(typ string, key cacheKey, tenant string) ([]byte, bool) {
+	c.commonMetrics.requestTotal.WithLabelValues(typ, tenant).Inc()
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -207,7 +208,7 @@ func (c *InMemoryIndexCache) get(typ string, key cacheKey) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	c.commonMetrics.hitsTotal.WithLabelValues(typ).Inc()
+	c.commonMetrics.hitsTotal.WithLabelValues(typ, tenant).Inc()
 	return v.([]byte), true
 }
 
@@ -294,22 +295,22 @@ func copyToKey(l labels.Label) cacheKeyPostings {
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
-	c.commonMetrics.dataSizeBytes.WithLabelValues(cacheTypePostings).Observe(float64(len(v)))
+func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
+	c.commonMetrics.dataSizeBytes.WithLabelValues(cacheTypePostings, tenant).Observe(float64(len(v)))
 	c.set(cacheTypePostings, cacheKey{block: blockID.String(), key: copyToKey(l)}, v)
 }
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
-	timer := prometheus.NewTimer(c.commonMetrics.fetchLatency.WithLabelValues(cacheTypePostings))
+func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits map[labels.Label][]byte, misses []labels.Label) {
+	timer := prometheus.NewTimer(c.commonMetrics.fetchLatency.WithLabelValues(cacheTypePostings, tenant))
 	defer timer.ObserveDuration()
 
 	hits = map[labels.Label][]byte{}
 
 	blockIDKey := blockID.String()
 	for _, key := range keys {
-		if b, ok := c.get(cacheTypePostings, cacheKey{blockIDKey, cacheKeyPostings(key), ""}); ok {
+		if b, ok := c.get(cacheTypePostings, cacheKey{blockIDKey, cacheKeyPostings(key), ""}, tenant); ok {
 			hits[key] = b
 			continue
 		}
@@ -321,17 +322,17 @@ func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.
 }
 
 // StoreExpandedPostings stores expanded postings for a set of label matchers.
-func (c *InMemoryIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte) {
-	c.commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeExpandedPostings).Observe(float64(len(v)))
+func (c *InMemoryIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string) {
+	c.commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeExpandedPostings, tenant).Observe(float64(len(v)))
 	c.set(cacheTypeExpandedPostings, cacheKey{block: blockID.String(), key: cacheKeyExpandedPostings(labelMatchersToString(matchers))}, v)
 }
 
 // FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
-func (c *InMemoryIndexCache) FetchExpandedPostings(_ context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
-	timer := prometheus.NewTimer(c.commonMetrics.fetchLatency.WithLabelValues(cacheTypeExpandedPostings))
+func (c *InMemoryIndexCache) FetchExpandedPostings(_ context.Context, blockID ulid.ULID, matchers []*labels.Matcher, tenant string) ([]byte, bool) {
+	timer := prometheus.NewTimer(c.commonMetrics.fetchLatency.WithLabelValues(cacheTypeExpandedPostings, tenant))
 	defer timer.ObserveDuration()
 
-	if b, ok := c.get(cacheTypeExpandedPostings, cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers)), ""}); ok {
+	if b, ok := c.get(cacheTypeExpandedPostings, cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers)), ""}, tenant); ok {
 		return b, true
 	}
 	return nil, false
@@ -339,22 +340,22 @@ func (c *InMemoryIndexCache) FetchExpandedPostings(_ context.Context, blockID ul
 
 // StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
-	c.commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeSeries).Observe(float64(len(v)))
+func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
+	c.commonMetrics.dataSizeBytes.WithLabelValues(cacheTypeSeries, tenant).Observe(float64(len(v)))
 	c.set(cacheTypeSeries, cacheKey{blockID.String(), cacheKeySeries(id), ""}, v)
 }
 
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 // and returns a map containing cache hits, along with a list of missing IDs.
-func (c *InMemoryIndexCache) FetchMultiSeries(_ context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
-	timer := prometheus.NewTimer(c.commonMetrics.fetchLatency.WithLabelValues(cacheTypeSeries))
+func (c *InMemoryIndexCache) FetchMultiSeries(_ context.Context, blockID ulid.ULID, ids []storage.SeriesRef, tenant string) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
+	timer := prometheus.NewTimer(c.commonMetrics.fetchLatency.WithLabelValues(cacheTypeSeries, tenant))
 	defer timer.ObserveDuration()
 
 	hits = map[storage.SeriesRef][]byte{}
 
 	blockIDKey := blockID.String()
 	for _, id := range ids {
-		if b, ok := c.get(cacheTypeSeries, cacheKey{blockIDKey, cacheKeySeries(id), ""}); ok {
+		if b, ok := c.get(cacheTypeSeries, cacheKey{blockIDKey, cacheKeySeries(id), ""}, tenant); ok {
 			hits[id] = b
 			continue
 		}

@@ -15,6 +15,8 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 const (
@@ -36,24 +38,24 @@ var (
 // (potentially with a deadline) as in the original user's request.
 type IndexCache interface {
 	// StorePostings stores postings for a single series.
-	StorePostings(blockID ulid.ULID, l labels.Label, v []byte)
+	StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string)
 
 	// FetchMultiPostings fetches multiple postings - each identified by a label -
 	// and returns a map containing cache hits, along with a list of missing keys.
-	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label)
+	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits map[labels.Label][]byte, misses []labels.Label)
 
 	// StoreExpandedPostings stores expanded postings for a set of label matchers.
-	StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte)
+	StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string)
 
 	// FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
-	FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool)
+	FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher, tenant string) ([]byte, bool)
 
 	// StoreSeries stores a single series.
-	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte)
+	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string)
 
 	// FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 	// and returns a map containing cache hits, along with a list of missing IDs.
-	FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef)
+	FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef, tenant string) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef)
 }
 
 // Common metrics that should be used by all cache implementations.
@@ -69,23 +71,23 @@ func newCommonMetrics(reg prometheus.Registerer) *commonMetrics {
 		requestTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_index_cache_requests_total",
 			Help: "Total number of items requests to the cache.",
-		}, []string{"item_type"}),
+		}, []string{"item_type", tenancy.MetricLabel}),
 		hitsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_index_cache_hits_total",
 			Help: "Total number of items requests to the cache that were a hit.",
-		}, []string{"item_type"}),
+		}, []string{"item_type", tenancy.MetricLabel}),
 		dataSizeBytes: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name: "thanos_store_index_cache_stored_data_size_bytes",
 			Help: "Histogram to track item data size stored in index cache",
 			Buckets: []float64{
 				32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 64 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 			},
-		}, []string{"item_type"}),
+		}, []string{"item_type", tenancy.MetricLabel}),
 		fetchLatency: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "thanos_store_index_cache_fetch_duration_seconds",
 			Help:    "Histogram to track latency to fetch items from index cache",
 			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 10, 15, 20, 30, 45, 60, 90, 120},
-		}, []string{"item_type"}),
+		}, []string{"item_type", tenancy.MetricLabel}),
 	}
 }
 
