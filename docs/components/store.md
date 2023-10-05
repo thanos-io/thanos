@@ -298,6 +298,7 @@ All the settings are **optional**:
 
 - `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
 - `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
+- `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 
 ### Memcached index cache
 
@@ -334,6 +335,7 @@ While the remaining settings are **optional**:
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
+- `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 
 ### Redis index cache
 
@@ -380,6 +382,7 @@ While the remaining settings are **optional**:
 - `read_timeout`: the redis read timeout.
 - `write_timeout`: the redis write timeout.
 - `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
+- `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 
 Here is an example of what effect client-side caching could have:
 
