@@ -410,8 +410,7 @@ type BucketStore struct {
 
 	enabledLazyExpandedPostings bool
 
-	// resort controls whether to resort series in the EagerRetrieval response set.
-	resort bool
+	sortingStrategy sortingStrategy
 
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
@@ -524,11 +523,14 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	}
 }
 
-// WithSeriesResort enables resorting series in the EagerRetrieval response set.
-// In most of the cases, should be always set to true. Disable it at your own risk.
+// WithSeriesResort enables series resorting in Store Gateway.
 func WithSeriesResort(enabled bool) BucketStoreOption {
 	return func(s *BucketStore) {
-		s.resort = enabled
+		if enabled {
+			s.sortingStrategy = sortingStrategyStore
+		} else {
+			s.sortingStrategy = sortingStrategyNone
+		}
 	}
 }
 
@@ -1509,20 +1511,35 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
 				}
 
-				resp := newEagerRespSet(
-					srv.Context(),
-					span,
-					10*time.Minute,
-					blk.meta.ULID.String(),
-					[]labels.Labels{blk.extLset},
-					onClose,
-					blockClient,
-					shardMatcher,
-					false,
-					s.metrics.emptyPostingCount.WithLabelValues(tenant),
-					nil,
-					s.resort,
-				)
+				var resp respSet
+				if s.sortingStrategy == sortingStrategyStore {
+					resp = newEagerRespSet(
+						srv.Context(),
+						span,
+						10*time.Minute,
+						blk.meta.ULID.String(),
+						[]labels.Labels{blk.extLset},
+						onClose,
+						blockClient,
+						shardMatcher,
+						false,
+						s.metrics.emptyPostingCount.WithLabelValues(tenant),
+						nil,
+					)
+				} else {
+					resp = newLazyRespSet(
+						srv.Context(),
+						span,
+						10*time.Minute,
+						blk.meta.ULID.String(),
+						[]labels.Labels{blk.extLset},
+						onClose,
+						blockClient,
+						shardMatcher,
+						false,
+						s.metrics.emptyPostingCount.WithLabelValues(tenant),
+					)
+				}
 
 				mtx.Lock()
 				respSets = append(respSets, resp)
