@@ -1390,3 +1390,24 @@ func TestFilterRules(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckRulesFiles(t *testing.T) {
+
+	validFiles := []string{
+		"../../cmd/thanos/testdata/rules-files/valid.yaml",
+	}
+
+	invalidFiles := [][]string{
+		{"../../cmd/thanos/testdata/rules-files/non-existing-file.yaml"},
+		{"../../cmd/thanos/testdata/rules-files/invalid-yaml-format.yaml"},
+		{"../../cmd/thanos/testdata/rules-files/invalid-rules-data.yaml"},
+		{"../../cmd/thanos/testdata/rules-files/invalid-unknown-field.yaml"},
+	}
+
+	testutil.Ok(t, CheckRulesFiles(validFiles))
+
+	for _, fn := range invalidFiles {
+		testutil.NotOk(t, CheckRulesFiles(fn), "expected err for file %s", fn)
+	}
+
+}
