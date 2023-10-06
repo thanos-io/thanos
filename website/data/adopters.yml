@@ -1,233 +1,233 @@
 ---
 adopters:
-- name: Aiven
-  url: https://aiven.io
-  logo: aivenlogo.png
-- name: Infinite Devices
-  url: https://infinimesh.io
-  logo: infdevlogo.png
-- name: Monzo
-  url: https://www.monzo.com
-  logo: monzo.png
-- name: UW
-  url: https://uw.co.uk/
-  logo: utilitywarehouse.png
-- name: Adform
-  url: https://site.adform.com
-  logo: Adform_logo_RGB.png
-- name: Seznam.cz
-  url: https://www.seznam.cz/
-  logo: seznam.png
-- name: tiket.com
-  url: https://www.tiket.com
-  logo: tiket.png
-- name: Uswitch
-  url: https://www.uswitch.com
-  logo: uswitch.png
-- name: Qonto
-  url: https://qonto.eu
-  logo: qonto.png
-- name: Meltwater
-  url: https://underthehood.meltwater.com
-  logo: meltwater.png
-- name: Jetstack
-  url: https://www.jetstack.io
-  logo: jetstack.png
-- name: ProSiebenSat.1
-  url: https://www.prosiebensat1.com/en/
-  logo: p7s1.png
-- name: Adobe
-  url: https://www.adobe.com
-  logo: Adobe_logo.png
-- name: Ebay
-  url: https://www.ebay.co.uk/
-  logo: ebay.png
-- name: Sauce Labs
-  url: https://saucelabs.com/
-  logo: saucelabs.png
-- name: XING
-  url: https://www.xing.com/
-  logo: xing.png
-- name: Untab
-  url: https://www.untab.io/
-  logo: untab.png
-- name: Hotstar
-  url: https://www.hotstar.com/
-  logo: hotstar.jpg
-- name: UBIO
-  url: https://ub.io/
-  logo: ubio.png
-- name: Softonic
-  url: https://www.softonic.com
-  logo: softonic.png
-- name: BlaBlaCar
-  url: https://www.blablacar.com
-  logo: blablacar.png
-- name: FREE NOW
-  url: https://free-now.com
-  logo: free-now.png
-- name: Amadeus
-  url: https://amadeus.com
-  logo: amadeus.png
-- name: Grofers
-  url: https://grofers.com
-  logo: grofers.png
-- name: Tencent
-  url: https://github.com/tkestack/tke
-  logo: tencent.png
-- name: VEXXHOST, Inc.
-  url: https://vexxhost.com
-  logo: vexxhost.png
-- name: World Wide Technology
-  url: https://www.wwt.com
-  logo: wwt.png
-- name: Banzai Cloud
-  url: https://banzaicloud.com/
-  logo: banzaicloud.png
-- name: Jurumani Solutions
-  url: https://www.jurumani.co.za/
-  logo: jurumanisolutions.png
-- name: Tangent Solutions
-  url: https://www.tangentsolutions.co.za/
-  logo: tangentsolutions.png
-- name: Toss
-  url: https://toss.im/en
-  logo: toss.png
-- name: Ozon
-  url: https://www.ozon.ru
-  logo: ozon.png
-- name: MALL Group
-  url: https://www.mallgroup.com/
-  logo: mallgroup.png
-- name: leboncoin
-  url: https://www.leboncoin.fr/
-  logo: leboncoin.png
-- name: Workfront
-  url: https://www.workfront.com/
-  logo: workfront.png
-- name: Cloud&Heat
-  url: https://cloudandheat.com
-  logo: cloudandheat.png
-- name: Hetzner
-  url: https://www.hetzner.com
-  logo: hetzner.png
-- name: FLAT ZONE s.r.o.
-  url: https://www.flatzone.cz
-  logo: flatzone.png
-- name: Beat
-  url: https://thebeat.co
-  logo: thebeat.png
-- name: Mobiuspace
-  url: https://www.mobiuspace.com
-  logo: mobiuspace.png
-- name: TiDB Cloud
-  url: https://tidbcloud.com
-  logo: tidbcloud.png
-- name: Talend
-  url: https://www.talend.com
-  logo: talend.png
-- name: NOS
-  url: https://www.nos.pt
-  logo: nos.png
-- name: Truphone
-  url: https://www.truphone.com
-  logo: truphone.png
-- name: de Volksbank
-  url: https://www.devolksbank.nl/
-  logo: devolksbank.png
-- name: Fullstaq
-  url: https://fullstaq.com/
-  logo: fullstaq.png
-- name: Wise
-  url: https://wise.com
-  logo: wise.png
-- name: ByteDance
-  url: https://www.bytedance.com/
-  logo: bytedance.png
-- name: Joblift
-  url: https://joblift.com/
-  logo: joblift.png
-- name: Civo
-  url: https://civo.com/
-  logo: civo.png
-- name: Stackhero
-  url: https://www.stackhero.io/
-  logo: stackhero.png
-- name: PagBank
-  url: https://pagseguro.com.br/
-  logo: pagbank.png
-- name: Itaú Unibanco
-  url: https://www.itau.com.br/
-  logo: itau-unibanco.png
-- name: LabyrinthLabs
-  url: https://lablabs.io
-  logo: lablabs.png
-- name: Darwinbox Digital Solutions
-  url: https://darwinbox.com
-  logo: darwinbox.png
-- name: Wehkamp
-  url: https://www.wehkamp.nl
-  logo: wehkamp.png
-- name: SoundCloud
-  url: https://www.soundcloud.com
-  logo: soundcloud.png
-- name: Hyperia
-  url: https://www.hyperia.sk/
-  logo: hyperia.png
-- name: Epidemic Sound
-  url: https://www.epidemicsound.com/
-  logo: epidemicsound.png
-- name: Kollective
-  url: https://www.kollective.com/
-  logo: kollective.png
-- name: SumUp
-  url: https://sumup.com/
-  logo: sumup.png
-- name: TIXnGO
-  url: https://www.tixngo.io
-  logo: tixngo.png
-- name: Vestiaire Collective
-  url: https://vestiairecollective.com/
-  logo: vestiairecollective.png
-- name: South China Morning Post (SCMP)
-  url: https://www.scmp.com/
-  logo: scmp.png
-- name: Authzed
-  url: https://authzed.com
-  logo: authzed.png
-- name: OYO
-  url: https://www.oyorooms.com/
-  logo: OYO.png
-- name: Udaan
-  url: https://udaan.com/
-  logo: udaan.png
-- name: Adfinis
-  url: https://adfinis.com/en/
-  logo: adfinis.png
-- name: Kakaopay
-  url: https://kakaopay.com/?locale=en
-  logo: kakaopay.png
-- name: Arlo
-  url: https://www.arlo.com/en-us/
-  logo: arlo.png
-- name: Grupo MasMovil
-  url: https://grupomasmovil.com/en/
-  logo: gmasmovil.png
-- name: Open Systems
-  url: https://www.open-systems.com
-  logo: open-systems.png
-- name: Deno
-  url: https://deno.com/deploy
-  logo: deno.png
-- name: CarTrade Tech
-  url: https://www.cartradetech.com
-  logo: cartradetech.png
-- name: DE-CIX
-  url: https://www.de-cix.net
-  logo: de-cix.png
-- name: Zenduty
-  url: https://www.zenduty.com
-  logo: zenduty.png
-- name: Banco do Brasil
-  url: https://www.bb.com.br/
-  logo: bb.png
+  - name: Aiven
+    url: https://aiven.io
+    logo: aivenlogo.png
+  - name: Infinite Devices
+    url: https://infinimesh.io
+    logo: infdevlogo.png
+  - name: Monzo
+    url: https://www.monzo.com
+    logo: monzo.png
+  - name: UW
+    url: https://uw.co.uk/
+    logo: utilitywarehouse.png
+  - name: Adform
+    url: https://site.adform.com
+    logo: Adform_logo_RGB.png
+  - name: Seznam.cz
+    url: https://www.seznam.cz/
+    logo: seznam.png
+  - name: tiket.com
+    url: https://www.tiket.com
+    logo: tiket.png
+  - name: Uswitch
+    url: https://www.uswitch.com
+    logo: uswitch.png
+  - name: Qonto
+    url: https://qonto.eu
+    logo: qonto.png
+  - name: Meltwater
+    url: https://underthehood.meltwater.com
+    logo: meltwater.png
+  - name: Jetstack
+    url: https://www.jetstack.io
+    logo: jetstack.png
+  - name: ProSiebenSat.1
+    url: https://www.prosiebensat1.com/en/
+    logo: p7s1.png
+  - name: Adobe
+    url: https://www.adobe.com
+    logo: Adobe_logo.png
+  - name: Ebay
+    url: https://www.ebay.co.uk/
+    logo: ebay.png
+  - name: Sauce Labs
+    url: https://saucelabs.com/
+    logo: saucelabs.png
+  - name: XING
+    url: https://www.xing.com/
+    logo: xing.png
+  - name: Untab
+    url: https://www.untab.io/
+    logo: untab.png
+  - name: Hotstar
+    url: https://www.hotstar.com/
+    logo: hotstar.png
+  - name: UBIO
+    url: https://ub.io/
+    logo: ubio.png
+  - name: Softonic
+    url: https://www.softonic.com
+    logo: softonic.png
+  - name: BlaBlaCar
+    url: https://www.blablacar.com
+    logo: blablacar.png
+  - name: FREE NOW
+    url: https://free-now.com
+    logo: free-now.png
+  - name: Amadeus
+    url: https://amadeus.com
+    logo: amadeus.png
+  - name: Grofers
+    url: https://grofers.com
+    logo: grofers.png
+  - name: Tencent
+    url: https://github.com/tkestack/tke
+    logo: tencent.png
+  - name: VEXXHOST, Inc.
+    url: https://vexxhost.com
+    logo: vexxhost.png
+  - name: World Wide Technology
+    url: https://www.wwt.com
+    logo: wwt.png
+  - name: Banzai Cloud
+    url: https://banzaicloud.com/
+    logo: banzaicloud.png
+  - name: Jurumani Solutions
+    url: https://www.jurumani.co.za/
+    logo: jurumanisolutions.png
+  - name: Tangent Solutions
+    url: https://www.tangentsolutions.co.za/
+    logo: tangentsolutions.png
+  - name: Toss
+    url: https://toss.im/en
+    logo: toss.png
+  - name: Ozon
+    url: https://www.ozon.ru
+    logo: ozon.png
+  - name: MALL Group
+    url: https://www.mallgroup.com/
+    logo: mallgroup.png
+  - name: leboncoin
+    url: https://www.leboncoin.fr/
+    logo: leboncoin.png
+  - name: Workfront
+    url: https://www.workfront.com/
+    logo: workfront.png
+  - name: Cloud&Heat
+    url: https://cloudandheat.com
+    logo: cloudandheat.png
+  - name: Hetzner
+    url: https://www.hetzner.com
+    logo: hetzner.png
+  - name: FLAT ZONE s.r.o.
+    url: https://www.flatzone.cz
+    logo: flatzone.png
+  - name: Beat
+    url: https://thebeat.co
+    logo: thebeat.png
+  - name: Mobiuspace
+    url: https://www.mobiuspace.com
+    logo: mobiuspace.png
+  - name: TiDB Cloud
+    url: https://tidbcloud.com
+    logo: tidbcloud.png
+  - name: Talend
+    url: https://www.talend.com
+    logo: talend.png
+  - name: NOS
+    url: https://www.nos.pt
+    logo: nos.png
+  - name: Truphone
+    url: https://www.truphone.com
+    logo: truphone.png
+  - name: de Volksbank
+    url: https://www.devolksbank.nl/
+    logo: devolksbank.png
+  - name: Fullstaq
+    url: https://fullstaq.com/
+    logo: fullstaq.png
+  - name: Wise
+    url: https://wise.com
+    logo: wise.png
+  - name: ByteDance
+    url: https://www.bytedance.com/
+    logo: bytedance.png
+  - name: Joblift
+    url: https://joblift.com/
+    logo: joblift.png
+  - name: Civo
+    url: https://civo.com/
+    logo: civo.png
+  - name: Stackhero
+    url: https://www.stackhero.io/
+    logo: stackhero.png
+  - name: PagBank
+    url: https://pagseguro.com.br/
+    logo: pagbank.png
+  - name: Itaú Unibanco
+    url: https://www.itau.com.br/
+    logo: itau-unibanco.png
+  - name: LabyrinthLabs
+    url: https://lablabs.io
+    logo: lablabs.png
+  - name: Darwinbox Digital Solutions
+    url: https://darwinbox.com
+    logo: darwinbox.png
+  - name: Wehkamp
+    url: https://www.wehkamp.nl
+    logo: wehkamp.png
+  - name: SoundCloud
+    url: https://www.soundcloud.com
+    logo: soundcloud.png
+  - name: Hyperia
+    url: https://www.hyperia.sk/
+    logo: hyperia.png
+  - name: Epidemic Sound
+    url: https://www.epidemicsound.com/
+    logo: epidemicsound.png
+  - name: Kollective
+    url: https://www.kollective.com/
+    logo: kollective.png
+  - name: SumUp
+    url: https://sumup.com/
+    logo: sumup.png
+  - name: TIXnGO
+    url: https://www.tixngo.io
+    logo: tixngo.png
+  - name: Vestiaire Collective
+    url: https://vestiairecollective.com/
+    logo: vestiairecollective.png
+  - name: South China Morning Post (SCMP)
+    url: https://www.scmp.com/
+    logo: scmp.png
+  - name: Authzed
+    url: https://authzed.com
+    logo: authzed.png
+  - name: OYO
+    url: https://www.oyorooms.com/
+    logo: OYO.png
+  - name: Udaan
+    url: https://udaan.com/
+    logo: udaan.png
+  - name: Adfinis
+    url: https://adfinis.com/en/
+    logo: adfinis.png
+  - name: Kakaopay
+    url: https://kakaopay.com/?locale=en
+    logo: kakaopay.png
+  - name: Arlo
+    url: https://www.arlo.com/en-us/
+    logo: arlo.png
+  - name: Grupo MasMovil
+    url: https://grupomasmovil.com/en/
+    logo: gmasmovil.png
+  - name: Open Systems
+    url: https://www.open-systems.com
+    logo: open-systems.png
+  - name: Deno
+    url: https://deno.com/deploy
+    logo: deno.png
+  - name: CarTrade Tech
+    url: https://www.cartradetech.com
+    logo: cartradetech.png
+  - name: DE-CIX
+    url: https://www.de-cix.net
+    logo: de-cix.png
+  - name: Zenduty
+    url: https://www.zenduty.com
+    logo: zenduty.png
+  - name: Banco do Brasil
+    url: https://www.bb.com.br/
+    logo: bb.png
