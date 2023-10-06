@@ -517,7 +517,7 @@ type BinaryReader struct {
 	nameSymbols map[uint32]string
 	// Direct cache of values. This is much faster than an LRU cache and still provides
 	// a reasonable cache hit ratio.
-	valueSymbolsMx sync.Mutex
+	valueSymbolsMx sync.RWMutex
 	valueSymbols   [valueSymbolsCacheSize]struct {
 		index  uint32
 		symbol string
@@ -942,13 +942,13 @@ func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
 	}
 
 	cacheIndex := o % valueSymbolsCacheSize
-	r.valueSymbolsMx.Lock()
+	r.valueSymbolsMx.RLock()
 	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
 		v := cached.symbol
-		r.valueSymbolsMx.Unlock()
+		r.valueSymbolsMx.RUnlock()
 		return v, nil
 	}
-	r.valueSymbolsMx.Unlock()
+	r.valueSymbolsMx.RUnlock()
 
 	s, err := r.symbols.Lookup(o)
 	if err != nil {
