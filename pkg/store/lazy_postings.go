@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -67,11 +68,11 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			pg.cardinality += (r.End - r.Start - 4) / 4
 		}
 	}
-	slices.SortFunc(postingGroups, func(a, b *postingGroup) bool {
+	slices.SortFunc(postingGroups, func(a, b *postingGroup) int {
 		if a.cardinality == b.cardinality {
-			return a.name < b.name
+			return strings.Compare(a.name, b.name)
 		}
-		return a.cardinality < b.cardinality
+		return int(a.cardinality - b.cardinality)
 	})
 
 	/*
@@ -251,7 +252,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 				postingIndex++
 			}
 
-			groupAdds = append(groupAdds, index.Merge(toMerge...))
+			groupAdds = append(groupAdds, index.Merge(ctx, toMerge...))
 		}
 
 		for _, l := range g.removeKeys {
@@ -260,7 +261,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 		}
 	}
 
-	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
+	result := index.Without(index.Intersect(groupAdds...), index.Merge(ctx, groupRemovals...))
 
 	if ctx.Err() != nil {
 		return nil, nil, ctx.Err()

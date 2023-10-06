@@ -510,8 +510,7 @@ type BinaryReader struct {
 	postingsV1 map[string]map[string]index.Range
 
 	// Symbols struct that keeps only 1/postingOffsetsInMemSampling in the memory, then looks up the rest via mmap.
-	// Use Symbols as interface for ease of testing.
-	symbols Symbols
+	symbols *index.Symbols
 	// Cache of the label name symbol lookups,
 	// as there are not many and they are half of all lookups.
 	nameSymbols map[uint32]string
@@ -930,7 +929,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 	return rngs, nil
 }
 
-func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
+func (r *BinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
 	if r.indexVersion == index.FormatV1 {
 		// For v1 little trick is needed. Refs are actual offset inside index, not index-header. This is different
 		// of the header length difference between two files.
@@ -950,7 +949,7 @@ func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
 	}
 	r.valueSymbolsMx.RUnlock()
 
-	s, err := r.symbols.Lookup(o)
+	s, err := r.symbols.Lookup(ctx, o)
 	if err != nil {
 		return s, err
 	}
@@ -1052,9 +1051,4 @@ func (b realByteSlice) Range(start, end int) []byte {
 
 func (b realByteSlice) Sub(start, end int) index.ByteSlice {
 	return b[start:end]
-}
-
-type Symbols interface {
-	Lookup(o uint32) (string, error)
-	ReverseLookup(sym string) (uint32, error)
 }

@@ -61,7 +61,7 @@ func TestRewrite(t *testing.T) {
 
 	defer cw.Close()
 
-	testutil.Ok(t, rewrite(log.NewNopLogger(), ir, cr, iw, cw, m, []ignoreFnType{func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (bool, error) {
+	testutil.Ok(t, rewrite(ctx, log.NewNopLogger(), ir, cr, iw, cw, m, []ignoreFnType{func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (bool, error) {
 		return curr.MaxTime == 696, nil
 	}}))
 
@@ -73,7 +73,8 @@ func TestRewrite(t *testing.T) {
 
 	defer func() { testutil.Ok(t, ir2.Close()) }()
 
-	all, err := ir2.Postings(index.AllPostingsKey())
+	key, value := index.AllPostingsKey()
+	all, err := ir2.Postings(ctx, key, value)
 	testutil.Ok(t, err)
 
 	for p := ir2.SortedPostings(all); p.Next(); {
@@ -86,12 +87,13 @@ func TestRewrite(t *testing.T) {
 }
 
 func TestGatherIndexHealthStatsReturnsOutOfOrderChunksErr(t *testing.T) {
+	ctx := context.Background()
 	blockDir := t.TempDir()
 
 	err := e2eutil.PutOutOfOrderIndex(blockDir, 0, math.MaxInt64)
 	testutil.Ok(t, err)
 
-	stats, err := GatherIndexHealthStats(log.NewLogfmtLogger(os.Stderr), blockDir+"/"+IndexFilename, 0, math.MaxInt64)
+	stats, err := GatherIndexHealthStats(ctx, log.NewLogfmtLogger(os.Stderr), blockDir+"/"+IndexFilename, 0, math.MaxInt64)
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, stats.OutOfOrderChunks)

@@ -1003,13 +1003,13 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 		return errors.Wrapf(err, "read meta from %s", bdir)
 	}
 
-	resid, err := block.Repair(logger, tmpdir, ie.id, metadata.CompactorRepairSource, block.IgnoreIssue347OutsideChunk)
+	resid, err := block.Repair(ctx, logger, tmpdir, ie.id, metadata.CompactorRepairSource, block.IgnoreIssue347OutsideChunk)
 	if err != nil {
 		return errors.Wrapf(err, "repair failed for block %s", ie.id)
 	}
 
 	// Verify repaired id before uploading it.
-	if err := block.VerifyIndex(logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+	if err := block.VerifyIndex(ctx, logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 		return errors.Wrapf(err, "repaired block is invalid %s", resid)
 	}
 
@@ -1091,7 +1091,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 				// Ensure all input blocks are valid.
 				var stats block.HealthStats
 				if err := tracing.DoInSpanWithErr(ctx, "compaction_block_health_stats", func(ctx context.Context) (e error) {
-					stats, e = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+					stats, e = block.GatherIndexHealthStats(ctx, cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 					return e
 				}, opentracing.Tags{"block.id": meta.ULID}); err != nil {
 					return errors.Wrapf(err, "gather index issues for block %s", bdir)
@@ -1174,7 +1174,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	var stats block.HealthStats
 	// Ensure the output block is valid.
 	err = tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
-		stats, err = block.GatherIndexHealthStats(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
+		stats, err = block.GatherIndexHealthStats(ctx, cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
 		if err != nil {
 			return err
 		}

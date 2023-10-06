@@ -84,7 +84,6 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 
 	logger := log.NewNopLogger()
 	q := newQuerier(
-		context.Background(),
 		logger,
 		math.MinInt64,
 		math.MaxInt64,
@@ -129,8 +128,9 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 	t.Run("select", func(t testutil.TB) {
 		t.ResetTimer()
 
+		ctx := context.Background()
 		for i := 0; i < t.N(); i++ {
-			ss := q.Select(true, nil, &labels.Matcher{Value: "foo", Name: "bar", Type: labels.MatchEqual})
+			ss := q.Select(ctx, true, nil, &labels.Matcher{Value: "foo", Name: "bar", Type: labels.MatchEqual})
 			testutil.Ok(t, ss.Err())
 			testutil.Equals(t, 0, len(ss.Warnings()))
 

@@ -986,6 +986,7 @@ func expectedTouchedBlockOps(all, expected, cached []ulid.ULID) []string {
 // Regression tests against: https://github.com/thanos-io/thanos/issues/1983.
 func TestReadIndexCache_LoadSeries(t *testing.T) {
 	bkt := objstore.NewInMemBucket()
+	ctx := context.Background()
 
 	s := newBucketStoreMetrics(nil)
 	b := &bucketBlock{
@@ -1018,7 +1019,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	}
 
 	// Success with no refetches.
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
+	testutil.Ok(t, r.loadSeries(ctx, []storage.SeriesRef{2, 13, 24}, false, 2, 100, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
@@ -1028,7 +1029,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with 2 refetches.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
+	testutil.Ok(t, r.loadSeries(ctx, []storage.SeriesRef{2, 13, 24}, false, 2, 15, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
@@ -1038,7 +1039,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with refetch on first element.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
+	testutil.Ok(t, r.loadSeries(ctx, []storage.SeriesRef{2}, false, 2, 5, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2: []byte("aaaaaaaaaa"),
 	}, r.loadedSeries)
@@ -1049,10 +1050,10 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	buf.PutByte(0)
 	buf.PutUvarint(10)
 	buf.PutString("aaaaaaa")
-	testutil.Ok(t, bkt.Upload(context.Background(), filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
+	testutil.Ok(t, bkt.Upload(ctx, filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
 
 	// Fail, but no recursion at least.
-	testutil.NotOk(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 1, 15, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
+	testutil.NotOk(t, r.loadSeries(ctx, []storage.SeriesRef{2, 13, 24}, false, 1, 15, NewBytesLimiterFactory(0)(nil), tenancy.DefaultTenant))
 }
 
 func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
@@ -1109,7 +1110,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	bdir := filepath.Join(dir, id.String())
 	meta, err := metadata.ReadFromDir(bdir)
 	testutil.Ok(t, err)
-	stats, err := block.GatherIndexHealthStats(logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+	stats, err := block.GatherIndexHealthStats(ctx, logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 	testutil.Ok(t, err)
 
 	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, "tmp", id.String()), metadata.Thanos{
@@ -1369,7 +1370,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 		blockIDDir := filepath.Join(blockDir, id.String())
 		meta, err := metadata.ReadFromDir(blockIDDir)
 		testutil.Ok(t, err)
-		stats, err := block.GatherIndexHealthStats(logger, filepath.Join(blockIDDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexHealthStats(context.TODO(), logger, filepath.Join(blockIDDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		testutil.Ok(t, err)
 		thanosMeta := metadata.Thanos{
 			Labels:     extLset.Map(),
@@ -2688,7 +2689,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 
 	if resolutionLevel > 0 {
 		// Downsample newly-created block.
-		blockID, err = downsample.Downsample(logger, blockMeta, head, tmpDir, int64(resolutionLevel))
+		blockID, err = downsample.Downsample(ctx, logger, blockMeta, head, tmpDir, int64(resolutionLevel))
 		testutil.Ok(b, err)
 		blockMeta, err = metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
 		testutil.Ok(b, err)
@@ -3483,8 +3484,8 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		},
 	}, srv))
 
-	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
-		return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) int {
+		return labels.Compare(x.PromLabels(), y.PromLabels())
 	}))
 	testutil.Equals(t, 2, len(srv.SeriesSet))
 }

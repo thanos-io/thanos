@@ -241,7 +241,9 @@ func (h *mockIndexHeaderReader) PostingsOffset(name string, value string) (index
 	return index.Range{}, nil
 }
 
-func (h *mockIndexHeaderReader) LookupSymbol(o uint32) (string, error) { return "", nil }
+func (h *mockIndexHeaderReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
+	return "", nil
+}
 
 func (h *mockIndexHeaderReader) LabelValues(name string) ([]string, error) { return nil, nil }
 
