@@ -576,6 +576,7 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
+		sortingStrategy:             sortingStrategyStore,
 	}
 
 	for _, option := range options {
