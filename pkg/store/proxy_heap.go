@@ -595,6 +595,7 @@ func newAsyncRespSet(
 			applySharding,
 			emptyStreamResponses,
 			labelsToRemove,
+			true,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -649,6 +650,7 @@ func newEagerRespSet(
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
 	removeLabels map[string]struct{},
+	resort bool,
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -758,7 +760,9 @@ func newEagerRespSet(
 		// See docs/proposals-accepted/20221129-avoid-global-sort.md for details.
 		// NOTE. Client is not guaranteed to give a sorted response when extLset is added
 		// Generally we need to resort here.
-		sortWithoutLabels(l.bufferedResponses, l.removeLabels)
+		if resort {
+			sortWithoutLabels(l.bufferedResponses, l.removeLabels)
+		}
 
 	}(ret)
 

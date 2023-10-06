@@ -410,6 +410,9 @@ type BucketStore struct {
 
 	enabledLazyExpandedPostings bool
 
+	// resort controls whether to resort series in the EagerRetrieval response set.
+	resort bool
+
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
 }
@@ -518,6 +521,14 @@ func WithBlockEstimatedMaxChunkFunc(f BlockEstimator) BucketStoreOption {
 func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.enabledLazyExpandedPostings = enabled
+	}
+}
+
+// WithSeriesResort enables resorting series in the EagerRetrieval response set.
+// In most of the cases, should be always set to true. Disable it at your own risk.
+func WithSeriesResort(enabled bool) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.resort = enabled
 	}
 }
 
@@ -1510,6 +1521,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					false,
 					s.metrics.emptyPostingCount.WithLabelValues(tenant),
 					nil,
+					s.resort,
 				)
 
 				mtx.Lock()
