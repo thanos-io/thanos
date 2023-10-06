@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -494,8 +493,6 @@ type postingOffset struct {
 	tableOff int
 }
 
-const valueSymbolsCacheSize = 1024
-
 type BinaryReader struct {
 	b   index.ByteSlice
 	toc *BinaryTOC
@@ -515,13 +512,6 @@ type BinaryReader struct {
 	// Cache of the label name symbol lookups,
 	// as there are not many and they are half of all lookups.
 	nameSymbols map[uint32]string
-	// Direct cache of values. This is much faster than an LRU cache and still provides
-	// a reasonable cache hit ratio.
-	valueSymbolsMx sync.Mutex
-	valueSymbols   [valueSymbolsCacheSize]struct {
-		index  uint32
-		symbol string
-	}
 
 	dec *index.Decoder
 
@@ -941,26 +931,7 @@ func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
 		return s, nil
 	}
 
-	cacheIndex := o % valueSymbolsCacheSize
-	r.valueSymbolsMx.Lock()
-	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
-		v := cached.symbol
-		r.valueSymbolsMx.Unlock()
-		return v, nil
-	}
-	r.valueSymbolsMx.Unlock()
-
-	s, err := r.symbols.Lookup(o)
-	if err != nil {
-		return s, err
-	}
-
-	r.valueSymbolsMx.Lock()
-	r.valueSymbols[cacheIndex].index = o
-	r.valueSymbols[cacheIndex].symbol = s
-	r.valueSymbolsMx.Unlock()
-
-	return s, nil
+	return r.symbols.Lookup(o)
 }
 
 func (r *BinaryReader) LabelValues(name string) ([]string, error) {
