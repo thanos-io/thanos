@@ -15,9 +15,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"golang.org/x/sync/errgroup"
 )
 
 // partitionSize is used for splitting range reads.
@@ -66,14 +67,17 @@ func (b *parallelBucketReader) GetRange(ctx context.Context, name string, off in
 		}
 		parts = append(parts, part)
 
+		// Assign partId to another variable to avoid modifying
+		// `partId` concurrently in multiple goroutines.
+		idx := partId
 		g.Go(func() error {
 			rc, err := b.BucketReader.GetRange(gctx, name, partOff, partLength)
-			defer runutil.CloseWithErrCapture(&err, rc, "close object")
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("get range part %v", partId))
+				return errors.Wrap(err, fmt.Sprintf("get range part %v", idx))
 			}
+			defer runutil.CloseWithErrCapture(&err, rc, "close object")
 			if _, err := io.Copy(part, rc); err != nil {
-				return errors.Wrap(err, fmt.Sprintf("get range part %v", partId))
+				return errors.Wrap(err, fmt.Sprintf("get range part %v", idx))
 			}
 			return part.Flush()
 		})
