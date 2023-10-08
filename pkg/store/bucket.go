@@ -523,12 +523,10 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	}
 }
 
-// WithSeriesResort enables series resorting in Store Gateway.
-func WithSeriesResort(enabled bool) BucketStoreOption {
+// WithDontResort disables series resorting in Store Gateway.
+func WithDontResort(true bool) BucketStoreOption {
 	return func(s *BucketStore) {
-		if enabled {
-			s.sortingStrategy = sortingStrategyStore
-		} else {
+		if true {
 			s.sortingStrategy = sortingStrategyNone
 		}
 	}

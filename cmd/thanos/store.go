@@ -387,7 +387,6 @@ func runStore(
 			return conf.estimatedMaxChunkSize
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
-		store.WithSeriesResort(true),
 	}
 
 	if conf.debugLogging {
