@@ -410,6 +410,8 @@ type BucketStore struct {
 
 	enabledLazyExpandedPostings bool
 
+	sortingStrategy sortingStrategy
+
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
 }
@@ -521,6 +523,15 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	}
 }
 
+// WithDontResort disables series resorting in Store Gateway.
+func WithDontResort(true bool) BucketStoreOption {
+	return func(s *BucketStore) {
+		if true {
+			s.sortingStrategy = sortingStrategyNone
+		}
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -563,6 +574,7 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
+		sortingStrategy:             sortingStrategyStore,
 	}
 
 	for _, option := range options {
@@ -1498,19 +1510,35 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
 				}
 
-				resp := newEagerRespSet(
-					srv.Context(),
-					span,
-					10*time.Minute,
-					blk.meta.ULID.String(),
-					[]labels.Labels{blk.extLset},
-					onClose,
-					blockClient,
-					shardMatcher,
-					false,
-					s.metrics.emptyPostingCount.WithLabelValues(tenant),
-					nil,
-				)
+				var resp respSet
+				if s.sortingStrategy == sortingStrategyStore {
+					resp = newEagerRespSet(
+						srv.Context(),
+						span,
+						10*time.Minute,
+						blk.meta.ULID.String(),
+						[]labels.Labels{blk.extLset},
+						onClose,
+						blockClient,
+						shardMatcher,
+						false,
+						s.metrics.emptyPostingCount.WithLabelValues(tenant),
+						nil,
+					)
+				} else {
+					resp = newLazyRespSet(
+						srv.Context(),
+						span,
+						10*time.Minute,
+						blk.meta.ULID.String(),
+						[]labels.Labels{blk.extLset},
+						onClose,
+						blockClient,
+						shardMatcher,
+						false,
+						s.metrics.emptyPostingCount.WithLabelValues(tenant),
+					)
+				}
 
 				mtx.Lock()
 				respSets = append(respSets, resp)
