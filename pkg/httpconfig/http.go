@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -125,6 +126,9 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 			ExpectContinueTimeout: time.Duration(transportConfig.ExpectContinueTimeout),
 			TLSHandshakeTimeout:   time.Duration(transportConfig.TLSHandshakeTimeout),
 			DialContext: conntrack.NewDialContextFunc(
+				conntrack.DialWithDialer(&net.Dialer{
+					Timeout: 5 * time.Second,
+				}),
 				conntrack.DialWithTracing(),
 				conntrack.DialWithName(name)),
 		}
