@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/promql/parser/posrange"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/teststorage"
 )
@@ -325,7 +326,7 @@ func ParseEval(lines []string, i int) (int, *evalCmd, error) {
 	if err != nil {
 		if perr, ok := err.(*parser.ParseErr); ok {
 			perr.LineOffset = i
-			posOffset := parser.Pos(strings.Index(lines[i], expr))
+			posOffset := posrange.Pos(strings.Index(lines[i], expr))
 			perr.PositionRange.Start += posOffset
 			perr.PositionRange.End += posOffset
 			perr.Query = lines[i]

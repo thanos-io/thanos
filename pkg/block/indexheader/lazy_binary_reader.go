@@ -154,6 +154,19 @@ func (r *LazyBinaryReader) IndexVersion() (int, error) {
 	return r.reader.IndexVersion()
 }
 
+// PostingsOffsets implements Reader.
+func (r *LazyBinaryReader) PostingsOffsets(name string, values ...string) ([]index.Range, error) {
+	r.readerMx.RLock()
+	defer r.readerMx.RUnlock()
+
+	if err := r.load(); err != nil {
+		return nil, err
+	}
+
+	r.usedAt.Store(time.Now().UnixNano())
+	return r.reader.PostingsOffsets(name, values...)
+}
+
 // PostingsOffset implements Reader.
 func (r *LazyBinaryReader) PostingsOffset(name, value string) (index.Range, error) {
 	r.readerMx.RLock()
@@ -168,7 +181,7 @@ func (r *LazyBinaryReader) PostingsOffset(name, value string) (index.Range, erro
 }
 
 // LookupSymbol implements Reader.
-func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
+func (r *LazyBinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
@@ -177,7 +190,7 @@ func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
 	}
 
 	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.LookupSymbol(o)
+	return r.reader.LookupSymbol(ctx, o)
 }
 
 // LabelValues implements Reader.

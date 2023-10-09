@@ -71,7 +71,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 	t.Run("query histogram using histogram_count fn and deduplication", func(t *testing.T) {
 		queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return fmt.Sprintf("histogram_count(%v)", testHistogramMetricName) }, ts, promclient.QueryOptions{Deduplicate: true}, model.Vector{
 			&model.Sample{
-				Value: 34,
+				Value: 39,
 				Metric: model.Metric{
 					"foo":        "bar",
 					"prometheus": "prom-ha",

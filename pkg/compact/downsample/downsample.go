@@ -24,7 +24,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/objstore"
@@ -50,6 +49,7 @@ const (
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
+	ctx context.Context,
 	logger log.Logger,
 	origMeta *metadata.Meta,
 	b tsdb.BlockReader,
@@ -104,7 +104,8 @@ func Downsample(
 	}
 	defer runutil.CloseWithErrCapture(&err, streamedBlockWriter, "close stream block writer")
 
-	postings, err := indexr.Postings(index.AllPostingsKey())
+	key, values := index.AllPostingsKey()
+	postings, err := indexr.Postings(ctx, key, values)
 	if err != nil {
 		return id, errors.Wrap(err, "get all postings list")
 	}
@@ -372,8 +373,17 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 		for ; j < len(data) && data[j].t <= curW; j++ {
 		}
 
-		batch := data[:j]
+		batch := make([]sample, 0, j)
+		for _, s := range data[:j] {
+			if math.IsNaN(s.v) {
+				continue
+			}
+			batch = append(batch, s)
+		}
 		data = data[j:]
+		if len(batch) == 0 {
+			continue
+		}
 
 		ab := newAggrChunkBuilder()
 
@@ -779,7 +789,7 @@ func (it *AverageChunkIterator) Err() error {
 }
 
 // SamplesFromTSDBSamples converts tsdbutil.Sample slice to samples.
-func SamplesFromTSDBSamples(samples []tsdbutil.Sample) []sample {
+func SamplesFromTSDBSamples(samples []chunks.Sample) []sample {
 	res := make([]sample, len(samples))
 	for i, s := range samples {
 		res[i] = sample{t: s.T(), v: s.F()}

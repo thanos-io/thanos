@@ -11,11 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/storage"
-
-	"github.com/efficientgo/core/testutil"
+	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -115,7 +114,7 @@ scrape_configs:
 				Limit:  tcase.limit,
 			})
 
-			testutil.Equals(t, storage.Warnings(nil), w)
+			testutil.Equals(t, annotations.Annotations(nil), w)
 			testutil.Ok(t, err)
 			testutil.Assert(t, tcase.expectedFunc(meta))
 		})

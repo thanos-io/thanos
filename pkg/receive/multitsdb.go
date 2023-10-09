@@ -731,9 +731,9 @@ func (s *ReadyStorage) StartTime() (int64, error) {
 }
 
 // Querier implements the Storage interface.
-func (s *ReadyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+func (s *ReadyStorage) Querier(mint, maxt int64) (storage.Querier, error) {
 	if x := s.get(); x != nil {
-		return x.Querier(ctx, mint, maxt)
+		return x.Querier(mint, maxt)
 	}
 	return nil, ErrNotReady
 }
@@ -772,8 +772,8 @@ func (a adapter) StartTime() (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
-func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return a.db.Querier(ctx, mint, maxt)
+func (a adapter) Querier(mint, maxt int64) (storage.Querier, error) {
+	return a.db.Querier(mint, maxt)
 }
 
 func (a adapter) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, error) {
@@ -865,19 +865,6 @@ func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Lab
 	}
 
 	return initialLset, nil
-}
-
-func (t *MultiTSDB) UpdateLabelNames(ctx context.Context) {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-
-	for _, tenant := range t.tenants {
-		db := tenant.storeTSDB
-		if db == nil {
-			continue
-		}
-		db.UpdateLabelNames(ctx)
-	}
 }
 
 // extendLabels extends external labels of the initial label set.
