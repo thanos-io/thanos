@@ -292,6 +292,7 @@ config:
   max_size: 0
   max_item_size: 0
 enabled_items: []
+ttl: 0s
 ```
 
 All the settings are **optional**:
@@ -299,6 +300,7 @@ All the settings are **optional**:
 - `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
 - `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
+- `ttl`: this field doesn't do anything for inmemory cache.
 
 ### Memcached index cache
 
@@ -318,6 +320,7 @@ config:
   dns_provider_update_interval: 0s
   auto_discovery: false
 enabled_items: []
+ttl: 0s
 ```
 
 The **required** settings are:
@@ -336,6 +339,7 @@ While the remaining settings are **optional**:
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
+- `ttl`: ttl to store index cache items in memcached.
 
 ### Redis index cache
 
@@ -367,6 +371,7 @@ config:
   max_async_buffer_size: 10000
   max_async_concurrency: 20
 enabled_items: []
+ttl: 0s
 ```
 
 The **required** settings are:
@@ -383,6 +388,7 @@ While the remaining settings are **optional**:
 - `write_timeout`: the redis write timeout.
 - `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
+- `ttl`: ttl to store index cache items in redis.
 
 Here is an example of what effect client-side caching could have:
 
