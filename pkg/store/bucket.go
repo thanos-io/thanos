@@ -2382,8 +2382,7 @@ type bucketIndexReader struct {
 	dec   *index.Decoder
 	stats *queryStats
 
-	mtx sync.Mutex
-	// Separate mutex to protect loadedSeries.
+	mtx             sync.Mutex
 	loadedSeriesMtx sync.Mutex
 	loadedSeries    map[storage.SeriesRef][]byte
 
