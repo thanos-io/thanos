@@ -367,6 +367,7 @@ type QueryOptions struct {
 	MaxSourceResolution     string
 	Engine                  string
 	Explain                 bool
+	Analyze                 bool
 	HTTPHeaders             http.Header
 }
 
@@ -377,6 +378,7 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	}
 
 	values.Add("explain", fmt.Sprintf("%v", p.Explain))
+	values.Add("analyze", fmt.Sprintf("%v", p.Analyze))
 	values.Add("engine", p.Engine)
 
 	var partialResponseValue string

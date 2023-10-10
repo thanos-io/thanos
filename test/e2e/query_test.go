@@ -1500,7 +1500,7 @@ func urlParse(t testing.TB, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation) {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
 	var result model.Vector
@@ -1512,18 +1512,16 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 
-	var explanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, rexplanation, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
+		res, _, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
 		}
 		result = res
-		explanation = rexplanation
 		return nil
 	}))
 	sortResults(result)
-	return result, explanation
+	return result
 }
 
 func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
@@ -1589,7 +1587,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
-	result, _ := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -1599,7 +1597,7 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() str
 	t.Helper()
 
 	sortResults(expected)
-	result, _ := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for _, r := range result {
 		r.Timestamp = 0 // Does not matter for us.
 	}
@@ -2246,7 +2244,7 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
 	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-	result, _ := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(up)"
 	}, time.Now, promclient.QueryOptions{}, 1)
 	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
@@ -2292,7 +2290,7 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 	}
 	testutil.Ok(t, synthesizeSamples(ctx, prom, []model.Sample{m}))
 
-	retv, _ := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
+	retv := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
 		return "sidecar_test_metric"
 	}, func() time.Time { return now.Add(time.Hour) }, promclient.QueryOptions{}, 1)
 
