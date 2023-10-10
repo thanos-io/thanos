@@ -368,7 +368,7 @@ type QueryOptions struct {
 	Engine                  string
 	Explain                 bool
 	Analyze                 bool
-  HTTPHeaders             http.Header
+	HTTPHeaders             http.Header
 }
 
 func (p *QueryOptions) AddTo(values url.Values) error {

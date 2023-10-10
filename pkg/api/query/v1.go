@@ -713,7 +713,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, res.Warnings, nil, qry.Close
+	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
 func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -1016,7 +1016,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, res.Warnings, nil, qry.Close
+	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
 func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
