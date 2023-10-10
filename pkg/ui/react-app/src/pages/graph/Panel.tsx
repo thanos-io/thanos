@@ -70,6 +70,7 @@ export interface PanelOptions {
   stacked: boolean;
   maxSourceResolution: string;
   useDeduplication: boolean;
+  forceTracing: boolean;
   usePartialResponse: boolean;
   storeMatches: Store[];
   engine: string;
@@ -91,6 +92,7 @@ export const PanelDefaultOptions: PanelOptions = {
   stacked: false,
   maxSourceResolution: '0s',
   useDeduplication: true,
+  forceTracing: false,
   usePartialResponse: false,
   storeMatches: [],
   engine: '',
@@ -123,6 +125,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleEngine(this.props.options.engine);
 
     this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
+    this.handleChangeForceTracing = this.handleChangeForceTracing.bind(this); //forceTracing
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
@@ -138,6 +141,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       type,
       maxSourceResolution,
       useDeduplication,
+      forceTracing,
       usePartialResponse,
       engine,
       analyze,
@@ -151,6 +155,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.maxSourceResolution !== maxSourceResolution ||
       prevOpts.useDeduplication !== useDeduplication ||
       prevOpts.usePartialResponse !== usePartialResponse ||
+      prevOpts.forceTracing !== forceTracing ||
       prevOpts.engine !== engine ||
       prevOpts.analyze !== analyze
       // Check store matches
@@ -223,6 +228,12 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     }
 
     fetch(`${this.props.pathPrefix}${path}?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        // Conditionally add the header if the checkbox is enabled
+        ...(this.props.options.forceTracing ? { 'X-Thanos-Force-Tracing': 'true' } : {}),
+      },
       cache: 'no-store',
       credentials: 'same-origin',
       signal: abortController.signal,
@@ -319,6 +330,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   handleChangeDeduplication = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ useDeduplication: event.target.checked });
+  };
+  handleChangeForceTracing = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ forceTracing: event.target.checked });
   };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -491,6 +505,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 defaultChecked={options.usePartialResponse}
               >
                 Use Partial Response
+              </Checkbox>
+              <Checkbox
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`force-tracing-checkbox-${id}`}
+                onChange={this.handleChangeForceTracing}
+                defaultchecked={options.forceTracing}
+              >
+                Force Tracing
               </Checkbox>
               <Label
                 style={{ marginLeft: '10px', display: 'inline-block' }}

@@ -357,6 +357,7 @@ type: AZURE
 config:
   storage_account: ""
   storage_account_key: ""
+  storage_connection_string: ""
   container: ""
   endpoint: ""
   user_assigned_id: ""

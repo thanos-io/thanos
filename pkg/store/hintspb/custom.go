@@ -47,4 +47,7 @@ func (m *QueryStats) Merge(other *QueryStats) {
 	m.ChunksFetchedSizeSum += other.ChunksFetchedSizeSum
 	m.ChunksTouched += other.ChunksTouched
 	m.ChunksTouchedSizeSum += other.ChunksTouchedSizeSum
+
+	m.GetAllDuration += other.GetAllDuration
+	m.MergeDuration += other.MergeDuration
 }

@@ -40,9 +40,9 @@ const (
 	LabelLongSuffix = "aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
 )
 
-func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
+func allPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader) index.Postings {
 	k, v := index.AllPostingsKey()
-	p, err := ix.Postings(k, v)
+	p, err := ix.Postings(ctx, k, v)
 	testutil.Ok(t, err)
 	return p
 }
@@ -145,7 +145,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 
 	var builder labels.ScratchBuilder
 
-	all := allPostings(t, ir)
+	all := allPostings(context.TODO(), t, ir)
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
 		lset = builder.Labels()
@@ -197,7 +197,7 @@ func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts He
 func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
 	sample := &histogram.Histogram{
 		Schema:        0,
-		Count:         9,
+		Count:         20,
 		Sum:           -3.1415,
 		ZeroCount:     12,
 		ZeroThreshold: 0.001,

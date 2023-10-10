@@ -166,7 +166,7 @@ func compactSeries(ctx context.Context, sReaders ...seriesReader) (symbols index
 		}
 
 		k, v := index.AllPostingsKey()
-		all, err := r.ir.Postings(k, v)
+		all, err := r.ir.Postings(ctx, k, v)
 		if err != nil {
 			return nil, nil, err
 		}

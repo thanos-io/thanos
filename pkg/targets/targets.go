@@ -9,7 +9,8 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 )
@@ -19,7 +20,7 @@ var _ UnaryClient = &GRPCClient{}
 // UnaryClient is gRPC targetspb.Targets client which expands streaming targets API. Useful for consumers that does not
 // support streaming.
 type UnaryClient interface {
-	Targets(ctx context.Context, req *targetspb.TargetsRequest) (*targetspb.TargetDiscovery, storage.Warnings, error)
+	Targets(ctx context.Context, req *targetspb.TargetsRequest) (*targetspb.TargetDiscovery, annotations.Annotations, error)
 }
 
 // GRPCClient allows to retrieve targets from local gRPC streaming server implementation.
@@ -46,7 +47,7 @@ func NewGRPCClientWithDedup(ts targetspb.TargetsServer, replicaLabels []string) 
 	return c
 }
 
-func (rr *GRPCClient) Targets(ctx context.Context, req *targetspb.TargetsRequest) (*targetspb.TargetDiscovery, storage.Warnings, error) {
+func (rr *GRPCClient) Targets(ctx context.Context, req *targetspb.TargetsRequest) (*targetspb.TargetDiscovery, annotations.Annotations, error) {
 	resp := &targetsServer{ctx: ctx, targets: &targetspb.TargetDiscovery{
 		ActiveTargets:  make([]*targetspb.ActiveTarget, 0),
 		DroppedTargets: make([]*targetspb.DroppedTarget, 0),
@@ -184,7 +185,7 @@ type targetsServer struct {
 	targetspb.Targets_TargetsServer
 	ctx context.Context
 
-	warnings []error
+	warnings annotations.Annotations
 	targets  *targetspb.TargetDiscovery
 	mu       sync.Mutex
 }
@@ -193,7 +194,7 @@ func (srv *targetsServer) Send(res *targetspb.TargetsResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings.Add(errors.New(res.GetWarning()))
 		return nil
 	}
 

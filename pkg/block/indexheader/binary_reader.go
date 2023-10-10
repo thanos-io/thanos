@@ -74,7 +74,12 @@ type BinaryTOC struct {
 
 // WriteBinary build index header from the pieces of index in object storage, and cached in file if necessary.
 func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string) ([]byte, error) {
-	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id)
+	var tmpDir = ""
+	if filename != "" {
+		tmpDir = filepath.Dir(filename)
+	}
+	parallelBucket := WrapWithParallel(bkt, tmpDir)
+	ir, indexVersion, err := newChunkedIndexReader(ctx, parallelBucket, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "new index reader")
 	}
@@ -511,7 +516,7 @@ type BinaryReader struct {
 	nameSymbols map[uint32]string
 	// Direct cache of values. This is much faster than an LRU cache and still provides
 	// a reasonable cache hit ratio.
-	valueSymbolsMx sync.Mutex
+	valueSymbolsMx sync.RWMutex
 	valueSymbols   [valueSymbolsCacheSize]struct {
 		index  uint32
 		symbol string
@@ -924,27 +929,27 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 	return rngs, nil
 }
 
-func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
-	cacheIndex := o % valueSymbolsCacheSize
-	r.valueSymbolsMx.Lock()
-	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
-		v := cached.symbol
-		r.valueSymbolsMx.Unlock()
-		return v, nil
-	}
-	r.valueSymbolsMx.Unlock()
-
-	if s, ok := r.nameSymbols[o]; ok {
-		return s, nil
-	}
-
+func (r *BinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
 	if r.indexVersion == index.FormatV1 {
 		// For v1 little trick is needed. Refs are actual offset inside index, not index-header. This is different
 		// of the header length difference between two files.
 		o += headerLen - index.HeaderLen
 	}
 
-	s, err := r.symbols.Lookup(o)
+	if s, ok := r.nameSymbols[o]; ok {
+		return s, nil
+	}
+
+	cacheIndex := o % valueSymbolsCacheSize
+	r.valueSymbolsMx.RLock()
+	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
+		v := cached.symbol
+		r.valueSymbolsMx.RUnlock()
+		return v, nil
+	}
+	r.valueSymbolsMx.RUnlock()
+
+	s, err := r.symbols.Lookup(ctx, o)
 	if err != nil {
 		return s, err
 	}

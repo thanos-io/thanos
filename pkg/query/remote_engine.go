@@ -16,10 +16,10 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
-	"github.com/thanos-io/promql-engine/api"
 
+	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -237,7 +237,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 
 	var (
 		result   = make(promql.Matrix, 0)
-		warnings storage.Warnings
+		warnings annotations.Annotations
 	)
 
 	for {
@@ -250,7 +250,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 
 		if warn := msg.GetWarnings(); warn != "" {
-			warnings = append(warnings, errors.New(warn))
+			warnings.Add(errors.New(warn))
 			continue
 		}
 

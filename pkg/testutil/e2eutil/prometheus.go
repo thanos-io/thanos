@@ -59,7 +59,7 @@ const (
 
 var histogramSample = histogram.Histogram{
 	Schema:        0,
-	Count:         9,
+	Count:         20,
 	Sum:           -3.1415,
 	ZeroCount:     12,
 	ZeroThreshold: 0.001,
@@ -556,7 +556,7 @@ func createBlock(
 
 	blockDir := filepath.Join(dir, id.String())
 	logger := log.NewNopLogger()
-	seriesSize, err := gatherMaxSeriesSize(filepath.Join(blockDir, "index"))
+	seriesSize, err := gatherMaxSeriesSize(ctx, filepath.Join(blockDir, "index"))
 	if err != nil {
 		return id, errors.Wrap(err, "gather max series size")
 	}
@@ -605,14 +605,15 @@ func createBlock(
 	return id, nil
 }
 
-func gatherMaxSeriesSize(fn string) (int64, error) {
+func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
 		return 0, errors.Wrap(err, "open index file")
 	}
 	defer runutil.CloseWithErrCapture(&err, r, "gather index issue file reader")
 
-	p, err := r.Postings(index.AllPostingsKey())
+	key, value := index.AllPostingsKey()
+	p, err := r.Postings(ctx, key, value)
 	if err != nil {
 		return 0, errors.Wrap(err, "get all postings")
 	}

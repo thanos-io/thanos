@@ -81,11 +81,11 @@ export const ScrapePoolListContent: FC<ScrapePoolListProps> = ({ activeTargets }
 
   return (
     <>
-      <Row xs="4" className="align-items-center">
-        <Col>
+      <Row className="align-items-center">
+        <Col xs="12" sm="6" md="4">
           <Filter filter={filter} setFilter={setFilter} expanded={expanded} setExpanded={setExpanded} />
         </Col>
-        <Col xs="6">
+        <Col xs="12" sm="6" md="8">
           <SearchBar handleChange={handleSearchChange} placeholder="Filter by endpoint or labels" />
         </Col>
       </Row>
