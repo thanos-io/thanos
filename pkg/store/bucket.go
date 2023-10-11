@@ -1056,9 +1056,9 @@ func (b *blockSeriesClient) Close() {
 }
 
 func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
-	stats = stats.merge(b.indexr.stats)
+	stats.merge(b.indexr.stats)
 	if !b.skipChunks {
-		stats = stats.merge(b.chunkr.stats)
+		stats.merge(b.chunkr.stats)
 	}
 	return stats
 }
@@ -2931,9 +2931,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			begin := time.Now()
 			stats := new(queryStats)
 			defer func() {
-				r.mtx.Lock()
-				r.stats = r.stats.merge(stats)
-				r.mtx.Unlock()
+				r.stats.merge(stats)
 			}()
 
 			brdr := bufioReaderPool.Get().(*bufio.Reader)
@@ -3118,9 +3116,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 	begin := time.Now()
 	stats := new(queryStats)
 	defer func() {
-		r.mtx.Lock()
-		r.stats = r.stats.merge(stats)
-		r.mtx.Unlock()
+		r.stats.merge(stats)
 	}()
 
 	if bytesLimiter != nil {
@@ -3339,11 +3335,11 @@ type bucketChunkReader struct {
 
 	toLoad [][]loadIdx
 
-	// Mutex protects access to following fields, when updated from chunks-loading goroutines.
+	// chunkBytesMtx protects access to chunkBytes, when updated from chunks-loading goroutines.
 	// After chunks are loaded, mutex is no longer used.
-	mtx        sync.Mutex
-	stats      *queryStats
-	chunkBytes []*[]byte // Byte slice to return to the chunk pool on close.
+	chunkBytesMtx sync.Mutex
+	stats         *queryStats
+	chunkBytes    []*[]byte // Byte slice to return to the chunk pool on close.
 
 	loadingChunksMtx  sync.Mutex
 	loadingChunks     bool
@@ -3453,9 +3449,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	stats := new(queryStats)
 	defer func() {
 		stats.ChunksFetchDurationSum += time.Since(fetchBegin)
-		r.mtx.Lock()
-		r.stats = r.stats.merge(stats)
-		r.mtx.Unlock()
+		r.stats.merge(stats)
 	}()
 
 	// Get a reader for the required range.
@@ -3569,8 +3563,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 // save saves a copy of b's payload to a memory pool of its own and returns a new byte slice referencing said copy.
 // Returned slice becomes invalid once r.block.chunkPool.Put() is called.
 func (r *bucketChunkReader) save(b []byte) ([]byte, error) {
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
+	r.chunkBytesMtx.Lock()
+	defer r.chunkBytesMtx.Unlock()
 	// Ensure we never grow slab beyond original capacity.
 	if len(r.chunkBytes) == 0 ||
 		cap(*r.chunkBytes[len(r.chunkBytes)-1])-len(*r.chunkBytes[len(r.chunkBytes)-1]) < len(b) {
@@ -3612,8 +3606,9 @@ func (b rawChunk) NumSamples() int {
 }
 
 type queryStats struct {
-	blocksQueried int
+	mtx sync.Mutex
 
+	blocksQueried            int
 	postingsTouched          int
 	PostingsTouchedSizeSum   units.Base2Bytes
 	postingsToFetch          int
@@ -3655,7 +3650,10 @@ type queryStats struct {
 	DataDownloadedSizeSum units.Base2Bytes
 }
 
-func (s queryStats) merge(o *queryStats) *queryStats {
+func (s *queryStats) merge(o *queryStats) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	s.blocksQueried += o.blocksQueried
 
 	s.postingsToFetch += o.postingsToFetch
@@ -3697,11 +3695,9 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.MergeDuration += o.MergeDuration
 
 	s.DataDownloadedSizeSum += o.DataDownloadedSizeSum
-
-	return &s
 }
 
-func (s queryStats) toHints() *hintspb.QueryStats {
+func (s *queryStats) toHints() *hintspb.QueryStats {
 	return &hintspb.QueryStats{
 		BlocksQueried:          int64(s.blocksQueried),
 		PostingsTouched:        int64(s.postingsTouched),
