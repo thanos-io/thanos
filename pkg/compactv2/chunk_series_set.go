@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/block"
 )
@@ -74,7 +75,7 @@ func (s *lazyPopulateChunkSeriesSet) Err() error {
 	return s.all.Err()
 }
 
-func (s *lazyPopulateChunkSeriesSet) Warnings() storage.Warnings { return nil }
+func (s *lazyPopulateChunkSeriesSet) Warnings() annotations.Annotations { return nil }
 
 type lazyPopulatableChunk struct {
 	m *chunks.Meta

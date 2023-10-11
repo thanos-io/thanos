@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -41,7 +42,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 		{
 			name: "error response",
 			engine: &engineStub{
-				warns: []error{errors.New("warn stub")},
+				warns: annotations.New().Add(errors.New("warn stub")),
 			},
 		},
 	}
@@ -68,7 +69,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 			if len(test.engine.warns) > 0 {
 				testutil.Ok(t, err)
 				for i, resp := range srv.responses {
-					testutil.Equals(t, test.engine.warns[i].Error(), resp.GetWarnings())
+					testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
 				}
 			}
 		})
@@ -87,7 +88,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 			if len(test.engine.warns) > 0 {
 				testutil.Ok(t, err)
 				for i, resp := range srv.responses {
-					testutil.Equals(t, test.engine.warns[i].Error(), resp.GetWarnings())
+					testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
 				}
 			}
 		})
@@ -97,7 +98,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 type engineStub struct {
 	v1.QueryEngine
 	err   error
-	warns []error
+	warns annotations.Annotations
 }
 
 func (e engineStub) NewInstantQuery(_ context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
@@ -111,7 +112,7 @@ func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts p
 type queryStub struct {
 	promql.Query
 	err   error
-	warns []error
+	warns annotations.Annotations
 }
 
 func (q queryStub) Close() {}

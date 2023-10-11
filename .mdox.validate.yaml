@@ -35,3 +35,6 @@ validators:
   # 403 when requested my mdox in GH actions.
   - regex: 'servicenow\.com'
     type: 'ignore'
+  # Seems like improbable.io temporarily removed their blogs.
+  - regex: 'improbable\.io'
+    type: 'ignore'

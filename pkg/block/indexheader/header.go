@@ -4,6 +4,7 @@
 package indexheader
 
 import (
+	"context"
 	"io"
 
 	"github.com/pkg/errors"
@@ -34,7 +35,7 @@ type Reader interface {
 
 	// LookupSymbol returns string based on given reference.
 	// Error is return if the symbol can't be found.
-	LookupSymbol(o uint32) (string, error)
+	LookupSymbol(ctx context.Context, o uint32) (string, error)
 
 	// LabelValues returns all label values for given label name or error.
 	// If no values are found for label name, or label name does not exists,

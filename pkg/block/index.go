@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 
@@ -29,8 +30,8 @@ import (
 )
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
-func VerifyIndex(logger log.Logger, fn string, minTime, maxTime int64) error {
-	stats, err := GatherIndexHealthStats(logger, fn, minTime, maxTime)
+func VerifyIndex(ctx context.Context, logger log.Logger, fn string, minTime, maxTime int64) error {
+	stats, err := GatherIndexHealthStats(ctx, logger, fn, minTime, maxTime)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ type HealthStats struct {
 	OutOfOrderLabels int
 
 	// Refer to Prometheus #12874
-	DoplicatedSample int
+	DuplicatedSample int
 	// Debug Statistics.
 	SeriesMinLifeDuration time.Duration
 	SeriesAvgLifeDuration time.Duration
@@ -131,6 +132,16 @@ func (i HealthStats) OutOfOrderChunksErr() error {
 	return nil
 }
 
+// DuplicatedSampleErr is a function that checks for any duplicate samples in the HealthStats object.
+// This issue has been corrected by Thanos Issue #6723 regarding a duplicate sample bug in Prometheus version 2.47.0.
+// If there are any duplicate samples, an error is returned.
+func (i HealthStats) DuplicatedSampleErr() error {
+	if i.DuplicatedSample > 0 {
+		return errors.Errorf("found %d duplicate sample detection at chunk corrected by https://github.com/thanos-io/thanos/issues/6723", i.DuplicatedSample)
+	}
+	return nil
+}
+
 // CriticalErr returns error if stats indicates critical block issue, that might solved only by manual repair procedure.
 func (i HealthStats) CriticalErr() error {
 	var errMsg []string
@@ -168,6 +179,10 @@ func (i HealthStats) AnyErr() error {
 	}
 
 	if err := i.OutOfOrderChunksErr(); err != nil {
+		errMsg = append(errMsg, err.Error())
+	}
+
+	if err := i.DuplicatedSampleErr(); err != nil {
 		errMsg = append(errMsg, err.Error())
 	}
 
@@ -215,14 +230,15 @@ func (n *minMaxSumInt64) Avg() int64 {
 // helps to assess index health.
 // It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
 // See HealthStats.Issue347OutsideChunks for details.
-func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64) (stats HealthStats, err error) {
+func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, minTime, maxTime int64) (stats HealthStats, err error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
 		return stats, errors.Wrap(err, "open index file")
 	}
 	defer runutil.CloseWithErrCapture(&err, r, "gather index issue file reader")
 
-	p, err := r.Postings(index.AllPostingsKey())
+	key, value := index.AllPostingsKey()
+	p, err := r.Postings(ctx, key, value)
 	if err != nil {
 		return stats, errors.Wrap(err, "get all postings")
 	}
@@ -240,13 +256,13 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		seriesSize                                  = newMinMaxSumInt64()
 	)
 
-	lnames, err := r.LabelNames()
+	lnames, err := r.LabelNames(ctx)
 	if err != nil {
 		return stats, errors.Wrap(err, "label names")
 	}
 	stats.LabelNamesCount = int64(len(lnames))
 
-	lvals, err := r.LabelValues("__name__")
+	lvals, err := r.LabelValues(ctx, "__name__")
 	if err != nil {
 		return stats, errors.Wrap(err, "metric label values")
 	}
@@ -352,11 +368,12 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 			}
 			// Refer to Prometheus #12874
 			if c.MinTime == c0.MaxTime {
-				stats.DoplicatedSample++
+				stats.DuplicatedSample++
+				level.Warn(logger).Log("msg", "found duplicate sample", "labels", lset, "index", i, "chuck", c, "chuck_last_one", c0)
 				continue
 			}
 			// Chunks partly overlaps or out of order.
-			level.Debug(logger).Log("msg", "found out of order chucks", "labels", lset, "index", i, "chuck", c, "chuck_last_one", c0)
+			level.Debug(logger).Log("msg", "found out of order chunk", "labels", lset, "index", i, "chuck", c, "chuck_last_one", c0)
 			ooo++
 		}
 		if ooo > 0 {
@@ -413,7 +430,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
 // TODO(bplotka): https://github.com/thanos-io/thanos/issues/378.
-func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
+func Repair(ctx context.Context, logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
 		return resid, errors.New("no ignore chunk function specified")
 	}
@@ -469,7 +486,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	resmeta.Stats = tsdb.BlockStats{} // Reset stats.
 	resmeta.Thanos.Source = source    // Update source.
 
-	if err := rewrite(logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
+	if err := rewrite(ctx, logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
 	resmeta.Thanos.SegmentFiles = GetSegmentFiles(resdir)
@@ -507,7 +524,7 @@ func IgnoreDuplicateOutsideChunk(_, _ int64, last, curr *chunks.Meta) (bool, err
 		return false, nil
 	}
 
-	if curr.MinTime > last.MaxTime {
+	if curr.MinTime >= last.MaxTime {
 		return false, nil
 	}
 
@@ -527,6 +544,66 @@ func IgnoreDuplicateOutsideChunk(_, _ int64, last, curr *chunks.Meta) (bool, err
 	return true, nil
 }
 
+// FixDuplicateSamplesOutsideChunk takes in two pointers to chunks.Meta structs,
+// last and curr, and returns a new chunks.Meta struct and an error. If last is
+// nil, the function returns curr and nil. Otherwise, it creates a new empty
+// chunk based on the encoding of curr.Chunk.
+//
+// Parameters:
+// - last: a pointer to the last chunk.Meta struct
+// - curr: a pointer to the current chunk.Meta struct
+//
+// Return:
+// - *chunks.Meta: a pointer to the new chunk.Meta struct
+// - error: an error if any occurred during the function execution.
+func FixDuplicateSamplesOutsideChunk(last, curr *chunks.Meta) (*chunks.Meta, error) {
+	if last == nil {
+		return curr, nil
+	}
+
+	c, err := chunkenc.NewEmptyChunk(curr.Chunk.Encoding())
+	if err != nil {
+		return curr, err
+	}
+	ncurr := &chunks.Meta{
+		MinTime: int64(0),
+		MaxTime: curr.MaxTime,
+		Chunk:   c,
+	}
+	if curr.MinTime == last.MaxTime {
+		var it chunkenc.Iterator
+		it = curr.Chunk.Iterator(it)
+		app, _ := ncurr.Chunk.Appender()
+		typ := it.Next()
+		for ; typ != chunkenc.ValNone; typ = it.Next() {
+			var t int64
+			var v float64
+			switch typ {
+			case chunkenc.ValFloat:
+				t, v = it.At()
+				if t <= last.MaxTime {
+					continue
+				}
+				app.Append(t, v)
+			default:
+				continue
+			}
+			if ncurr.MinTime == 0 {
+				ncurr.MinTime = t
+			}
+		}
+		if ncurr.Chunk.Bytes() == nil {
+			return curr, errors.Errorf("empty chunk")
+		}
+	} else {
+		return curr, nil
+	}
+	if ncurr.MinTime == 0 {
+		ncurr.MinTime = curr.MinTime
+	}
+	return ncurr, nil
+}
+
 // sanitizeChunkSequence ensures order of the input chunks and drops any duplicates.
 // It errors if the sequence contains non-dedupable overlaps.
 func sanitizeChunkSequence(chks []chunks.Meta, mint, maxt int64, ignoreChkFns []ignoreFnType) ([]chunks.Meta, error) {
@@ -541,7 +618,6 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint, maxt int64, ignoreChkFns []
 	// Remove duplicates, complete outsiders and near outsiders.
 	repl := make([]chunks.Meta, 0, len(chks))
 	var last *chunks.Meta
-
 OUTER:
 	// This compares the current chunk to the chunk from the last iteration
 	// by pointers.  If we use "i, c := range chks" the variable c is a new
@@ -559,9 +635,10 @@ OUTER:
 				continue OUTER
 			}
 		}
-
+		// TODO: error on duplicate samples
+		chk, _ := FixDuplicateSamplesOutsideChunk(last, &chks[i])
 		last = &chks[i]
-		repl = append(repl, chks[i])
+		repl = append(repl, *chk)
 	}
 
 	return repl, nil
@@ -575,6 +652,7 @@ type seriesRepair struct {
 // rewrite writes all data from the readers back into the writers while cleaning
 // up mis-ordered and duplicated chunks.
 func rewrite(
+	ctx context.Context,
 	logger log.Logger,
 	indexr tsdb.IndexReader, chunkr tsdb.ChunkReader,
 	indexw tsdb.IndexWriter, chunkw tsdb.ChunkWriter,
@@ -591,7 +669,8 @@ func rewrite(
 		return errors.Wrap(symbols.Err(), "next symbol")
 	}
 
-	all, err := indexr.Postings(index.AllPostingsKey())
+	key, value := index.AllPostingsKey()
+	all, err := indexr.Postings(ctx, key, value)
 	if err != nil {
 		return errors.Wrap(err, "postings")
 	}
@@ -665,9 +744,11 @@ func rewrite(
 			continue
 		}
 		if err := chunkw.WriteChunks(s.chks...); err != nil {
+			level.Error(logger).Log("msg", "write chunks failed", "err", err)
 			return errors.Wrap(err, "write chunks")
 		}
 		if err := indexw.AddSeries(i, s.lset, s.chks...); err != nil {
+			level.Error(logger).Log("msg", "index add series failed", "err", err)
 			return errors.Wrap(err, "add series")
 		}
 
@@ -690,6 +771,7 @@ func rewrite(
 		i++
 		lastSet = s.lset
 	}
+	level.Info(logger).Log("msg", "rewrote", "series", meta.Stats.NumSeries, "chunks", meta.Stats.NumChunks, "samples", meta.Stats.NumSamples)
 	return nil
 }
 

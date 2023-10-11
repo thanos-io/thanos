@@ -16,7 +16,7 @@ func TestIndexCacheMetrics(t *testing.T) {
 	commonMetrics := newCommonMetrics(reg)
 
 	memcached := newMockedMemcachedClient(nil)
-	_, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, commonMetrics, reg)
+	_, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, commonMetrics, reg, memcachedDefaultTTL)
 	testutil.Ok(t, err)
 	conf := []byte(`
 max_size: 10MB

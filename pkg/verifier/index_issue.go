@@ -85,6 +85,10 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 		level.Warn(ctx.Logger).Log("msg", "detected outsiders are not all 'complete' outsiders or outsiders from https://github.com/prometheus/tsdb/issues/347. We can safely delete only these outsiders", "id", id)
 	}
 
+	if stats.DuplicatedSample > 0 {
+		level.Warn(ctx.Logger).Log("msg", "try to repair duplicated samples", "id", id, "duplicated_num", stats.DuplicatedSample)
+	}
+
 	if meta.Thanos.Downsample.Resolution > 0 {
 		return errors.Wrap(err, "cannot repair downsampled blocks")
 	}
@@ -97,6 +101,7 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 
 	level.Info(ctx.Logger).Log("msg", "repairing block", "id", id, "issue")
 	resid, err := block.Repair(
+		ctx,
 		ctx.Logger,
 		dir,
 		id,
@@ -110,7 +115,7 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 	}
 	level.Info(ctx.Logger).Log("msg", "verifying repaired block", "id", id, "newID", resid)
 
-	if err := block.VerifyIndex(ctx.Logger, filepath.Join(dir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+	if err := block.VerifyIndex(ctx, ctx.Logger, filepath.Join(dir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 		return errors.Wrapf(err, "repaired block is invalid %s", resid)
 	}
 
@@ -132,7 +137,7 @@ func verifyIndex(ctx Context, id ulid.ULID, dir string, meta *metadata.Meta) (st
 		return stats, errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 	}
 
-	stats, err = block.GatherIndexHealthStats(ctx.Logger, filepath.Join(dir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+	stats, err = block.GatherIndexHealthStats(ctx, ctx.Logger, filepath.Join(dir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 	if err != nil {
 		return stats, errors.Wrapf(err, "gather index issues %s", id)
 	}

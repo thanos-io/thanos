@@ -705,8 +705,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					}
 					testutil.Ok(t, err)
 
-					testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) bool {
-						return labels.Compare(x.PromLabels(), y.PromLabels()) < 0
+					testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) int {
+						return labels.Compare(x.PromLabels(), y.PromLabels())
 					}))
 
 					receivedLabels := make([]labels.Labels, 0)
@@ -723,6 +723,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 
 func TestBucketStore_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	ctx := context.Background()
 
 	for _, lazyExpandedPosting := range []bool{false, true} {
 		testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -757,7 +758,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			auxBlockDir := filepath.Join(auxDir, id.String())
 			meta, err := metadata.ReadFromDir(auxBlockDir)
 			testutil.Ok(t, err)
-			stats, err := block.GatherIndexHealthStats(logger, filepath.Join(auxBlockDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+			stats, err := block.GatherIndexHealthStats(ctx, logger, filepath.Join(auxBlockDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 			testutil.Ok(t, err)
 			_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
 				Labels:     extLset.Map(),
@@ -767,8 +768,8 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			}, nil)
 			testutil.Ok(tt, err)
 
-			testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
-			testutil.Ok(tt, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+			testutil.Ok(tt, block.Upload(ctx, logger, bkt, auxBlockDir, metadata.NoneFunc))
+			testutil.Ok(tt, block.Upload(ctx, logger, bkt, auxBlockDir, metadata.NoneFunc))
 
 			chunkPool, err := NewDefaultChunkBytesPool(2e5)
 			testutil.Ok(tt, err)

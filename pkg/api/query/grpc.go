@@ -129,7 +129,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	}
 
 	if len(result.Warnings) != 0 {
-		if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings...)); err != nil {
+		if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings.AsErrors()...)); err != nil {
 			return err
 		}
 	}
@@ -231,7 +231,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	}
 
 	if len(result.Warnings) != 0 {
-		if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings...)); err != nil {
+		if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings.AsErrors()...)); err != nil {
 			return err
 		}
 	}
