@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -84,6 +85,7 @@ type TransportConfig struct {
 	MaxConnsPerHost       int   `yaml:"max_conns_per_host"`
 	DisableCompression    bool  `yaml:"disable_compression"`
 	TLSHandshakeTimeout   int64 `yaml:"tls_handshake_timeout"`
+	DialerTimeout         int64 `yaml:"dialer_timeout"`
 }
 
 var defaultTransportConfig TransportConfig = TransportConfig{
@@ -95,6 +97,7 @@ var defaultTransportConfig TransportConfig = TransportConfig{
 	ExpectContinueTimeout: int64(10 * time.Second),
 	DisableCompression:    false,
 	TLSHandshakeTimeout:   int64(10 * time.Second),
+	DialerTimeout:         int64(5 * time.Second),
 }
 
 func NewDefaultClientConfig() ClientConfig {
@@ -125,6 +128,9 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 			ExpectContinueTimeout: time.Duration(transportConfig.ExpectContinueTimeout),
 			TLSHandshakeTimeout:   time.Duration(transportConfig.TLSHandshakeTimeout),
 			DialContext: conntrack.NewDialContextFunc(
+				conntrack.DialWithDialer(&net.Dialer{
+					Timeout: time.Duration(transportConfig.DialerTimeout),
+				}),
 				conntrack.DialWithTracing(),
 				conntrack.DialWithName(name)),
 		}

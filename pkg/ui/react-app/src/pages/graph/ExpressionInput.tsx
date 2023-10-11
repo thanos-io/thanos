@@ -33,10 +33,16 @@ interface CMExpressionInputProps {
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
   enableLinter: boolean;
+  executeExplain: () => void;
+  disableExplain: boolean;
 }
 
 const dynamicConfigCompartment = new Compartment();
 
+export interface ExplainTree {
+  name: string;
+  children?: ExplainTree[];
+}
 // Autocompletion strategy that wraps the main one and enriches
 // it with past query items.
 export class HistoryCompleteStrategy implements CompleteStrategy {
@@ -88,11 +94,12 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
   enableAutocomplete,
   enableHighlighting,
   enableLinter,
+  executeExplain,
+  disableExplain,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { theme } = useTheme();
-
   // (Re)initialize editor based on settings / setting changes.
   useEffect(() => {
     // Build the dynamic part of the config.
@@ -205,6 +212,9 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
             Execute
           </Button>
         </InputGroupAddon>
+        <Button className="ml-2" color="info" onClick={executeExplain} disabled={disableExplain}>
+          Explain
+        </Button>
       </InputGroup>
     </>
   );

@@ -71,7 +71,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 	t.Run("query histogram using histogram_count fn and deduplication", func(t *testing.T) {
 		queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return fmt.Sprintf("histogram_count(%v)", testHistogramMetricName) }, ts, promclient.QueryOptions{Deduplicate: true}, model.Vector{
 			&model.Sample{
-				Value: 34,
+				Value: 39,
 				Metric: model.Metric{
 					"foo":        "bar",
 					"prometheus": "prom-ha",
@@ -91,7 +91,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 
 	t.Run("query histogram rate and compare to Prometheus result", func(t *testing.T) {
 		query := func() string { return fmt.Sprintf("rate(%v[1m])", testHistogramMetricName) }
-		expected, _ := instantQuery(t, ctx, prom1.Endpoint("http"), query, ts, promclient.QueryOptions{}, 1)
+		expected := instantQuery(t, ctx, prom1.Endpoint("http"), query, ts, promclient.QueryOptions{}, 1)
 		expected[0].Metric["prometheus"] = "prom-ha"
 		expected[0].Timestamp = 0
 		queryAndAssert(t, ctx, querier.Endpoint("http"), query, ts, promclient.QueryOptions{Deduplicate: true}, expected)

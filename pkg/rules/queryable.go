@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/series"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -36,7 +37,6 @@ type promClientsQueryable struct {
 	duplicatedQuery prometheus.Counter
 }
 type promClientsQuerier struct {
-	ctx        context.Context
 	mint, maxt int64
 	step       int64
 	httpMethod string
@@ -66,9 +66,8 @@ func NewPromClientsQueryable(logger log.Logger, queryClients []*httpconfig.Clien
 }
 
 // Querier returns a new Querier for the given time range.
-func (q *promClientsQueryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+func (q *promClientsQueryable) Querier(mint, maxt int64) (storage.Querier, error) {
 	return &promClientsQuerier{
-		ctx:                 ctx,
 		mint:                mint,
 		maxt:                maxt,
 		step:                int64(q.step / time.Second),
@@ -81,14 +80,14 @@ func (q *promClientsQueryable) Querier(ctx context.Context, mint, maxt int64) (s
 }
 
 // Select implements storage.Querier interface.
-func (q *promClientsQuerier) Select(_ bool, _ *storage.SelectHints, matchers ...*labels.Matcher) storage.SeriesSet {
+func (q *promClientsQuerier) Select(ctx context.Context, _ bool, _ *storage.SelectHints, matchers ...*labels.Matcher) storage.SeriesSet {
 	query := storepb.PromMatchersToString(matchers...)
 
 	for _, i := range rand.Perm(len(q.queryClients)) {
 		promClient := q.promClients[i]
 		endpoints := RemoveDuplicateQueryEndpoints(q.logger, q.duplicatedQuery, q.queryClients[i].Endpoints())
 		for _, i := range rand.Perm(len(endpoints)) {
-			m, warns, _, err := promClient.QueryRange(q.ctx, endpoints[i], query, q.mint, q.maxt, q.step, promclient.QueryOptions{
+			m, warns, _, err := promClient.QueryRange(ctx, endpoints[i], query, q.mint, q.maxt, q.step, promclient.QueryOptions{
 				Deduplicate: true,
 				Method:      q.httpMethod,
 			})
@@ -119,12 +118,12 @@ func (q *promClientsQuerier) Select(_ bool, _ *storage.SelectHints, matchers ...
 }
 
 // LabelValues implements storage.LabelQuerier interface.
-func (q *promClientsQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
+func (q *promClientsQuerier) LabelValues(ctx context.Context, name string, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	return nil, nil, nil
 }
 
 // LabelNames implements storage.LabelQuerier interface.
-func (q *promClientsQuerier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
+func (q *promClientsQuerier) LabelNames(ctx context.Context, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	return nil, nil, nil
 }
 
