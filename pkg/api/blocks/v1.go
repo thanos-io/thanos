@@ -5,6 +5,7 @@ package v1
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -25,10 +26,12 @@ import (
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI                *api.BaseAPI
-	logger                 log.Logger
-	globalBlocksInfo       *BlocksInfo
-	loadedBlocksInfo       *BlocksInfo
+	baseAPI          *api.BaseAPI
+	logger           log.Logger
+	globalBlocksInfo *BlocksInfo
+	loadedBlocksInfo *BlocksInfo
+
+	globalLock, loadedLock sync.Mutex
 	disableCORS            bool
 	bkt                    objstore.Bucket
 	disableAdminOperations bool
@@ -131,8 +134,15 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	viewParam := r.URL.Query().Get("view")
 	if viewParam == "loaded" {
+		bapi.loadedLock.Lock()
+		defer bapi.loadedLock.Unlock()
+
 		return bapi.loadedBlocksInfo, nil, nil, func() {}
 	}
+
+	bapi.globalLock.Lock()
+	defer bapi.globalLock.Unlock()
+
 	return bapi.globalBlocksInfo, nil, nil, func() {}
 }
 
@@ -151,10 +161,16 @@ func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
 
 // SetGlobal updates the global blocks' metadata in the API.
 func (bapi *BlocksAPI) SetGlobal(blocks []metadata.Meta, err error) {
+	bapi.globalLock.Lock()
+	defer bapi.globalLock.Unlock()
+
 	bapi.globalBlocksInfo.set(blocks, err)
 }
 
 // SetLoaded updates the local blocks' metadata in the API.
 func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
+	bapi.loadedLock.Lock()
+	defer bapi.loadedLock.Unlock()
+
 	bapi.loadedBlocksInfo.set(blocks, err)
 }
