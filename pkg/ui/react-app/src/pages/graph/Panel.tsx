@@ -58,6 +58,7 @@ interface PanelState {
   exprInputValue: string;
   analysis: QueryTree | null;
   explainOutput: ExplainTree | null;
+  traceId: string | null; //Include traceId in the state.
   isHovered: boolean;
 }
 
@@ -116,6 +117,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       exprInputValue: props.options.expr,
       explainOutput: null,
       analysis: null,
+      traceId: null, // Initialize traceId to null.
       isHovered: false,
     };
 
@@ -238,7 +240,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then((resp) => resp.json())
+      .then((resp) => {
+        // Access the response headers
+        const traceIdHeader = resp.headers.get('X-Thanos-Trace-Id');
+        // Set the traceId state
+        this.setState({ traceId: traceIdHeader });
+        return resp.json();
+      })
+
       .then((json) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
