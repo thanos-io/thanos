@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -93,29 +94,35 @@ type QueryEngineFactory struct {
 	engineOpts            promql.EngineOpts
 	remoteEngineEndpoints promqlapi.RemoteEndpoints
 
-	prometheusEngine v1.QueryEngine
-	thanosEngine     v1.QueryEngine
+	createPrometheusEngine sync.Once
+	prometheusEngine       v1.QueryEngine
+
+	createThanosEngine sync.Once
+	thanosEngine       v1.QueryEngine
 }
 
 func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
-	if f.prometheusEngine != nil {
-		return f.prometheusEngine
-	}
+	f.createPrometheusEngine.Do(func() {
+		if f.prometheusEngine != nil {
+			return
+		}
+		f.prometheusEngine = promql.NewEngine(f.engineOpts)
+	})
 
-	f.prometheusEngine = promql.NewEngine(f.engineOpts)
 	return f.prometheusEngine
 }
 
 func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
-	if f.thanosEngine != nil {
-		return f.thanosEngine
-	}
-
-	if f.remoteEngineEndpoints == nil {
-		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true})
-	} else {
-		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
-	}
+	f.createThanosEngine.Do(func() {
+		if f.thanosEngine != nil {
+			return
+		}
+		if f.remoteEngineEndpoints == nil {
+			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true})
+		} else {
+			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
+		}
+	})
 
 	return f.thanosEngine
 }
