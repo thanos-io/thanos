@@ -3606,6 +3606,6 @@ func TestQueryStatsMerge(t *testing.T) {
 		DataDownloadedSizeSum:              101,
 	}
 
-	output := s.merge(o)
-	testutil.Equals(t, e, output)
+	s.merge(o)
+	testutil.Equals(t, e, s)
 }
