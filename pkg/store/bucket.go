@@ -232,7 +232,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.resultSeriesCount = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_series_result_series",
 		Help:    "Number of series observed in the final result of a query.",
-		Buckets: prometheus.ExponentialBuckets(1, 2, 15),
+		Buckets: prometheus.ExponentialBuckets(100, 2, 15), // From 100 to 1638400.
 	}, []string{tenancy.MetricLabel})
 
 	m.chunkSizeBytes = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
