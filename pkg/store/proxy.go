@@ -73,6 +73,13 @@ type Client interface {
 	Addr() (addr string, isLocalClient bool)
 }
 
+type StoreAPIResult struct {
+	Series   int
+	Chunks   int
+	Labels   int
+	Duration time.Duration
+}
+
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger

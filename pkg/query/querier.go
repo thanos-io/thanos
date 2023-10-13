@@ -41,6 +41,13 @@ func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsR
 	}
 }
 
+type QueryMetadata struct {
+	StoreResults map[string]store.StoreAPIResult
+	//minTime time.Time
+	//maxTime time.Time
+	//cpuUsage
+}
+
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
@@ -57,6 +64,7 @@ type QueryableCreator func(
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	QueryMetadata QueryMetadata,
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -80,6 +88,7 @@ func NewQueryableCreator(
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
+		nil,
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -98,6 +107,7 @@ func NewQueryableCreator(
 			enableQueryPushdown:  enableQueryPushdown,
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
+			QueryMetadata: QueryMetadata{},
 		}
 	}
 }
@@ -117,6 +127,7 @@ type queryable struct {
 	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
+	QueryMetadata        QueryMetadata
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
@@ -311,7 +322,7 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 
 		span, ctx := tracing.StartSpan(ctx, "querier_select_select_fn")
 		defer span.Finish()
-
+		//add an mapping aggr function to collect metadata
 		set, stats, err := q.selectFn(ctx, hints, ms...)
 		if err != nil {
 			promise <- storage.ErrSeriesSet(err)

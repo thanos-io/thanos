@@ -295,8 +295,11 @@ type queryData struct {
 	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
 	QueryAnalysis queryTelemetry `json:"analysis,omitempty"`
+	QueryMetadata query.QueryMetadata  `json:"metadata,omitempty"`
 	Warnings      []error        `json:"warnings,omitempty"`
 }
+
+
 
 type queryTelemetry struct {
 	// TODO(saswatamcode): Replace with engine.TrackedTelemetry once it has exported fields.
@@ -552,6 +555,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	var seriesStats []storepb.SeriesStatsCounter
+	var QueryMetadata QueryMetadata
 	qry, err := engine.NewInstantQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -564,6 +568,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			QueryMetadata,
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
