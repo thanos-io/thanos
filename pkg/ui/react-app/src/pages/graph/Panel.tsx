@@ -59,6 +59,7 @@ interface PanelState {
   analysis: QueryTree | null;
   explainOutput: ExplainTree | null;
   traceId: string | null; //Include traceId in the state.
+  hoverMessage: string | null;
   isHovered: boolean;
 }
 
@@ -118,6 +119,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       explainOutput: null,
       analysis: null,
       traceId: null, // Initialize traceId to null.
+      hoverMessage: null,
       isHovered: false,
     };
 
@@ -342,6 +344,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
   handleChangeForceTracing = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ forceTracing: event.target.checked });
+
+    if (event.target.checked && this.state.traceId) {
+      this.setState({ hoverMessage: `TraceID: ${this.state.traceId}` });
+    } else if (event.target.checked) {
+      this.setState({ hoverMessage: 'TraceID is not available. Enable it in your options.' });
+    } else {
+      this.setState({ hoverMessage: '' });
+    }
   };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -520,9 +530,20 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 id={`force-tracing-checkbox-${id}`}
                 onChange={this.handleChangeForceTracing}
                 defaultchecked={options.forceTracing}
+                onMouseEnter={this.handleMouseEnter}
+                onMouseLeave={this.handleMouseLeave}
               >
                 Force Tracing
               </Checkbox>
+              <div style={{ display: 'inline-block', marginLeft: 10 }}>
+                <span
+                  className="trace-id-tooltip"
+                  onMouseEnter={() => this.state.isHovered && this.setState({ hoverMessage: this.state.hoverMessage })}
+                  onMouseLeave={() => this.setState({ hoverMessage: '' })}
+                >
+                  {this.state.hoverMessage}
+                </span>
+              </div>
               <Label
                 style={{ marginLeft: '10px', display: 'inline-block' }}
                 for={`select-engine=${id}`}
