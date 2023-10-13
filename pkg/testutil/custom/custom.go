@@ -20,6 +20,8 @@ func TolerantVerifyLeakMain(m *testing.M) {
 		goleak.IgnoreTopFunction("k8s.io/klog.(*loggingT).flushDaemon"),
 		// https://github.com/baidubce/bce-sdk-go/blob/9a8c1139e6a3ad23080b9b8c51dec88df8ce3cda/util/log/logger.go#L359
 		goleak.IgnoreTopFunction("github.com/baidubce/bce-sdk-go/util/log.NewLogger.func1"),
+		goleak.IgnoreTopFunction("github.com/outcaste-io/ristretto.(*lfuPolicy).processItems"),
+		goleak.IgnoreTopFunction("github.com/outcaste-io/ristretto.(*Cache).processItems"),
 	)
 }
 
@@ -34,5 +36,7 @@ func TolerantVerifyLeak(t *testing.T) {
 		goleak.IgnoreTopFunction("k8s.io/klog.(*loggingT).flushDaemon"),
 		// https://github.com/baidubce/bce-sdk-go/blob/9a8c1139e6a3ad23080b9b8c51dec88df8ce3cda/util/log/logger.go#L359
 		goleak.IgnoreTopFunction("github.com/baidubce/bce-sdk-go/util/log.NewLogger.func1"),
+		goleak.IgnoreTopFunction("github.com/outcaste-io/ristretto.(*lfuPolicy).processItems"),
+		goleak.IgnoreTopFunction("github.com/outcaste-io/ristretto.(*Cache).processItems"),
 	)
 }

@@ -52,6 +52,15 @@ func TestFilterCache(t *testing.T) {
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
 				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
 
+				// Inmem index cache set method is async. Wait for set to finish in tests.
+				fic, ok := c.(*FilteredIndexCache)
+				if ok {
+					ic, ok2 := fic.cache.(*InMemoryIndexCache)
+					if ok2 {
+						ic.cache.Wait()
+					}
+				}
+
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
 				testutil.Equals(t, testPostingData, hits[postingKeys[0]])
@@ -72,6 +81,15 @@ func TestFilterCache(t *testing.T) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
 				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+
+				// Inmem index cache set method is async. Wait for set to finish in tests.
+				fic, ok := c.(*FilteredIndexCache)
+				if ok {
+					ic, ok2 := fic.cache.(*InMemoryIndexCache)
+					if ok2 {
+						ic.cache.Wait()
+					}
+				}
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
@@ -94,6 +112,15 @@ func TestFilterCache(t *testing.T) {
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
 				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
 
+				// Inmem index cache set method is async. Wait for set to finish in tests.
+				fic, ok := c.(*FilteredIndexCache)
+				if ok {
+					ic, ok2 := fic.cache.(*InMemoryIndexCache)
+					if ok2 {
+						ic.cache.Wait()
+					}
+				}
+
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
 				testutil.Equals(t, testPostingData, hits[postingKeys[0]])
@@ -113,6 +140,15 @@ func TestFilterCache(t *testing.T) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
 				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+
+				// Inmem index cache set method is async. Wait for set to finish in tests.
+				fic, ok := c.(*FilteredIndexCache)
+				if ok {
+					ic, ok2 := fic.cache.(*InMemoryIndexCache)
+					if ok2 {
+						ic.cache.Wait()
+					}
+				}
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 1, len(missed))
@@ -134,6 +170,15 @@ func TestFilterCache(t *testing.T) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
 				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+
+				// Inmem index cache set method is async. Wait for set to finish in tests.
+				fic, ok := c.(*FilteredIndexCache)
+				if ok {
+					ic, ok2 := fic.cache.(*InMemoryIndexCache)
+					if ok2 {
+						ic.cache.Wait()
+					}
+				}
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 1, len(missed))

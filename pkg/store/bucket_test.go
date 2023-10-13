@@ -1849,7 +1849,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -1940,7 +1940,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2098,7 +2098,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 			fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 			testutil.Ok(tb, err)
 
-			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 			testutil.Ok(tb, err)
 
 			store, err := NewBucketStore(
@@ -2284,7 +2284,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
@@ -2500,7 +2500,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
