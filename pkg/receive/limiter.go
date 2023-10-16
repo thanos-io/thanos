@@ -153,8 +153,18 @@ func (l *Limiter) loadConfig() error {
 		l.registerer,
 		&config.WriteLimits,
 	)
-	seriesLimitSupported := (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && (len(config.WriteLimits.TenantsLimits) != 0 || config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
-	if seriesLimitSupported {
+	seriesLimitIsActivated := func() bool {
+		if config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0 {
+			return true
+		}
+		for _, tenant := range config.WriteLimits.TenantsLimits {
+			if tenant.HeadSeriesLimit != nil && *tenant.HeadSeriesLimit != 0 {
+				return true
+			}
+		}
+		return false
+	}
+	if (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && seriesLimitIsActivated() {
 		l.HeadSeriesLimiter = NewHeadSeriesLimit(config.WriteLimits, l.registerer, l.logger)
 	}
 	return nil

@@ -1163,7 +1163,7 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 		return nil
 	}
 
-	b.indexr.reset()
+	b.indexr.reset(len(postingsBatch))
 	if !b.skipChunks {
 		b.chunkr.reset()
 	}
@@ -2413,8 +2413,8 @@ func (r *bucketIndexReader) IndexVersion() (int, error) {
 	return v, nil
 }
 
-func (r *bucketIndexReader) reset() {
-	r.loadedSeries = map[storage.SeriesRef][]byte{}
+func (r *bucketIndexReader) reset(size int) {
+	r.loadedSeries = make(map[storage.SeriesRef][]byte, size)
 }
 
 // ExpandedPostings returns postings in expanded list instead of index.Postings.
