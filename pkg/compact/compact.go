@@ -154,7 +154,12 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	return s.blocks
+	metas := make(map[ulid.ULID]*metadata.Meta, len(s.blocks))
+	for k, v := range s.blocks {
+		metas[k] = v
+	}
+
+	return metas
 }
 
 // GarbageCollect marks blocks for deletion from bucket if their data is available as part of a
