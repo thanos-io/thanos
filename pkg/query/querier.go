@@ -5,11 +5,13 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -41,13 +44,6 @@ func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsR
 	}
 }
 
-type QueryMetadata struct {
-	StoreResults map[string]store.StoreAPIResult
-	//minTime time.Time
-	//maxTime time.Time
-	//cpuUsage
-}
-
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
@@ -64,7 +60,6 @@ type QueryableCreator func(
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
-	QueryMetadata QueryMetadata,
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -88,7 +83,6 @@ func NewQueryableCreator(
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
-		nil,
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -107,7 +101,6 @@ func NewQueryableCreator(
 			enableQueryPushdown:  enableQueryPushdown,
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
-			QueryMetadata: QueryMetadata{},
 		}
 	}
 }
@@ -127,7 +120,6 @@ type queryable struct {
 	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
-	QueryMetadata        QueryMetadata
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
@@ -212,6 +204,7 @@ type seriesServer struct {
 	storepb.Store_SeriesServer
 	ctx context.Context
 
+	hints          []hintspb.QueryStats
 	seriesSet      []storepb.Series
 	seriesSetStats storepb.SeriesStatsCounter
 	warnings       annotations.Annotations
@@ -227,6 +220,16 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
 		s.seriesSetStats.Count(r.GetSeries())
 		return nil
+	}
+
+	if r.GetHints() != nil {
+		tmp := hintspb.SeriesResponseHints{}
+		if err := types.UnmarshalAny(r.GetHints(), &tmp); err != nil {
+			return err
+		}
+		fmt.Println(tmp)
+
+		s.hints = append(s.hints, *tmp.QueryStats)
 	}
 
 	// Unsupported field, skip.
@@ -323,7 +326,7 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 		span, ctx := tracing.StartSpan(ctx, "querier_select_select_fn")
 		defer span.Finish()
 		//add an mapping aggr function to collect metadata
-		set, stats, err := q.selectFn(ctx, hints, ms...)
+		set, stats, _, err := q.selectFn(ctx, hints, ms...)
 		if err != nil {
 			promise <- storage.ErrSeriesSet(err)
 			return
@@ -346,10 +349,10 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 	}}
 }
 
-func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
+func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, []hintspb.QueryStats, error) {
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
-		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "convert matchers")
+		return nil, storepb.SeriesStatsCounter{}, nil, errors.Wrap(err, "convert matchers")
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
@@ -379,8 +382,17 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		req.WithoutReplicaLabels = q.replicaLabels
 	}
 
+	reqHints := hintspb.SeriesRequestHints{
+		EnableQueryStats: true,
+	}
+	anyHints, err := types.MarshalAny(&reqHints)
+	if err != nil {
+		return nil, storepb.SeriesStatsCounter{}, nil, errors.Wrap(err, "marshaling hints")
+	}
+	req.Hints = anyHints
+
 	if err := q.proxy.Series(&req, resp); err != nil {
-		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "proxy Series()")
+		return nil, storepb.SeriesStatsCounter{}, nil, errors.Wrap(err, "proxy Series()")
 	}
 	warns := annotations.New().Merge(resp.warnings)
 
@@ -407,7 +419,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 			set:   newStoreSeriesSet(resp.seriesSet),
 			aggrs: aggrs,
 			warns: warns,
-		}, resp.seriesSetStats, nil
+		}, resp.seriesSetStats, resp.hints, nil
 	}
 
 	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
@@ -421,7 +433,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns: warns,
 	}
 
-	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
+	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, resp.hints, nil
 }
 
 // LabelValues returns all potential values for a label name.

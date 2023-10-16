@@ -73,13 +73,6 @@ type Client interface {
 	Addr() (addr string, isLocalClient bool)
 }
 
-type StoreAPIResult struct {
-	Series   int
-	Chunks   int
-	Labels   int
-	Duration time.Duration
-}
-
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
@@ -308,6 +301,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		Hints:                   originalRequest.Hints,
 	}
 
 	// We may arrive here either via the promql engine

@@ -108,7 +108,7 @@ func createData() (perr error) {
 // TestReadOnlyThanosSetup runs read only Thanos setup that has data from `maxTimeFresh - 2w` to `maxTimeOld`, with extra monitoring and tracing for full playground experience.
 // Run with test args `-timeout 9999m`.
 func TestReadOnlyThanosSetup(t *testing.T) {
-	t.Skip("This is interactive test - it will run until you will kill it or curl 'finish' endpoint. Comment and run as normal test to use it!")
+	// t.Skip("This is interactive test - it will run until you will kill it or curl 'finish' endpoint. Comment and run as normal test to use it!")
 
 	// Create series of TSDB blocks. Cache them to 'data' dir so we don't need to re-create on every run.
 	_, err := os.Stat(data)
