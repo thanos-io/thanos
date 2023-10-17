@@ -659,7 +659,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	queryStr := r.FormValue("query")
-
 	if qapi.enforceTenancy {
 		queryStr, err = tenancy.EnforceQueryTenancy(qapi.tenantLabel, tenant, queryStr)
 		if err != nil {
@@ -970,7 +969,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
 	queryStr := r.FormValue("query")
-
 	if qapi.enforceTenancy {
 		queryStr, err = tenancy.EnforceQueryTenancy(qapi.tenantLabel, tenant, queryStr)
 		if err != nil {
@@ -1337,12 +1335,17 @@ func (qapi *QueryAPI) getLabelMatchers(matchers []string, tenant string) ([][]*l
 		}
 		if qapi.enforceTenancy {
 			// first check if there's a tenant matcher already, in which case we overwrite it
-			// if there are multiple tenant matchers, we overwrite all of them
+			// if there are multiple tenant matchers, we remove the subsequent ones
 			found := false
 			for idx, matchValue := range matchers {
 				if matchValue.Name == qapi.tenantLabel {
-					matchers[idx] = tenantLabelMatcher
-					found = true
+					if found {
+						// remove any additional tenant matchers.
+						matchers = append(matchers[:idx], matchers[idx+1:]...)
+					} else {
+						matchers[idx] = tenantLabelMatcher
+						found = true
+					}
 				}
 			}
 			// if there are no pre-existing tenant matchers, add it.
