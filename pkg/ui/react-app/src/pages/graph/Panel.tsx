@@ -59,6 +59,7 @@ interface PanelState {
   analysis: QueryTree | null;
   explainOutput: ExplainTree | null;
   traceId: string | null; //Include traceId in the state.
+  queryStatus: boolean;
   hoverMessage: string | null;
   isHovered: boolean;
 }
@@ -119,6 +120,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       explainOutput: null,
       analysis: null,
       traceId: null, // Initialize traceId to null.
+      queryStatus: false,
       hoverMessage: null,
       isHovered: false,
     };
@@ -243,9 +245,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       signal: abortController.signal,
     })
       .then((resp) => {
-        // Access the response headers
         const traceIdHeader = resp.headers.get('X-Thanos-Trace-Id');
-        // Set the traceId state
         this.setState({ traceId: traceIdHeader });
         return resp.json();
       })
@@ -345,10 +345,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   handleChangeForceTracing = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ forceTracing: event.target.checked });
 
-    if (event.target.checked && this.state.traceId) {
+    if (this.state.queryStatus && this.state.traceId) {
       this.setState({ hoverMessage: `TraceID: ${this.state.traceId}` });
-    } else if (event.target.checked) {
-      this.setState({ hoverMessage: 'TraceID is not available. Enable it in your options.' });
+    } else if (this.state.queryStatus) {
+      this.setState({ hoverMessage: 'TraceID is not available' });
     } else {
       this.setState({ hoverMessage: '' });
     }
@@ -449,6 +449,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         let result = null;
         if (json.data) {
           result = json.data;
+          this.setState({ queryStatus: true });
         }
         this.setState({ explainOutput: result });
       })
