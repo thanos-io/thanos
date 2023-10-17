@@ -32,8 +32,10 @@ message Chunk {
 }
 
 message Series {
-  repeated Label labels      = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  // Deprecated: Use string_labels instead
+  // repeated Label labels      = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
   repeated AggrChunk chunks  = 2 [(gogoproto.nullable) = false];
+  StringLabels string_labels      = 3 [(gogoproto.nullable) = false];
 }
 
 message AggrChunk {

@@ -11,9 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/prometheus/prometheus/model/labels"
-
 	"github.com/efficientgo/core/testutil"
+	labels "github.com/thanos-io/thanos/pkg/store/labelpb/vendorpromlabels"
 )
 
 var testLsetMap = map[string]string{
@@ -328,7 +327,7 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 			data, err := lbls.Marshal()
 			testutil.Ok(b, err)
 
-			dest = Label{}
+			dest := LabelSet{}
 			testutil.Ok(b, (&dest).Unmarshal(data))
 		}
 	})
@@ -345,7 +344,7 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 			data, err := lbls.Marshal()
 			testutil.Ok(b, err)
 
-			zdest = ZLabel{}
+			zdest := ZLabelSet{}
 			testutil.Ok(b, (&zdest).Unmarshal(data))
 		}
 	})

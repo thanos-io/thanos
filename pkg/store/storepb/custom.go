@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -244,13 +245,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{StringLabels: labelpb.StringLabelsFromPromLabels(lset), Chunks: chks}
 			continue
 		}
 
 		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
 			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{StringLabels: labelpb.StringLabelsFromPromLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -447,7 +448,7 @@ func (x LabelMatcher_Type) PromString() string {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.ZLabelsToPromLabels(m.Labels)
+	return labelpb.StringLabelsToPromLabels(m.StringLabels)
 }
 
 // Deprecated.
@@ -486,8 +487,8 @@ type SeriesStatsCounter struct {
 	Samples int
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
-	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
+func (c *SeriesStatsCounter) CountSeries(seriesLabels labelpb.StringLabels) {
+	seriesHash := xxhash.Sum64String(seriesLabels.Data)
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
 		c.Series++
@@ -495,7 +496,7 @@ func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 }
 
 func (c *SeriesStatsCounter) Count(series *Series) {
-	c.CountSeries(series.Labels)
+	c.CountSeries(series.StringLabels)
 	for _, chk := range series.Chunks {
 		if chk.Raw != nil {
 			c.Chunks++

@@ -31,7 +31,7 @@ type listSeriesSet struct {
 
 func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
 	s := Series{
-		Labels: labelpb.ZLabelsFromPromLabels(lset),
+		StringLabels: labelpb.StringLabelsFromPromLabels(lset),
 	}
 
 	for _, smpls := range smplChunks {

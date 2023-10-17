@@ -24,6 +24,10 @@ message Label {
     string value = 2;
 }
 
+message StringLabels {
+    string data = 1;
+}
+
 message LabelSet {
     repeated Label labels = 1 [(gogoproto.nullable) = false];
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -93,17 +94,17 @@ func TestServerAsClient(t *testing.T) {
 				s := &testStoreServer{
 					series: []*SeriesResponse{
 						NewSeriesResponse(&Series{
-							Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}},
-							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
+							StringLabels: labelpb.StringLabelsFromPromLabels(labels.FromStrings("a", "b1")),
+							Chunks:       []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
 						NewSeriesResponse(&Series{
-							Labels: []labelpb.ZLabel{{Name: "a", Value: "b1"}},
-							Chunks: []AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
+							StringLabels: labelpb.StringLabelsFromPromLabels(labels.FromStrings("a", "b2")),
+							Chunks:       []AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
 						NewWarnSeriesResponse(errors.New("yolo")),
 						NewSeriesResponse(&Series{
-							Labels: []labelpb.ZLabel{{Name: "a", Value: "b3"}},
-							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
+							StringLabels: labelpb.StringLabelsFromPromLabels(labels.FromStrings("a", "b3")),
+							Chunks:       []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
 						}),
 					}}
 				t.Run("ok", func(t *testing.T) {
