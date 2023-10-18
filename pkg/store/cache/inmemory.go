@@ -198,9 +198,7 @@ func (c *InMemoryIndexCache) onEvict(key, val interface{}) {
 	c.curSize -= entrySize
 }
 
-func (c *InMemoryIndexCache) get(typ string, key cacheKey, tenant string) ([]byte, bool) {
-	c.commonMetrics.requestTotal.WithLabelValues(typ, tenant).Inc()
-
+func (c *InMemoryIndexCache) get(key cacheKey) ([]byte, bool) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -208,7 +206,6 @@ func (c *InMemoryIndexCache) get(typ string, key cacheKey, tenant string) ([]byt
 	if !ok {
 		return nil, false
 	}
-	c.commonMetrics.hitsTotal.WithLabelValues(typ, tenant).Inc()
 	return v.([]byte), true
 }
 
@@ -309,17 +306,25 @@ func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID uli
 	hits = map[labels.Label][]byte{}
 
 	blockIDKey := blockID.String()
+	requests := 0
+	hit := 0
 	for _, key := range keys {
 		if ctx.Err() != nil {
+			c.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings, tenant).Add(float64(requests))
+			c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenant).Add(float64(hit))
 			return hits, misses
 		}
-		if b, ok := c.get(cacheTypePostings, cacheKey{blockIDKey, cacheKeyPostings(key), ""}, tenant); ok {
+		requests++
+		if b, ok := c.get(cacheKey{blockIDKey, cacheKeyPostings(key), ""}); ok {
+			hit++
 			hits[key] = b
 			continue
 		}
 
 		misses = append(misses, key)
 	}
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings, tenant).Add(float64(requests))
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenant).Add(float64(hit))
 
 	return hits, misses
 }
@@ -338,7 +343,9 @@ func (c *InMemoryIndexCache) FetchExpandedPostings(ctx context.Context, blockID 
 	if ctx.Err() != nil {
 		return nil, false
 	}
-	if b, ok := c.get(cacheTypeExpandedPostings, cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers)), ""}, tenant); ok {
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeExpandedPostings, tenant).Inc()
+	if b, ok := c.get(cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers)), ""}); ok {
+		c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings, tenant).Inc()
 		return b, true
 	}
 	return nil, false
@@ -360,17 +367,25 @@ func (c *InMemoryIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.
 	hits = map[storage.SeriesRef][]byte{}
 
 	blockIDKey := blockID.String()
+	requests := 0
+	hit := 0
 	for _, id := range ids {
 		if ctx.Err() != nil {
+			c.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries, tenant).Add(float64(requests))
+			c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenant).Add(float64(hit))
 			return hits, misses
 		}
-		if b, ok := c.get(cacheTypeSeries, cacheKey{blockIDKey, cacheKeySeries(id), ""}, tenant); ok {
+		requests++
+		if b, ok := c.get(cacheKey{blockIDKey, cacheKeySeries(id), ""}); ok {
+			hit++
 			hits[id] = b
 			continue
 		}
 
 		misses = append(misses, id)
 	}
+	c.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries, tenant).Add(float64(requests))
+	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenant).Add(float64(hit))
 
 	return hits, misses
 }
