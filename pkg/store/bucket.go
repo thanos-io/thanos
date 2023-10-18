@@ -2503,8 +2503,9 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 			}
 			// Cache label values because label name is the same.
 			if !valuesCached && vals != nil {
+				lvals := vals
 				lvalsFunc = func(_ string) ([]string, error) {
-					return vals, nil
+					return lvals, nil
 				}
 				valuesCached = true
 			}
