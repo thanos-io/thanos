@@ -2608,7 +2608,7 @@ func (pg postingGroup) mergeKeys(other *postingGroup) *postingGroup {
 		pg.addAll = false
 		pg.removeKeys = nil
 	} else {
-		addKeys := make([]string, 0, len(pg.addKeys)+len(other.addKeys))
+		addKeys := make([]string, 0, min(len(pg.addKeys), len(other.addKeys)))
 		for i < len(pg.addKeys) && j < len(other.addKeys) {
 			if pg.addKeys[i] == other.addKeys[j] {
 				addKeys = append(addKeys, pg.addKeys[i])
@@ -2623,6 +2623,13 @@ func (pg postingGroup) mergeKeys(other *postingGroup) *postingGroup {
 		pg.addKeys = addKeys
 	}
 	return &pg
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func checkNilPosting(name, value string, p index.Postings) index.Postings {
