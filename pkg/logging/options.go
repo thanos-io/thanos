@@ -185,7 +185,7 @@ func GetRequestIDAsField(ctx context.Context) grpc_logging.Fields {
 	newReqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
 
 	// Insert into context (Note: This updated context isn't being used later, so this might be redundant)
-	ctx = middleware.NewContextWithRequestID(ctx, newReqID)
+	_ = middleware.NewContextWithRequestID(ctx, newReqID)
 
 	return grpc_logging.Fields{"requestID", newReqID}
 }
