@@ -5,6 +5,7 @@ package extgrpc
 
 import (
 	"math"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -38,6 +40,7 @@ func EndpointGroupGRPCOpts() []grpc.DialOption {
 
 	return []grpc.DialOption{
 		grpc.WithDefaultServiceConfig(serviceConfig),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
 	}
 }
 
