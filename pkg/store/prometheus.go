@@ -699,17 +699,17 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	extLset := p.externalLabelsFn()
 
-	// First check for matching external label which has priority.
-	if l := extLset.Get(r.Label); l != "" {
-		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
-	}
-
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !match {
 		return &storepb.LabelValuesResponse{Values: nil}, nil
+	}
+
+	// First check for matching external label which has priority.
+	if l := extLset.Get(r.Label); l != "" {
+		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
 	}
 
 	var (
