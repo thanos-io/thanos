@@ -3076,29 +3076,6 @@ func TestMatchersToPostingGroup(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "Reproduce values shadow bug",
-			matchers: []*labels.Matcher{
-				labels.MustNewMatcher(labels.MatchRegexp, "name", "test.*"),
-				labels.MustNewMatcher(labels.MatchNotRegexp, "name", "testfoo"),
-				labels.MustNewMatcher(labels.MatchNotEqual, "name", ""),
-			},
-			labelValues: map[string][]string{
-				"name": {"testbar", "testfoo"},
-			},
-			expected: []*postingGroup{
-				{
-					name:    "name",
-					addAll:  false,
-					addKeys: []string{"testbar"},
-					matchers: []*labels.Matcher{
-						labels.MustNewMatcher(labels.MatchNotEqual, "name", ""),
-						labels.MustNewMatcher(labels.MatchRegexp, "name", "test.*"),
-						labels.MustNewMatcher(labels.MatchNotRegexp, "name", "testfoo"),
-					},
-				},
-			},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			actual, err := matchersToPostingGroups(ctx, func(name string) ([]string, error) {
