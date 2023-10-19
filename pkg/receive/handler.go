@@ -442,7 +442,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	under, err := h.Limiter.HeadSeriesLimiter.isUnderLimit(tenant)
+	under, err := h.Limiter.HeadSeriesLimiter().isUnderLimit(tenant)
 	if err != nil {
 		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
 	}
