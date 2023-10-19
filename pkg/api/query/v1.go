@@ -61,6 +61,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
@@ -294,8 +295,9 @@ type queryData struct {
 	Result     parser.Value     `json:"result"`
 	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	QueryAnalysis queryTelemetry `json:"analysis,omitempty"`
-	Warnings      []error        `json:"warnings,omitempty"`
+	QueryAnalysis queryTelemetry       `json:"analysis,omitempty"`
+	QueryMetadata []hintspb.QueryStats `json:"query_metadata,omitempty"`
+	Warnings      []error              `json:"warnings,omitempty"`
 }
 
 type queryTelemetry struct {
@@ -552,6 +554,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	var seriesStats []storepb.SeriesStatsCounter
+	seriesResponseHints := make([]hintspb.QueryStats, 0)
 	qry, err := engine.NewInstantQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -564,6 +567,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			seriesResponseHints,
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -657,6 +661,8 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	defer span.Finish()
 
 	var seriesStats []storepb.SeriesStatsCounter
+
+	seriesResponseHints := make([]hintspb.QueryStats, 0)
 	qry, err := engine.NewInstantQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -669,6 +675,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			seriesResponseHints,
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -824,6 +831,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	var seriesStats []storepb.SeriesStatsCounter
+	seriesResponseHints := make([]hintspb.QueryStats, 0)
 	qry, err := engine.NewRangeQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -836,6 +844,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			seriesResponseHints,
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -959,6 +968,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	defer span.Finish()
 
 	var seriesStats []storepb.SeriesStatsCounter
+	seriesResponseHints := make([]hintspb.QueryStats, 0)
 	qry, err := engine.NewRangeQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -971,6 +981,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			seriesResponseHints,
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -1075,6 +1086,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -1178,6 +1190,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
@@ -1245,6 +1258,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
