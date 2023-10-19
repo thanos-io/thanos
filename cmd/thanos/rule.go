@@ -4,7 +4,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"html/template"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -38,7 +41,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/tsdb/wlog"
-	"github.com/prometheus/prometheus/util/strutil"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -101,6 +103,10 @@ type ruleConfig struct {
 	storeRateLimits   store.SeriesSelectLimits
 }
 
+type Expression struct {
+	Expr string
+}
+
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.http.registerFlag(cmd)
 	rc.grpc.registerFlag(cmd)
@@ -143,8 +149,6 @@ func registerRule(app *extkingpin.App) {
 		StringsVar(&conf.ignoredLabelNames)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
-
-	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
@@ -210,12 +214,12 @@ func registerRule(app *extkingpin.App) {
 			return err
 		}
 
-		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -329,6 +333,10 @@ func runRule(
 				},
 			)
 		}
+	}
+
+	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate); err != nil {
+		return errors.Wrap(err, "invalid alert source template")
 	}
 
 	queryProvider := dns.NewProvider(
@@ -494,11 +502,15 @@ func runRule(
 				if alrt.State == rules.StatePending {
 					continue
 				}
+				expressionURL, err := tableLinkForExpression(*conf.alertmgr.alertSourceTemplate, expr)
+				if err != nil {
+					level.Warn(logger).Log("msg", "failed to generate link for expression", "expr", expr, "err", err)
+				}
 				a := &notifier.Alert{
 					StartsAt:     alrt.FiredAt,
 					Labels:       alrt.Labels,
 					Annotations:  alrt.Annotations,
-					GeneratorURL: conf.alertQueryURL.String() + strutil.TableLinkForExpression(expr),
+					GeneratorURL: conf.alertQueryURL.String() + expressionURL,
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
@@ -920,4 +932,34 @@ func reloadRules(logger log.Logger,
 		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.OriginalFile, group.Name()).Set(float64(len(group.Rules())))
 	}
 	return errs.Err()
+}
+
+func tableLinkForExpression(tmpl string, expr string) (string, error) {
+	// template example: "/graph?g0.expr={{.Expr}}&g0.tab=1"
+	escapedExpression := url.QueryEscape(expr)
+
+	escapedExpr := Expression{Expr: escapedExpression}
+	t, err := template.New("url").Parse(tmpl)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse template")
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, escapedExpr); err != nil {
+		return "", errors.Wrap(err, "failed to execute template")
+	}
+	return buf.String(), nil
+}
+
+func validateTemplate(tmplStr string) error {
+	tmpl, err := template.New("test").Parse(tmplStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse the template: %w", err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, Expression{Expr: "test_expr"})
+	if err != nil {
+		return fmt.Errorf("failed to execute the template: %w", err)
+	}
+	return nil
 }

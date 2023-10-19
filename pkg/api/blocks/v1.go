@@ -5,6 +5,7 @@ package v1
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -29,8 +30,11 @@ type BlocksAPI struct {
 	logger           log.Logger
 	globalBlocksInfo *BlocksInfo
 	loadedBlocksInfo *BlocksInfo
-	disableCORS      bool
-	bkt              objstore.Bucket
+
+	globalLock, loadedLock sync.Mutex
+	disableCORS            bool
+	bkt                    objstore.Bucket
+	disableAdminOperations bool
 }
 
 type BlocksInfo struct {
@@ -61,6 +65,7 @@ func parse(s string) ActionType {
 
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
 func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket) *BlocksAPI {
+	disableAdminOperations := flagsMap["disable-admin-operations"] == "true"
 	return &BlocksAPI{
 		baseAPI: api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:  logger,
@@ -72,8 +77,9 @@ func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap ma
 			Blocks: []metadata.Meta{},
 			Label:  label,
 		},
-		disableCORS: disableCORS,
-		bkt:         bkt,
+		disableCORS:            disableCORS,
+		bkt:                    bkt,
+		disableAdminOperations: disableAdminOperations,
 	}
 }
 
@@ -87,6 +93,9 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	if bapi.disableAdminOperations {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Admin operations are disabled")}, func() {}
+	}
 	idParam := r.FormValue("id")
 	actionParam := r.FormValue("action")
 	detailParam := r.FormValue("detail")
@@ -125,8 +134,15 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	viewParam := r.URL.Query().Get("view")
 	if viewParam == "loaded" {
+		bapi.loadedLock.Lock()
+		defer bapi.loadedLock.Unlock()
+
 		return bapi.loadedBlocksInfo, nil, nil, func() {}
 	}
+
+	bapi.globalLock.Lock()
+	defer bapi.globalLock.Unlock()
+
 	return bapi.globalBlocksInfo, nil, nil, func() {}
 }
 
@@ -145,10 +161,16 @@ func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
 
 // SetGlobal updates the global blocks' metadata in the API.
 func (bapi *BlocksAPI) SetGlobal(blocks []metadata.Meta, err error) {
+	bapi.globalLock.Lock()
+	defer bapi.globalLock.Unlock()
+
 	bapi.globalBlocksInfo.set(blocks, err)
 }
 
 // SetLoaded updates the local blocks' metadata in the API.
 func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
+	bapi.loadedLock.Lock()
+	defer bapi.loadedLock.Unlock()
+
 	bapi.loadedBlocksInfo.set(blocks, err)
 }

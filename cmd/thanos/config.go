@@ -220,6 +220,7 @@ type alertMgrConfig struct {
 	alertExcludeLabels     []string
 	alertQueryURL          *string
 	alertRelabelConfigPath *extflag.PathOrContent
+	alertSourceTemplate    *string
 }
 
 func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
@@ -234,5 +235,7 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		StringsVar(&ac.alertExcludeLabels)
 	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", extflag.WithEnvSubstitution())
+	ac.alertSourceTemplate = cmd.Flag("alert.query-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").String()
+
 	return ac
 }

@@ -5,6 +5,7 @@ syntax = "proto3";
 package hintspb;
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 import "store/storepb/types.proto";
 
 option go_package = "hintspb";
@@ -90,4 +91,6 @@ message QueryStats {
     int64 chunks_fetch_count = 19;
 
     int64 data_downloaded_size_sum = 20;
+    google.protobuf.Duration get_all_duration = 21 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+    google.protobuf.Duration merge_duration = 22 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
 }

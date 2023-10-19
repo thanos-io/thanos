@@ -68,11 +68,11 @@ func (r *resortingServer) Send(response *storepb.SeriesResponse) error {
 }
 
 func (r *resortingServer) Flush() error {
-	slices.SortFunc(r.series, func(a, b *storepb.Series) bool {
+	slices.SortFunc(r.series, func(a, b *storepb.Series) int {
 		return labels.Compare(
 			labelpb.ZLabelsToPromLabels(a.Labels),
 			labelpb.ZLabelsToPromLabels(b.Labels),
-		) < 0
+		)
 	})
 	for _, response := range r.series {
 		if err := r.Store_SeriesServer.Send(storepb.NewSeriesResponse(response)); err != nil {

@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
 
+	"github.com/thanos-io/thanos/pkg/extannotations"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -233,9 +234,19 @@ func GetInstr(
 	return instr
 }
 
+func shouldNotCacheBecauseOfWarnings(warnings []error) bool {
+	for _, w := range warnings {
+		// PromQL warnings should not prevent caching
+		if !extannotations.IsPromQLAnnotation(w.Error()) {
+			return true
+		}
+	}
+	return false
+}
+
 func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	w.Header().Set("Content-Type", "application/json")
-	if len(warnings) > 0 {
+	if shouldNotCacheBecauseOfWarnings(warnings) {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 	w.WriteHeader(http.StatusOK)

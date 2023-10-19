@@ -341,15 +341,6 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would
-                                 be soon deprecated, and replaced with
-                                 `request.logging-config`. Request Logging
-                                 for logging the start and end of requests. By
-                                 default this flag is disabled. LogFinishCall:
-                                 Logs the finish call of the requests.
-                                 LogStartAndFinishCall: Logs the start and
-                                 finish call of the requests. NoLogCall: Disable
-                                 request logging.
       --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
@@ -369,6 +360,9 @@ Flags:
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
+      --query.default-tenant-id="default-tenant"
+                                 Default tenant ID to use if tenant header is
+                                 not present
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
@@ -413,6 +407,14 @@ Flags:
       --query.telemetry.request-series-seconds-quantiles=10... ...
                                  The quantiles for exporting metrics about the
                                  series count quantiles.
+      --query.tenant-certificate-field=
+                                 Use TLS client's certificate field to determine
+                                 tenant for write requests. Must be one of
+                                 organization, organizationalUnit or commonName.
+                                 This setting will cause the query.tenant-header
+                                 flag value to be ignored.
+      --query.tenant-header="THANOS-TENANT"
+                                 HTTP header to determine tenant.
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'

@@ -25,6 +25,7 @@ import (
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -148,11 +149,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-frontend.vertical-shards", "Number of shards to use when distributing shardable PromQL queries. For more details, you can refer to the Vertical query sharding proposal: https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md").IntVar(&cfg.NumShards)
 
-	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		httpLogOpts, err := logging.ParseHTTPOptions(cfg.RequestLoggingDecision, reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -182,6 +182,13 @@ func parseTransportConfiguration(downstreamTripperConfContentYaml []byte) (*http
 			return nil, errors.Wrap(err, "parsing downstream tripper config YAML file")
 		}
 
+		if tripperConfig.TLSConfig != nil {
+			tlsConfig, err := exthttp.NewTLSConfig(tripperConfig.TLSConfig)
+			if err != nil {
+				return nil, errors.Wrap(err, "parsing downstream tripper TLS config YAML")
+			}
+			downstreamTripper.TLSClientConfig = tlsConfig
+		}
 		if tripperConfig.IdleConnTimeout > 0 {
 			downstreamTripper.IdleConnTimeout = time.Duration(tripperConfig.IdleConnTimeout)
 		}
