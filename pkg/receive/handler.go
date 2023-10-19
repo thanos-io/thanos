@@ -651,16 +651,24 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		tLogger = log.With(h.logger, logTags)
 	}
 
-	responses := make(chan writeResponse, 1)
-
-	var wg sync.WaitGroup
-
 	// NOTE(GiedriusS): First write locally because inside of the function we check if the local TSDB has cached strings.
 	// If not then it copies those strings. This is so that the memory allocated for the
 	// protobuf (except for the labels) can be deallocated.
 	// This causes a write to the labels field. When fanning out this request to other Receivers, the code calls
 	// Size() which reads those same fields. We would like to avoid adding locks around each string
 	// hence we need to write locally first.
+	var maxBufferedResponses = 0
+	for writeTarget := range wreqs {
+		if writeTarget.endpoint != h.options.Endpoint {
+			continue
+		}
+		maxBufferedResponses++
+	}
+
+	responses := make(chan writeResponse, maxBufferedResponses)
+
+	var wg sync.WaitGroup
+
 	for writeTarget := range wreqs {
 		if writeTarget.endpoint != h.options.Endpoint {
 			continue
@@ -685,7 +693,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		}
 
 		responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, nil)
-		break
 	}
 	for writeTarget := range wreqs {
 		if writeTarget.endpoint == h.options.Endpoint {
