@@ -651,39 +651,47 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		tLogger = log.With(h.logger, logTags)
 	}
 
-	responses := make(chan writeResponse)
+	responses := make(chan writeResponse, 1)
 
 	var wg sync.WaitGroup
-	for writeTarget := range wreqs {
-		wg.Add(1)
 
+	// NOTE(GiedriusS): First write locally because inside of the function we check if the local TSDB has cached strings.
+	// If not then it copies those strings. This is so that the memory allocated for the
+	// protobuf (except for the labels) can be deallocated.
+	// This causes a write to the labels field. When fanning out this request to other Receivers, the code calls
+	// Size() which reads those same fields. We would like to avoid adding locks around each string
+	// hence we need to write locally first.
+	for writeTarget := range wreqs {
+		if writeTarget.endpoint != h.options.Endpoint {
+			continue
+		}
 		// If the endpoint for the write request is the
 		// local node, then don't make a request but store locally.
 		// By handing replication to the local node in the same
 		// function as replication to other nodes, we can treat
 		// a failure to write locally as just another error that
 		// can be ignored if the replication factor is met.
-		if writeTarget.endpoint == h.options.Endpoint {
-			go func(writeTarget endpointReplica) {
-				defer wg.Done()
+		var err error
 
-				var err error
-				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
-					err = h.writer.Write(fctx, tenant, &prompb.WriteRequest{
-						Timeseries: wreqs[writeTarget].timeSeries,
-					})
-				})
-				if err != nil {
-					level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
-					responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, errors.Wrapf(err, "store locally for endpoint %v", writeTarget.endpoint))
-					return
-				}
-				responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, nil)
-			}(writeTarget)
-
+		tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
+			err = h.writer.Write(fctx, tenant, &prompb.WriteRequest{
+				Timeseries: wreqs[writeTarget].timeSeries,
+			})
+		})
+		if err != nil {
+			level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
+			responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, errors.Wrapf(err, "store locally for endpoint %v", writeTarget.endpoint))
 			continue
 		}
 
+		responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, nil)
+		break
+	}
+	for writeTarget := range wreqs {
+		if writeTarget.endpoint == h.options.Endpoint {
+			continue
+		}
+		wg.Add(1)
 		// Make a request to the specified endpoint.
 		go func(writeTarget endpointReplica) {
 			defer wg.Done()
