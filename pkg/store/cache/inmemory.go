@@ -6,12 +6,11 @@ package storecache
 import (
 	"context"
 	"reflect"
-	"sync"
 	"unsafe"
 
+	"github.com/VictoriaMetrics/fastcache"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,6 +23,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
+const (
+	chunkSize = 64 * 1024
+
+	// maxKeyLen is the maximum size of key.
+	//
+	// - 16 bytes are for (hash + valueLen)
+	// - 4 bytes are for len(key)+len(subkey)
+	// - 1 byte is implementation detail of fastcache
+	maxKeyLen = chunkSize - 16 - 4 - 1
+)
+
 var (
 	DefaultInMemoryIndexCacheConfig = InMemoryIndexCacheConfig{
 		MaxSize:     250 * 1024 * 1024,
@@ -31,24 +41,15 @@ var (
 	}
 )
 
-const maxInt = int(^uint(0) >> 1)
-
 type InMemoryIndexCache struct {
-	mtx sync.Mutex
-
 	logger           log.Logger
-	lru              *lru.LRU
+	cache            *fastcache.Cache
 	maxSizeBytes     uint64
 	maxItemSizeBytes uint64
 
-	curSize uint64
-
-	evicted          *prometheus.CounterVec
-	added            *prometheus.CounterVec
-	current          *prometheus.GaugeVec
-	currentSize      *prometheus.GaugeVec
-	totalCurrentSize *prometheus.GaugeVec
-	overflow         *prometheus.CounterVec
+	added     *prometheus.CounterVec
+	overflow  *prometheus.CounterVec
+	keyTooBig *prometheus.CounterVec
 
 	commonMetrics *commonMetrics
 }
@@ -71,8 +72,8 @@ func parseInMemoryIndexCacheConfig(conf []byte) (InMemoryIndexCacheConfig, error
 	return config, nil
 }
 
-// NewInMemoryIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
-// size approximately does not exceed maxBytes.
+// NewInMemoryIndexCache creates a new thread-safe cache for index entries. It relies on the cache library
+// (fastcache) to ensures the total cache size approximately does not exceed maxBytes.
 func NewInMemoryIndexCache(logger log.Logger, commonMetrics *commonMetrics, reg prometheus.Registerer, conf []byte) (*InMemoryIndexCache, error) {
 	config, err := parseInMemoryIndexCacheConfig(conf)
 	if err != nil {
@@ -82,11 +83,16 @@ func NewInMemoryIndexCache(logger log.Logger, commonMetrics *commonMetrics, reg 
 	return NewInMemoryIndexCacheWithConfig(logger, commonMetrics, reg, config)
 }
 
-// NewInMemoryIndexCacheWithConfig creates a new thread-safe LRU cache for index entries and ensures the total cache
-// size approximately does not exceed maxBytes.
+// NewInMemoryIndexCacheWithConfig creates a new thread-safe cache for index entries. It relies on the cache library
+// (fastcache) to ensures the total cache size approximately does not exceed maxBytes.
 func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMetrics, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
 	if config.MaxItemSize > config.MaxSize {
 		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
+	}
+
+	// fastcache will panic if MaxSize <= 0.
+	if config.MaxSize <= 0 {
+		config.MaxSize = DefaultInMemoryIndexCacheConfig.MaxSize
 	}
 
 	if commonMetrics == nil {
@@ -99,14 +105,6 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 		maxItemSizeBytes: uint64(config.MaxItemSize),
 		commonMetrics:    commonMetrics,
 	}
-
-	c.evicted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_store_index_cache_items_evicted_total",
-		Help: "Total number of items that were evicted from the index cache.",
-	}, []string{"item_type"})
-	c.evicted.WithLabelValues(cacheTypePostings)
-	c.evicted.WithLabelValues(cacheTypeSeries)
-	c.evicted.WithLabelValues(cacheTypeExpandedPostings)
 
 	c.added = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_added_total",
@@ -128,55 +126,19 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 	c.overflow.WithLabelValues(cacheTypeSeries)
 	c.overflow.WithLabelValues(cacheTypeExpandedPostings)
 
+	c.keyTooBig = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_store_index_cache_items_key_too_big_total",
+		Help: "Total number of items that could not be added to the cache due to key being too big.",
+	}, []string{"item_type"})
+	c.keyTooBig.WithLabelValues(cacheTypePostings)
+	c.keyTooBig.WithLabelValues(cacheTypeSeries)
+	c.keyTooBig.WithLabelValues(cacheTypeExpandedPostings)
+
 	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)
 	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)
 	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings, tenancy.DefaultTenant)
 
-	c.current = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-		Name: "thanos_store_index_cache_items",
-		Help: "Current number of items in the index cache.",
-	}, []string{"item_type"})
-	c.current.WithLabelValues(cacheTypePostings)
-	c.current.WithLabelValues(cacheTypeSeries)
-	c.current.WithLabelValues(cacheTypeExpandedPostings)
-
-	c.currentSize = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-		Name: "thanos_store_index_cache_items_size_bytes",
-		Help: "Current byte size of items in the index cache.",
-	}, []string{"item_type"})
-	c.currentSize.WithLabelValues(cacheTypePostings)
-	c.currentSize.WithLabelValues(cacheTypeSeries)
-	c.currentSize.WithLabelValues(cacheTypeExpandedPostings)
-
-	c.totalCurrentSize = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-		Name: "thanos_store_index_cache_total_size_bytes",
-		Help: "Current byte size of items (both value and key) in the index cache.",
-	}, []string{"item_type"})
-	c.totalCurrentSize.WithLabelValues(cacheTypePostings)
-	c.totalCurrentSize.WithLabelValues(cacheTypeSeries)
-	c.totalCurrentSize.WithLabelValues(cacheTypeExpandedPostings)
-
-	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_store_index_cache_max_size_bytes",
-		Help: "Maximum number of bytes to be held in the index cache.",
-	}, func() float64 {
-		return float64(c.maxSizeBytes)
-	})
-	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_store_index_cache_max_item_size_bytes",
-		Help: "Maximum number of bytes for single entry to be held in the index cache.",
-	}, func() float64 {
-		return float64(c.maxItemSizeBytes)
-	})
-
-	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
-	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(maxInt, c.onEvict)
-	if err != nil {
-		return nil, err
-	}
-	c.lru = l
-
+	c.cache = fastcache.New(int(config.MaxSize))
 	level.Info(logger).Log(
 		"msg", "created in-memory index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
@@ -186,40 +148,44 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 	return c, nil
 }
 
-func (c *InMemoryIndexCache) onEvict(key, val interface{}) {
-	k := key.(cacheKey).keyType()
-	entrySize := sliceHeaderSize + uint64(len(val.([]byte)))
-
-	c.evicted.WithLabelValues(k).Inc()
-	c.current.WithLabelValues(k).Dec()
-	c.currentSize.WithLabelValues(k).Sub(float64(entrySize))
-	c.totalCurrentSize.WithLabelValues(k).Sub(float64(entrySize + key.(cacheKey).size()))
-
-	c.curSize -= entrySize
-}
-
 func (c *InMemoryIndexCache) get(key cacheKey) ([]byte, bool) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	v, ok := c.lru.Get(key)
-	if !ok {
+	k := yoloBuf(key.string())
+	resp := c.cache.GetBig(nil, k)
+	if len(resp) == 0 {
 		return nil, false
 	}
-	return v.([]byte), true
+	return resp, true
 }
 
 func (c *InMemoryIndexCache) set(typ string, key cacheKey, val []byte) {
-	var size = sliceHeaderSize + uint64(len(val))
+	k := yoloBuf(key.string())
 
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	if _, ok := c.lru.Get(key); ok {
+	// SetBig has a max key length restriction in fastcache.
+	if len(k) > maxKeyLen {
+		level.Info(c.logger).Log(
+			"msg", "key bigger than maxKeyLen. Ignoring..",
+			"itemKeyLen", len(k),
+			"maxKeyLen", maxKeyLen,
+			"cacheType", typ,
+		)
+		c.keyTooBig.WithLabelValues(typ).Inc()
 		return
 	}
 
-	if !c.ensureFits(size, typ) {
+	r := c.cache.GetBig(nil, k)
+	// item exists, no need to set it again.
+	if r != nil {
+		return
+	}
+
+	size := uint64(len(k) + len(val))
+	if size > c.maxItemSizeBytes {
+		level.Info(c.logger).Log(
+			"msg", "item bigger than maxItemSizeBytes. Ignoring..",
+			"maxItemSizeBytes", c.maxItemSizeBytes,
+			"maxSizeBytes", c.maxSizeBytes,
+			"cacheType", typ,
+		)
 		c.overflow.WithLabelValues(typ).Inc()
 		return
 	}
@@ -228,52 +194,12 @@ func (c *InMemoryIndexCache) set(typ string, key cacheKey, val []byte) {
 	// to ensure we don't waste huge amounts of space for something small.
 	v := make([]byte, len(val))
 	copy(v, val)
-	c.lru.Add(key, v)
-
+	c.cache.SetBig(k, v)
 	c.added.WithLabelValues(typ).Inc()
-	c.currentSize.WithLabelValues(typ).Add(float64(size))
-	c.totalCurrentSize.WithLabelValues(typ).Add(float64(size + key.size()))
-	c.current.WithLabelValues(typ).Inc()
-	c.curSize += size
 }
 
-// ensureFits tries to make sure that the passed slice will fit into the LRU cache.
-// Returns true if it will fit.
-func (c *InMemoryIndexCache) ensureFits(size uint64, typ string) bool {
-	if size > c.maxItemSizeBytes {
-		level.Debug(c.logger).Log(
-			"msg", "item bigger than maxItemSizeBytes. Ignoring..",
-			"maxItemSizeBytes", c.maxItemSizeBytes,
-			"maxSizeBytes", c.maxSizeBytes,
-			"curSize", c.curSize,
-			"itemSize", size,
-			"cacheType", typ,
-		)
-		return false
-	}
-
-	for c.curSize+size > c.maxSizeBytes {
-		if _, _, ok := c.lru.RemoveOldest(); !ok {
-			level.Error(c.logger).Log(
-				"msg", "LRU has nothing more to evict, but we still cannot allocate the item. Resetting cache.",
-				"maxItemSizeBytes", c.maxItemSizeBytes,
-				"maxSizeBytes", c.maxSizeBytes,
-				"curSize", c.curSize,
-				"itemSize", size,
-				"cacheType", typ,
-			)
-			c.reset()
-		}
-	}
-	return true
-}
-
-func (c *InMemoryIndexCache) reset() {
-	c.lru.Purge()
-	c.current.Reset()
-	c.currentSize.Reset()
-	c.totalCurrentSize.Reset()
-	c.curSize = 0
+func yoloBuf(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
 
 func copyString(s string) string {

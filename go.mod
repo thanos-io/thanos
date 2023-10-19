@@ -117,6 +117,7 @@ require (
 )
 
 require (
+	github.com/VictoriaMetrics/fastcache v1.12.1
 	github.com/onsi/gomega v1.27.10
 	go.opentelemetry.io/contrib/propagators/autoprop v0.38.0
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb

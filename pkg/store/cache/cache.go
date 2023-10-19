@@ -23,12 +23,6 @@ const (
 	cacheTypePostings         string = "Postings"
 	cacheTypeExpandedPostings string = "ExpandedPostings"
 	cacheTypeSeries           string = "Series"
-
-	sliceHeaderSize = 16
-)
-
-var (
-	ulidSize = uint64(len(ulid.ULID{}))
 )
 
 // IndexCache is the interface exported by index cache backends.
@@ -108,19 +102,6 @@ func (c cacheKey) keyType() string {
 		return cacheTypeExpandedPostings
 	}
 	return "<unknown>"
-}
-
-func (c cacheKey) size() uint64 {
-	switch k := c.key.(type) {
-	case cacheKeyPostings:
-		// ULID + 2 slice headers + number of chars in value and name.
-		return ulidSize + 2*sliceHeaderSize + uint64(len(k.Value)+len(k.Name))
-	case cacheKeyExpandedPostings:
-		return ulidSize + sliceHeaderSize + uint64(len(k))
-	case cacheKeySeries:
-		return ulidSize + 8 // ULID + uint64.
-	}
-	return 0
 }
 
 func (c cacheKey) string() string {
