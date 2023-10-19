@@ -18,6 +18,20 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
+## [v0.32.5](https://github.com/thanos-io/thanos/tree/release-0.32) - 18.10.2023
+
+### Fixed
+
+- [#6615](https://github.com/thanos-io/thanos/pull/6615) [#6805](https://github.com/thanos-io/thanos/pull/6805): Build with Go 1.21 and bump golang.org/x/net to v0.17 for addressing [CVE](https://groups.google.com/g/golang-announce/c/iNNxDTCjZvo)
+- [#6802](https://github.com/thanos-io/thanos/pull/6802) Receive: head series limiter should not run if no head series limit is set.
+- [#6816](https://github.com/thanos-io/thanos/pull/6816) Store: fix prometheus store label values matches for external labels
+
+### Added
+
+### Changed
+
+### Removed
+
 ## [v0.32.4](https://github.com/thanos-io/thanos/tree/release-0.32) - 02.10.2023
 
 ### Fixed

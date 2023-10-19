@@ -1,6 +1,6 @@
 # By default we pin to amd64 sha. Use make docker to automatically adjust for arm64 versions.
 ARG BASE_DOCKER_SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
-FROM golang:1.20-alpine3.16 as builder
+FROM golang:1.21-alpine3.18 as builder
 
 WORKDIR $GOPATH/src/github.com/thanos-io/thanos
 # Change in the docker context invalidates the cache so to leverage docker
