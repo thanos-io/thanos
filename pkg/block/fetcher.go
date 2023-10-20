@@ -37,6 +37,13 @@ import (
 
 const FetcherConcurrency = 32
 
+// BaseFetcherMetrics holds metrics tracked by the base fetcher. This struct and its fields are exported
+// to allow depending projects (eg. Cortex) to implement their own custom metadata fetcher while tracking
+// compatible metrics.
+type BaseFetcherMetrics struct {
+	Syncs prometheus.Counter
+}
+
 // FetcherMetrics holds metrics tracked by the metadata fetcher. This struct and its fields are exported
 // to allow depending projects (eg. Cortex) to implement their own custom metadata fetcher while tracking
 // compatible metrics.
@@ -87,6 +94,18 @@ const (
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 )
+
+func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
+	var m BaseFetcherMetrics
+
+	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Subsystem: fetcherSubSys,
+		Name:      "base_syncs_total",
+		Help:      "Total blocks metadata synchronization attempts by base Fetcher",
+	})
+
+	return &m
+}
 
 func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExtraLabels [][]string) *FetcherMetrics {
 	var m FetcherMetrics
@@ -176,6 +195,11 @@ type BaseFetcher struct {
 
 // NewBaseFetcher constructs BaseFetcher.
 func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer) (*BaseFetcher, error) {
+	return NewBaseFetcherWithMetrics(logger, concurrency, bkt, dir, NewBaseFetcherMetrics(reg))
+}
+
+// NewBaseFetcherWithMetrics constructs BaseFetcher.
+func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, metrics *BaseFetcherMetrics) (*BaseFetcher, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -194,11 +218,7 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 		bkt:         bkt,
 		cacheDir:    cacheDir,
 		cached:      map[ulid.ULID]*metadata.Meta{},
-		syncs: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Subsystem: fetcherSubSys,
-			Name:      "base_syncs_total",
-			Help:      "Total blocks metadata synchronization attempts by base Fetcher",
-		}),
+		syncs:       metrics.Syncs,
 	}, nil
 }
 
@@ -217,9 +237,23 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 	return b.NewMetaFetcher(reg, filters), nil
 }
 
+// NewMetaFetcherWithMetrics returns meta fetcher.
+func NewMetaFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, baseFetcherMetrics *BaseFetcherMetrics, fetcherMetrics *FetcherMetrics, filters []MetadataFilter) (*MetaFetcher, error) {
+	b, err := NewBaseFetcherWithMetrics(logger, concurrency, bkt, dir, baseFetcherMetrics)
+	if err != nil {
+		return nil, err
+	}
+	return b.NewMetaFetcherWithMetrics(fetcherMetrics, filters), nil
+}
+
 // NewMetaFetcher transforms BaseFetcher into actually usable *MetaFetcher.
 func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, logTags ...interface{}) *MetaFetcher {
-	return &MetaFetcher{metrics: NewFetcherMetrics(reg, nil, nil), wrapped: f, filters: filters, logger: log.With(f.logger, logTags...)}
+	return f.NewMetaFetcherWithMetrics(NewFetcherMetrics(reg, nil, nil), filters, logTags...)
+}
+
+// NewMetaFetcherWithMetrics transforms BaseFetcher into actually usable *MetaFetcher.
+func (f *BaseFetcher) NewMetaFetcherWithMetrics(fetcherMetrics *FetcherMetrics, filters []MetadataFilter, logTags ...interface{}) *MetaFetcher {
+	return &MetaFetcher{metrics: fetcherMetrics, wrapped: f, filters: filters, logger: log.With(f.logger, logTags...)}
 }
 
 var (

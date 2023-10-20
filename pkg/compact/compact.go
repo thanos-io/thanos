@@ -51,44 +51,46 @@ const (
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
 	logger                   log.Logger
-	reg                      prometheus.Registerer
 	bkt                      objstore.Bucket
 	fetcher                  block.MetadataFetcher
 	mtx                      sync.Mutex
 	blocks                   map[ulid.ULID]*metadata.Meta
 	partial                  map[ulid.ULID]error
-	metrics                  *syncerMetrics
+	metrics                  *SyncerMetrics
 	duplicateBlocksFilter    block.DeduplicateFilter
 	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
 }
 
-type syncerMetrics struct {
-	garbageCollectedBlocks    prometheus.Counter
-	garbageCollections        prometheus.Counter
-	garbageCollectionFailures prometheus.Counter
-	garbageCollectionDuration prometheus.Histogram
-	blocksMarkedForDeletion   prometheus.Counter
+// SyncerMetrics holds metrics tracked by the syncer. This struct and its fields are exported
+// to allow depending projects (eg. Cortex) to implement their own custom syncer while tracking
+// compatible metrics.
+type SyncerMetrics struct {
+	GarbageCollectedBlocks    prometheus.Counter
+	GarbageCollections        prometheus.Counter
+	GarbageCollectionFailures prometheus.Counter
+	GarbageCollectionDuration prometheus.Histogram
+	BlocksMarkedForDeletion   prometheus.Counter
 }
 
-func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) *syncerMetrics {
-	var m syncerMetrics
+func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) *SyncerMetrics {
+	var m SyncerMetrics
 
-	m.garbageCollectedBlocks = garbageCollectedBlocks
-	m.garbageCollections = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+	m.GarbageCollectedBlocks = garbageCollectedBlocks
+	m.GarbageCollections = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_total",
 		Help: "Total number of garbage collection operations.",
 	})
-	m.garbageCollectionFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+	m.GarbageCollectionFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_failures_total",
 		Help: "Total number of failed garbage collection operations.",
 	})
-	m.garbageCollectionDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+	m.GarbageCollectionDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_compact_garbage_collection_duration_seconds",
 		Help:    "Time it took to perform garbage collection iteration.",
 		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
 	})
 
-	m.blocksMarkedForDeletion = blocksMarkedForDeletion
+	m.BlocksMarkedForDeletion = blocksMarkedForDeletion
 
 	return &m
 }
@@ -96,16 +98,19 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
 func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
+	return NewMetaSyncerWithMetrics(logger, NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks), bkt, fetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
+}
+
+func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
 		logger:                   logger,
-		reg:                      reg,
 		bkt:                      bkt,
 		fetcher:                  fetcher,
 		blocks:                   map[ulid.ULID]*metadata.Meta{},
-		metrics:                  newSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks),
+		metrics:                  metrics,
 		duplicateBlocksFilter:    duplicateBlocksFilter,
 		ignoreDeletionMarkFilter: ignoreDeletionMarkFilter,
 	}, nil
@@ -194,20 +199,20 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
 		level.Info(s.logger).Log("msg", "marking outdated block for deletion", "block", id)
-		err := block.MarkForDeletion(delCtx, s.logger, s.bkt, id, "outdated block", s.metrics.blocksMarkedForDeletion)
+		err := block.MarkForDeletion(delCtx, s.logger, s.bkt, id, "outdated block", s.metrics.BlocksMarkedForDeletion)
 		cancel()
 		if err != nil {
-			s.metrics.garbageCollectionFailures.Inc()
+			s.metrics.GarbageCollectionFailures.Inc()
 			return retry(errors.Wrapf(err, "mark block %s for deletion", id))
 		}
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
 		// after running garbage collection.
 		delete(s.blocks, id)
-		s.metrics.garbageCollectedBlocks.Inc()
+		s.metrics.GarbageCollectedBlocks.Inc()
 	}
-	s.metrics.garbageCollections.Inc()
-	s.metrics.garbageCollectionDuration.Observe(time.Since(begin).Seconds())
+	s.metrics.GarbageCollections.Inc()
+	s.metrics.GarbageCollectionDuration.Observe(time.Since(begin).Seconds())
 	return nil
 }
 
@@ -1386,7 +1391,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					}
 
 					if IsIssue347Error(err) {
-						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.BlocksMarkedForDeletion, err); err == nil {
 							mtx.Lock()
 							finishedAllGroups = false
 							mtx.Unlock()
