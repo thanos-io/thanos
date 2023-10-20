@@ -165,29 +165,31 @@ var MapAllowedLevels = map[string][]string{
 	"WARN":  {"WARN", "ERROR"},
 }
 
-func GetTraceIDAsField(ctx context.Context) grpc_logging.Fields {
+func GetTraceIDAndRequestIDAsField(ctx context.Context) grpc_logging.Fields {
+	logFields := grpc_logging.Fields{}
+
+	//get traceID from context
 	span := opentracing.SpanFromContext(ctx)
 	TraceID, _ := migration.GetTraceIDFromBridgeSpan(span)
 	if span := trace.SpanContextFromContext(ctx); span.IsSampled() {
-		return grpc_logging.Fields{"traceID", TraceID}
+		logFields = logFields.AppendUnique(grpc_logging.Fields{"traceID", TraceID})
 	}
-	return nil
-
-}
-
-func GetRequestIDAsField(ctx context.Context) grpc_logging.Fields {
+	//get requestID from context
 	reqID, ok := middleware.RequestIDFromContext(ctx)
 	if ok {
-		return grpc_logging.Fields{"requestID", reqID}
+		logFields = logFields.AppendUnique(grpc_logging.Fields{"requestID", reqID})
+		return logFields
 	}
 
 	entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
 	newReqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
+	logFields = logFields.AppendUnique(grpc_logging.Fields{"requestID", newReqID})
 
 	// Insert into context (Note: This updated context isn't being used later, so this might be redundant)
 	_ = middleware.NewContextWithRequestID(ctx, newReqID)
 
-	return grpc_logging.Fields{"requestID", newReqID}
+	return logFields
+
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
