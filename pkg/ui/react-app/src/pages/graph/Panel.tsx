@@ -96,7 +96,7 @@ export const PanelDefaultOptions: PanelOptions = {
   maxSourceResolution: '0s',
   useDeduplication: true,
   forceTracing: false,
-  usePartialResponse: false,
+  usePartialResponse: true,
   storeMatches: [],
   engine: '',
   analyze: false,
