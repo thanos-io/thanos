@@ -45,40 +45,10 @@ type tracingAssertService struct {
 	T *testing.T
 }
 
-//func (s *tracingAssertService) Ping(ctx context.Context, ping *testpb.PingRequest) (*testpb.PingResponse, error) {
-//	assert.NotNil(s.T, opentracing.SpanFromContext(ctx), "handlers must have the spancontext in their context, otherwise propagation will fail")
-//	tags := tags.Extract(ctx)
-//	assert.True(s.T, tags.Has(tracing.TagTraceId), "tags must contain traceid")
-//	assert.True(s.T, tags.Has(tracing.TagSpanId), "tags must contain spanid")
-//	assert.True(s.T, tags.Has(tracing.TagSampled), "tags must contain sampled")
-//	assert.Equal(s.T, tags.Values()[tracing.TagSampled], "true", "sampled must be set to true")
-//	return s.TestServiceServer.Ping(ctx, ping)
-//}
-
 func (s *tracingAssertService) PingError(ctx context.Context, ping *testpb.PingRequest) (*testpb.Empty, error) {
 	assert.NotNil(s.T, opentracing.SpanFromContext(ctx), "handlers must have the spancontext in their context, otherwise propagation will fail")
 	return s.TestServiceServer.PingError(ctx, ping)
 }
-
-//func (s *tracingAssertService) PingList(ping *testpb.PingRequest, stream testpb.TestService_PingListServer) error {
-//	assert.NotNil(s.T, opentracing.SpanFromContext(stream.Context()), "handlers must have the spancontext in their context, otherwise propagation will fail")
-//	tags := tags.Extract(stream.Context())
-//	assert.True(s.T, tags.Has(tracing.TagTraceId), "tags must contain traceid")
-//	assert.True(s.T, tags.Has(tracing.TagSpanId), "tags must contain spanid")
-//	assert.True(s.T, tags.Has(tracing.TagSampled), "tags must contain sampled")
-//	assert.Equal(s.T, tags.Values()[tracing.TagSampled], "true", "sampled must be set to true")
-//	return s.TestServiceServer.PingList(ping, stream)
-//}
-
-//func (s *tracingAssertService) PingEmpty(ctx context.Context, empty *testpb.Empty) (*testpb.PingResponse, error) {
-//	assert.NotNil(s.T, opentracing.SpanFromContext(ctx), "handlers must have the spancontext in their context, otherwise propagation will fail")
-//	tags := tags.Extract(ctx)
-//	assert.True(s.T, tags.Has(tracing.TagTraceId), "tags must contain traceid")
-//	assert.True(s.T, tags.Has(tracing.TagSpanId), "tags must contain spanid")
-//	assert.True(s.T, tags.Has(tracing.TagSampled), "tags must contain sampled")
-//	assert.Equal(s.T, tags.Values()[tracing.TagSampled], "false", "sampled must be set to false")
-//	return s.TestServiceServer.PingEmpty(ctx, empty)
-//}
 
 func TestTaggingSuite(t *testing.T) {
 	mockTracer := mocktracer.New()
