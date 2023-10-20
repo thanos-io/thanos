@@ -19,9 +19,6 @@ import (
 	"flag"
 	"math/big"
 	"net"
-	"path"
-
-	"runtime"
 	"sync"
 	"time"
 
@@ -37,11 +34,6 @@ var (
 	certPEM []byte
 	keyPEM  []byte
 )
-
-func getTestingCertsPath() string {
-	_, callerPath, _, _ := runtime.Caller(0)
-	return path.Join(path.Dir(callerPath), "certs")
-}
 
 // InterceptorTestSuite is a testify/Suite that starts a gRPC PingService server and a client.
 type InterceptorTestSuite struct {
