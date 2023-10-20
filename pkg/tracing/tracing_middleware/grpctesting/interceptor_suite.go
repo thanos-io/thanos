@@ -10,24 +10,32 @@ package grpctesting
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"flag"
+	"math/big"
 	"net"
 	"path"
+
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/thanos-io/thanos/pkg/tracing/tracing_middleware/grpctesting/testpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/thanos-io/thanos/pkg/tracing/tracing_middleware/grpctesting/testpb"
 )
 
 var (
 	flagTls = flag.Bool("use_tls", true, "whether all gRPC middleware tests should use tls")
+	certPEM []byte
+	keyPEM  []byte
 )
 
 func getTestingCertsPath() string {
@@ -60,6 +68,9 @@ func (s *InterceptorTestSuite) SetupSuite() {
 	s.serverRunning = make(chan bool)
 
 	s.serverAddr = "127.0.0.1:0"
+	var err error
+	certPEM, keyPEM, err = generateCertAndKey([]string{"localhost", "example.com"})
+	require.NoError(s.T(), err, "unable to generate test certificate/key")
 
 	go func() {
 		for {
@@ -68,16 +79,14 @@ func (s *InterceptorTestSuite) SetupSuite() {
 			s.serverAddr = s.ServerListener.Addr().String()
 			require.NoError(s.T(), err, "must be able to allocate a port for serverListener")
 			if *flagTls {
-				creds, err := credentials.NewServerTLSFromFile(
-					path.Join(getTestingCertsPath(), "localhost.crt"),
-					path.Join(getTestingCertsPath(), "localhost.key"),
-				)
-				require.NoError(s.T(), err, "failed reading server credentials for localhost.crt")
+				cert, err := tls.X509KeyPair(certPEM, keyPEM)
+				require.NoError(s.T(), err, "unable to load test TLS certificate")
+				creds := credentials.NewServerTLSFromCert(&cert)
 				s.ServerOpts = append(s.ServerOpts, grpc.Creds(creds))
 			}
-			// This is the point where we hook up the interceptor
+			// This is the point where we hook up the interceptor.
 			s.Server = grpc.NewServer(s.ServerOpts...)
-			// Crete a service of the instantiator hasn't provided one.
+			// Create a service if the instantiator hasn't provided one.
 			if s.TestService == nil {
 				s.TestService = &TestPingService{T: s.T()}
 			}
@@ -102,7 +111,11 @@ func (s *InterceptorTestSuite) SetupSuite() {
 		}
 	}()
 
-	<-s.serverRunning
+	select {
+	case <-s.serverRunning:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("server failed to start before deadline")
+	}
 }
 
 func (s *InterceptorTestSuite) RestartServer(delayedStart time.Duration) <-chan bool {
@@ -113,19 +126,22 @@ func (s *InterceptorTestSuite) RestartServer(delayedStart time.Duration) <-chan 
 
 func (s *InterceptorTestSuite) NewClient(dialOpts ...grpc.DialOption) testpb.TestServiceClient {
 	newDialOpts := append(dialOpts, grpc.WithBlock())
+	var err error
 	if *flagTls {
-		creds, err := credentials.NewClientTLSFromFile(
-			path.Join(getTestingCertsPath(), "localhost.crt"), "localhost")
-		require.NoError(s.T(), err, "failed reading client credentials for localhost.crt")
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certPEM) {
+			s.T().Fatal("failed to append certificate")
+		}
+		creds := credentials.NewTLS(&tls.Config{ServerName: "localhost", RootCAs: cp})
 		newDialOpts = append(newDialOpts, grpc.WithTransportCredentials(creds))
 	} else {
-		newDialOpts = append(newDialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		newDialOpts = append(newDialOpts, grpc.WithInsecure())
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	clientConn, err := grpc.DialContext(ctx, s.ServerAddr(), newDialOpts...)
+	s.clientConn, err = grpc.DialContext(ctx, s.ServerAddr(), newDialOpts...)
 	require.NoError(s.T(), err, "must not error on client Dial")
-	return testpb.NewTestServiceClient(clientConn)
+	return testpb.NewTestServiceClient(s.clientConn)
 }
 
 func (s *InterceptorTestSuite) ServerAddr() string {
@@ -157,4 +173,46 @@ func (s *InterceptorTestSuite) TearDownSuite() {
 	for _, c := range s.cancels {
 		c()
 	}
+}
+
+// generateCertAndKey copied from https://github.com/johanbrandhorst/certify/blob/master/issuers/vault/vault_suite_test.go#L255
+// with minor modifications.
+func generateCertAndKey(san []string) ([]byte, []byte, error) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
+	notBefore := time.Now()
+	notAfter := notBefore.Add(time.Hour)
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, nil, err
+	}
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			CommonName: "example.com",
+		},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              san,
+	}
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.Public(), priv)
+	if err != nil {
+		return nil, nil, err
+	}
+	certOut := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: derBytes,
+	})
+	keyOut := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(priv),
+	})
+
+	return certOut, keyOut, nil
 }
