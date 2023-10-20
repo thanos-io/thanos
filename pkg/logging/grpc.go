@@ -151,8 +151,7 @@ func NewGRPCOption(configYAML []byte) ([]grpc_logging.Option, []string, error) {
 
 	logOpts = []grpc_logging.Option{
 		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
-		grpc_logging.WithFieldsFromContext(GetTraceIDAsField),
-		grpc_logging.WithFieldsFromContext(GetRequestIDAsField),
+		grpc_logging.WithFieldsFromContext(GetTraceIDAndRequestIDAsField),
 	}
 	// If the combination is valid, use them, otherwise return error.
 	reqLogDecision, err := getGRPCLoggingOption(globalStart, globalEnd)
