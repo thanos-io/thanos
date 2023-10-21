@@ -30,7 +30,7 @@ const (
 	//
 	// - 16 bytes are for (hash + valueLen)
 	// - 4 bytes are for len(key)+len(subkey)
-	// - 1 byte is implementation detail of fastcache
+	// - 1 byte is implementation detail of fastcache.
 	maxKeyLen = chunkSize - 16 - 4 - 1
 )
 

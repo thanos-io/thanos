@@ -92,18 +92,6 @@ type cacheKey struct {
 	compression string
 }
 
-func (c cacheKey) keyType() string {
-	switch c.key.(type) {
-	case cacheKeyPostings:
-		return cacheTypePostings
-	case cacheKeySeries:
-		return cacheTypeSeries
-	case cacheKeyExpandedPostings:
-		return cacheTypeExpandedPostings
-	}
-	return "<unknown>"
-}
-
 func (c cacheKey) string() string {
 	switch c.key.(type) {
 	case cacheKeyPostings:
