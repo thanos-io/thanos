@@ -101,6 +101,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		false,
 		request.ShardInfo,
 		query.NoopSeriesStatsReporter,
+		query.NoopSeriesResponseHints,
 	)
 
 	var engine v1.QueryEngine
@@ -199,6 +200,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		false,
 		request.ShardInfo,
 		query.NoopSeriesStatsReporter,
+		query.NoopSeriesResponseHints,
 	)
 
 	startTime := time.Unix(request.StartTimeSeconds, 0)

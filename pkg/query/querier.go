@@ -44,6 +44,16 @@ func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsR
 	}
 }
 
+type seriesResponseHints func(hints []hintspb.QueryStats)
+
+func NewResponseHints(hints *[]hintspb.QueryStats) seriesResponseHints {
+	return func(h []hintspb.QueryStats) {
+		*hints = append(*hints, h...)
+	}
+}
+
+var NoopSeriesResponseHints seriesResponseHints = func(_ []hintspb.QueryStats) {}
+
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
@@ -60,7 +70,7 @@ type QueryableCreator func(
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
-	seriesResponseHints []hintspb.QueryStats,
+	seriesResponseHints seriesResponseHints,
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -84,7 +94,7 @@ func NewQueryableCreator(
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
-		seriesResponseHints []hintspb.QueryStats,
+		seriesResponseHints seriesResponseHints,
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -123,12 +133,12 @@ type queryable struct {
 	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
-	seriesResponseHints  []hintspb.QueryStats
+	seriesResponseHints  seriesResponseHints
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter,q.seriesResponseHints), nil
+	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.seriesResponseHints), nil
 }
 
 type querier struct {
@@ -146,7 +156,7 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
-	seriesResponseHints     []hintspb.QueryStats
+	seriesResponseHints     seriesResponseHints
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -167,7 +177,7 @@ func newQuerier(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
-	seriesResponseHints []hintspb.QueryStats,
+	seriesResponseHints seriesResponseHints,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -332,14 +342,14 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 
 		span, ctx := tracing.StartSpan(ctx, "querier_select_select_fn")
 		defer span.Finish()
-		//add an mapping aggr function to collect metadata
 		set, stats, responseHints, err := q.selectFn(ctx, hints, ms...)
 		if err != nil {
 			promise <- storage.ErrSeriesSet(err)
 			return
 		}
 		q.seriesStatsReporter(stats)
-		q.seriesResponseHints = append(q.seriesResponseHints, responseHints...)
+		q.seriesResponseHints(responseHints)
+
 		promise <- set
 	}()
 

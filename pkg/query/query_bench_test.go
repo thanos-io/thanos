@@ -99,6 +99,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		10*time.Second,
 		nil,
 		NoopSeriesStatsReporter,
+		NoopSeriesResponseHints,
 	)
 	testSelect(t, q, expectedSeries)
 }
