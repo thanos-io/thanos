@@ -406,10 +406,10 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 		level.Warn(logger).Log("msg", "Prometheus is running in agent mode. StoreAPI will be disabled.")
 	}
 
-	if uploads && *promAgentModeEnabled {
-		return errors.New("uploading is not supported when Prometheus is running in agent mode")
-	}
 	if uploads {
+		if *promAgentModeEnabled {
+			return errors.New("uploading is not supported when Prometheus is running in agent mode")
+		}
 		// Check if compaction is disabled.
 		if flags.TSDBMinTime != flags.TSDBMaxTime {
 			if !ignoreBlockSize {
