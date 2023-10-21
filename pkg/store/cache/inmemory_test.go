@@ -33,7 +33,6 @@ func TestNewInMemoryIndexCache(t *testing.T) {
 	conf = []byte{}
 	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, nil, conf)
 	testutil.Ok(t, err)
-	testutil.Equals(t, uint64(DefaultInMemoryIndexCacheConfig.MaxSize), cache.maxSizeBytes)
 	testutil.Equals(t, uint64(DefaultInMemoryIndexCacheConfig.MaxItemSize), cache.maxItemSizeBytes)
 
 	// Should instance an in-memory index cache with specified YAML config.s with units.
@@ -43,7 +42,6 @@ max_item_size: 2KB
 `)
 	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, nil, conf)
 	testutil.Ok(t, err)
-	testutil.Equals(t, uint64(1024*1024), cache.maxSizeBytes)
 	testutil.Equals(t, uint64(2*1024), cache.maxItemSizeBytes)
 
 	// Should instance an in-memory index cache with specified YAML config.s with units.

@@ -44,7 +44,6 @@ var (
 type InMemoryIndexCache struct {
 	logger           log.Logger
 	cache            *fastcache.Cache
-	maxSizeBytes     uint64
 	maxItemSizeBytes uint64
 
 	added     *prometheus.CounterVec
@@ -101,7 +100,6 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 
 	c := &InMemoryIndexCache{
 		logger:           logger,
-		maxSizeBytes:     uint64(config.MaxSize),
 		maxItemSizeBytes: uint64(config.MaxItemSize),
 		commonMetrics:    commonMetrics,
 	}
@@ -142,8 +140,7 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 	level.Info(logger).Log(
 		"msg", "created in-memory index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
-		"maxSizeBytes", c.maxSizeBytes,
-		"maxItems", "maxInt",
+		"maxSizeBytes", config.MaxSize,
 	)
 	return c, nil
 }
@@ -183,7 +180,6 @@ func (c *InMemoryIndexCache) set(typ string, key cacheKey, val []byte) {
 		level.Info(c.logger).Log(
 			"msg", "item bigger than maxItemSizeBytes. Ignoring..",
 			"maxItemSizeBytes", c.maxItemSizeBytes,
-			"maxSizeBytes", c.maxSizeBytes,
 			"cacheType", typ,
 		)
 		c.overflow.WithLabelValues(typ).Inc()
