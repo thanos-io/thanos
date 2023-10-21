@@ -6,14 +6,13 @@ package queryrange
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	io "io"
 	"net/http"
 	"strconv"
 	"testing"
 
-	"github.com/prometheus/common/model"
-
 	jsoniter "github.com/json-iterator/go"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/httpgrpc"
@@ -103,7 +102,7 @@ func TestResponse(t *testing.T) {
 			response := &http.Response{
 				StatusCode: 200,
 				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       ioutil.NopCloser(bytes.NewBuffer([]byte(tc.body))),
+				Body:       io.NopCloser(bytes.NewBuffer([]byte(tc.body))),
 			}
 			resp, err := PrometheusCodec.DecodeResponse(context.Background(), response, nil)
 			require.NoError(t, err)
@@ -113,7 +112,7 @@ func TestResponse(t *testing.T) {
 			response = &http.Response{
 				StatusCode:    200,
 				Header:        http.Header{"Content-Type": []string{"application/json"}},
-				Body:          ioutil.NopCloser(bytes.NewBuffer([]byte(tc.body))),
+				Body:          io.NopCloser(bytes.NewBuffer([]byte(tc.body))),
 				ContentLength: int64(len(tc.body)),
 			}
 			resp2, err := PrometheusCodec.EncodeResponse(context.Background(), resp)
@@ -163,7 +162,7 @@ func TestResponseWithStats(t *testing.T) {
 			response := &http.Response{
 				StatusCode: 200,
 				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       ioutil.NopCloser(bytes.NewBuffer([]byte(tc.body))),
+				Body:       io.NopCloser(bytes.NewBuffer([]byte(tc.body))),
 			}
 			resp, err := PrometheusCodec.DecodeResponse(context.Background(), response, nil)
 			require.NoError(t, err)
@@ -173,7 +172,7 @@ func TestResponseWithStats(t *testing.T) {
 			response = &http.Response{
 				StatusCode:    200,
 				Header:        http.Header{"Content-Type": []string{"application/json"}},
-				Body:          ioutil.NopCloser(bytes.NewBuffer([]byte(tc.body))),
+				Body:          io.NopCloser(bytes.NewBuffer([]byte(tc.body))),
 				ContentLength: int64(len(tc.body)),
 			}
 			resp2, err := PrometheusCodec.EncodeResponse(context.Background(), resp)
