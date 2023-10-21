@@ -98,10 +98,10 @@ func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
 func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
-	return NewMetaSyncerWithMetrics(logger, NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks), bkt, fetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
+	return NewMetaSyncerWithMetrics(logger, NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks), bkt, fetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter)
 }
 
-func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
+func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -258,31 +258,68 @@ func NewDefaultGrouper(
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
 ) *DefaultGrouper {
-	return &DefaultGrouper{
-		bkt:                      bkt,
-		logger:                   logger,
-		acceptMalformedIndex:     acceptMalformedIndex,
-		enableVerticalCompaction: enableVerticalCompaction,
-		compactions: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	return NewDefaultGrouperWithMetrics(
+		logger,
+		bkt,
+		acceptMalformedIndex,
+		enableVerticalCompaction,
+		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block.",
 		}, []string{"resolution"}),
-		compactionRunsStarted: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compaction_runs_started_total",
 			Help: "Total number of group compaction attempts.",
 		}, []string{"resolution"}),
-		compactionRunsCompleted: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compaction_runs_completed_total",
 			Help: "Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction.",
 		}, []string{"resolution"}),
-		compactionFailures: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compactions_failures_total",
 			Help: "Total number of failed group compactions.",
 		}, []string{"resolution"}),
-		verticalCompactions: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
+		blocksMarkedForNoCompact,
+		garbageCollectedBlocks,
+		blocksMarkedForDeletion,
+		hashFunc,
+		blockFilesConcurrency,
+		compactBlocksFetchConcurrency,
+	)
+}
+
+// NewDefaultGrouperWithMetrics makes a new DefaultGrouper.
+func NewDefaultGrouperWithMetrics(
+	logger log.Logger,
+	bkt objstore.Bucket,
+	acceptMalformedIndex bool,
+	enableVerticalCompaction bool,
+	compactions *prometheus.CounterVec,
+	compactionRunsStarted *prometheus.CounterVec,
+	compactionRunsCompleted *prometheus.CounterVec,
+	compactionFailures *prometheus.CounterVec,
+	verticalCompactions *prometheus.CounterVec,
+	blocksMarkedForDeletion prometheus.Counter,
+	garbageCollectedBlocks prometheus.Counter,
+	blocksMarkedForNoCompact prometheus.Counter,
+	hashFunc metadata.HashFunc,
+	blockFilesConcurrency int,
+	compactBlocksFetchConcurrency int,
+) *DefaultGrouper {
+	return &DefaultGrouper{
+		bkt:                           bkt,
+		logger:                        logger,
+		acceptMalformedIndex:          acceptMalformedIndex,
+		enableVerticalCompaction:      enableVerticalCompaction,
+		compactions:                   compactions,
+		compactionRunsStarted:         compactionRunsStarted,
+		compactionRunsCompleted:       compactionRunsCompleted,
+		compactionFailures:            compactionFailures,
+		verticalCompactions:           verticalCompactions,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
