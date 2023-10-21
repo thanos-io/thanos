@@ -2625,13 +2625,6 @@ func (pg postingGroup) mergeKeys(other *postingGroup) *postingGroup {
 	return &pg
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func checkNilPosting(name, value string, p index.Postings) index.Postings {
 	if p == nil {
 		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
