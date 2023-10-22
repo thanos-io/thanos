@@ -11,7 +11,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
-- [#6834](https://github.com/thanos-io/thanos/pull/6834) Replaces instances of io/ioutil with io and os in Go code
 - [#6817](https://github.com/thanos-io/thanos/pull/6817) Store Gateway: fix `matchersToPostingGroups` label values variable got shadowed bug.
 
 ### Added
