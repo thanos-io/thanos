@@ -258,38 +258,38 @@ func NewDefaultGrouper(
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
 ) *DefaultGrouper {
-	return NewDefaultGrouperWithMetrics(
-		logger,
-		bkt,
-		acceptMalformedIndex,
-		enableVerticalCompaction,
-		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	return &DefaultGrouper{
+		bkt:                      bkt,
+		logger:                   logger,
+		acceptMalformedIndex:     acceptMalformedIndex,
+		enableVerticalCompaction: enableVerticalCompaction,
+		compactions: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block.",
 		}, []string{"resolution"}),
-		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		compactionRunsStarted: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compaction_runs_started_total",
 			Help: "Total number of group compaction attempts.",
 		}, []string{"resolution"}),
-		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		compactionRunsCompleted: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compaction_runs_completed_total",
 			Help: "Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction.",
 		}, []string{"resolution"}),
-		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		compactionFailures: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compactions_failures_total",
 			Help: "Total number of failed group compactions.",
 		}, []string{"resolution"}),
-		promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		verticalCompactions: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
-		blocksMarkedForNoCompact,
-		garbageCollectedBlocks,
-		blocksMarkedForDeletion,
-		hashFunc,
-		blockFilesConcurrency,
-		compactBlocksFetchConcurrency,
-	)
+		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
+		garbageCollectedBlocks:        garbageCollectedBlocks,
+		blocksMarkedForDeletion:       blocksMarkedForDeletion,
+		hashFunc:                      hashFunc,
+		blockFilesConcurrency:         blockFilesConcurrency,
+		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
+	}
 }
 
 // NewDefaultGrouperWithMetrics makes a new DefaultGrouper.
