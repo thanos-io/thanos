@@ -509,9 +509,7 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
-					sort.Slice(lset, func(i, j int) bool {
-						return lset[i].Name < lset[j].Name
-					})
+					sort.Sort(lset)
 
 					var err error
 					if sampleType == chunkenc.ValFloat {
@@ -667,9 +665,7 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 	}
 
 	lbls := []labels.Labels{
-		[]labels.Label{
-			{Name: "lbl1", Value: "1"},
-		},
+		labels.New(labels.Label{Name: "lbl1", Value: "1"}),
 	}
 
 	// Sort labels as the index writer expects series in sorted order.
@@ -677,9 +673,9 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 
 	symbols := map[string]struct{}{}
 	for _, lset := range lbls {
-		for _, l := range lset {
-			symbols[l.Name] = struct{}{}
-			symbols[l.Value] = struct{}{}
+		for k, v := range lset.Map() {
+			symbols[k] = struct{}{}
+			symbols[v] = struct{}{}
 		}
 	}
 
@@ -738,13 +734,13 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 			return err
 		}
 
-		for _, l := range s.labels {
-			valset, ok := values[l.Name]
+		for k, v := range s.labels.Map() {
+			valset, ok := values[k]
 			if !ok {
 				valset = map[string]struct{}{}
-				values[l.Name] = valset
+				values[k] = valset
 			}
-			valset[l.Value] = struct{}{}
+			valset[v] = struct{}{}
 		}
 		postings.Add(storage.SeriesRef(i), s.labels)
 	}
