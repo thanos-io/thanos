@@ -509,8 +509,6 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
-					sort.Sort(lset)
-
 					var err error
 					if sampleType == chunkenc.ValFloat {
 						randMutex.Lock()

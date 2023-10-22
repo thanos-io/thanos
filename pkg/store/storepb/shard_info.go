@@ -8,7 +8,6 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 var sep = []byte{'\xff'}
@@ -34,31 +33,27 @@ func (s *ShardMatcher) Close() {
 	}
 }
 
-func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
+func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
 	// Match all series when query is not sharded
 	if s == nil || !s.isSharded {
 		return true
 	}
 
 	*s.buf = (*s.buf)[:0]
-	for _, lbl := range zLabels {
+	lbls.Range(func(lbl labels.Label) {
 		if shardByLabel(s.shardingLabelset, lbl, s.by) {
 			*s.buf = append(*s.buf, lbl.Name...)
 			*s.buf = append(*s.buf, sep[0])
 			*s.buf = append(*s.buf, lbl.Value...)
 			*s.buf = append(*s.buf, sep[0])
 		}
-	}
+	})
 
 	hash := xxhash.Sum64(*s.buf)
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
 }
 
-func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
-	return s.MatchesZLabels(labelpb.ZLabelsFromPromLabels(lbls))
-}
-
-func shardByLabel(labelSet map[string]struct{}, zlabel labelpb.ZLabel, groupingBy bool) bool {
+func shardByLabel(labelSet map[string]struct{}, zlabel labels.Label, groupingBy bool) bool {
 	_, shardHasLabel := labelSet[zlabel.Name]
 	if groupingBy && shardHasLabel {
 		return true

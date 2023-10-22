@@ -451,26 +451,6 @@ func (m *Series) PromLabels() labels.Labels {
 	return labelpb.StringLabelsToPromLabels(m.StringLabels)
 }
 
-// Deprecated.
-// TODO(bwplotka): Remove this once Cortex dep will stop using it.
-type Label = labelpb.ZLabel
-
-// Deprecated.
-// TODO(bwplotka): Remove this in next PR. Done to reduce diff only.
-type LabelSet = labelpb.ZLabelSet
-
-// Deprecated.
-// TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func CompareLabels(a, b []Label) int {
-	return labels.Compare(labelpb.ZLabelsToPromLabels(a), labelpb.ZLabelsToPromLabels(b))
-}
-
-// Deprecated.
-// TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
-	return labelpb.ZLabelsToPromLabels(lset)
-}
-
 // XORNumSamples return number of samples. Returns 0 if it's not XOR chunk.
 func (m *Chunk) XORNumSamples() int {
 	if m.Type == Chunk_XOR {
