@@ -704,7 +704,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
 
-	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator()
+	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator(tenant)
 	for i := range seriesStats {
 		aggregator.Aggregate(seriesStats[i])
 	}
@@ -1007,7 +1007,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
-	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator()
+	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator(tenant)
 	for i := range seriesStats {
 		aggregator.Aggregate(seriesStats[i])
 	}
