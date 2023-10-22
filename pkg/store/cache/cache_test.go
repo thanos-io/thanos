@@ -148,7 +148,7 @@ func BenchmarkCacheKey_string_Postings(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key.String()
+		_ = key.String()
 	}
 }
 
@@ -158,6 +158,6 @@ func BenchmarkCacheKey_string_Series(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key.String()
+		_ = key.String()
 	}
 }
