@@ -23,17 +23,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
-const (
-	chunkSize = 64 * 1024
-
-	// maxKeyLen is the maximum size of key.
-	//
-	// - 16 bytes are for (hash + valueLen)
-	// - 4 bytes are for len(key)+len(subkey)
-	// - 1 byte is implementation detail of fastcache.
-	maxKeyLen = chunkSize - 16 - 4 - 1
-)
-
 var (
 	DefaultInMemoryIndexCacheConfig = InMemoryIndexCacheConfig{
 		MaxSize:     250 * 1024 * 1024,
@@ -46,9 +35,8 @@ type InMemoryIndexCache struct {
 	cache            *fastcache.Cache
 	maxItemSizeBytes uint64
 
-	added     *prometheus.CounterVec
-	overflow  *prometheus.CounterVec
-	keyTooBig *prometheus.CounterVec
+	added    *prometheus.CounterVec
+	overflow *prometheus.CounterVec
 
 	commonMetrics *commonMetrics
 }
@@ -124,14 +112,6 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *commonMet
 	c.overflow.WithLabelValues(cacheTypeSeries)
 	c.overflow.WithLabelValues(cacheTypeExpandedPostings)
 
-	c.keyTooBig = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_store_index_cache_items_key_too_big_total",
-		Help: "Total number of items that could not be added to the cache due to key being too big.",
-	}, []string{"item_type"})
-	c.keyTooBig.WithLabelValues(cacheTypePostings)
-	c.keyTooBig.WithLabelValues(cacheTypeSeries)
-	c.keyTooBig.WithLabelValues(cacheTypeExpandedPostings)
-
 	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)
 	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)
 	c.commonMetrics.hitsTotal.WithLabelValues(cacheTypeExpandedPostings, tenancy.DefaultTenant)
@@ -156,19 +136,6 @@ func (c *InMemoryIndexCache) get(key cacheKey) ([]byte, bool) {
 
 func (c *InMemoryIndexCache) set(typ string, key cacheKey, val []byte) {
 	k := yoloBuf(key.string())
-
-	// SetBig has a max key length restriction in fastcache.
-	if len(k) > maxKeyLen {
-		level.Info(c.logger).Log(
-			"msg", "key bigger than maxKeyLen. Ignoring..",
-			"itemKeyLen", len(k),
-			"maxKeyLen", maxKeyLen,
-			"cacheType", typ,
-		)
-		c.keyTooBig.WithLabelValues(typ).Inc()
-		return
-	}
-
 	r := c.cache.GetBig(nil, k)
 	// item exists, no need to set it again.
 	if r != nil {
@@ -186,11 +153,7 @@ func (c *InMemoryIndexCache) set(typ string, key cacheKey, val []byte) {
 		return
 	}
 
-	// The caller may be passing in a sub-slice of a huge array. Copy the data
-	// to ensure we don't waste huge amounts of space for something small.
-	v := make([]byte, len(val))
-	copy(v, val)
-	c.cache.SetBig(k, v)
+	c.cache.SetBig(k, val)
 	c.added.WithLabelValues(typ).Inc()
 }
 

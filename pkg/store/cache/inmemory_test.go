@@ -8,11 +8,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 
@@ -156,4 +159,26 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 			testutil.Equals(t, []string(nil), errorLogs)
 		})
 	}
+}
+
+func TestInMemoryIndexCacheSetOverflow(t *testing.T) {
+	config := InMemoryIndexCacheConfig{
+		MaxSize:     DefaultInMemoryIndexCacheConfig.MaxSize,
+		MaxItemSize: 100,
+	}
+	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), nil, nil, config)
+	testutil.Ok(t, err)
+	counter := cache.overflow.WithLabelValues(cacheTypeSeries)
+	id := ulid.MustNew(ulid.Now(), nil)
+	// Insert a small value won't trigger item overflow.
+	cache.StoreSeries(id, 1, []byte("0"), tenancy.DefaultTenant)
+	testutil.Equals(t, float64(0), prom_testutil.ToFloat64(counter))
+
+	var sb strings.Builder
+	for i := 0; i < 100; i++ {
+		sb.WriteString(strconv.Itoa(i))
+	}
+	// Trigger overflow with a large value.
+	cache.StoreSeries(id, 2, []byte(sb.String()), tenancy.DefaultTenant)
+	testutil.Equals(t, float64(1), prom_testutil.ToFloat64(counter))
 }
