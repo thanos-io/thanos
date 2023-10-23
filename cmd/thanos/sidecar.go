@@ -403,7 +403,7 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 
 	if strings.Contains(flags.PromFeature, "agent") {
 		*promAgentModeEnabled = true
-		level.Warn(logger).Log("msg", "Prometheus is running in agent mode. StoreAPI will be disabled.")
+		level.Info(logger).Log("msg", "Prometheus is running in agent mode. StoreAPI will be disabled.")
 	}
 
 	if uploads {
