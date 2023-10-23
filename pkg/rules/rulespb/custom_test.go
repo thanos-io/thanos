@@ -172,17 +172,11 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name: "group1",
 						Rules: []testpromcompatibility.Rule{
 							testpromcompatibility.AlertingRule{
-								Type:  RuleAlertingType,
-								Name:  "alert1",
-								Query: "up == 0",
-								Labels: labels.Labels{
-									{Name: "a2", Value: "b2"},
-									{Name: "c2", Value: "d2"},
-								},
-								Annotations: labels.Labels{
-									{Name: "ann1", Value: "ann44"},
-									{Name: "ann2", Value: "ann33"},
-								},
+								Type:           RuleAlertingType,
+								Name:           "alert1",
+								Query:          "up == 0",
+								Labels:         labels.FromStrings("a2", "b2", "c2", "d2"),
+								Annotations:    labels.FromStrings("ann1", "ann44", "ann2", "ann33"),
 								Health:         "health2",
 								LastError:      "1",
 								Duration:       60,
@@ -245,11 +239,11 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								Type:  RuleRecordingType,
 								Query: "up",
 								Name:  "recording1",
-								Labels: labels.Labels{
-									{Name: "a", Value: "b"},
-									{Name: "c", Value: "d"},
-									{Name: "a", Value: "b"}, // Kind of invalid, but random one will be chosen.
-								},
+								Labels: labels.FromStrings(
+									"a", "b",
+									"c", "d",
+									"a", "b", // Kind of invalid, but random one will be chosen.
+								),
 								LastError:      "2",
 								Health:         "health",
 								LastEvaluation: now.Add(-2 * time.Minute),
@@ -259,31 +253,27 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								Type:  RuleAlertingType,
 								Name:  "alert1",
 								Query: "up == 0",
-								Labels: labels.Labels{
-									{Name: "a2", Value: "b2"},
-									{Name: "c2", Value: "d2"},
-								},
-								Annotations: labels.Labels{
-									{Name: "ann1", Value: "ann44"},
-									{Name: "ann2", Value: "ann33"},
-								},
+								Labels: labels.FromStrings(
+									"a2", "b2",
+									"c2", "d2",
+								),
+								Annotations: labels.FromStrings(
+									"ann1", "ann44",
+									"ann2", "ann33",
+								),
 								Health: "health2",
 								Alerts: []*testpromcompatibility.Alert{
 									{
-										Labels: labels.Labels{
-											{Name: "instance1", Value: "1"},
-										},
-										Annotations: labels.Labels{
-											{Name: "annotation1", Value: "2"},
-										},
+										Labels:                  labels.FromStrings("instance1", "1"),
+										Annotations:             labels.FromStrings("annotation1", "2"),
 										State:                   "inactive",
 										ActiveAt:                nil,
 										Value:                   "1",
 										PartialResponseStrategy: "WARN",
 									},
 									{
-										Labels:                  nil,
-										Annotations:             nil,
+										Labels:                  labels.EmptyLabels(),
+										Annotations:             labels.EmptyLabels(),
 										State:                   "firing",
 										ActiveAt:                &twoHoursAgo,
 										Value:                   "2143",

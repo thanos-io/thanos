@@ -49,13 +49,13 @@ func TestMatrixToSeriesSetSortsMetricLabels(t *testing.T) {
 	require.NoError(t, ss.Err())
 
 	l := ss.At().Labels()
-	require.Equal(t, labels.Labels{
-		{Name: string(model.MetricNameLabel), Value: "testmetric"},
-		{Name: "a", Value: "b"},
-		{Name: "c", Value: "d"},
-		{Name: "e", Value: "f"},
-		{Name: "g", Value: "h"},
-	}, l)
+	require.Equal(t, labels.New(
+		labels.Label{Name: string(model.MetricNameLabel), Value: "testmetric"},
+		labels.Label{Name: "a", Value: "b"},
+		labels.Label{Name: "c", Value: "d"},
+		labels.Label{Name: "e", Value: "f"},
+		labels.Label{Name: "g", Value: "h"},
+	), l)
 }
 
 func TestDeletedSeriesIterator(t *testing.T) {

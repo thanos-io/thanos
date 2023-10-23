@@ -218,7 +218,7 @@ func (stream *exemplarsStream) receive(ctx context.Context) error {
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
 func matchesExternalLabels(ms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher) {
-	if len(externalLabels) == 0 {
+	if externalLabels.IsEmpty() {
 		return true, ms
 	}
 
