@@ -134,7 +134,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 			Help:      "Number of block metadata synced",
 		},
 		[]string{"state"},
-		append(GetDefaultSyncedStateLabelValues(), syncedExtraLabels...)...,
+		append(DefaultSyncedStateLabelValues(), syncedExtraLabels...)...,
 	)
 	m.Modified = extprom.NewTxGaugeVec(
 		reg,
@@ -144,12 +144,12 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 			Help:      "Number of blocks whose metadata changed",
 		},
 		[]string{"modified"},
-		append(GetDefaultModifiedLabelValues(), modifiedExtraLabels...)...,
+		append(DefaultModifiedLabelValues(), modifiedExtraLabels...)...,
 	)
 	return &m
 }
 
-func GetDefaultSyncedStateLabelValues() [][]string {
+func DefaultSyncedStateLabelValues() [][]string {
 	return [][]string{
 		{CorruptedMeta},
 		{NoMeta},
@@ -164,7 +164,7 @@ func GetDefaultSyncedStateLabelValues() [][]string {
 	}
 }
 
-func GetDefaultModifiedLabelValues() [][]string {
+func DefaultModifiedLabelValues() [][]string {
 	return [][]string{
 		{replicaRemovedMeta},
 	}
