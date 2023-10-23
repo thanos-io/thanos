@@ -69,7 +69,7 @@ func (s *FetcherMetrics) ResetTx() {
 }
 
 const (
-	fetcherSubSys = "blocks_meta"
+	FetcherSubSys = "blocks_meta"
 
 	CorruptedMeta = "corrupted-meta-json"
 	NoMeta        = "no-meta-json"
@@ -99,7 +99,7 @@ func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
 	var m BaseFetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "base_syncs_total",
 		Help:      "Total blocks metadata synchronization attempts by base Fetcher",
 	})
@@ -111,17 +111,17 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	var m FetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "syncs_total",
 		Help:      "Total blocks metadata synchronization attempts",
 	})
 	m.SyncFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "sync_failures_total",
 		Help:      "Total blocks metadata synchronization failures",
 	})
 	m.SyncDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "sync_duration_seconds",
 		Help:      "Duration of the blocks metadata synchronization in seconds",
 		Buckets:   []float64{0.01, 1, 10, 100, 300, 600, 1000},
@@ -129,37 +129,45 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.Synced = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: fetcherSubSys,
+			Subsystem: FetcherSubSys,
 			Name:      "synced",
 			Help:      "Number of block metadata synced",
 		},
 		[]string{"state"},
-		append([][]string{
-			{CorruptedMeta},
-			{NoMeta},
-			{LoadedMeta},
-			{tooFreshMeta},
-			{FailedMeta},
-			{labelExcludedMeta},
-			{timeExcludedMeta},
-			{duplicateMeta},
-			{MarkedForDeletionMeta},
-			{MarkedForNoCompactionMeta},
-		}, syncedExtraLabels...)...,
+		append(DefaultSyncedStateLabelValues(), syncedExtraLabels...)...,
 	)
 	m.Modified = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: fetcherSubSys,
+			Subsystem: FetcherSubSys,
 			Name:      "modified",
 			Help:      "Number of blocks whose metadata changed",
 		},
 		[]string{"modified"},
-		append([][]string{
-			{replicaRemovedMeta},
-		}, modifiedExtraLabels...)...,
+		append(DefaultModifiedLabelValues(), modifiedExtraLabels...)...,
 	)
 	return &m
+}
+
+func DefaultSyncedStateLabelValues() [][]string {
+	return [][]string{
+		{CorruptedMeta},
+		{NoMeta},
+		{LoadedMeta},
+		{tooFreshMeta},
+		{FailedMeta},
+		{labelExcludedMeta},
+		{timeExcludedMeta},
+		{duplicateMeta},
+		{MarkedForDeletionMeta},
+		{MarkedForNoCompactionMeta},
+	}
+}
+
+func DefaultModifiedLabelValues() [][]string {
+	return [][]string{
+		{replicaRemovedMeta},
+	}
 }
 
 type MetadataFetcher interface {
@@ -794,15 +802,21 @@ type ConsistencyDelayMetaFilter struct {
 
 // NewConsistencyDelayMetaFilter creates ConsistencyDelayMetaFilter.
 func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Duration, reg prometheus.Registerer) *ConsistencyDelayMetaFilter {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
 	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "consistency_delay_seconds",
 		Help: "Configured consistency delay in seconds.",
 	}, func() float64 {
 		return consistencyDelay.Seconds()
 	})
+
+	return NewConsistencyDelayMetaFilterWithoutMetrics(logger, consistencyDelay)
+}
+
+// NewConsistencyDelayMetaFilterWithoutMetrics creates ConsistencyDelayMetaFilter.
+func NewConsistencyDelayMetaFilterWithoutMetrics(logger log.Logger, consistencyDelay time.Duration) *ConsistencyDelayMetaFilter {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 
 	return &ConsistencyDelayMetaFilter{
 		logger:           logger,
