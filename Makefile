@@ -226,6 +226,12 @@ $(TEST_DOCKER_ARCHS): docker-test-%:
 	@echo ">> testing image"
 	@docker run "thanos-linux-$*" --help
 
+.PHONY: docker-e2e
+docker-e2e: ## Builds 'thanos' docker for e2e tests
+docker-e2e:
+	@echo ">> building docker image 'thanos' with Dockerfile.e2e-tests"
+	@docker build -f Dockerfile.e2e-tests -t "thanos" .
+
 # docker-manifest push docker manifest to support multiple architectures.
 .PHONY: docker-manifest
 docker-manifest:
@@ -318,7 +324,7 @@ test-local:
 
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-test-e2e: docker $(GOTESPLIT)
+test-e2e: docker-e2e $(GOTESPLIT)
 	@echo ">> cleaning docker environment."
 	@docker system prune -f --volumes
 	@echo ">> cleaning e2e test garbage."
