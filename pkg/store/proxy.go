@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -540,7 +539,6 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		mtx            sync.Mutex
 		g, gctx        = errgroup.WithContext(ctx)
 		storeDebugMsgs []string
-		span           opentracing.Span
 	)
 
 	// We may arrive here either via the promql engine
@@ -564,12 +562,6 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		if storeID == "" {
 			storeID = "Store Gateway"
 		}
-		span, gctx = tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-			"store.id":       storeID,
-			"store.addr":     storeAddr,
-			"store.is_local": isLocalStore,
-		})
-		defer span.Finish()
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
@@ -583,7 +575,14 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		}
 
 		g.Go(func() error {
-			resp, err := st.LabelValues(gctx, &storepb.LabelValuesRequest{
+			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
+				"store.id":       storeID,
+				"store.addr":     storeAddr,
+				"store.is_local": isLocalStore,
+			})
+			defer span.Finish()
+
+			resp, err := st.LabelValues(spanCtx, &storepb.LabelValuesRequest{
 				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 				Start:                   r.Start,

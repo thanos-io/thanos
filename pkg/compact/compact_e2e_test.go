@@ -217,9 +217,9 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		// Compaction on empty should not fail.
 		testutil.Ok(t, bComp.Compact(ctx))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectedBlocks))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.BlocksMarkedForDeletion))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectionFailures))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.blocksMarkedForNoCompact))
 		testutil.Equals(t, 0, MetricCount(grouper.compactions))
 		testutil.Equals(t, 0, MetricCount(grouper.compactionRunsStarted))
@@ -320,10 +320,10 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		groupKey2 := metas[6].Thanos.GroupKey()
 
 		testutil.Ok(t, bComp.Compact(ctx))
-		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
-		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
+		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.GarbageCollectedBlocks))
+		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.BlocksMarkedForDeletion))
 		testutil.Equals(t, 1.0, promtest.ToFloat64(grouper.blocksMarkedForNoCompact))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectionFailures))
 		testutil.Equals(t, 2, MetricCount(grouper.compactions))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(metas[0].Thanos.ResolutionString())))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(metas[5].Thanos.ResolutionString())))

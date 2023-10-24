@@ -768,7 +768,6 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(18), []string{"thanos_compact_blocks_cleaned_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_block_cleanup_failures_total"}, e2emon.WaitMissingMetrics()))
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_blocks_marked_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_aborted_partial_uploads_deletion_attempts_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compactions_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_vertical_compactions_total"}, e2emon.WaitMissingMetrics()))

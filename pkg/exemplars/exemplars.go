@@ -9,7 +9,8 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
+
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -20,7 +21,7 @@ var _ UnaryClient = &GRPCClient{}
 // UnaryClient is gRPC exemplarspb.Exemplars client which expands streaming exemplars API. Useful for consumers that does not
 // support streaming.
 type UnaryClient interface {
-	Exemplars(ctx context.Context, req *exemplarspb.ExemplarsRequest) ([]*exemplarspb.ExemplarData, storage.Warnings, error)
+	Exemplars(ctx context.Context, req *exemplarspb.ExemplarsRequest) ([]*exemplarspb.ExemplarData, annotations.Annotations, error)
 }
 
 // GRPCClient allows to retrieve exemplars from local gRPC streaming server implementation.
@@ -36,7 +37,7 @@ type exemplarsServer struct {
 	exemplarspb.Exemplars_ExemplarsServer
 	ctx context.Context
 
-	warnings []error
+	warnings annotations.Annotations
 	data     []*exemplarspb.ExemplarData
 	mu       sync.Mutex
 }
@@ -45,7 +46,7 @@ func (srv *exemplarsServer) Send(res *exemplarspb.ExemplarsResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings.Add(errors.New(res.GetWarning()))
 		return nil
 	}
 
@@ -79,7 +80,7 @@ func NewGRPCClientWithDedup(es exemplarspb.ExemplarsServer, replicaLabels []stri
 	return c
 }
 
-func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsRequest) ([]*exemplarspb.ExemplarData, storage.Warnings, error) {
+func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsRequest) ([]*exemplarspb.ExemplarData, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "exemplar_grpc_request")
 	defer span.Finish()
 

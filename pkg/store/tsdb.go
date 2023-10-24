@@ -184,7 +184,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
-	q, err := s.db.ChunkQuerier(context.Background(), r.MinTime, r.MaxTime)
+	q, err := s.db.ChunkQuerier(r.MinTime, r.MaxTime)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -195,7 +195,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb chunk querier series")
 	}
 
-	set := q.Select(true, nil, matchers...)
+	set := q.Select(srv.Context(), true, nil, matchers...)
 
 	shardMatcher := r.ShardInfo.Matcher(&s.buffers)
 	defer shardMatcher.Close()
@@ -297,13 +297,13 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 		return &storepb.LabelNamesResponse{Names: nil}, nil
 	}
 
-	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
+	q, err := s.db.ChunkQuerier(r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
 
-	res, _, err := q.LabelNames(matchers...)
+	res, _, err := q.LabelNames(ctx, matchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -348,13 +348,13 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return &storepb.LabelValuesResponse{Values: []string{v}}, nil
 	}
 
-	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
+	q, err := s.db.ChunkQuerier(r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label values")
 
-	res, _, err := q.LabelValues(r.Label, matchers...)
+	res, _, err := q.LabelValues(ctx, r.Label, matchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

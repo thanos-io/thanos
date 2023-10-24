@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { InputProps, Collapse, ListGroupItem, ListGroup } from 'reactstrap';
+import { ExplainTree } from '../pages/graph/ExpressionInput';
 
 export interface QueryTree {
   name: string;
+  executionTime?: string;
   children?: QueryTree[];
 }
 
 interface NodeProps extends InputProps {
-  node: QueryTree | null;
+  node: QueryTree | ExplainTree | null;
 }
 
 const ListTree: React.FC<NodeProps> = ({ id, node }) => {
@@ -42,6 +44,7 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
                 )}
                 <div id={id} style={{ cursor: `${node.children ? 'pointer' : 'inherit'}` }} onClick={toggle}>
                   {node.name}
+                  {node.executionTime && ` · ${node.executionTime}`}
                 </div>
               </div>
             }
