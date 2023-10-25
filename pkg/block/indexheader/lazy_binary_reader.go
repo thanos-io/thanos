@@ -59,7 +59,7 @@ func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetr
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "indexheader_lazy_load_duration_seconds",
 			Help:    "Duration of the index-header lazy loading in seconds.",
-			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 120, 300},
+			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
 		}),
 	}
 }
@@ -74,6 +74,7 @@ type LazyBinaryReader struct {
 	id                          ulid.ULID
 	postingOffsetsInMemSampling int
 	metrics                     *LazyBinaryReaderMetrics
+	binaryReaderMetrics         *BinaryReaderMetrics
 	onClosed                    func(*LazyBinaryReader)
 
 	readerMx  sync.RWMutex
@@ -96,6 +97,7 @@ func NewLazyBinaryReader(
 	id ulid.ULID,
 	postingOffsetsInMemSampling int,
 	metrics *LazyBinaryReaderMetrics,
+	binaryReaderMetrics *BinaryReaderMetrics,
 	onClosed func(*LazyBinaryReader),
 ) (*LazyBinaryReader, error) {
 	if dir != "" {
@@ -114,6 +116,7 @@ func NewLazyBinaryReader(
 			}
 
 			level.Debug(logger).Log("msg", "built index-header file", "path", indexHeaderFile, "elapsed", time.Since(start))
+			binaryReaderMetrics.downloadDuration.Observe(time.Since(start).Seconds())
 		}
 	}
 
@@ -125,6 +128,7 @@ func NewLazyBinaryReader(
 		id:                          id,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		metrics:                     metrics,
+		binaryReaderMetrics:         binaryReaderMetrics,
 		usedAt:                      atomic.NewInt64(time.Now().UnixNano()),
 		onClosed:                    onClosed,
 	}, nil
@@ -257,7 +261,7 @@ func (r *LazyBinaryReader) load() (returnErr error) {
 	r.metrics.loadCount.Inc()
 	startTime := time.Now()
 
-	reader, err := NewBinaryReader(r.ctx, r.logger, r.bkt, r.dir, r.id, r.postingOffsetsInMemSampling)
+	reader, err := NewBinaryReader(r.ctx, r.logger, r.bkt, r.dir, r.id, r.postingOffsetsInMemSampling, r.binaryReaderMetrics)
 	if err != nil {
 		r.metrics.loadFailedCount.Inc()
 		r.readerErr = err
