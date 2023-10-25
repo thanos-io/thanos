@@ -265,9 +265,10 @@ func runSidecar(
 
 		var infoOptions []info.ServerOptionFunc
 		if !promAgentModeEnabled {
-			infoOptions = append(infoOptions, info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
-				return promStore.LabelSet()
-			}),
+			infoOptions = append(infoOptions,
+				info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+					return promStore.LabelSet()
+				}),
 				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 					if httpProbe.IsReady() {
 						mint, maxt := promStore.Timestamps()
