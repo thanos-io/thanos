@@ -282,8 +282,8 @@ func runSidecar(
 					}
 					return nil
 				}),
-				info.WithExemplarsInfoFunc())
-		}
+				info.WithExemplarsInfoFunc(),
+			)
 		infoOptions = append(infoOptions,
 			info.WithRulesInfoFunc(),
 			info.WithTargetsInfoFunc(),
