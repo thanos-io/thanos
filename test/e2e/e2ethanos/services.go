@@ -978,6 +978,13 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		flags["--query-range.split-interval"] = "0"
 	}
 
+	if config.TenantHeader != "" {
+		flags["--query-frontend.tenant-header"] = config.TenantHeader
+	}
+	if config.DefaultTenant != "" {
+		flags["--query-frontend.default-tenant"] = config.DefaultTenant
+	}
+
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).
 		WithPorts(map[string]int{"http": 8080}).
 		Init(e2e.StartOptions{

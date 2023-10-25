@@ -19,6 +19,7 @@ type seriesStatsAggregator struct {
 	queryDuration    *prometheus.HistogramVec
 	seriesLeBuckets  []float64
 	samplesLeBuckets []float64
+	tenant           string
 
 	seriesStats storepb.SeriesStatsCounter
 }
@@ -29,11 +30,12 @@ type seriesStatsAggregatorFactory struct {
 	samplesLeBuckets []float64
 }
 
-func (f *seriesStatsAggregatorFactory) NewAggregator() SeriesQueryPerformanceMetricsAggregator {
+func (f *seriesStatsAggregatorFactory) NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator {
 	return &seriesStatsAggregator{
 		queryDuration:    f.queryDuration,
 		seriesLeBuckets:  f.seriesLeBuckets,
 		samplesLeBuckets: f.samplesLeBuckets,
+		tenant:           tenant,
 		seriesStats:      storepb.SeriesStatsCounter{},
 	}
 }
@@ -49,7 +51,7 @@ func NewSeriesStatsAggregatorFactory(
 			Name:    "thanos_store_api_query_duration_seconds",
 			Help:    "Duration of the Thanos Store API select phase for a query.",
 			Buckets: durationQuantiles,
-		}, []string{"series_le", "samples_le"}),
+		}, []string{"series_le", "samples_le", "tenant"}),
 		seriesLeBuckets:  seriesQuantiles,
 		samplesLeBuckets: sampleQuantiles,
 	}
@@ -67,7 +69,7 @@ func NewSeriesStatsAggregator(
 			Name:    "thanos_store_api_query_duration_seconds",
 			Help:    "Duration of the Thanos Store API select phase for a query.",
 			Buckets: durationQuantiles,
-		}, []string{"series_le", "samples_le"}),
+		}, []string{"series_le", "samples_le", "tenant"}),
 		seriesLeBuckets:  seriesQuantiles,
 		samplesLeBuckets: sampleQuantiles,
 		seriesStats:      storepb.SeriesStatsCounter{},
@@ -92,6 +94,7 @@ func (s *seriesStatsAggregator) Observe(duration float64) {
 	s.queryDuration.With(prometheus.Labels{
 		"series_le":  seriesLeBucket,
 		"samples_le": samplesLeBucket,
+		"tenant":     s.tenant,
 	}).Observe(duration)
 	s.reset()
 }
@@ -115,7 +118,7 @@ func findBucket(value float64, quantiles []float64) string {
 }
 
 type SeriesQueryPerformanceMetricsAggregatorFactory interface {
-	NewAggregator() SeriesQueryPerformanceMetricsAggregator
+	NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator
 }
 
 type SeriesQueryPerformanceMetricsAggregator interface {
@@ -133,7 +136,7 @@ func (s *NoopSeriesStatsAggregator) Observe(_ float64) {}
 // NoopSeriesStatsAggregatorFactory is a query performance series aggregator factory that does nothing.
 type NoopSeriesStatsAggregatorFactory struct{}
 
-func (s *NoopSeriesStatsAggregatorFactory) NewAggregator() SeriesQueryPerformanceMetricsAggregator {
+func (s *NoopSeriesStatsAggregatorFactory) NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator {
 	return &NoopSeriesStatsAggregator{}
 }
 
