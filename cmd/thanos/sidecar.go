@@ -284,6 +284,7 @@ func runSidecar(
 				}),
 				info.WithExemplarsInfoFunc(),
 			)
+		}
 		infoOptions = append(infoOptions,
 			info.WithRulesInfoFunc(),
 			info.WithTargetsInfoFunc(),
@@ -304,7 +305,7 @@ func runSidecar(
 		}
 		if !promAgentModeEnabled {
 			storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
-			opts = append(opts, 
+			opts = append(opts,
 				grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
 				grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
