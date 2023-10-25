@@ -996,7 +996,27 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		}), "http")
 }
 
-func NewReverseProxy(e e2e.Environment, name, tenantID, target string) *e2emon.InstrumentedRunnable {
+func NewReverseProxy(e e2e.Environment, name, conf string) *e2emon.InstrumentedRunnable {
+	f := e.Runnable(fmt.Sprintf("nginx-%s", name)).
+		WithPorts(map[string]int{"http": 80}).
+		Future()
+
+	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
+		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
+	}
+
+	if err := os.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
+		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))}
+	}
+
+	return e2emon.AsInstrumented(f.Init(e2e.StartOptions{
+		Image:            "docker.io/nginx:1.21.1-alpine",
+		Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
+		WaitReadyBackoff: &defaultBackoffConfig,
+	}), "http")
+}
+
+func NewDefaultReverseProxy(e e2e.Environment, name, tenantID, target string) *e2emon.InstrumentedRunnable {
 	conf := fmt.Sprintf(`
 events {
 	worker_connections  1024;
@@ -1015,23 +1035,7 @@ http {
 }
 `, tenantID, target)
 
-	f := e.Runnable(fmt.Sprintf("nginx-%s", name)).
-		WithPorts(map[string]int{"http": 80}).
-		Future()
-
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
-	}
-
-	if err := os.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))}
-	}
-
-	return e2emon.AsInstrumented(f.Init(e2e.StartOptions{
-		Image:            "docker.io/nginx:1.21.1-alpine",
-		Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
-		WaitReadyBackoff: &defaultBackoffConfig,
-	}), "http")
+	return NewReverseProxy(e, name, conf)
 }
 
 func NewMemcached(e e2e.Environment, name string) *e2emon.InstrumentedRunnable {

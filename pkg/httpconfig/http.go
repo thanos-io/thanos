@@ -42,6 +42,8 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
+	// FollowRedirects specifies whether the client should follow HTTP 3xx redirects.
+	FollowRedirects bool `yaml:"follow_redirects"`
 	// TransportConfig for Client transport properties
 	TransportConfig TransportConfig `yaml:"transport_config"`
 	// ClientMetrics contains metrics that will be used to instrument
@@ -242,6 +244,11 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 
 	rt = &userAgentRoundTripper{name: ThanosUserAgent, rt: rt}
 	client := &http.Client{Transport: rt}
+	if !cfg.FollowRedirects {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 
 	return client, nil
 }

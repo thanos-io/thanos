@@ -514,6 +514,82 @@ func TestRule(t *testing.T) {
 	})
 }
 
+func TestRule_FollowRedirects(t *testing.T) {
+	e, err := e2e.NewDockerEnvironment("follow-redirects")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	rpConf := `
+events {
+	worker_connections 1024;
+}
+
+http {
+	server {
+		listen 80;
+		server_name _;
+
+		location /api/v1/alerts {
+		  return 302 "https://example.com";
+		}
+	}
+}
+`
+	rp := e2ethanos.NewReverseProxy(e, "1", rpConf)
+	testutil.Ok(t, e2e.StartAndWaitReady(rp))
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+
+	queryTargetsSubDir := filepath.Join("rules_query_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
+
+	rulesSubDir := filepath.Join("rules")
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFiles(t, rulesPath)
+
+	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
+		{
+			HTTPClientConfig: httpconfig.ClientConfig{
+				FollowRedirects: false,
+			},
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				StaticAddresses: []string{
+					rp.InternalEndpoint("http"),
+				},
+				Scheme: "http",
+			},
+			Timeout:    amTimeout,
+			APIVersion: alert.APIv1,
+		},
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+		{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				// We test Statically Addressed queries in other tests. Focus on FileSD here.
+				FileSDConfigs: []httpconfig.FileSDConfig{
+					{
+						// FileSD which will be used to register discover dynamically q.
+						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
+						RefreshInterval: model.Duration(time.Second),
+					},
+				},
+				Scheme: "http",
+			},
+		},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	writeTargets(t, filepath.Join(rFuture.Dir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
+
+	t.Run("alert redirects", func(t *testing.T) {
+		// Alerts dropped because should not follow redirects
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Greater(4), "thanos_alert_sender_alerts_dropped_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Greater(4), "thanos_alert_sender_errors_total"))
+	})
+}
+
 // TestRule_CanRemoteWriteData checks that Thanos Ruler can be run in stateless mode
 // where it remote_writes rule evaluations to a Prometheus remote-write endpoint (typically
 // a Thanos Receiver).
