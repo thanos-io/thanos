@@ -103,10 +103,10 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
-			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 		})
 	}
 }
@@ -186,14 +186,14 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 			}
 
 			// Assert on metrics.
-			testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypeExpandedPostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
 			if testData.expectedHit {
-				testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypeExpandedPostings, tenancy.DefaultTenant)))
+				testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
 			}
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 		})
 	}
 }
@@ -279,10 +279,10 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
-			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
 		})
 	}
 }
