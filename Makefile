@@ -133,7 +133,7 @@ react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   cd $(REACT_APP_PATH) && npm run lint:ci
 
 .PHONY: react-app-lint-fix
-react-app-lint-fix:
+react-app-lint-fix: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app linting and fixing errors where possible"
 	cd $(REACT_APP_PATH) && npm run lint
 
