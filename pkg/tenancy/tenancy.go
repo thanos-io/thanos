@@ -154,14 +154,81 @@ func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (strin
 	}
 
 	if err := e.EnforceNode(expr); err != nil {
-		var illegalLabelMatcherError *injectproxy.IllegalLabelMatcherError
-		if errors.As(err, *illegalLabelMatcherError) {
-			return "", illegalLabelMatcherError
-		}
 		return "", errors.Wrap(err, "error enforcing label")
 	}
 
-	queryStr := expr.String()
+	return expr.String(), nil
+}
 
-	return queryStr, nil
+func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool, tenantLabel string) ([][]*labels.Matcher, error) {
+	tenantLabelMatcher := &labels.Matcher{
+		Name:  tenantLabel,
+		Type:  labels.MatchEqual,
+		Value: tenant,
+	}
+
+	matcherSets := make([][]*labels.Matcher, 0, len(formMatchers))
+
+	// If tenancy is enforced, but there are no matchers at all, add the tenant matcher
+	if len(formMatchers) == 0 && enforceTenancy {
+		var matcher []*labels.Matcher
+		matcher = append(matcher, tenantLabelMatcher)
+		matcherSets = append(matcherSets, matcher)
+		return matcherSets, nil
+	}
+
+	for _, s := range formMatchers {
+		matchers, err := parser.ParseMetricSelector(s)
+		if err != nil {
+			return nil, err
+		}
+
+		if enforceTenancy {
+			e := injectproxy.NewEnforcer(false, tenantLabelMatcher)
+			matchers, err = e.EnforceMatchers(matchers)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		matcherSets = append(matcherSets, matchers)
+	}
+
+	return matcherSets, nil
+}
+
+// This function will:
+// - Get tenant from HTTP header and add it to context.
+// - if tenancy is enforce, add a tenant matcher.
+func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, queryStr string) (string, string, context.Context, error) {
+	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField)
+	if err != nil {
+		return "", "", ctx, err
+	}
+	ctx = context.WithValue(ctx, TenantKey, tenant)
+
+	if enforceTenancy {
+		queryStr, err = EnforceQueryTenancy(tenantLabel, tenant, queryStr)
+		return queryStr, tenant, ctx, err
+	}
+	return queryStr, tenant, ctx, nil
+}
+
+// This function will:
+// - Get tenant from HTTP header and add it to context.
+// - Parse all labels matchers provided.
+// - If tenancy is enforced, make sure a tenant matcher is present.
+func RewriteLabelMatchers(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, formMatchers []string) ([][]*labels.Matcher, context.Context, error) {
+	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField)
+	if err != nil {
+		return nil, ctx, err
+	}
+	ctx = context.WithValue(ctx, TenantKey, tenant)
+
+	matcherSets, err := getLabelMatchers(formMatchers, tenant, enforceTenancy, tenantLabel)
+	if err != nil {
+		return nil, ctx, err
+	}
+
+	return matcherSets, ctx, nil
 }

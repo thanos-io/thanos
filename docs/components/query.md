@@ -363,9 +363,10 @@ Flags:
       --query.default-tenant-id="default-tenant"
                                  Default tenant ID to use if tenant header is
                                  not present
-      --query.enable-tenancy     Enable tenancy. Only responses where the value
-                                 of the configured tenant-label-name and value
-                                 of the tenant header matches are returned.
+      --query.enforce-tenancy    Enforce tenancy on Query APIs. Only
+                                 responses where the value of the configured
+                                 tenant-label-name and value of the tenant
+                                 header matches are returned.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.

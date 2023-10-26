@@ -651,19 +651,9 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.FormValue("query"))
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
-	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
-
-	queryStr := r.FormValue("query")
-	if qapi.enforceTenancy {
-		queryStr, err = tenancy.EnforceQueryTenancy(qapi.tenantLabel, tenant, queryStr)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-		}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
@@ -958,23 +948,13 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.FormValue("query"))
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
-
-	queryStr := r.FormValue("query")
-	if qapi.enforceTenancy {
-		queryStr, err = tenancy.EnforceQueryTenancy(qapi.tenantLabel, tenant, queryStr)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-		}
-	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
@@ -1071,15 +1051,9 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, apiErr, func() {}
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
 	if err != nil {
 		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
-	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
-
-	matcherSets, apiErr := qapi.getLabelMatchers(r.Form[MatcherParam], tenant)
-	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
 
@@ -1150,15 +1124,9 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, "")
+	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(r.Context(), r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
 	if err != nil {
 		apiErr := &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
-	}
-	ctx := context.WithValue(r.Context(), tenancy.TenantKey, tenant)
-
-	matcherSets, apiErr := qapi.getLabelMatchers(r.Form[MatcherParam], tenant)
-	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
 
@@ -1233,15 +1201,9 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, "")
+	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(r.Context(), r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
-	}
-	ctx := context.WithValue(r.Context(), tenancy.TenantKey, tenant)
-
-	matcherSets, apiErr := qapi.getLabelMatchers(r.Form[MatcherParam], tenant)
-	if apiErr != nil {
+		apiErr := &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		return nil, nil, apiErr, func() {}
 	}
 
@@ -1309,54 +1271,6 @@ func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiErr
 		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], status)
 	}
 	return statuses, nil, nil, func() {}
-}
-
-func (qapi *QueryAPI) getLabelMatchers(matchers []string, tenant string) ([][]*labels.Matcher, *api.ApiError) {
-	tenantLabelMatcher := &labels.Matcher{
-		Name:  qapi.tenantLabel,
-		Type:  labels.MatchEqual,
-		Value: tenant,
-	}
-
-	matcherSets := make([][]*labels.Matcher, 0, len(matchers))
-
-	// If tenancy is enforced, but there are no matchers at all, add the tenant matcher
-	if len(matchers) == 0 && qapi.enforceTenancy {
-		var matcher []*labels.Matcher
-		matcher = append(matcher, tenantLabelMatcher)
-		matcherSets = append(matcherSets, matcher)
-		return matcherSets, nil
-	}
-
-	for _, s := range matchers {
-		matchers, err := parser.ParseMetricSelector(s)
-		if err != nil {
-			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		}
-		if qapi.enforceTenancy {
-			// first check if there's a tenant matcher already, in which case we overwrite it
-			// if there are multiple tenant matchers, we remove the subsequent ones
-			found := false
-			for idx, matchValue := range matchers {
-				if matchValue.Name == qapi.tenantLabel {
-					if found {
-						// remove any additional tenant matchers.
-						matchers = append(matchers[:idx], matchers[idx+1:]...)
-					} else {
-						matchers[idx] = tenantLabelMatcher
-						found = true
-					}
-				}
-			}
-			// if there are no pre-existing tenant matchers, add it.
-			if !found {
-				matchers = append(matchers, tenantLabelMatcher)
-			}
-		}
-		matcherSets = append(matcherSets, matchers)
-	}
-
-	return matcherSets, nil
 }
 
 // NewTargetsHandler created handler compatible with HTTP /api/v1/targets https://prometheus.io/docs/prometheus/latest/querying/api/#targets

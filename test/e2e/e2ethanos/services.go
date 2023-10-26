@@ -493,7 +493,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		args = append(args, "--query.telemetry.request-series-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
 	}
 	if q.enforceTenancy {
-		args = append(args, "--query.enable-tenancy")
+		args = append(args, "--query.enforce-tenancy")
 	}
 	return args, nil
 }
