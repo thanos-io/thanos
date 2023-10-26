@@ -27,6 +27,7 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -95,7 +96,7 @@ func TestQueryServiceAttribute(t *testing.T) {
 			Image:     "jaegertracing/all-in-one:1.33",
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
-	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	newJaeger := e2eobs.AsObservable(newJaegerRunnable, "http.admin")
 	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
 
 	otelcolConfig := fmt.Sprintf(`---
@@ -1739,7 +1740,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2eobs.Observable, testSamples []fakeMetricSample) error {
 	samples := make([]model.Sample, len(testSamples))
 	for i, s := range testSamples {
 		samples[i] = newSample(s)
@@ -1748,7 +1749,7 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.Instrum
 	return synthesizeSamples(ctx, prometheus, samples)
 }
 
-func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, samples []model.Sample) error {
+func synthesizeSamples(ctx context.Context, prometheus *e2eobs.Observable, samples []model.Sample) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(samples))
@@ -1778,7 +1779,7 @@ func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunna
 	return storeWriteRequest(ctx, rawRemoteWriteURL, writeRequest)
 }
 
-func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, series []seriesWithLabels) error {
+func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2eobs.Observable, series []seriesWithLabels) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(series))

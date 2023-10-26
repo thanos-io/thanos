@@ -11,6 +11,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/timestamp"
 
@@ -27,8 +28,8 @@ const (
 func TestExemplarsAPI_Fanout(t *testing.T) {
 	t.Parallel()
 	var (
-		prom1, prom2       *e2emon.InstrumentedRunnable
-		sidecar1, sidecar2 *e2emon.InstrumentedRunnable
+		prom1, prom2       *e2eobs.Observable
+		sidecar1, sidecar2 *e2eobs.Observable
 		err                error
 		e                  *e2e.DockerEnvironment
 	)
