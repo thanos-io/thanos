@@ -11,6 +11,17 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - in progress
+
+### Fixed
+
 - [#6817](https://github.com/thanos-io/thanos/pull/6817) Store Gateway: fix `matchersToPostingGroups` label values variable got shadowed bug.
 
 ### Added
