@@ -78,7 +78,7 @@ func NewBinaryReaderMetrics(reg prometheus.Registerer) *BinaryReaderMetrics {
 		downloadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "indexheader_download_duration_seconds",
 			Help:    "Duration of the index-header download from objstore in seconds.",
-			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
+			Buckets: []float64{0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
 		}),
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "indexheader_load_duration_seconds",
