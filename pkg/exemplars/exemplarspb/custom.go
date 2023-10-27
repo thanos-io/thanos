@@ -76,7 +76,7 @@ func (s1 *ExemplarData) Compare(s2 *ExemplarData) int {
 func (s *ExemplarData) SetSeriesLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
-	if len(ls) > 0 {
+	if !ls.IsEmpty() {
 		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
 	}
 

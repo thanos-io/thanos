@@ -381,7 +381,7 @@ groups:
 				return nil, nil
 			}
 		},
-		nil,
+		labels.EmptyLabels(),
 		"http://localhost",
 	)
 
@@ -439,7 +439,7 @@ groups:
 				}, nil
 			}
 		},
-		nil,
+		labels.EmptyLabels(),
 		"http://localhost",
 	)
 	thanosRuleMgr.Run()
