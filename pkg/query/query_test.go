@@ -119,6 +119,11 @@ func (s *selectStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesS
 	if r.MaxTime > s.maxt {
 		r.MaxTime = s.maxt
 	}
-	r.Matchers = append(r.Matchers, s.matchers...)
-	return s.StoreServer.Series(r, srv)
+
+	matchers := make([]storepb.LabelMatcher, 0, len(r.Matchers))
+	matchers = append(matchers, r.Matchers...)
+
+	req := *r
+	req.Matchers = matchers
+	return s.StoreServer.Series(&req, srv)
 }
