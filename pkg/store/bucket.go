@@ -1163,7 +1163,7 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 		return nil
 	}
 
-	b.indexr.reset()
+	b.indexr.reset(len(postingsBatch))
 	if !b.skipChunks {
 		b.chunkr.reset()
 	}
@@ -2413,8 +2413,8 @@ func (r *bucketIndexReader) IndexVersion() (int, error) {
 	return v, nil
 }
 
-func (r *bucketIndexReader) reset() {
-	r.loadedSeries = map[storage.SeriesRef][]byte{}
+func (r *bucketIndexReader) reset(size int) {
+	r.loadedSeries = make(map[storage.SeriesRef][]byte, size)
 }
 
 // ExpandedPostings returns postings in expanded list instead of index.Postings.
@@ -2608,7 +2608,7 @@ func (pg postingGroup) mergeKeys(other *postingGroup) *postingGroup {
 		pg.addAll = false
 		pg.removeKeys = nil
 	} else {
-		addKeys := make([]string, 0, len(pg.addKeys)+len(other.addKeys))
+		addKeys := make([]string, 0, min(len(pg.addKeys), len(other.addKeys)))
 		for i < len(pg.addKeys) && j < len(other.addKeys) {
 			if pg.addKeys[i] == other.addKeys[j] {
 				addKeys = append(addKeys, pg.addKeys[i])
@@ -2664,8 +2664,9 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 			}
 			// Cache label values because label name is the same.
 			if !valuesCached && vals != nil {
+				lvals := vals
 				lvalsFunc = func(_ string) ([]string, error) {
-					return vals, nil
+					return lvals, nil
 				}
 				valuesCached = true
 			}

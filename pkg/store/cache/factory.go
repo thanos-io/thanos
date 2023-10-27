@@ -41,7 +41,7 @@ type IndexCacheConfig struct {
 func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Registerer) (IndexCache, error) {
 	level.Info(logger).Log("msg", "loading index cache configuration")
 	cacheConfig := &IndexCacheConfig{}
-	cacheMetrics := newCommonMetrics(reg)
+	cacheMetrics := NewCommonMetrics(reg)
 	if err := yaml.UnmarshalStrict(confContentYaml, cacheConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
 	}

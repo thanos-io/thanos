@@ -269,6 +269,13 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 			Start: q.mint,
 			End:   q.maxt,
 		}
+	} else {
+		// NOTE(GiedriusS): need to make a copy here
+		// because the PromQL engine sorts these and
+		// we later on call String() the whole request (including this slice).
+		grouping := make([]string, 0, len(hints.Grouping))
+		grouping = append(grouping, hints.Grouping...)
+		hints.Grouping = grouping
 	}
 
 	matchers := make([]string, len(ms))
