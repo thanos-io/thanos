@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 
@@ -89,16 +90,16 @@ func TestPathContentReloader(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			reloadCount := 0
+			reloadCount := &atomic.Int64{}
 			configReloadTime := 500 * time.Millisecond
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
-				reloadCount++
+				reloadCount.Inc()
 				wg.Done()
 			}, configReloadTime)
 			testutil.Ok(t, err)
 			// wait for the initial reload
 			testutil.NotOk(t, runutil.Repeat(configReloadTime, ctx.Done(), func() error {
-				if reloadCount != 1 {
+				if reloadCount.Load() != 1 {
 					return nil
 				}
 				return errors.New("reload count matched")
@@ -109,7 +110,7 @@ func TestPathContentReloader(t *testing.T) {
 
 			// wait for final reload
 			testutil.NotOk(t, runutil.Repeat(2*configReloadTime, ctx.Done(), func() error {
-				if reloadCount != tt.wantReloads {
+				if reloadCount.Load() != int64(tt.wantReloads) {
 					return nil
 				}
 				return errors.New("reload count matched")
