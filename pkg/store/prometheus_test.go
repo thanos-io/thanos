@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/go-kit/log"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -62,7 +63,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -224,7 +225,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -406,7 +407,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -469,7 +470,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -578,7 +579,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testin
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, p.Appender(), func() storepb.StoreServer {
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
