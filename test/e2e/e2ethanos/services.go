@@ -43,7 +43,7 @@ const (
 var defaultBackoffConfig = backoff.Config{
 	Min:        300 * time.Millisecond,
 	Max:        600 * time.Millisecond,
-	MaxRetries: 50,
+	MaxRetries: 0,
 }
 
 // TODO(bwplotka): Make strconv.Itoa(os.Getuid()) pattern in e2e?
@@ -896,9 +896,10 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 	}
 
 	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     DefaultImage(),
-		Command:   e2e.NewCommand("store", args...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		Image:            DefaultImage(),
+		Command:          e2e.NewCommand("store", args...),
+		Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		WaitReadyBackoff: &defaultBackoffConfig,
 	})), "http")
 }
 
@@ -944,7 +945,8 @@ func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig 
 			"--selector.relabel-config":  string(relabelConfigBytes),
 			"--wait":                     "",
 		}), extArgs...)...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		WaitReadyBackoff: &defaultBackoffConfig,
 	})), "http")
 }
 
