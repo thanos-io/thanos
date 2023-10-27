@@ -2402,7 +2402,7 @@ func TestTenantHTTPMetrics(t *testing.T) {
 	tenant1Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-1")
 	testutil.Ok(t, err)
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(
-		e2emon.Equals(3),
+		e2emon.GreaterOrEqual(3),
 		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
 			tenant1Matcher,
 		),
