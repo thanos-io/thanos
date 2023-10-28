@@ -375,7 +375,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 
 		// The labels have to be copied because `relabel.Process` is now overwriting the original
 		// labels to same memory. This happens since Prometheus v2.39.0.
-		if processedLabels, _ := relabel.Process(lbls.Copy(), d.relabels...); len(processedLabels) == 0 {
+		if processedLabels, _ := relabel.Process(lbls.Copy(), d.relabels...); processedLabels.IsEmpty() {
 			// Special case: Delete whole series if no labels are present.
 			var (
 				minT int64 = math.MaxInt64
@@ -403,10 +403,10 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 			log.DeleteSeries(lbls, deleted)
 			p.SeriesProcessed()
 		} else {
-			for _, lb := range processedLabels {
-				symbols[lb.Name] = struct{}{}
-				symbols[lb.Value] = struct{}{}
-			}
+			processedLabels.Range(func(l labels.Label) {
+				symbols[l.Name] = struct{}{}
+				symbols[l.Value] = struct{}{}
+			})
 
 			lbStr := processedLabels.String()
 			if _, ok := chunkSeriesMap[lbStr]; !ok {
