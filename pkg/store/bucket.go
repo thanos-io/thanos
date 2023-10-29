@@ -795,8 +795,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	sort.Sort(lset)
-
 	set, ok := s.blockSets[h]
 	if !ok {
 		set = newBucketBlockSet(lset)

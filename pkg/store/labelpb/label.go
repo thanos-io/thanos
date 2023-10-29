@@ -342,7 +342,6 @@ func (m *ZLabelSet) UnmarshalJSON(entry []byte) error {
 	if err := lbls.UnmarshalJSON(entry); err != nil {
 		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
 	}
-	sort.Sort(lbls)
 	m.Labels = ZLabelsFromPromLabels(lbls)
 	return nil
 }
