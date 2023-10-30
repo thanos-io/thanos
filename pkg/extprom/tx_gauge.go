@@ -81,6 +81,9 @@ func (tx *TxGaugeVec) Collect(ch chan<- prometheus.Metric) {
 //
 //	myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
 func (tx *TxGaugeVec) With(labels prometheus.Labels) prometheus.Gauge {
+	tx.mtx.Lock()
+	defer tx.mtx.Unlock()
+
 	if tx.tx == nil {
 		tx.ResetTx()
 	}
@@ -93,6 +96,9 @@ func (tx *TxGaugeVec) With(labels prometheus.Labels) prometheus.Gauge {
 //
 //	myVec.WithLabelValues("404", "GET").Add(42)
 func (tx *TxGaugeVec) WithLabelValues(lvs ...string) prometheus.Gauge {
+	tx.mtx.Lock()
+	defer tx.mtx.Unlock()
+
 	if tx.tx == nil {
 		tx.ResetTx()
 	}
