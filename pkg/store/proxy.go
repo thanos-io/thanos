@@ -271,7 +271,17 @@ func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
 	return infos
 }
 
+func (s *ProxyStore) SeriesWithHints(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (*HintsCollector, error) {
+	hc := &HintsCollector{}
+
+	return hc, s.originalSeries(originalRequest, srv, hc)
+}
+
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	return s.originalSeries(originalRequest, srv, nil)
+}
+
+func (s *ProxyStore) originalSeries(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer, hc *HintsCollector) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.
 	reqLogger := log.With(s.logger, "component", "proxy", "request", originalRequest.String())
@@ -343,7 +353,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 		}
 
-		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, hc)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 

@@ -366,6 +366,7 @@ func newLazyRespSet(
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
+	hc *HintsCollector,
 ) respSet {
 	bufferedResponses := []*storepb.SeriesResponse{}
 	bufferedResponsesMtx := &sync.Mutex{}
@@ -469,10 +470,22 @@ func newLazyRespSet(
 					seriesStats.Count(resp.GetSeries())
 				}
 
-				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, resp)
-				l.dataOrFinishEvent.Signal()
-				l.bufferedResponsesMtx.Unlock()
+				if resp.GetHints() != nil {
+					if hc == nil {
+						l.bufferedResponsesMtx.Lock()
+						l.bufferedResponses = append(l.bufferedResponses, resp)
+						l.dataOrFinishEvent.Signal()
+						l.bufferedResponsesMtx.Unlock()
+					} else {
+						hc.AddHint(storeName, resp)
+					}
+				} else {
+					l.bufferedResponsesMtx.Lock()
+					l.bufferedResponses = append(l.bufferedResponses, resp)
+					l.dataOrFinishEvent.Signal()
+					l.bufferedResponsesMtx.Unlock()
+				}
+
 				return true
 			}
 		}
@@ -516,6 +529,7 @@ func newAsyncRespSet(
 	shardInfo *storepb.ShardInfo,
 	logger log.Logger,
 	emptyStreamResponses prometheus.Counter,
+	hc *HintsCollector,
 ) (respSet, error) {
 
 	var span opentracing.Span
@@ -581,6 +595,7 @@ func newAsyncRespSet(
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
+			hc,
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
@@ -595,6 +610,7 @@ func newAsyncRespSet(
 			applySharding,
 			emptyStreamResponses,
 			labelsToRemove,
+			hc,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -649,6 +665,7 @@ func newEagerRespSet(
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
 	removeLabels map[string]struct{},
+	hc *HintsCollector,
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -738,7 +755,16 @@ func newEagerRespSet(
 					seriesStats.Count(resp.GetSeries())
 				}
 
-				l.bufferedResponses = append(l.bufferedResponses, resp)
+				if resp.GetHints() != nil {
+					if hc == nil {
+						l.bufferedResponses = append(l.bufferedResponses, resp)
+					} else {
+						hc.AddHint(storeName, resp)
+					}
+				} else {
+					l.bufferedResponses = append(l.bufferedResponses, resp)
+				}
+
 				return true
 			}
 		}
@@ -854,4 +880,25 @@ type respSet interface {
 	Labelset() string
 	StoreLabels() map[string]struct{}
 	Empty() bool
+}
+
+type HintsCollector struct {
+	hints map[string][]*storepb.SeriesResponse
+	l     sync.Mutex
+}
+
+func (hc *HintsCollector) AddHint(storeID string, r *storepb.SeriesResponse) {
+	hc.l.Lock()
+	defer hc.l.Unlock()
+
+	hc.hints[storeID] = append(hc.hints[storeID], r)
+}
+
+func (hc *HintsCollector) GetHints() map[string][]*storepb.SeriesResponse {
+	hc.l.Lock()
+	defer hc.l.Unlock()
+
+	// TODO(GiedriusS): we need to copy hc.hints here otherwise we have a race condition.
+
+	return hc.hints
 }

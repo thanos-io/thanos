@@ -78,7 +78,7 @@ type QueryableCreator func(
 func NewQueryableCreator(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	proxy storepb.StoreServer,
+	proxy StoreServerWithHints,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
@@ -122,7 +122,7 @@ type queryable struct {
 	logger               log.Logger
 	replicaLabels        []string
 	storeDebugMatchers   [][]*labels.Matcher
-	proxy                storepb.StoreServer
+	proxy                StoreServerWithHints
 	deduplicate          bool
 	maxResolutionMillis  int64
 	partialResponse      bool
@@ -141,12 +141,17 @@ func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
 	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.seriesResponseHints), nil
 }
 
+type StoreServerWithHints interface {
+	storepb.StoreServer
+	SeriesWithHints(*storepb.SeriesRequest, storepb.Store_SeriesServer) (*store.HintsCollector, error)
+}
+
 type querier struct {
 	logger                  log.Logger
 	mint, maxt              int64
 	replicaLabels           []string
 	storeDebugMatchers      [][]*labels.Matcher
-	proxy                   storepb.StoreServer
+	proxy                   StoreServerWithHints
 	deduplicate             bool
 	maxResolutionMillis     int64
 	partialResponseStrategy storepb.PartialResponseStrategy
@@ -167,7 +172,7 @@ func newQuerier(
 	maxt int64,
 	replicaLabels []string,
 	storeDebugMatchers [][]*labels.Matcher,
-	proxy storepb.StoreServer,
+	proxy StoreServerWithHints,
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse,
@@ -408,9 +413,11 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 	req.Hints = anyHints
 
-	if err := q.proxy.Series(&req, resp); err != nil {
+	hc, err := q.proxy.SeriesWithHints(&req, resp)
+	if err != nil {
 		return nil, storepb.SeriesStatsCounter{}, nil, errors.Wrap(err, "proxy Series()")
 	}
+	var _ = hc
 	warns := annotations.New().Merge(resp.warnings)
 
 	if q.enableQueryPushdown && (hints.Func == "max_over_time" || hints.Func == "min_over_time") {
