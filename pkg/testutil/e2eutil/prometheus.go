@@ -191,7 +191,7 @@ func (p *Prometheus) Start(ctx context.Context, l log.Logger) error {
 	if err := p.start(); err != nil {
 		return err
 	}
-	if err := p.waitPrometheusUp(ctx, l); err != nil {
+	if err := p.waitPrometheusUp(ctx, l, p.prefix); err != nil {
 		return err
 	}
 	return nil
@@ -242,12 +242,12 @@ func (p *Prometheus) start() error {
 	return nil
 }
 
-func (p *Prometheus) waitPrometheusUp(ctx context.Context, logger log.Logger) error {
+func (p *Prometheus) waitPrometheusUp(ctx context.Context, logger log.Logger, prefix string) error {
 	if !p.running {
 		return errors.New("method Start was not invoked.")
 	}
-	return runutil.Retry(time.Second, ctx.Done(), func() error {
-		r, err := http.Get(fmt.Sprintf("http://%s/-/ready", p.addr))
+	return runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		r, err := http.Get(fmt.Sprintf("http://%s%s/-/ready", p.addr, prefix))
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func (p *Prometheus) Restart(ctx context.Context, l log.Logger) error {
 	if err := p.start(); err != nil {
 		return err
 	}
-	return p.waitPrometheusUp(ctx, l)
+	return p.waitPrometheusUp(ctx, l, p.prefix)
 }
 
 // Dir returns TSDB dir.

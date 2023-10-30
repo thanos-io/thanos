@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
+	testutil.Ok(t, p.Start(ctx, log.NewLogfmtLogger(os.Stderr)))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
