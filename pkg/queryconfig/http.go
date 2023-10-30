@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package httpconfig is a wrapper around github.com/prometheus/common/config.
+// Package queryconfig Package httpconfig is a wrapper around github.com/prometheus/common/config.
 package queryconfig
 
 import (
@@ -32,13 +32,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 )
 
-// Config is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
+// HTTPConfig is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
 type HTTPConfig struct {
 	HTTPClientConfig HTTPClientConfig    `yaml:"http_config"`
 	EndpointsConfig  HTTPEndpointsConfig `yaml:",inline"`
 }
 
-// ClientConfig configures an HTTP client.
+// HTTPClientConfig configures an HTTP client.
 type HTTPClientConfig struct {
 	// The HTTP basic authentication credentials for the targets.
 	BasicAuth BasicAuth `yaml:"basic_auth"`
@@ -83,7 +83,7 @@ func (b BasicAuth) IsZero() bool {
 	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
 }
 
-// Transport configures client's transport properties.
+// TransportConfig configures client's transport properties.
 type TransportConfig struct {
 	MaxIdleConns          int   `yaml:"max_idle_conns"`
 	MaxIdleConnsPerHost   int   `yaml:"max_idle_conns_per_host"`
@@ -280,7 +280,7 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 	return u.rt.RoundTrip(r)
 }
 
-// EndpointsConfig configures a cluster of HTTP endpoints from static addresses and
+// HTTPEndpointsConfig configures a cluster of HTTP endpoints from static addresses and
 // file service discovery.
 type HTTPEndpointsConfig struct {
 	// List of addresses with DNS prefixes.
@@ -295,7 +295,7 @@ type HTTPEndpointsConfig struct {
 	PathPrefix string `yaml:"path_prefix"`
 }
 
-// FileSDConfig represents a file service discovery configuration.
+// HTTPFileSDConfig represents a file service discovery configuration.
 type HTTPFileSDConfig struct {
 	Files           []string       `yaml:"files"`
 	RefreshInterval model.Duration `yaml:"refresh_interval"`
@@ -316,7 +316,7 @@ type AddressProvider interface {
 	Addresses() []string
 }
 
-// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
+// HTTPClient represents a client that can send requests to a cluster of HTTP-based endpoints.
 type HTTPClient struct {
 	logger log.Logger
 

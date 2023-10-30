@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Config is a structure that allows pointing to various HTTP and GRCP query endpoints, e.g ruler connecting to queriers.
+// Config is a structure that allows pointing to various HTTP and GRPC query endpoints, e.g. ruler connecting to queriers.
 type Config struct {
 	HTTPConfig HTTPConfig  `yaml:",inline"`
 	GRPCConfig *GRPCConfig `yaml:"grpc_config"`
@@ -49,7 +49,7 @@ func LoadConfigs(confYAML []byte) ([]Config, error) {
 	return queryCfg, nil
 }
 
-// BuildHTTPConfig returns a configuration from a static addresses.
+// BuildConfigFromHTTPAddresses returns a configuration from a static addresses.
 func BuildConfigFromHTTPAddresses(addrs []string) ([]Config, error) {
 	configs := make([]Config, 0, len(addrs))
 	for i, addr := range addrs {

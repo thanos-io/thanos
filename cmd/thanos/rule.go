@@ -346,13 +346,11 @@ func runRule(
 			)
 		}
 
-		if len(conf.grpcQueryEndpoints) > 0 {
-			grpcQueryCfg, err := queryconfig.BuildConfigFromGRPCAddresses(conf.grpcQueryEndpoints)
-			if err != nil {
-				return errors.Wrap(err, "query configuration")
-			}
-			queryCfg = append(queryCfg, grpcQueryCfg...)
+		grpcQueryCfg, err := queryconfig.BuildConfigFromGRPCAddresses(conf.grpcQueryEndpoints)
+		if err != nil {
+			return errors.Wrap(err, "query configuration")
 		}
+		queryCfg = append(queryCfg, grpcQueryCfg...)
 	}
 
 	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate); err != nil {
@@ -400,7 +398,7 @@ func runRule(
 			Help: "The number of times a duplicated grpc endpoint is detected from the different configs in rule",
 		})
 
-		grpcEndpointSet, err = newEndpointSet(g, logger, reg, dnsSDResolver, tracer, duplicatedGRPCEndpoints, grpcEndpoints)
+		grpcEndpointSet, err = prepareEndpointSet(g, logger, reg, dnsSDResolver, tracer, duplicatedGRPCEndpoints, grpcEndpoints)
 		if err != nil {
 			return err
 		}
@@ -1036,7 +1034,7 @@ func validateTemplate(tmplStr string) error {
 	return nil
 }
 
-func newEndpointSet(
+func prepareEndpointSet(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
