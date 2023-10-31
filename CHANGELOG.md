@@ -17,6 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
+- [#6867](https://github.com/thanos-io/thanos/pull/6867) Query UI: Tenant input box added to the Query UI, in order to be able to specify which tenant the query should use.
 
 ### Changed
 

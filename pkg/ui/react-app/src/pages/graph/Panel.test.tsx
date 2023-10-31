@@ -25,6 +25,7 @@ const defaultProps: PanelProps = {
     engine: 'prometheus',
     analyze: false,
     disableAnalyzeCheckbox: false,
+    tenant: 'default-tenant',
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -101,6 +102,7 @@ describe('Panel', () => {
       engine: 'prometheus',
       analyze: false,
       disableAnalyzeCheckbox: false,
+      tenant: 'default-tenant',
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

@@ -30,6 +30,7 @@ import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseDuration } from '../../utils';
+import { defaultTenant, tenantHeader } from '../../thanos/config';
 
 export interface PanelProps {
   id: string;
@@ -76,6 +77,7 @@ export interface PanelOptions {
   engine: string;
   analyze: boolean;
   disableAnalyzeCheckbox: boolean;
+  tenant: string;
 }
 
 export enum PanelType {
@@ -98,6 +100,7 @@ export const PanelDefaultOptions: PanelOptions = {
   engine: '',
   analyze: false,
   disableAnalyzeCheckbox: false,
+  tenant: '',
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -132,6 +135,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleChangeAnalyze = this.handleChangeAnalyze.bind(this);
     this.handleMouseEnter = this.handleMouseEnter.bind(this);
     this.handleMouseLeave = this.handleMouseLeave.bind(this);
+    this.handleChangeTenant = this.handleChangeTenant.bind(this);
   }
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
     const {
@@ -145,6 +149,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       usePartialResponse,
       engine,
       analyze,
+      tenant,
       // TODO: Add support for Store Matches
     } = this.props.options;
     if (
@@ -157,7 +162,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.usePartialResponse !== usePartialResponse ||
       prevOpts.forceTracing !== forceTracing ||
       prevOpts.engine !== engine ||
-      prevOpts.analyze !== analyze
+      prevOpts.analyze !== analyze ||
+      prevOpts.tenant !== tenant
       // Check store matches
     ) {
       this.executeQuery();
@@ -215,6 +221,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('max_source_resolution', this.props.options.maxSourceResolution);
         params.append('engine', this.props.options.engine);
         params.append('analyze', this.props.options.analyze.toString());
+        params.append('tenant', this.props.options.tenant);
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
@@ -222,18 +229,27 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('time', endTime.toString());
         params.append('engine', this.props.options.engine);
         params.append('analyze', this.props.options.analyze.toString());
+        params.append('tenant', this.props.options.tenant);
         break;
       default:
         throw new Error('Invalid panel type "' + this.props.options.type + '"');
     }
 
+    // Create request headers
+    const requestHeaders: HeadersInit = new Headers();
+    requestHeaders.set('Content-Type', 'application/json');
+
+    if (this.props.options.forceTracing) {
+      requestHeaders.set('X-Thanos-Force-Tracing', 'true');
+    }
+
+    if (this.props.options.tenant.length > 0) {
+      requestHeaders.set(tenantHeader, this.props.options.tenant);
+    }
+
     fetch(`${this.props.pathPrefix}${path}?${params}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        // Conditionally add the header if the checkbox is enabled
-        ...(this.props.options.forceTracing ? { 'X-Thanos-Force-Tracing': 'true' } : {}),
-      },
+      headers: requestHeaders,
       cache: 'no-store',
       credentials: 'same-origin',
       signal: abortController.signal,
@@ -357,6 +373,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   handleChangeAnalyze = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ analyze: event.target.checked });
+  };
+
+  handleChangeTenant = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ tenant: event.target.value });
   };
 
   handleMouseEnter = () => {
@@ -536,6 +556,22 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 <option value="prometheus">Prometheus</option>
                 <option value="thanos">Thanos</option>
               </Input>
+              <Label style={{ marginLeft: '10px', display: 'inline-block' }} className="control-label">
+                Tenant
+              </Label>
+              <Input
+                style={{
+                  width: 'auto',
+                  marginLeft: '10px',
+                  display: 'inline-block',
+                }}
+                id={`tenant=${id}`}
+                type="text"
+                bsSize="sm"
+                onChange={this.handleChangeTenant}
+                placeholder={`${defaultTenant}`}
+                value={options.tenant}
+              ></Input>
             </div>
             <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
               <Checkbox
