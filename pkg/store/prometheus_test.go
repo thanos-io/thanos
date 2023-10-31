@@ -169,9 +169,9 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
 		testutil.Equals(t, []labelpb.ZLabel{
+			{Name: "__thanos_pushed_down", Value: "true"},
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
-			{Name: "__thanos_pushed_down", Value: "true"},
 		}, srv.SeriesSet[0].Labels)
 		testutil.Equals(t, []string(nil), srv.Warnings)
 		testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
