@@ -824,7 +824,7 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 
 		appendFn(p.Appender())
 
-		testutil.Ok(tt, p.Start())
+		testutil.Ok(tt, p.Start(context.Background(), log.NewNopLogger()))
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(tt, err)
 
