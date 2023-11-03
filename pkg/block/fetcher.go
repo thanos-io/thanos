@@ -50,7 +50,7 @@ type BaseFetcherMetrics struct {
 type FetcherMetrics struct {
 	Syncs        prometheus.Counter
 	SyncFailures prometheus.Counter
-	SyncDuration prometheus.Histogram
+	SyncDuration prometheus.Observer
 
 	Synced   *extprom.TxGaugeVec
 	Modified *extprom.TxGaugeVec
