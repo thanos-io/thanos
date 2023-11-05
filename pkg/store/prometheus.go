@@ -189,15 +189,17 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 		if err != nil {
 			return err
 		}
+		var b labels.Builder
 		for _, lbm := range labelMaps {
-			lset := make([]labelpb.ZLabel, 0, len(lbm)+finalExtLset.Len())
+			b.Reset(labels.EmptyLabels())
 			for k, v := range lbm {
-				lset = append(lset, labelpb.ZLabel{Name: k, Value: v})
+				b.Set(k, v)
 			}
-			lset = append(lset, labelpb.ZLabelsFromPromLabels(finalExtLset)...)
-			sort.Slice(lset, func(i, j int) bool {
-				return lset[i].Name < lset[j].Name
+			// external labels should take precedence
+			finalExtLset.Range(func(l labels.Label) {
+				b.Set(l.Name, l.Value)
 			})
+			lset := labelpb.ZLabelsFromPromLabels(b.Labels())
 			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
