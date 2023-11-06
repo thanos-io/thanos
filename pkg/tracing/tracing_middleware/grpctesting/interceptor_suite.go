@@ -17,6 +17,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"flag"
+	"google.golang.org/grpc/credentials/insecure"
 	"math/big"
 	"net"
 	"sync"
@@ -127,7 +128,7 @@ func (s *InterceptorTestSuite) NewClient(dialOpts ...grpc.DialOption) testpb.Tes
 		creds := credentials.NewTLS(&tls.Config{ServerName: "localhost", RootCAs: cp})
 		newDialOpts = append(newDialOpts, grpc.WithTransportCredentials(creds))
 	} else {
-		newDialOpts = append(newDialOpts, grpc.WithInsecure())
+		newDialOpts = append(newDialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
