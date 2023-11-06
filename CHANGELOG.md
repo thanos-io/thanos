@@ -148,7 +148,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6847](https://github.com/thanos-io/thanos/pull/6847) Store: Add `thanos_bucket_store_indexheader_download_duration_seconds` and `thanos_bucket_store_indexheader_load_duration_seconds` metrics for tracking latency of downloading and initializing the index-header.
 - [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
 
-
 ### Changed
 
 - [#6698](https://github.com/thanos-io/thanos/pull/6608) Receive: Change write log level from warn to info.
@@ -156,7 +155,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6772](https://github.com/thanos-io/thanos/pull/6772) *: Bump prometheus to v0.47.2-0.20231006112807-a5a4eab679cc
 - [#6794](https://github.com/thanos-io/thanos/pull/6794) Receive: the exported HTTP metrics now uses the specified default tenant for requests where no tenants are found.
 - [#6651](https://github.com/thanos-io/thanos/pull/6651) *: Update go_grpc_middleware to v2.0.0. Remove Tags Interceptor from Thanos. Tags interceptor is removed from v2.0.0 go-grpc-middleware and is not needed anymore.
-
 
 ### Removed
 
