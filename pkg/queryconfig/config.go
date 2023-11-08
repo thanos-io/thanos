@@ -14,13 +14,13 @@ import (
 
 // Config is a structure that allows pointing to various HTTP and GRPC query endpoints, e.g. ruler connecting to queriers.
 type Config struct {
-	HTTPConfig HTTPConfig  `yaml:",inline"`
+	HTTPConfig *HTTPConfig `yaml:",inline"`
 	GRPCConfig *GRPCConfig `yaml:"grpc_config"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		HTTPConfig: HTTPConfig{
+		HTTPConfig: &HTTPConfig{
 			EndpointsConfig: HTTPEndpointsConfig{
 				Scheme:          "http",
 				StaticAddresses: []string{},
@@ -68,7 +68,7 @@ func BuildConfigFromHTTPAddresses(addrs []string) ([]Config, error) {
 			return nil, errors.Errorf("%q is not supported scheme for address", u.Scheme)
 		}
 		configs = append(configs, Config{
-			HTTPConfig: HTTPConfig{
+			HTTPConfig: &HTTPConfig{
 				EndpointsConfig: HTTPEndpointsConfig{
 					Scheme:          u.Scheme,
 					StaticAddresses: []string{u.Host},

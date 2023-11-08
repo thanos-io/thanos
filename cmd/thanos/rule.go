@@ -336,7 +336,7 @@ func runRule(
 			})
 			queryCfg = append(queryCfg,
 				queryconfig.Config{
-					HTTPConfig: queryconfig.HTTPConfig{
+					HTTPConfig: &queryconfig.HTTPConfig{
 						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 							Scheme:        "http",
 							FileSDConfigs: fileSDConfigs,
@@ -372,20 +372,22 @@ func runRule(
 	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 
 	for _, cfg := range queryCfg {
-		cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
-		c, err := queryconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
-		if err != nil {
-			return err
+		if cfg.HTTPConfig != nil {
+			cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
+			c, err := queryconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
+			if err != nil {
+				return err
+			}
+			c.Transport = tracing.HTTPTripperware(logger, c.Transport)
+			queryClient, err := queryconfig.NewClient(logger, cfg.HTTPConfig.EndpointsConfig, c, queryProvider.Clone())
+			if err != nil {
+				return err
+			}
+			queryClients = append(queryClients, queryClient)
+			promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
+			// Discover and resolve query addresses.
+			addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 		}
-		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-		queryClient, err := queryconfig.NewClient(logger, cfg.HTTPConfig.EndpointsConfig, c, queryProvider.Clone())
-		if err != nil {
-			return err
-		}
-		queryClients = append(queryClients, queryClient)
-		promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
-		// Discover and resolve query addresses.
-		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 
 		if cfg.GRPCConfig != nil {
 			grpcEndpoints = append(grpcEndpoints, cfg.GRPCConfig.EndpointAddrs...)
