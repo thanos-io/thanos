@@ -891,6 +891,10 @@ func (hc *HintsCollector) AddHint(storeID string, r *storepb.SeriesResponse) {
 	hc.l.Lock()
 	defer hc.l.Unlock()
 
+	if hc.hints == nil {
+		hc.hints = make(map[string][]*storepb.SeriesResponse)
+	}
+
 	hc.hints[storeID] = append(hc.hints[storeID], r)
 }
 

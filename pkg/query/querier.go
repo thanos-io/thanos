@@ -44,15 +44,18 @@ func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsR
 	}
 }
 
-type seriesResponseHints func(hints []hintspb.QueryStats)
+type seriesResponseHints func(hc *store.HintsCollector)
 
-func NewResponseHints(hints *[]hintspb.QueryStats) seriesResponseHints {
-	return func(h []hintspb.QueryStats) {
-		*hints = append(*hints, h...)
+func NewResponseHints(hc *[]*store.HintsCollector) seriesResponseHints {
+	var mutex sync.Mutex
+	return func(h *store.HintsCollector) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		*hc = append(*hc, h)
 	}
 }
 
-var NoopSeriesResponseHints seriesResponseHints = func(_ []hintspb.QueryStats) {}
+var NoopSeriesResponseHints seriesResponseHints = func(_ *store.HintsCollector) {}
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
@@ -300,6 +303,16 @@ func storeHintsFromPromHints(hints *storage.SelectHints) *storepb.QueryHints {
 }
 
 func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.SeriesSet {
+	return q.originalSelect(ctx, true, hints, nil, ms...)
+}
+
+func (q *querier) SelectWithHints(ctx context.Context, _ bool, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, *store.HintsCollector) {
+	hc := &store.HintsCollector{}
+
+	return q.originalSelect(ctx, true, hints, hc, ms...), hc
+}
+
+func (q *querier) originalSelect(ctx context.Context, _ bool, hints *storage.SelectHints, hc *store.HintsCollector, ms ...*labels.Matcher) storage.SeriesSet {
 	if hints == nil {
 		hints = &storage.SelectHints{
 			Start: q.mint,
@@ -371,7 +384,7 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 	}}
 }
 
-func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, []hintspb.QueryStats, error) {
+func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, *store.HintsCollector, error) {
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
 		return nil, storepb.SeriesStatsCounter{}, nil, errors.Wrap(err, "convert matchers")
@@ -443,7 +456,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 			set:   newStoreSeriesSet(resp.seriesSet),
 			aggrs: aggrs,
 			warns: warns,
-		}, resp.seriesSetStats, resp.hints, nil
+		}, resp.seriesSetStats, hc, nil
 	}
 
 	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
@@ -457,7 +470,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns: warns,
 	}
 
-	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, resp.hints, nil
+	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, hc, nil
 }
 
 // LabelValues returns all potential values for a label name.
