@@ -336,7 +336,7 @@ func runRule(
 			})
 			queryCfg = append(queryCfg,
 				queryconfig.Config{
-					HTTPConfig: &queryconfig.HTTPConfig{
+					HTTPConfig: queryconfig.HTTPConfig{
 						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 							Scheme:        "http",
 							FileSDConfigs: fileSDConfigs,
@@ -372,7 +372,7 @@ func runRule(
 	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 
 	for _, cfg := range queryCfg {
-		if cfg.HTTPConfig != nil {
+		if cfg.HTTPConfig.NotEmpty() {
 			cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
 			c, err := queryconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
 			if err != nil {

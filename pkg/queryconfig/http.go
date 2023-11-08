@@ -38,6 +38,10 @@ type HTTPConfig struct {
 	EndpointsConfig  HTTPEndpointsConfig `yaml:",inline"`
 }
 
+func (c *HTTPConfig) NotEmpty() bool {
+	return len(c.EndpointsConfig.FileSDConfigs) > 0 || len(c.EndpointsConfig.StaticAddresses) > 0
+}
+
 // HTTPClientConfig configures an HTTP client.
 type HTTPClientConfig struct {
 	// The HTTP basic authentication credentials for the targets.
