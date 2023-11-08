@@ -341,7 +341,7 @@ func TestRule(t *testing.T) {
 		},
 	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
 		{
-			HTTPConfig: queryconfig.HTTPConfig{
+			HTTPConfig: &queryconfig.HTTPConfig{
 				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 					// We test Statically Addressed queries in other tests. Focus on FileSD here.
 					FileSDConfigs: []queryconfig.HTTPFileSDConfig{
@@ -679,7 +679,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 		},
 	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
 		{
-			HTTPConfig: queryconfig.HTTPConfig{
+			HTTPConfig: &queryconfig.HTTPConfig{
 				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{
 						q.InternalEndpoint("http"),
@@ -764,7 +764,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 			WithRestoreIgnoredLabels("tenant_id").
 			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
 				{
-					HTTPConfig: queryconfig.HTTPConfig{
+					HTTPConfig: &queryconfig.HTTPConfig{
 						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 							StaticAddresses: []string{
 								q.InternalEndpoint("http"),

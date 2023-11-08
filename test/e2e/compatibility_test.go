@@ -212,7 +212,7 @@ func TestAlertCompliance(t *testing.T) {
 			WithReplicaLabel("").
 			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []queryconfig.Config{
 				{
-					HTTPConfig: queryconfig.HTTPConfig{
+					HTTPConfig: &queryconfig.HTTPConfig{
 						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 							StaticAddresses: []string{
 								querierBuilder.InternalEndpoint("http"),
@@ -296,7 +296,7 @@ func TestAlertCompliance(t *testing.T) {
 			WithRestoreIgnoredLabels("tenant_id").
 			InitStateless(filepath.Join(rFuture.InternalDir(), "rules"), []queryconfig.Config{
 				{
-					HTTPConfig: queryconfig.HTTPConfig{
+					HTTPConfig: &queryconfig.HTTPConfig{
 						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 							StaticAddresses: []string{
 								query.InternalEndpoint("http"),
