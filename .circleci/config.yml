@@ -7,9 +7,11 @@ orbs:
 
 executors:
   golang:
+    resource_class: thanos-io/linuxaio
     docker:
       - image: cimg/go:1.21-node
   golang-test:
+    resource_class: thanos-io/linuxaio
     docker:
       - image: cimg/go:1.21-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
@@ -54,6 +56,7 @@ jobs:
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:
     machine: true
+    resource_class: thanos-io/linuxaio
     working_directory: /home/circleci/.go_workspace/src/github.com/thanos-io/thanos
     environment:
       GOBIN: "/home/circleci/.go_workspace/go/bin"
