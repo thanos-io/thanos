@@ -190,7 +190,7 @@ func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err
 		"grafana_panel_id", grafanaPanelID,
 	}, formatQueryString(queryString)...)
 
-	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
 // reportSlowQuery reports slow queries.
