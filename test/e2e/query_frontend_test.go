@@ -936,3 +936,112 @@ func (u tenantRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	r.Header.Set(u.tenantHeader, u.tenant)
 	return u.rt.RoundTrip(r)
 }
+
+func TestTenantQFEHTTPMetrics(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("tenant-metrics")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// scrape the local prometheus, and our querier metrics
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+		Config: queryfrontend.InMemoryResponseCacheConfig{
+			MaxSizeItems: 1000,
+			Validity:     time.Hour,
+		},
+	}
+
+	cfg := queryfrontend.Config{}
+	queryFrontend := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), cfg, inMemoryCacheConfig)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, queryFrontend))
+
+	// Query once with default-tenant to ensure everything is ready
+	// for the following requests
+	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
+		return "prometheus_api_remote_read_queries"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, 1)
+	testutil.Ok(t, err)
+
+	// Query a few times with tenant 1
+	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
+		return "prometheus_api_remote_read_queries"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 1)
+	testutil.Ok(t, err)
+
+	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
+		return "go_goroutines"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
+		return "go_memstats_frees_total"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	// query just once with tenant-2
+	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
+		return "go_memstats_heap_alloc_bytes"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-2"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	// check that http metrics for tenant-1 matches 3 requests, both for querier and query frontend
+	tenant1Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-1")
+	testutil.Ok(t, err)
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(
+		e2emon.GreaterOrEqual(3),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant1Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+	testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+		e2emon.GreaterOrEqual(3),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant1Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+
+	// check that http metrics for tenant-2 matches 1 requests, both for querier and query frontend
+	tenant2Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-2")
+	testutil.Ok(t, err)
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(
+		e2emon.Equals(1),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant2Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+	testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+		e2emon.Equals(1),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant2Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+}
