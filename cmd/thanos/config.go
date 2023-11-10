@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/common/model"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/shipper"
 )
 
 type grpcConfig struct {
@@ -140,6 +141,7 @@ type shipperConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	hashFunc              string
+	metaFileName          string
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -156,6 +158,7 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
+	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)
 	return sc
 }
 

@@ -172,6 +172,8 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
+      --shipper.meta-file-name="thanos.shipper.json"
+                                 the file to store shipper metadata in
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
