@@ -171,7 +171,7 @@ func (i *limitedServer) Send(response *storepb.SeriesResponse) error {
 	if err := i.seriesLimiter.Reserve(1); err != nil {
 		return errors.Wrapf(err, "failed to send series")
 	}
-	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks) * MaxSamplesPerChunk)); err != nil {
+	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks))); err != nil {
 		return errors.Wrapf(err, "failed to send samples")
 	}
 
