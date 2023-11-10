@@ -47,6 +47,7 @@ type HandlerConfig struct {
 	LogQueriesLongerThan time.Duration `yaml:"log_queries_longer_than"`
 	MaxBodySize          int64         `yaml:"max_body_size"`
 	QueryStatsEnabled    bool          `yaml:"query_stats_enabled"`
+	LogFailedQueries    bool          `yaml:"log_failed_queries"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -128,6 +129,10 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		writeError(w, err)
+		if f.cfg.LogFailedQueries {
+			queryString = f.parseRequestQueryString(r, buf)
+			f.reportFailedQuery(r, queryString, err)
+		}
 		return
 	}
 
@@ -159,6 +164,33 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
 	}
+}
+
+func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err error) {
+	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
+	grafanaDashboardUID := "-"
+	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
+		grafanaDashboardUID = dashboardUID
+	}
+	grafanaPanelID := "-"
+	if panelID := r.Header.Get("X-Panel-Id"); panelID != "" {
+		grafanaPanelID = panelID
+	}
+	remoteUser, _, _ := r.BasicAuth()
+
+	logMessage := append([]interface{}{
+		"msg", "failed query",
+		"method", r.Method,
+		"host", r.Host,
+		"path", r.URL.Path,
+		"remote_user", remoteUser,
+		"remote_addr", r.RemoteAddr,
+		"error", err.Error(),
+		"grafana_dashboard_uid", grafanaDashboardUID,
+		"grafana_panel_id", grafanaPanelID,
+	}, formatQueryString(queryString)...)
+
+	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
 // reportSlowQuery reports slow queries.
