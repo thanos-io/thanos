@@ -884,7 +884,7 @@ type respSet interface {
 
 type HintsCollector struct {
 	hints map[string][]*storepb.SeriesResponse
-	l     sync.Mutex
+	l     *sync.Mutex
 }
 
 func (hc *HintsCollector) AddHint(storeID string, r *storepb.SeriesResponse) {

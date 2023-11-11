@@ -294,9 +294,9 @@ type queryData struct {
 	Result     parser.Value     `json:"result"`
 	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	QueryAnalysis queryTelemetry          `json:"analysis,omitempty"`
-	QueryMetadata []*store.HintsCollector `json:"query_metadata,omitempty"`
-	Warnings      []error                 `json:"warnings,omitempty"`
+	QueryAnalysis queryTelemetry       `json:"analysis,omitempty"`
+	QueryMetadata store.HintsCollector `json:"query_metadata,omitempty"`
+	Warnings      []error              `json:"warnings,omitempty"`
 }
 
 type queryTelemetry struct {
@@ -553,7 +553,9 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	var seriesStats []storepb.SeriesStatsCounter
-	var seriesResponseHints []*store.HintsCollector
+
+	var seriesResponseHints store.HintsCollector
+
 	qry, err := engine.NewInstantQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -661,7 +663,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	var seriesStats []storepb.SeriesStatsCounter
 
-	var seriesResponseHints []*store.HintsCollector
+	var seriesResponseHints store.HintsCollector
 
 	qry, err := engine.NewInstantQuery(
 		ctx,
@@ -833,7 +835,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 
 	var seriesStats []storepb.SeriesStatsCounter
 
-	var seriesResponseHints []*store.HintsCollector
+	var seriesResponseHints store.HintsCollector
 
 	qry, err := engine.NewRangeQuery(
 		ctx,
@@ -972,7 +974,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	var seriesStats []storepb.SeriesStatsCounter
 
-	var seriesResponseHints []*store.HintsCollector
+	var seriesResponseHints store.HintsCollector
 
 	qry, err := engine.NewRangeQuery(
 		ctx,

@@ -46,12 +46,13 @@ func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsR
 
 type seriesResponseHints func(hc *store.HintsCollector)
 
-func NewResponseHints(hc *[]*store.HintsCollector) seriesResponseHints {
-	var mutex sync.Mutex
-	return func(h *store.HintsCollector) {
-		mutex.Lock()
-		defer mutex.Unlock()
-		*hc = append(*hc, h)
+func NewResponseHints(h *store.HintsCollector) seriesResponseHints {
+	return func(hc *store.HintsCollector) {
+		h.mutex.Lock()
+		defer hc.mutex.Unlock()
+		for key, values := range hc.hints {
+			h.hints[key] = append(h.hints[key], values...)
+		}
 	}
 }
 
