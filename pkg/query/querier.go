@@ -48,10 +48,22 @@ type seriesResponseHints func(hc *store.HintsCollector)
 
 func NewResponseHints(h *store.HintsCollector) seriesResponseHints {
 	return func(hc *store.HintsCollector) {
-		h.mutex.Lock()
-		defer hc.mutex.Unlock()
-		for key, values := range hc.hints {
-			h.hints[key] = append(h.hints[key], values...)
+		hc.AppendHints(hc, h)
+	}
+}
+
+func NewSeriesResponseHintsCollector(h *store.HintsCollector) seriesResponseHints {
+	var mutex sync.Mutex
+	return func(hc *store.HintsCollector) {
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		if h.Hints == nil {
+			h.Hints = make(map[string][]*storepb.SeriesResponse)
+		}
+
+		for key, value := range hc.Hints {
+			h.Hints[key] = append(h.Hints[key], value...)
 		}
 	}
 }

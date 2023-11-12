@@ -883,19 +883,19 @@ type respSet interface {
 }
 
 type HintsCollector struct {
-	hints map[string][]*storepb.SeriesResponse
-	l     *sync.Mutex
+	Hints map[string][]*storepb.SeriesResponse
+	l     sync.Mutex
 }
 
 func (hc *HintsCollector) AddHint(storeID string, r *storepb.SeriesResponse) {
 	hc.l.Lock()
 	defer hc.l.Unlock()
 
-	if hc.hints == nil {
-		hc.hints = make(map[string][]*storepb.SeriesResponse)
+	if hc.Hints == nil {
+		hc.Hints = make(map[string][]*storepb.SeriesResponse)
 	}
 
-	hc.hints[storeID] = append(hc.hints[storeID], r)
+	hc.Hints[storeID] = append(hc.Hints[storeID], r)
 }
 
 func (hc *HintsCollector) GetHints() map[string][]*storepb.SeriesResponse {
@@ -904,5 +904,20 @@ func (hc *HintsCollector) GetHints() map[string][]*storepb.SeriesResponse {
 
 	// TODO(GiedriusS): we need to copy hc.hints here otherwise we have a race condition.
 
-	return hc.hints
+	return hc.Hints
+}
+
+func (hc *HintsCollector) AppendHints(src *HintsCollector, dest *HintsCollector) {
+
+	src.l.Lock()
+	defer src.l.Unlock()
+
+	for key, value := range src.Hints {
+		dest.Hints[key] = append(dest.Hints[key], value...)
+	}
+}
+
+func (hc *HintsCollector) New() *HintsCollector {
+
+	return &HintsCollector{Hints: make(map[string][]*storepb.SeriesResponse)}
 }
