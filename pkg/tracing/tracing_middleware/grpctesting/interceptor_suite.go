@@ -17,11 +17,12 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"flag"
-	"google.golang.org/grpc/credentials/insecure"
 	"math/big"
 	"net"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
