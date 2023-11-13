@@ -89,18 +89,19 @@ func TestDiffVarintCodec(t *testing.T) {
 		testutil.Ok(t, idx.Close())
 	}()
 
+	ctx := context.TODO()
 	postingsMap := map[string]index.Postings{
-		"all":      allPostings(t, idx),
-		`n="1"`:    matchPostings(t, idx, labels.MustNewMatcher(labels.MatchEqual, "n", "1"+storetestutil.LabelLongSuffix)),
-		`j="foo"`:  matchPostings(t, idx, labels.MustNewMatcher(labels.MatchEqual, "j", "foo")),
-		`j!="foo"`: matchPostings(t, idx, labels.MustNewMatcher(labels.MatchNotEqual, "j", "foo")),
-		`i=~".*"`:  matchPostings(t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", ".*")),
-		`i=~".+"`:  matchPostings(t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", ".+")),
-		`i=~"1.+"`: matchPostings(t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", "1.+")),
-		`i=~"^$"'`: matchPostings(t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", "^$")),
-		`i!~""`:    matchPostings(t, idx, labels.MustNewMatcher(labels.MatchNotEqual, "i", "")),
-		`n!="2"`:   matchPostings(t, idx, labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+storetestutil.LabelLongSuffix)),
-		`i!~"2.*"`: matchPostings(t, idx, labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")),
+		"all":      allPostings(ctx, t, idx),
+		`n="1"`:    matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchEqual, "n", "1"+storetestutil.LabelLongSuffix)),
+		`j="foo"`:  matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchEqual, "j", "foo")),
+		`j!="foo"`: matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchNotEqual, "j", "foo")),
+		`i=~".*"`:  matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", ".*")),
+		`i=~".+"`:  matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", ".+")),
+		`i=~"1.+"`: matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", "1.+")),
+		`i=~"^$"'`: matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchRegexp, "i", "^$")),
+		`i!~""`:    matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchNotEqual, "i", "")),
+		`n!="2"`:   matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+storetestutil.LabelLongSuffix)),
+		`i!~"2.*"`: matchPostings(ctx, t, idx, labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")),
 	}
 
 	codecs := map[string]struct {
@@ -167,15 +168,15 @@ func comparePostings(t *testing.T, p1, p2 index.Postings) {
 	testutil.Ok(t, p2.Err())
 }
 
-func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
+func allPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader) index.Postings {
 	k, v := index.AllPostingsKey()
-	p, err := ix.Postings(k, v)
+	p, err := ix.Postings(ctx, k, v)
 	testutil.Ok(t, err)
 	return p
 }
 
-func matchPostings(t testing.TB, ix tsdb.IndexReader, m *labels.Matcher) index.Postings {
-	vals, err := ix.LabelValues(m.Name)
+func matchPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader, m *labels.Matcher) index.Postings {
+	vals, err := ix.LabelValues(ctx, m.Name)
 	testutil.Ok(t, err)
 
 	matching := []string(nil)
@@ -185,7 +186,7 @@ func matchPostings(t testing.TB, ix tsdb.IndexReader, m *labels.Matcher) index.P
 		}
 	}
 
-	p, err := ix.Postings(m.Name, matching...)
+	p, err := ix.Postings(ctx, m.Name, matching...)
 	testutil.Ok(t, err)
 	return p
 }

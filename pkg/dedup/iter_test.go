@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/efficientgo/core/testutil"
@@ -72,7 +73,7 @@ func (s *mockedSeriesSet) At() storage.Series {
 }
 func (s *mockedSeriesSet) Err() error { return nil }
 
-func (s *mockedSeriesSet) Warnings() storage.Warnings { return nil }
+func (s *mockedSeriesSet) Warnings() annotations.Annotations { return nil }
 
 type mockedSeriesIterator struct {
 	cur     int

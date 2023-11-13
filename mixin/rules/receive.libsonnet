@@ -10,7 +10,7 @@
         name: 'thanos-receive.rules',
         rules: [
           {
-            record: ':grpc_server_failures_per_unary:sum_rate',
+            record: ':thanos_query_receive_grpc_server_failures_per_unary:sum_rate',
             expr: |||
               (
                 sum by (%(dimensions)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s, grpc_type="unary"}[5m]))
@@ -20,7 +20,7 @@
             ||| % thanos.receive,
           },
           {
-            record: ':grpc_server_failures_per_stream:sum_rate',
+            record: ':thanos_query_receive_grpc_server_failures_per_stream:sum_rate',
             expr: |||
               (
                 sum by (%(dimensions)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s, grpc_type="server_stream"}[5m]))

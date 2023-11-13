@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -23,7 +24,7 @@ type promSeriesSet struct {
 	mint, maxt int64
 	aggrs      []storepb.Aggr
 
-	warns storage.Warnings
+	warns annotations.Annotations
 }
 
 func (s *promSeriesSet) Next() bool {
@@ -43,7 +44,7 @@ func (s *promSeriesSet) Err() error {
 	return s.set.Err()
 }
 
-func (s *promSeriesSet) Warnings() storage.Warnings {
+func (s *promSeriesSet) Warnings() annotations.Annotations {
 	return s.warns
 }
 
@@ -297,7 +298,7 @@ func (c *lazySeriesSet) At() storage.Series {
 	return nil
 }
 
-func (c *lazySeriesSet) Warnings() storage.Warnings {
+func (c *lazySeriesSet) Warnings() annotations.Annotations {
 	if c.set != nil {
 		return c.set.Warnings()
 	}

@@ -257,8 +257,7 @@ func (t *MultiTSDB) Flush() error {
 		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
 		wg.Add(1)
 		go func() {
-			head := db.Head()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+			if err := t.flushHead(db); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -269,6 +268,20 @@ func (t *MultiTSDB) Flush() error {
 
 	wg.Wait()
 	return merr.Err()
+}
+
+func (t *MultiTSDB) flushHead(db *tsdb.DB) error {
+	head := db.Head()
+	if head.MinTime() == head.MaxTime() {
+		return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()))
+	}
+	blockAlignedMaxt := head.MaxTime() - (head.MaxTime() % t.tsdbOpts.MaxBlockDuration)
+	// Flush a well aligned TSDB block.
+	if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), blockAlignedMaxt-1)); err != nil {
+		return err
+	}
+	// Flush the remainder of the head.
+	return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1))
 }
 
 func (t *MultiTSDB) Close() error {
@@ -383,7 +396,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Compacting tenant")
-	if err := tdb.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+	if err := t.flushHead(tdb); err != nil {
 		return false, err
 	}
 
@@ -731,9 +744,9 @@ func (s *ReadyStorage) StartTime() (int64, error) {
 }
 
 // Querier implements the Storage interface.
-func (s *ReadyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+func (s *ReadyStorage) Querier(mint, maxt int64) (storage.Querier, error) {
 	if x := s.get(); x != nil {
-		return x.Querier(ctx, mint, maxt)
+		return x.Querier(mint, maxt)
 	}
 	return nil, ErrNotReady
 }
@@ -772,8 +785,8 @@ func (a adapter) StartTime() (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
-func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return a.db.Querier(ctx, mint, maxt)
+func (a adapter) Querier(mint, maxt int64) (storage.Querier, error) {
+	return a.db.Querier(mint, maxt)
 }
 
 func (a adapter) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, error) {

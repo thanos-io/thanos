@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -67,11 +68,11 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			pg.cardinality += (r.End - r.Start - 4) / 4
 		}
 	}
-	slices.SortFunc(postingGroups, func(a, b *postingGroup) bool {
+	slices.SortFunc(postingGroups, func(a, b *postingGroup) int {
 		if a.cardinality == b.cardinality {
-			return a.name < b.name
+			return strings.Compare(a.name, b.name)
 		}
-		return a.cardinality < b.cardinality
+		return int(a.cardinality - b.cardinality)
 	})
 
 	/*
@@ -148,6 +149,7 @@ func fetchLazyExpandedPostings(
 	addAllPostings bool,
 	lazyExpandedPostingEnabled bool,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
+	tenant string,
 ) (*lazyExpandedPostings, error) {
 	var (
 		err               error
@@ -178,7 +180,7 @@ func fetchLazyExpandedPostings(
 		}
 	}
 
-	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter)
+	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -220,9 +222,9 @@ func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label
 	return keys, lazyMatchers
 }
 
-func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter) ([]storage.SeriesRef, []*labels.Matcher, error) {
+func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string) ([]storage.SeriesRef, []*labels.Matcher, error) {
 	keys, lazyMatchers := keysToFetchFromPostingGroups(postingGroups)
-	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter)
+	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant)
 	defer func() {
 		for _, closeFn := range closeFns {
 			closeFn()
@@ -250,7 +252,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 				postingIndex++
 			}
 
-			groupAdds = append(groupAdds, index.Merge(toMerge...))
+			groupAdds = append(groupAdds, index.Merge(ctx, toMerge...))
 		}
 
 		for _, l := range g.removeKeys {
@@ -259,7 +261,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 		}
 	}
 
-	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
+	result := index.Without(index.Intersect(groupAdds...), index.Merge(ctx, groupRemovals...))
 
 	if ctx.Err() != nil {
 		return nil, nil, ctx.Err()

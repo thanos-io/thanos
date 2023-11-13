@@ -44,14 +44,14 @@ groups:
       /
         sum by (job) (rate(grpc_server_started_total{job=~".*thanos-receive.*", grpc_type="unary"}[5m]))
       )
-    record: :grpc_server_failures_per_unary:sum_rate
+    record: :thanos_query_receive_grpc_server_failures_per_unary:sum_rate
   - expr: |
       (
         sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~".*thanos-receive.*", grpc_type="server_stream"}[5m]))
       /
         sum by (job) (rate(grpc_server_started_total{job=~".*thanos-receive.*", grpc_type="server_stream"}[5m]))
       )
-    record: :grpc_server_failures_per_stream:sum_rate
+    record: :thanos_query_receive_grpc_server_failures_per_stream:sum_rate
   - expr: |
       (
         sum by (job) (rate(http_requests_total{handler="receive", job=~".*thanos-receive.*", code!~"5.."}[5m]))
@@ -95,14 +95,14 @@ groups:
       /
         sum by (job) (rate(grpc_server_started_total{job=~".*thanos-store.*", grpc_type="unary"}[5m]))
       )
-    record: :grpc_server_failures_per_unary:sum_rate
+    record: :thanos_query_store_grpc_server_failures_per_unary:sum_rate
   - expr: |
       (
         sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~".*thanos-store.*", grpc_type="server_stream"}[5m]))
       /
         sum by (job) (rate(grpc_server_started_total{job=~".*thanos-store.*", grpc_type="server_stream"}[5m]))
       )
-    record: :grpc_server_failures_per_stream:sum_rate
+    record: :thanos_query_store_grpc_server_failures_per_stream:sum_rate
   - expr: |
       (
         sum by (job) (rate(thanos_objstore_bucket_operation_failures_total{job=~".*thanos-store.*"}[5m]))

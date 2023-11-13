@@ -97,6 +97,7 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 
 	level.Info(ctx.Logger).Log("msg", "repairing block", "id", id, "issue")
 	resid, err := block.Repair(
+		ctx,
 		ctx.Logger,
 		dir,
 		id,
@@ -110,7 +111,7 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 	}
 	level.Info(ctx.Logger).Log("msg", "verifying repaired block", "id", id, "newID", resid)
 
-	if err := block.VerifyIndex(ctx.Logger, filepath.Join(dir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+	if err := block.VerifyIndex(ctx, ctx.Logger, filepath.Join(dir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 		return errors.Wrapf(err, "repaired block is invalid %s", resid)
 	}
 
@@ -132,7 +133,7 @@ func verifyIndex(ctx Context, id ulid.ULID, dir string, meta *metadata.Meta) (st
 		return stats, errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 	}
 
-	stats, err = block.GatherIndexHealthStats(ctx.Logger, filepath.Join(dir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+	stats, err = block.GatherIndexHealthStats(ctx, ctx.Logger, filepath.Join(dir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 	if err != nil {
 		return stats, errors.Wrapf(err, "gather index issues %s", id)
 	}

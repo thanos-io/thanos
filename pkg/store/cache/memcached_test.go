@@ -16,6 +16,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/efficientgo/core/testutil"
+
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
@@ -86,25 +88,25 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil, memcachedDefaultTTL)
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StorePostings(p.block, p.label, p.value)
+				c.StorePostings(p.block, p.label, p.value, tenancy.DefaultTenant)
 			}
 
 			// Fetch postings from cached and assert on it.
-			hits, misses := c.FetchMultiPostings(ctx, testData.fetchBlockID, testData.fetchLabels)
+			hits, misses := c.FetchMultiPostings(ctx, testData.fetchBlockID, testData.fetchLabels, tenancy.DefaultTenant)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
-			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.postingRequests))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.postingHits))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.seriesRequests))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.seriesHits))
+			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 		})
 	}
 }
@@ -167,31 +169,31 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil, memcachedDefaultTTL)
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StoreExpandedPostings(p.block, p.matchers, p.value)
+				c.StoreExpandedPostings(p.block, p.matchers, p.value, tenancy.DefaultTenant)
 			}
 
 			// Fetch postings from cached and assert on it.
-			val, hit := c.FetchExpandedPostings(ctx, testData.fetchBlockID, testData.fetchMatchers)
+			val, hit := c.FetchExpandedPostings(ctx, testData.fetchBlockID, testData.fetchMatchers, tenancy.DefaultTenant)
 			testutil.Equals(t, testData.expectedHit, hit)
 			if hit {
 				testutil.Equals(t, testData.expectedValue, val)
 			}
 
 			// Assert on metrics.
-			testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.expandedPostingRequests))
+			testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
 			if testData.expectedHit {
-				testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.expandedPostingHits))
+				testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
 			}
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.postingRequests))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.postingHits))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.seriesRequests))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.seriesHits))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 		})
 	}
 }
@@ -262,25 +264,25 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil, nil, memcachedDefaultTTL)
 			testutil.Ok(t, err)
 
 			// Store the series expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StoreSeries(p.block, p.id, p.value)
+				c.StoreSeries(p.block, p.id, p.value, tenancy.DefaultTenant)
 			}
 
 			// Fetch series from cached and assert on it.
-			hits, misses := c.FetchMultiSeries(ctx, testData.fetchBlockID, testData.fetchIds)
+			hits, misses := c.FetchMultiSeries(ctx, testData.fetchBlockID, testData.fetchIds, tenancy.DefaultTenant)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
-			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.seriesRequests))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.seriesHits))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.postingRequests))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.postingHits))
+			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
 		})
 	}
 }

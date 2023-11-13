@@ -222,7 +222,7 @@ describe('Utils', () => {
           type: PanelType.Graph,
           storeMatches: [],
           engine: 'prometheus',
-          explain: false,
+          analyze: false,
         },
       },
       {
@@ -239,12 +239,12 @@ describe('Utils', () => {
           type: PanelType.Table,
           storeMatches: stores,
           engine: 'prometheus',
-          explain: false,
+          analyze: false,
         },
       },
     ];
     const query =
-      '?g0.expr=rate(node_cpu_seconds_total%7Bmode%3D%22system%22%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D&g0.engine=prometheus&g0.explain=0&g0.end_input=2019-10-25%2023%3A37%3A00&g0.moment_input=2019-10-25%2023%3A37%3A00&g1.expr=node_filesystem_avail_bytes&g1.tab=1&g1.stacked=0&g1.range_input=1h&g1.max_source_resolution=auto&g1.deduplicate=0&g1.partial_response=1&g1.store_matches=%5B%7B%22name%22%3A%22thanos_sidecar_one%3A10901%22%7D%5D&g1.engine=prometheus&g1.explain=0';
+      '?g0.expr=rate(node_cpu_seconds_total%7Bmode%3D%22system%22%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D&g0.engine=prometheus&g0.analyze=0&g0.end_input=2019-10-25%2023%3A37%3A00&g0.moment_input=2019-10-25%2023%3A37%3A00&g1.expr=node_filesystem_avail_bytes&g1.tab=1&g1.stacked=0&g1.range_input=1h&g1.max_source_resolution=auto&g1.deduplicate=0&g1.partial_response=1&g1.store_matches=%5B%7B%22name%22%3A%22thanos_sidecar_one%3A10901%22%7D%5D&g1.engine=prometheus&g1.analyze=0';
 
     describe('decodePanelOptionsFromQueryString', () => {
       it('returns [] when query is empty', () => {
@@ -332,15 +332,16 @@ describe('Utils', () => {
               resolution: 1,
               maxSourceResolution: 'raw',
               useDeduplication: true,
+              forceTracing: false,
               usePartialResponse: false,
               storeMatches: [],
               engine: 'prometheus',
-              explain: false,
-              disableExplainCheckbox: false,
+              analyze: false,
+              disableAnalyzeCheckbox: false,
             },
           })
         ).toEqual(
-          'g0.expr=foo&g0.tab=0&g0.stacked=1&g0.range_input=0s&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D&g0.engine=prometheus&g0.explain=0&g0.step_input=1'
+          'g0.expr=foo&g0.tab=0&g0.stacked=1&g0.range_input=0s&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D&g0.engine=prometheus&g0.analyze=0&g0.step_input=1'
         );
       });
     });

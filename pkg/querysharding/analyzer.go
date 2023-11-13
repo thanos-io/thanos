@@ -108,11 +108,13 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 				} else if n.Func.Name == "absent_over_time" || n.Func.Name == "absent" || n.Func.Name == "scalar" {
 					isShardable = false
 					return notShardableErr
+				} else if n.Func.Name == "histogram_quantile" {
+					analysis = analysis.scopeToLabels([]string{"le"}, false)
 				}
 			}
 		case *parser.BinaryExpr:
 			if n.VectorMatching != nil {
-				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
+				shardingLabels := n.VectorMatching.MatchingLabels
 				if !n.VectorMatching.On {
 					shardingLabels = append(shardingLabels, model.MetricNameLabel)
 				}
@@ -121,7 +123,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		case *parser.AggregateExpr:
 			shardingLabels := make([]string, 0)
 			if len(n.Grouping) > 0 {
-				shardingLabels = without(n.Grouping, []string{"le"})
+				shardingLabels = n.Grouping
 			}
 			analysis = analysis.scopeToLabels(shardingLabels, !n.Without)
 		}

@@ -19,11 +19,12 @@ const defaultProps: PanelProps = {
     stacked: false,
     maxSourceResolution: 'auto',
     useDeduplication: true,
+    forceTracing: false,
     usePartialResponse: false,
     storeMatches: [],
     engine: 'prometheus',
-    explain: false,
-    disableExplainCheckbox: false,
+    analyze: false,
+    disableAnalyzeCheckbox: false,
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -94,11 +95,12 @@ describe('Panel', () => {
       stacked: false,
       maxSourceResolution: 'auto',
       useDeduplication: true,
+      forceTracing: false,
       usePartialResponse: false,
       storeMatches: [],
       engine: 'prometheus',
-      explain: false,
-      disableExplainCheckbox: false,
+      analyze: false,
+      disableAnalyzeCheckbox: false,
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

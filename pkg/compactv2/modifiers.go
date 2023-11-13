@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
@@ -146,7 +147,7 @@ func (d *delModifierSeriesSet) Err() error {
 	return d.ChunkSeriesSet.Err()
 }
 
-func (d *delModifierSeriesSet) Warnings() storage.Warnings {
+func (d *delModifierSeriesSet) Warnings() annotations.Annotations {
 	return d.ChunkSeriesSet.Warnings()
 }
 
@@ -374,7 +375,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 
 		// The labels have to be copied because `relabel.Process` is now overwriting the original
 		// labels to same memory. This happens since Prometheus v2.39.0.
-		if processedLabels, _ := relabel.Process(lbls.Copy(), d.relabels...); len(processedLabels) == 0 {
+		if processedLabels, _ := relabel.Process(lbls.Copy(), d.relabels...); processedLabels.IsEmpty() {
 			// Special case: Delete whole series if no labels are present.
 			var (
 				minT int64 = math.MaxInt64
@@ -402,10 +403,10 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 			log.DeleteSeries(lbls, deleted)
 			p.SeriesProcessed()
 		} else {
-			for _, lb := range processedLabels {
-				symbols[lb.Name] = struct{}{}
-				symbols[lb.Value] = struct{}{}
-			}
+			processedLabels.Range(func(l labels.Label) {
+				symbols[l.Name] = struct{}{}
+				symbols[l.Value] = struct{}{}
+			})
 
 			lbStr := processedLabels.String()
 			if _, ok := chunkSeriesMap[lbStr]; !ok {
@@ -504,6 +505,6 @@ func (s *listChunkSeriesSet) Next() bool {
 	return s.idx < len(s.css)
 }
 
-func (s *listChunkSeriesSet) At() storage.ChunkSeries    { return s.css[s.idx] }
-func (s *listChunkSeriesSet) Err() error                 { return nil }
-func (s *listChunkSeriesSet) Warnings() storage.Warnings { return nil }
+func (s *listChunkSeriesSet) At() storage.ChunkSeries           { return s.css[s.idx] }
+func (s *listChunkSeriesSet) Err() error                        { return nil }
+func (s *listChunkSeriesSet) Warnings() annotations.Annotations { return nil }

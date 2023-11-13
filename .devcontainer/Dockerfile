@@ -1,5 +1,5 @@
 # For details, see https://github.com/devcontainers/images/tree/main/src/go
-FROM mcr.microsoft.com/devcontainers/go:0-1.21
+FROM mcr.microsoft.com/devcontainers/go:1.21
 
 RUN echo "Downloading prometheus..." \
     && curl -sSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/prometheus/prometheus/tags" -o /tmp/tags.json \
