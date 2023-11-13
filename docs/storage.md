@@ -93,6 +93,7 @@ config:
     enable: false
   list_objects_version: ""
   bucket_lookup_type: auto
+  send_content_md5: true
   part_size: 67108864
   sse_config:
     type: ""
