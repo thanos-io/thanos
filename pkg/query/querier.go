@@ -315,6 +315,11 @@ func storeHintsFromPromHints(hints *storage.SelectHints) *storepb.QueryHints {
 	}
 }
 
+type QuerierWithHints interface {
+	storage.Querier
+	SelectWithHints(context.Context, bool, *storage.SelectHints, ...*labels.Matcher) (storage.SeriesSet, *store.HintsCollector)
+}
+
 func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.SeriesSet {
 	return q.originalSelect(ctx, true, hints, nil, ms...)
 }
