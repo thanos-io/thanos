@@ -587,30 +587,231 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		}
 	}
 
-	wreqs := make(map[endpointReplica]trackedSeries)
-	for tsID, ts := range wreq.Timeseries {
+	wreqs, _, err := h.distributeTimeseriesToReplicas(tenant, h.hashring, replicas, 0, wreq.Timeseries)
+	if err != nil {
+		h.mtx.RUnlock()
+		return err
+	}
+	h.mtx.RUnlock()
+
+	return h.fanoutForward(ctx, tenant, wreqs, len(wreq.Timeseries), replicas, r.replicated)
+}
+
+type distributedSeries map[endpointReplica]trackedSeries
+
+// distributeTimeseriesToReplicas distributes the given timeseries from the tenant to different endpoints in a manner
+// that achieves the replication factor indicated by replicas. It is possible to offset the hashing algorithm by using
+// the hashOffset parameter, which can be used to distribute the same series differently.
+func (h *Handler) distributeTimeseriesToReplicas(tenant string, hashring Hashring, replicas []uint64, hashOffset uint64, timeseries []prompb.TimeSeries) (distributedSeries, distributedSeries, error) {
+	remoteWrites := make(distributedSeries)
+	localWrites := make(distributedSeries)
+	for tsIndex, ts := range timeseries {
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := hashring.GetN(tenant, &ts, rn+hashOffset)
 			if err != nil {
-				h.mtx.RUnlock()
-				return err
+				return nil, nil, err
 			}
 			key := endpointReplica{endpoint: endpoint, replica: rn}
-			writeTarget, ok := wreqs[key]
+			var writeDestination = remoteWrites
+			if endpoint == h.options.Endpoint {
+				writeDestination = localWrites
+			}
+			writeTarget, ok := writeDestination[key]
 			if !ok {
 				writeTarget = trackedSeries{
 					seriesIDs:  make([]int, 0),
 					timeSeries: make([]prompb.TimeSeries, 0),
 				}
 			}
-			writeTarget.timeSeries = append(wreqs[key].timeSeries, ts)
-			writeTarget.seriesIDs = append(wreqs[key].seriesIDs, tsID)
-			wreqs[key] = writeTarget
+			writeTarget.timeSeries = append(remoteWrites[key].timeSeries, ts)
+			writeTarget.seriesIDs = append(remoteWrites[key].seriesIDs, tsIndex)
+			remoteWrites[key] = writeTarget
 		}
 	}
-	h.mtx.RUnlock()
+	return localWrites, remoteWrites, nil
+}
 
-	return h.fanoutForward(ctx, tenant, wreqs, len(wreq.Timeseries), r.replicated)
+func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool) error {
+	var writeErrors writeErrors
+
+	// Create a new context for this function with a custom timeout.
+	ctx, cancel := context.WithTimeout(pctx, h.options.ForwardTimeout)
+
+	defer func() {
+		if writeErrors.ErrOrNil() != nil {
+			// NOTICE: The cancel function is not used on all paths intentionally,
+			// if there is no error when quorum is reached,
+			// let forward requests to optimistically run until timeout.
+			cancel()
+		}
+	}()
+
+	tLogger := log.With(h.logger, "tenant", tenant)
+	if id, ok := middleware.RequestIDFromContext(pctx); ok {
+		tLogger = log.With(tLogger, "request-id", id)
+	}
+
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(tenant, h.hashring, replicas, 0, writeRequest.Timeseries)
+	if err != nil {
+		return err
+	}
+	maxBufferedResponses := len(remoteWrites) + len(localWrites)
+	finalResponses := make(chan writeResponse, maxBufferedResponses)
+
+	// Do the writes to the local node first. This should be easy and fast.
+	for endpointReplica := range localWrites {
+		var err error
+		tracing.DoInSpan(ctx, "receive_tsdb_write", func(_ context.Context) {
+			err = h.writer.Write(ctx, tenant, &prompb.WriteRequest{
+				Timeseries: localWrites[endpointReplica].timeSeries,
+			})
+		})
+		if err != nil {
+			level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
+			finalResponses <- newWriteResponse(localWrites[endpointReplica].seriesIDs, err)
+			continue
+		}
+		finalResponses <- newWriteResponse(localWrites[endpointReplica].seriesIDs, nil)
+	}
+
+	// Do the writes to remote nodes. Run them all in parallel.
+	var wg sync.WaitGroup
+	wg.Add(len(remoteWrites))
+	for er := range remoteWrites {
+		go func(endpointReplica endpointReplica, respChan chan<- writeResponse) {
+			defer wg.Done()
+			err := h.sendRemoteWrite(ctx, tenant, endpointReplica, remoteWrites[endpointReplica].timeSeries)
+			if err != nil {
+				finalResponses <- newWriteResponse(remoteWrites[endpointReplica].seriesIDs, err)
+
+				h.forwardRequests.WithLabelValues(labelError).Inc()
+				if !alreadyReplicated {
+					h.replications.WithLabelValues(labelError).Inc()
+				}
+				return
+			}
+			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
+			if !alreadyReplicated {
+				h.replications.WithLabelValues(labelSuccess).Inc()
+			}
+		}(er, finalResponses)
+	}
+
+	go func() {
+		wg.Wait()
+		close(finalResponses)
+	}()
+
+	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
+	// This is needed if context is canceled or if we reached success of fail quorum faster.
+	defer func() {
+		go func() {
+			for resp := range finalResponses {
+				if resp.err != nil {
+					// TODO: log something
+				}
+			}
+		}()
+	}()
+
+	quorum := h.writeQuorum()
+	if alreadyReplicated {
+		quorum = 1
+	}
+	successes := make([]int, len(writeRequest.Timeseries))
+	seriesErrs := newReplicationErrors(quorum, len(writeRequest.Timeseries))
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case resp, hasMore := <-finalResponses:
+			// At the end, aggregate all errors if there are any and return them.
+			if !hasMore {
+				for _, err := range seriesErrs {
+					writeErrors.Add(err)
+				}
+				return writeErrors.ErrOrNil()
+			}
+
+			// Track errors and successes on a per-series basis.
+			if resp.err != nil {
+				for _, seriesID := range resp.seriesIDs {
+					seriesErrs[seriesID].Add(resp.err)
+				}
+				continue
+			}
+			for _, seriesID := range resp.seriesIDs {
+				successes[seriesID]++
+			}
+
+			if quorumReached(successes, quorum) {
+				return nil
+			}
+		}
+	}
+}
+
+func (h *Handler) sendRemoteWrite(ctx context.Context, tenant string, endpointReplica endpointReplica, timeSeries []prompb.TimeSeries) error {
+	endpoint := endpointReplica.endpoint
+	cl, err := h.peers.get(ctx, endpoint)
+	if err != nil {
+		return err
+	}
+	if peerHealthy := h.isPeerHealthy(endpoint); !peerHealthy {
+		return errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint)
+	}
+
+	span, spanCtx := tracing.StartSpan(ctx, "receive_forward")
+	// Actually make the request against the endpoint we determined should handle these time series.
+	_, err = cl.RemoteWrite(spanCtx, &storepb.WriteRequest{
+		Timeseries: timeSeries,
+		Tenant:     tenant,
+		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
+		Replica: int64(endpointReplica.replica + 1),
+	})
+	span.Finish()
+	if err != nil {
+		// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
+		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.Unavailable {
+				h.markUnhealthyPeer(endpoint)
+			}
+		}
+		return err
+	}
+	h.markHealthyPeer(endpoint)
+	return nil
+}
+
+func (h *Handler) markUnhealthyPeer(endpoint string) {
+	h.mtx.Lock()
+
+	state, ok := h.peerStates[endpoint]
+	if !ok {
+		state = &retryState{attempt: -1}
+	}
+	state.attempt++
+	state.nextAllowed = time.Now().Add(h.expBackoff.ForAttempt(state.attempt))
+	h.peerStates[endpoint] = state
+
+	h.mtx.Unlock()
+}
+
+func (h *Handler) markHealthyPeer(endpoint string) {
+	h.mtx.Lock()
+	delete(h.peerStates, endpoint)
+	h.mtx.Unlock()
+}
+
+func (h *Handler) isPeerHealthy(endpoint string) bool {
+	h.mtx.RLock()
+	defer h.mtx.RUnlock()
+	state, ok := h.peerStates[endpoint]
+	// No state means the peer wasn't reported as unhealthy yet.
+	if !ok {
+		return true
+	}
+	return time.Now().Before(state.nextAllowed)
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
@@ -630,7 +831,7 @@ func quorumReached(successes []int, successThreshold int) bool {
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
-func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[endpointReplica]trackedSeries, numSeries int, seriesReplicated bool) error {
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[endpointReplica]trackedSeries, numSeries int, replicas []uint64, seriesReplicated bool) error {
 	var errs writeErrors
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
@@ -768,7 +969,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 				}
 				werr := errors.Wrapf(err, "forwarding request to endpoint %v", writeTarget.endpoint)
 				responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, werr)
-				return
 			}
 			h.mtx.Lock()
 			delete(h.peerStates, writeTarget.endpoint)
