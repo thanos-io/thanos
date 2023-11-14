@@ -878,3 +878,49 @@ func ensureGETStatusCode(t testing.TB, code int, url string) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, code, r.StatusCode)
 }
+
+func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
+	now, err := time.Parse(time.RFC3339, "2020-03-24T08:00:00Z")
+	testutil.Ok(t, err)
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+	e, err := e2e.NewDockerEnvironment("downsample-mrkd")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	const bucket = "compact-test"
+	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	bktCfg := e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir())
+	bkt, err := s3.NewBucketWithConfig(logger, bktCfg, "test")
+	testutil.Ok(t, err)
+
+	downsampledBase := blockDesc{
+		series: []labels.Labels{
+			labels.FromStrings("z", "1", "b", "2"),
+			labels.FromStrings("z", "1", "b", "5"),
+		},
+		extLset: labels.FromStrings("case", "block-about-to-be-downsampled"),
+		mint:    timestamp.FromTime(now),
+		maxt:    timestamp.FromTime(now.Add(10 * 24 * time.Hour)),
+	}
+	// New block that will be downsampled.
+	justAfterConsistencyDelay := 30 * time.Minute
+
+	downsampledRawID, err := downsampledBase.Create(context.Background(), dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, downsampledRawID.String()), downsampledRawID.String()))
+	testutil.Ok(t, block.MarkForNoDownsample(context.Background(), logger, bkt, downsampledRawID, metadata.ManualNoDownsampleReason, "why not", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+
+	c := e2ethanos.NewCompactorBuilder(e, "working").Init(client.BucketConfig{
+		Type:   client.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
+	}, nil)
+	testutil.Ok(t, e2e.StartAndWaitReady(c))
+	testutil.NotOk(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_downsample_total"}, e2emon.WaitMissingMetrics()))
+
+}
