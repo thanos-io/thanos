@@ -41,8 +41,7 @@ Having separate services for index and chunks fetches can help scale each operat
 
 ### Statelessness
 
-Currently, store gateway in Thanos downloads the index-header for each block it is responsible for at startup. This slows down the start up time and reduces the scaling speed.
-Chunk look ups are stateless and doesn’t require the index-header on disk. A separate stateless service for chunks will make it easier and faster to scale the chunk look ups.
+Currently, store gateway in Thanos downloads the index-header for each block it is responsible for at startup. This slows down the start up time and reduces the scaling speed. Chunk look ups are stateless and doesn’t require the index-header on disk. A separate stateless service for chunks will make it easier and faster to scale the chunk look ups.
 
 ### Streaming Chunks in the engine
 
@@ -58,8 +57,7 @@ By having a dedicated `ChunkStore` service, Querier can ask for chunks from diff
 
 ### Reduce chance of chunk pool exhaustion
 
-Chunk pool exhaustion is a common issue when running long time range, chunks heavy queries.
-Currently, horizontally scale up Store Gateway is one way to handle this. But it scales up both Index and Chunks read path at the same time, which is unnecessary because Chunks read path scale up should be sufficient.
+Chunk pool exhaustion is a common issue when running long time range, chunks heavy queries. Currently, horizontally scale up Store Gateway is one way to handle this. But it scales up both Index and Chunks read path at the same time, which is unnecessary because Chunks read path scale up should be sufficient.
 
 By allowing Index and Chunks read path scale up separately, chunk pool exhaustion issue can be addressed more effectively.
 
@@ -140,6 +138,7 @@ service ChunkStore {
 ```
 
 #### Models
+
 ```
 message ChunksRequest {
     string blockId = 1;
@@ -155,8 +154,7 @@ message ChunksResponse {
 
 #### Fetching series and chunks
 
-The querier will first make a `Select()` call to the `IndexStore` to retrieve the Series labels and the metadata about the chunks. The querier would make concurrent calls to multiple `ChunkStore`s to read the corresponding chunks.
-A `SeriesSet` will be created by stitching together the chunks with the corresponding series.
+The querier will first make a `Select()` call to the `IndexStore` to retrieve the Series labels and the metadata about the chunks. The querier would make concurrent calls to multiple `ChunkStore`s to read the corresponding chunks. A `SeriesSet` will be created by stitching together the chunks with the corresponding series.
 
 #### Adapting the Select()/Chunks() into Series()
 
@@ -180,15 +178,13 @@ The `IndexStore` will allow querying multiple blocks per request. Only the serie
 
 ### Endpoint Discovery
 
-`Info` API will be exposed in `IndexStore` so that Querier can discover index store the same way as discovering current stores.
-`ChunkStore` is stateless and it only exposes `Chunks()` gRPC API. Querier can use DNS service discovery for it.
+`Info` API will be exposed in `IndexStore` so that Querier can discover index store the same way as discovering current stores. `ChunkStore` is stateless and it only exposes `Chunks()` gRPC API. Querier can use DNS service discovery for it.
 
 ## Alternatives Considered
 
 ### Lazy Loading blocks
 
 Instead of splitting the chunks part, store-gateways could be made stateless through lazy loading blocks. We still think that the scaling needs are different for index and chunks. Splitting would provide more flexibility allowing to choose the instance type, the resources etc.
-
 
 ### Querier fetches chunks directly
 
@@ -201,7 +197,7 @@ We didn’t pick up this because of some downsides:
 
 ### Index Gateway fetches chunks from chunks gateway
 
-Instead of having Querier to call `Select()` and `Chunks()` to get index and chunks information separately, Querier can perform the work of fetching chunks from the IndexStore  as well. Basically, `IndexStore`  fetches chunks from `ChunkStore` and returns both series and chunks back to Querier. There are pros and cons for this approach.
+Instead of having Querier to call `Select()` and `Chunks()` to get index and chunks information separately, Querier can perform the work of fetching chunks from the IndexStore as well. Basically, `IndexStore` fetches chunks from `ChunkStore` and returns both series and chunks back to Querier. There are pros and cons for this approach.
 
 Pros:
 
@@ -220,4 +216,3 @@ Cons:
 * Should the chunks request be made per block?
 * Should the `Chunks()` API accept an array of `ChunksRequest` instead of bi-directional streaming.
 * Should the `Chunks()` calls be bootstraped with the blockID first to avoid having to send blockID for every .
-
