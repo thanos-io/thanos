@@ -167,19 +167,48 @@ The compactor is also optimizing data read for long range queries. If you are qu
 
 Finally you can configure how long you want to retain your data on object storage. One flag `--retention.resolution-*` for each resolution is available. We recommand having the same value for each. 
 
-### Exposing buckets data for qureies: the store gateway and the store API
+### Exposing buckets data for queries: the store gateway and the store API
 
-EXPLAIN HOW IT WORKS. EXPLAIN CONFIGURATION. EXPLAIN CACHES. EXPLAIN RECOMMENDATIONS. 
+#### Exposing data for queries
+
+HOW DOES THE STORE KNOWS NEW BLOCKS ARE AVAILABLE? WHAT DELAY? SYNC MECHANISMS WITH THE RECEIVE> HOW TO AVOID THE SAME DATA BEING SERVED BY BOTH COMPONENTS?
+
+The Store Gateway is acting as a facade for the object storage. It provides access to the bucket data through the Thanos Store API, which was previously mentioned in the context of the Receive component. The store exposes the store API with the `--grpc-address` flag.
+
+The Store Gateway requires access to the object storage bucket to retrieve data, set with the `--objstore.config` flag. Additionally, it utilizes caches to efficiently store indexes and chunks of data.
+
+#### Efficient data retrieval with indexes and caches
+
+EXPLAIN HOW THE STORE RETRIEVES DATA REQUESTED ON THE STORE API. EXPLAIN METADATA USAGE, EXTERNAL LABELS, TIME RANGES, THEN INDEX, POSTINGS, THEN CHUNKS, THEN SAMPLES.
+
+When a query comes in via the Store API, the Store Gateway:
+
+* **Processes Metadata**: It first uses metadata to understand the external labels and time ranges relevant to the query.
+* **Accesses Indexes and Postings**: The Store Gateway then retrieves index and postings information to identify relevant data blocks.
+* **Fetches Chunks**: After identifying the relevant blocks, it fetches the corresponding chunks.
+* **Retrieves Samples**: Finally, it extracts the specific samples requested in the query.
+
+#### Distributing the load with sharding
+
+Stores performance can be improved by controlling the concurrency level. Sharding can also be configured using relabel configuration. EXPAND ON THAT.
 
 ### Querying data: the engine, limits, and ruler split
 
+All our data is ingested, maintained and made available for querying. The Querier component will be responsible for retrieving data from the store and processing it according to the query. 
+
 TWO QUERY EVELUATION ENGINES: PROMQL AND VOLCANO. EXPLAIN TRADEOFFS. EXPLAIN CONFIGURATION. EXPLAIN VOLCANO HTTP PORTS. EXPLAIN NOISY NEIGHBOURS PROTECTION. EXPLAIN QUERY RULER SPLIT AND LIMITS.
 
+### Scaling queries by sharing the load: the query frontend
 
+TALK ALSO ABOUT THE THANOS ENGINE?
+
+### Logical isolation of data: multi-tenancy
+
+EXPLAIN HOW IT WORKS. EXPLAIN CONFIGURATION. EXPLAIN RECOMMENDATIONS.
 
 ### Annexes
 
-### Metrics terminology: Samples, Labels and Series
+#### Metrics terminology: Samples, Labels and Series
 
 * **Sample**: In the context of Prometheus, a sample is a data point representing a measurement of a dynamic system aspect or property at a specific moment in time. 
 * **Labels** Each sample in Prometheus is associated with a set of labels, which are key-value pairs that provide details about:
@@ -187,6 +216,8 @@ TWO QUERY EVELUATION ENGINES: PROMQL AND VOLCANO. EXPLAIN TRADEOFFS. EXPLAIN CON
   * The property being measured
   * Its source or origin
   * Additional contextual information
+
+* **External labels**: External labels are not defined by the source of the sample but are added on top by the component scraping or receiving the data. DEVELOP
 
 * **Series**: A series is defined by a unique combination of labels and their values. To illustrate, here's an example of a series representation:
 
@@ -202,10 +233,31 @@ In this case, the series name (http_requests_total) is effectively a specific la
 
 For our discussion, samples can be of various types, but we'll treat them as simple integers for simplicity.
 
-### TSDB terminology: Blocks, Chunks, indexes
+#### TSDB terminology: Blocks, Chunks, indexes
 
 TSDB stores Series for fast read access, low data expansion. DESCIBE TSDB, DESIGN CONSTRAINTS, 120 SANPLES FORMS A BLOCK, BLOCKS ARE AGGREGATED INTO??ALL THIS IS INDEXED...
 
+#### Object store format
+
+
+#### Configuration Options Summary
+
+Summary of the listed configuration options of the Receive component:
+
+| Flag | Purpose |
+| ---- | ---------- |
+| `--remote-write.address`
+ `--remote-write.*` | The remote write endpoint |
+| `--receive.limits-config` | Limits on the remote write endpoint |
+| `--http-address`
+  `--receive.hashrings-algorithm` | The hashring |
+| `--receive.replication-factor`
+  `--receive.replica-header` | Replication of incoming data |
+| `--objstore.config` | Configuration of the object storage |
+| `--tsdb.retention`, `--tsdb.*` | Configuration of the local storage |
+| `--grpc-address` | The store API endpoint |
+| `--store.limits.request-samples`
+  `--store.limits.request-series` | Limits on the store API |
 
 
 
