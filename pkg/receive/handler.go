@@ -627,11 +627,9 @@ func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint6
 }
 
 func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool) error {
-	var writeErrors writeErrors
-
-	// Create a new context for this function with a custom timeout.
 	ctx, cancel := context.WithTimeout(pctx, h.options.ForwardTimeout)
 
+	var writeErrors writeErrors
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
 			// NOTICE: The cancel function is not used on all paths intentionally,
@@ -641,9 +639,9 @@ func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeReq
 		}
 	}()
 
-	tLogger := log.With(h.logger, "tenant", tenant)
+	requestLogger := log.With(h.logger, "tenant", tenant)
 	if id, ok := middleware.RequestIDFromContext(pctx); ok {
-		tLogger = log.With(tLogger, "request-id", id)
+		requestLogger = log.With(requestLogger, "request-id", id)
 	}
 
 	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(tenant, replicas, 0, writeRequest.Timeseries)
@@ -661,7 +659,7 @@ func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeReq
 		})
 		span.Finish()
 		if err != nil {
-			level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
+			level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
 			finalResponses <- newWriteResponse(localWrites[endpointReplica].seriesIDs, err)
 			continue
 		}
@@ -703,7 +701,7 @@ func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeReq
 		go func() {
 			for resp := range finalResponses {
 				if resp.err != nil {
-					level.Debug(tLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", resp.err)
+					level.Debug(requestLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", resp.err)
 				}
 			}
 		}()
