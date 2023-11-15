@@ -588,7 +588,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		}
 	}
 
-	return h.newFanoutForward(ctx, tenant, wreq, replicas, r.replicated)
+	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated)
 }
 
 type distributedSeries map[endpointReplica]trackedSeries
@@ -628,7 +628,7 @@ func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint6
 	return localWrites, remoteWrites, nil
 }
 
-func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool) error {
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool) error {
 	ctx, cancel := context.WithTimeout(pctx, h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
