@@ -386,10 +386,11 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
+  msi_resource: ""
 prefix: ""
 ```
 
-If `storage_account_key` is used, authentication is done via storage account key. 
+If `storage_account_key` is used, authentication is done via storage account key.
 
 If `user_assigned_id` is used, authentication is done via user-assigned managed identity.
 
