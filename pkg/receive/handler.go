@@ -698,7 +698,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case resp, hasMore := <-finalResponses:
 		case resp, hasMore := <-responses:
 			// At the end, aggregate all errors if there are any and return them.
 			if !hasMore {
