@@ -420,6 +420,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
+	span.SetTag("receiver.mode", string(h.receiverMode))
 	defer span.Finish()
 
 	tenant, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
@@ -430,6 +431,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
+	span.SetTag("tenant", tenant)
 
 	writeGate := h.Limiter.WriteGate()
 	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
