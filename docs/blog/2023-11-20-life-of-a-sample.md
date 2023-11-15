@@ -8,7 +8,13 @@ author: Thibault Mangé (https://github.com/thibaultmg)
 
 ### Introduction
 
-You would like to use Thanos but you are feeling intimidated by its apparent complexity? Thanos is indeed a sophisticated distributed system with a broad range of capabilities, and with that comes a certain level of configuration intricacies. In this article, we'll take a deep dive into the lifecycle of a sample within Thanos, tracking its journey from initial ingestion to final retrieval. Our focus will be to explain Thanos' critical internal mechanisms and pinpoint the essential configurations for each component, guiding you to achieve the operational results you're aiming for.
+You would like to use Thanos but you are feeling intimidated by its apparent complexity? Thanos is indeed a sophisticated distributed system with a broad range of capabilities, and with that comes a certain level of configuration intricacies. In this article, we'll take a deep dive into the lifecycle of a sample within Thanos, tracking its journey from initial ingestion to final retrieval. Our focus will be to explain Thanos' critical internal mechanisms and pinpoint the essential configurations for each component, guiding you to achieve the operational results you're aiming for. We'll be covering the following thanos components:
+
+* **Receive**: Ingests samples from Prometheus servers and prepares them for object storage.
+* **Compactor**: Merges and deduplicates blocks in object storage.
+* **Store**: Exposes blocks in object storage for querying.
+* **Query**: Retrieves data from stores and processes queries.
+* **Query Frontend**: Distributes queries to query instances.
 
 Our goal with this article is to make Thanos more accessible to new users, helping to alleviate any initial apprehensions. Given the extensive ground to cover, we'll aim to maintain conciseness throughout our exploration.
 
@@ -21,17 +27,25 @@ The sample originates typically from a Prometheus instance that is scraping targ
 * The **Prometheus instances are running in clusters that you administer**. In this case you can use the Thanos sidecar that you will attach the the pod running the prometheus server. The Thanos sidecar will read directly the samples from the Prometheus server using the read API. Then the sidecar will behave similarly to the other scenario without the routing and ingestion parts. Thus we will not go further into this use case.
 * The **Prometheus servers are running in clusters that you do not control**. You'll often hear air gapped clusters. In this case, you cannot attach a sidecar to the Prometheus server. The samples will trvel to your Thanos system using the remote write protocol. This is the scenario we will focus on.
 
+![Thanos integration with data source](img/life-of-a-sample.png)
+
 Comparing the two deployment modes, the Sidecar Mode is generally preferable due to its simpler configuration and fewer moving parts. However, if this isn't possible, opt for the **Receive Mode**. Bear in mind, this mode requires careful configuration to ensure high availability, scalability, and durability. It adds another layer of indirection and comes with the overhead of operating the additional component.
 
 <!-- Add schema of both topologies, with side car in grey -->
 
-### Sending samples to Thanos: the remote write protocol with limits
+### Sending samples to Thanos
 
-Say hi to our first Thanos component, the **Receive** or **Receiver**, the entry point to the system. This component facilitates the ingestion of metrics from multiple clients, eliminating the need for close integration with the clients' Prometheus deployments.
+#### The remote write protocol
+
+Say hi to our first Thanos component, the **Receive** or **Receiver**, the entry point to the system. It was introduced with this [proposal](https://thanos.io/tip/proposals-done/201812-thanos-remote-receive.md/). This component facilitates the ingestion of metrics from multiple clients, eliminating the need for close integration with the clients' Prometheus deployments.
 
 Thanos Receive is a server that exposes a remote-write endpoint (see [Prometheus remote-write](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write)) that Prometheus servers can use to transmit metrics. The only prerequisite on the client side is to configure the remote write endpoint on each Prometheus server, a feature natively supported by Prometheus. 
 
+On the Receive, the remote write endpoint is configured with the `--remote-write.address` flag. You can also configure TLS options using other `--remote-write.*` flags. 
+
 The remote-write protocol is based on HTTP POST requests. The payload consists of a protobuf message containing a list of time-series samples and labels. Generally, a payload contains at most one sample per time series in a given payload and spans numerous time series. Metrics are typically scraped every 15 seconds, with a maximum remote write delay of 5 seconds to minimize latency, from scraping to query availability on the receiver. 
+
+#### Tuning the remote write protocol
 
 The Prometheus remote-write configuration offers various parameters to tailor connection specifications, parallelism, and payload properties (compression, batch size, etc.). While these may seem like implementation details for Prometheus, understanding them is essential for optimizing ingestion, as they form a sensitive part of the system.
 
@@ -39,24 +53,54 @@ Implementation-wise for Prometheus, the key idea is to read directly from the TS
 
 <!-- TODO: add diagram showing the parameters influence over the protocol, explain tradeoffs, show sensible config, explain external labels management? -->
 
-The remote write endpoint is configured with the `--remote-write.address` flag. You can also configure TLS options using other `--remote-write.*` flags. 
+#### Protecting the receiver from abusive usage
 
-As you cannot control the configuration of your clients, you must protect yourselft from abusive usage. To that effect the receive component offers a few configuration options that are well described in the [documentation](https://thanos.io/tip/components/receive.md/#limits--gates-experimental). Here is a schema illustrating the impact of these options:
+As you cannot control the configuration of your clients, you must protect yourselft from abusive usage. To that effect the Receive component offers a few configuration options that are well described in the [documentation](https://thanos.io/tip/components/receive.md/#limits--gates-experimental). Here is a schema illustrating the impact of these options:
 
 <!-- SCHEMA -->
 
-### Receiving samples with high availability and durability
+DO CLIENTS SUPPORT 429? WHAT HAPPENS IF A CLIENT SENDS TWICE THE SAME DATA? CONFLICT? IS IT SUPPORTED BY CLIENTS? TALK ABOUT OUT OF ORDER HERE?
 
-To have high availability, you can run multiple receive components. They will all listen on the same address and a load balancer will distribute requests. However, a given sample must always land on the same receive instance so that it can build data blocks as we'll describe later. The receive component will then use a hash ring to distribute the samples to the different receive components. There are two possible hashrings:
+### Receiving samples with High Availability and Durability 
 
-* hashmod EXPLAIN
-* ketama EXPLAIN
+#### The need for multiple Receive instances
 
-These hashrings use gossip to maintain a consistent view of the ring. Receive components must then be able to communicate with each others. They expose to that end a http server that is configured with the `--http-address` flag.
+Relying on a single instance of Thanos Receive is not sufficient for two main reasons:
 
-Also some clients really don't want their data to be lost. Which my happen if a receive is down ... EXPLAIN REPLICATION, REPLICA LABEL
+* Scalability: As your metrics grow, so does the need for scaling your infrastructure.
+* Reliability: If a single Receive instance fails, it disrupts metric collection, affecting rule evaluation and alerting. Furthermore, during downtime, Prometheus servers will buffer data in their Write-Ahead Log (WAL). If the outage exceeds the WAL's retention duration (default 2 hours), this can lead to data loss.
 
-As we've seen, just for receiving samples, a lot of data can be flowing between receivers. We can reduce this overhead with the notion of Router and Ingestor. While in our preceding example, Receive wa acting as an `IngestorRouter`, doing both the routing... EXPLAIN CONFIGURATION AND DO SCHEMA
+#### The Hashring Mechanism
+
+To achieve high availability, it is necessary to deploy multiple receive replicas. However, it's not just about having more instances; it's crucial to maintain consistency in sample ingestion. In other words, samples from a given time series must always be ingested be the same Receive instance. This consistency is key for constructing chunks and blocks, as we'll discuss later. 
+
+To that effect, you guessed it, the receive uses a hashring! With the hashring, every Receive participant knows and agrees on who must ingest what sample. When clients send data, they connect to any Receive instance, which then routes the data to the correct instance based on the hashring. This is why the Receive component is also known as the **IngestorRouter**.
+
+<!-- Schema -->
+
+Receive instances use a gossip protocol to maintain a consistent view of the hashring, requiring inter-instance communication via a configured HTTP server (`--http-address` flag).
+
+There are two possible hashrings:
+
+* **hashmod**: This algorithm distributes time series by hashing labels. It's effective in evenly distributing load but requires data flushing to object storage during scaling operations, potentially causing downtime. This is especially critical if you are running big receive nodes. The most data they have, the longer it will take to flush it to the object store. 
+* **ketama** A more recent addition, employing consistent hashing. It means that during scaling operations, most of the time series will remain attached to the same nodes. It allows for less data movement during scaling, reducing the impact on nodes. However, it's less efficient in load distribution compared to hashmod.
+
+We recommend using the Ketama hashring (--receive.hashrings-algorithm flag) for its operational benefits. This is configured with the `--receive.hashrings-algorithm` flag.
+
+When the hashring configuration changes, Receive instances need to flush data to object storage EVEN WITH KETAMA??. During that time, the Receive replies with 503 to the clients which is interpreted as a temporary failure and remote-writes are retried. At that moment, your receive will have to catch up and receive a lot of data. This is why we recommend using the `--receive.limits-config` flag to limit the amount of data that can be received. This will prevent the receive from being overwhelmed by the catch up. 
+
+#### Improving Scalability and Reliability
+
+To address the challenges in scalability and reliability, a new deployment topology was [proposed](https://thanos.io/tip/proposals-accepted/202012-receive-split.md/), separating the **router** and **ingestor** roles. Routers now manage the hashring, directing data to appropriate ingestors. This approach simplifies scaling and reduces downtime.
+
+<!-- EXPLAIN CONFIGURATION AND DO SCHEMA -->
+
+#### Ensuring Smaples Durability
+
+For clients requiring high data durability, the `--receive.replication-factor` flag ensures data duplication across multiple receivers. When set to n, it will only reply a succesful processing to the client once it has duplicated the data to `n-1` other receivers. Additionally, an external replicas label can be added to each Receive instance (`--label` flag) to mark replicated data. This setup increases data resilience but also expands the data footprint. 
+HOW DOES IT PLAYS WITH `--receive.replica-header`?
+
+<!-- DO SCHEMA -->
 
 ### Preparing samples for object storage: building chunks and blocks
 
