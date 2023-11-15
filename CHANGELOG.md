@@ -16,6 +16,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
+
 ### Changed
 
 ### Removed
@@ -38,7 +40,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6773](https://github.com/thanos-io/thanos/pull/6773) Index Cache: Add `ttl` to control the ttl to store items in remote index caches like memcached and redis.
 - [#6794](https://github.com/thanos-io/thanos/pull/6794) Query: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing custom dashboard queries to be incorrect due to the added label.
 - [#6847](https://github.com/thanos-io/thanos/pull/6847) Store: Add `thanos_bucket_store_indexheader_download_duration_seconds` and `thanos_bucket_store_indexheader_load_duration_seconds` metrics for tracking latency of downloading and initializing the index-header.
-- [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
 
 ### Changed
 
