@@ -679,13 +679,13 @@ func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeReq
 
 	// Do the writes to remote nodes. Run them all in parallel.
 	var wg sync.WaitGroup
-	for er := range remoteWrites {
+	for writeDestination := range remoteWrites {
 		wg.Add(1)
-		go func(endpointReplica endpointReplica) {
+		go func(writeDestination endpointReplica) {
 			defer wg.Done()
-			err := h.sendRemoteWrite(ctx, tenant, endpointReplica, remoteWrites[endpointReplica].timeSeries)
+			err := h.sendRemoteWrite(ctx, tenant, writeDestination, remoteWrites[writeDestination].timeSeries)
 			if err != nil {
-				finalResponses <- newWriteResponse(remoteWrites[endpointReplica].seriesIDs, err)
+				finalResponses <- newWriteResponse(remoteWrites[writeDestination].seriesIDs, err)
 
 				h.forwardRequests.WithLabelValues(labelError).Inc()
 				if !alreadyReplicated {
@@ -693,12 +693,12 @@ func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeReq
 				}
 				return
 			}
-			finalResponses <- newWriteResponse(remoteWrites[endpointReplica].seriesIDs, nil)
+			finalResponses <- newWriteResponse(remoteWrites[writeDestination].seriesIDs, nil)
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
 				h.replications.WithLabelValues(labelSuccess).Inc()
 			}
-		}(er)
+		}(writeDestination)
 	}
 
 	go func() {
