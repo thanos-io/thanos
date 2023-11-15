@@ -374,14 +374,18 @@ type trackedSeries struct {
 }
 
 type writeResponse struct {
-	seriesIDs []int
-	err       error
+	seriesIDs  []int
+	err        error
+	retry      bool
+	retryCount int
 }
 
-func newWriteResponse(seriesIDs []int, err error) writeResponse {
+func newWriteResponse(seriesIDs []int, err error, retry bool, retryCount int) writeResponse {
 	return writeResponse{
-		seriesIDs: seriesIDs,
-		err:       err,
+		seriesIDs:  seriesIDs,
+		err:        err,
+		retry:      retry,
+		retryCount: retryCount,
 	}
 }
 
@@ -587,8 +591,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 			replicas = append(replicas, rn)
 		}
 	}
-
-	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated)
+	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated, 3)
 }
 
 type distributedSeries map[endpointReplica]trackedSeries
@@ -628,7 +631,7 @@ func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint6
 	return localWrites, remoteWrites, nil
 }
 
-func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool) error {
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool, retriesLeft int) error {
 	ctx, cancel := context.WithTimeout(pctx, h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
@@ -654,63 +657,30 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
 	maxBufferedResponses := len(remoteWrites) + len(localWrites)
-	finalResponses := make(chan writeResponse, maxBufferedResponses)
+	responses := make(chan writeResponse, maxBufferedResponses)
 
 	// Do the writes to the local node first. This should be easy and fast.
 	for writeDestination := range localWrites {
-		go func(writeDestination endpointReplica) {
-			span, tracingCtx := tracing.StartSpan(ctx, "receive_local_tsdb_write")
-			defer span.Finish()
-			span.SetTag("endpoint", writeDestination.endpoint)
-			span.SetTag("replica", writeDestination.replica)
-			err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
-				Timeseries: localWrites[writeDestination].timeSeries,
-			})
-			if err != nil {
-				level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
-				span.SetTag("error", true)
-				span.SetTag("error.msg", err.Error())
-				finalResponses <- newWriteResponse(localWrites[writeDestination].seriesIDs, err)
-				return
-			}
-			finalResponses <- newWriteResponse(localWrites[writeDestination].seriesIDs, nil)
-		}(writeDestination)
+		h.sendLocalWrite(ctx, writeDestination, tenant, localWrites[writeDestination], requestLogger, responses)
 	}
 
 	// Do the writes to remote nodes. Run them all in parallel.
 	var wg sync.WaitGroup
 	for writeDestination := range remoteWrites {
 		wg.Add(1)
-		go func(writeDestination endpointReplica) {
-			defer wg.Done()
-			err := h.sendRemoteWrite(ctx, tenant, writeDestination, remoteWrites[writeDestination].timeSeries)
-			if err != nil {
-				finalResponses <- newWriteResponse(remoteWrites[writeDestination].seriesIDs, err)
-
-				h.forwardRequests.WithLabelValues(labelError).Inc()
-				if !alreadyReplicated {
-					h.replications.WithLabelValues(labelError).Inc()
-				}
-				return
-			}
-			finalResponses <- newWriteResponse(remoteWrites[writeDestination].seriesIDs, nil)
-			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
-			if !alreadyReplicated {
-				h.replications.WithLabelValues(labelSuccess).Inc()
-			}
-		}(writeDestination)
+		go h.sendRemoteWrite(ctx, &wg, tenant, writeDestination, remoteWrites[writeDestination], alreadyReplicated, true, retriesLeft, responses)
 	}
 
 	go func() {
 		wg.Wait()
-		close(finalResponses)
+		close(responses)
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
 	// This is needed if context is canceled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
-			for resp := range finalResponses {
+			for resp := range responses {
 				if resp.err != nil {
 					level.Debug(requestLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", resp.err)
 				}
@@ -729,6 +699,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 		case <-ctx.Done():
 			return ctx.Err()
 		case resp, hasMore := <-finalResponses:
+		case resp, hasMore := <-responses:
 			// At the end, aggregate all errors if there are any and return them.
 			if !hasMore {
 				for _, seriesErr := range seriesErrs {
@@ -755,20 +726,50 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 	}
 }
 
-func (h *Handler) sendRemoteWrite(ctx context.Context, tenant string, endpointReplica endpointReplica, timeSeries []prompb.TimeSeries) error {
+func (h *Handler) sendLocalWrite(
+	ctx context.Context,
+	writeDestination endpointReplica,
+	tenant string,
+	trackedSeries trackedSeries,
+	requestLogger log.Logger,
+	responses chan writeResponse,
+) {
+	span, tracingCtx := tracing.StartSpan(ctx, "receive_local_tsdb_write")
+	span.SetTag("endpoint", writeDestination.endpoint)
+	span.SetTag("replica", writeDestination.replica)
+	err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
+		Timeseries: trackedSeries.timeSeries,
+	})
+	if err != nil {
+		level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
+		span.SetTag("error", true)
+		span.SetTag("error.msg", err.Error())
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, false, 0)
+		return
+	}
+	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, false, 0)
+	span.Finish()
+}
+
+func (h *Handler) sendRemoteWrite(ctx context.Context, wg *sync.WaitGroup, tenant string, endpointReplica endpointReplica, trackedSeries trackedSeries, alreadyReplicated, shouldRetry bool, retriesLeft int, responses chan writeResponse) {
+	defer wg.Done()
 	endpoint := endpointReplica.endpoint
 	cl, err := h.peers.get(ctx, endpoint)
 	if err != nil {
-		return err
+		h.peers.markPeerDown(endpoint)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, shouldRetry, retriesLeft)
+		return
 	}
 	if peerUp := h.peers.isPeerUp(endpoint); !peerUp {
-		return errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+		err := errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, shouldRetry, retriesLeft)
+		return
 	}
 
 	span, spanCtx := tracing.StartSpan(ctx, "receive_forward")
 	// Actually make the request against the endpoint we determined should handle these time series.
 	_, err = cl.RemoteWrite(spanCtx, &storepb.WriteRequest{
-		Timeseries: timeSeries,
+		Timeseries: trackedSeries.timeSeries,
 		Tenant:     tenant,
 		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
 		Replica: int64(endpointReplica.replica + 1),
@@ -781,10 +782,19 @@ func (h *Handler) sendRemoteWrite(ctx context.Context, tenant string, endpointRe
 				h.peers.markPeerDown(endpoint)
 			}
 		}
-		return err
+		h.forwardRequests.WithLabelValues(labelError).Inc()
+		if !alreadyReplicated {
+			h.replications.WithLabelValues(labelError).Inc()
+		}
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, shouldRetry, retriesLeft)
+		return
 	}
+	h.forwardRequests.WithLabelValues(labelSuccess).Inc()
+	if !alreadyReplicated {
+		h.replications.WithLabelValues(labelSuccess).Inc()
+	}
+	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, shouldRetry, retriesLeft)
 	h.peers.markPeerUp(endpoint)
-	return nil
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
