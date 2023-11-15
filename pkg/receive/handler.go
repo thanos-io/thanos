@@ -650,22 +650,31 @@ func (h *Handler) newFanoutForward(pctx context.Context, tenant string, writeReq
 	if err != nil {
 		return err
 	}
+
+	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
+	// asynchronously and with this capacity we will never block on writing to the channel.
 	maxBufferedResponses := len(remoteWrites) + len(localWrites)
 	finalResponses := make(chan writeResponse, maxBufferedResponses)
 
 	// Do the writes to the local node first. This should be easy and fast.
-	for endpointReplica := range localWrites {
-		span, tracingCtx := tracing.StartSpan(ctx, "receive_tsdb_write")
-		err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
-			Timeseries: localWrites[endpointReplica].timeSeries,
-		})
-		span.Finish()
-		if err != nil {
-			level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
-			finalResponses <- newWriteResponse(localWrites[endpointReplica].seriesIDs, err)
-			continue
-		}
-		finalResponses <- newWriteResponse(localWrites[endpointReplica].seriesIDs, nil)
+	for writeDestination := range localWrites {
+		go func(writeDestination endpointReplica) {
+			span, tracingCtx := tracing.StartSpan(ctx, "receive_local_tsdb_write")
+			defer span.Finish()
+			span.SetTag("endpoint", writeDestination.endpoint)
+			span.SetTag("replica", writeDestination.replica)
+			err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
+				Timeseries: localWrites[writeDestination].timeSeries,
+			})
+			if err != nil {
+				level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
+				span.SetTag("error", true)
+				span.SetTag("error.msg", err.Error())
+				finalResponses <- newWriteResponse(localWrites[writeDestination].seriesIDs, err)
+				return
+			}
+			finalResponses <- newWriteResponse(localWrites[writeDestination].seriesIDs, nil)
+		}(writeDestination)
 	}
 
 	// Do the writes to remote nodes. Run them all in parallel.
