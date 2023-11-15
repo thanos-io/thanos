@@ -95,7 +95,7 @@ To address the challenges in scalability and reliability, a new deployment topol
 
 <!-- EXPLAIN CONFIGURATION AND DO SCHEMA -->
 
-#### Ensuring Smaples Durability
+#### Ensuring Samples Durability
 
 For clients requiring high data durability, the `--receive.replication-factor` flag ensures data duplication across multiple receivers. When set to n, it will only reply a succesful processing to the client once it has duplicated the data to `n-1` other receivers. Additionally, an external replicas label can be added to each Receive instance (`--label` flag) to mark replicated data. This setup increases data resilience but also expands the data footprint. 
 HOW DOES IT PLAYS WITH `--receive.replica-header`?
@@ -104,12 +104,45 @@ HOW DOES IT PLAYS WITH `--receive.replica-header`?
 
 ### Preparing samples for object storage: building chunks and blocks
 
-One of the key feature of Thanos is that it uses cheap object storage (e.g. AWS S3) to store the data with configurable retention durations. While Prometheus will typically keep the data for a few weeks on its local disk. Preparing data for the object store is the responsability of the **Receive** component.
+#### Using object storage
 
-The object storage follows the TSDB data model with a few adaptations. It means that **Receive** aggregates samples over time to build TSDB Blocks. These blocks are build by aggregating data over two hours periods. Why two hours? EXPLAIN. Once ready these blocks are sent to object storage. Configuration of the Object storage is the same for every component that needs access to it. 
-EXPLAIN OBJSTOER CONFIG< RETENTION DURATION AND NEED FOR STORE API SERVER. PROVIDE RECOMMENDATION FOR RETENTION DURATION. EXPLAIN TRADEOFFS.
+A key feature of Thanos is its ability to leverage economical object storage solutions like AWS S3 for long-term data retention. This contrasts with Prometheus's typical approach of storing data locally for shorter periods.
 
-EXPLAIN STORE API LIMITS
+The Receive component is responsible for preparing data for object storage. Thanos adopts the TSDB (Time Series Database) data model, with some modifications, for its object storage. This involves aggregating samples over time to construct TSDB Blocks.
+
+These blocks are built by aggregating data over two-hour periods. The two-hour timeframe strikes a balance between timely data availability and manageable block sizes for efficient storage and retrieval. Once a block is ready, it's sent to the object storage, which is configured using the `--objstore.config` flag. This configuration is uniform across all components requiring object storage access.
+
+On restarts, the Receive component ensures data preservation by immediately flushing existing data to object storage, even if it doesn't constitute a full two-hour block. These partial blocks are less efficient but are later optimized by the compactor.
+
+#### Exposing local data for queries
+
+During the block-building phase, the data isn't accessible to the store gateway. Hence, the Receive component also serves as a data store, making the local data available to queriers through the store API. This is a common gRPC API used across all Thanos components for time series data access, set with the `--grpc-address` flag. The receive will serve all data is has. The more data it serves, the more resources it will use for this duty in addition of ingesting client's data. WHY WOULD WE SERVE MORE THAN 2H OF DATA? The amount of data the Receive component serves can be managed through two parameters:
+
+* `--tsdb.retention`: Sets the local storage retention duration. The minimum is 2 hours, aligning with block construction periods.
+* `--store.limits.request-samples` and `--store.limits.request-series`: These limit the volume of data that can be queried. Exceeding these limits will result in the query being TRUNCATED OR DENIED??, ensuring system stability. WHAT HAPPENS TO thE ORIGINAL QUERY?
+
+#### Handling Out-of-Order Timestamps
+
+Issues can arise when clients send data with out-of-order timestamps, often due to unsynchronized clocks or more complex client setups with several prometheusis handling the same target. Explain `--receive.max-block-duration`, WHAT TRADEOFFS?. SCHEMA 
+
+#### Configuration Options Summary
+
+Summary of the listed configuration options of the Receive component:
+
+| Flag | Purpose |
+| ---- | ---------- |
+| `--remote-write.address`
+ `--remote-write.*` | The remote write endpoint |
+| `--receive.limits-config` | Limits on the remote write endpoint |
+| `--http-address`
+  `--receive.hashrings-algorithm` | The hashring |
+| `--receive.replication-factor`
+  `--receive.replica-header` | Replication of incoming data |
+| `--objstore.config` | Configuration of the object storage |
+| `--tsdb.retention`, `--tsdb.*` | Configuration of the local storage |
+| `--grpc-address` | The store API endpoint |
+| `--store.limits.request-samples`
+  `--store.limits.request-series` | Limits on the store API |
 
 EXPLAIN OUT OF ORDER CONSIDERATIONSAS WE DON'T CONTROL OUR CLIENTS CLOCKS
 
