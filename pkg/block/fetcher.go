@@ -171,7 +171,8 @@ func DefaultModifiedLabelValues() [][]string {
 }
 
 type BlockIDsFetcher interface {
-	GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs []ulid.ULID, partialBlocks map[ulid.ULID]bool, err error)
+	//Get the Ative Block IDs and sent to ch, and return the partialBlock sets
+	GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error)
 }
 
 type BaseBlockIDsFetcher struct {
@@ -186,8 +187,7 @@ func NewBaseBlockIDsFetcher(logger log.Logger, bkt objstore.InstrumentedBucketRe
 	}
 }
 
-func (f *BaseBlockIDsFetcher) GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs []ulid.ULID, partialBlocks map[ulid.ULID]bool, err error) {
-	metaIDs = make([]ulid.ULID, 0)
+func (f *BaseBlockIDsFetcher) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
 	partialBlocks = make(map[ulid.ULID]bool)
 	err = f.bkt.Iter(ctx, "", func(name string) error {
 		parts := strings.Split(name, "/")
@@ -207,12 +207,11 @@ func (f *BaseBlockIDsFetcher) GetActiveAndPartialBlockIDs(ctx context.Context) (
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
+		case ch <- id:
 		}
-		metaIDs = append(metaIDs, id)
 		return nil
 	}, objstore.WithRecursiveIter)
-	return metaIDs, partialBlocks, err
+	return partialBlocks, err
 }
 
 type MetadataFetcher interface {
@@ -439,17 +438,13 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		})
 	}
 
-	metaIDs, partialBlocks, err := f.blockIDsFetcher.GetActiveAndPartialBlockIDs(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "BlockIDsFetcher failed")
-	}
+	var partialBlocks map[ulid.ULID]bool
+	var err error
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
 		defer close(ch)
-		for _, id := range metaIDs {
-			ch <- id
-		}
-		return nil
+		partialBlocks, err = f.blockIDsFetcher.GetActiveAndPartialBlockIDs(ctx, ch)
+		return err
 	})
 
 	if err := eg.Wait(); err != nil {
