@@ -94,6 +94,7 @@ type Options struct {
 	RelabelConfigs    []*relabel.Config
 	TSDBStats         TSDBStats
 	Limiter           *Limiter
+	sloppyQuorum      bool
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -374,18 +375,16 @@ type trackedSeries struct {
 }
 
 type writeResponse struct {
-	seriesIDs  []int
-	err        error
-	retry      bool
-	retryCount int
+	seriesIDs   []int
+	err         error
+	retriesLeft int
 }
 
-func newWriteResponse(seriesIDs []int, err error, retry bool, retryCount int) writeResponse {
+func newWriteResponse(seriesIDs []int, err error, retryCount int) writeResponse {
 	return writeResponse{
-		seriesIDs:  seriesIDs,
-		err:        err,
-		retry:      retry,
-		retryCount: retryCount,
+		seriesIDs:   seriesIDs,
+		err:         err,
+		retriesLeft: retryCount,
 	}
 }
 
@@ -591,7 +590,12 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 			replicas = append(replicas, rn)
 		}
 	}
-	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated, 3)
+
+	var retriesLeft int
+	if h.options.sloppyQuorum {
+		retriesLeft = 3
+	}
+	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated, retriesLeft)
 }
 
 type distributedSeries map[endpointReplica]trackedSeries
@@ -599,11 +603,19 @@ type distributedSeries map[endpointReplica]trackedSeries
 // distributeTimeseriesToReplicas distributes the given timeseries from the tenant to different endpoints in a manner
 // that achieves the replication factor indicated by replicas. It is possible to offset the hashing algorithm by using
 // the hashOffset parameter, which can be used to distribute the same series differently.
-func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint64, hashOffset int, timeseries []prompb.TimeSeries) (distributedSeries, distributedSeries, error) {
+func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint64, hashOffset int, timeseries []prompb.TimeSeries, seriesIDs []int) (distributedSeries, distributedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
+	if seriesIDs != nil && len(seriesIDs) != len(timeseries) {
+		return nil, nil, errors.New("seriesIDs and timeseries must have the same length")
+	}
+	if seriesIDs != nil {
+		level.Debug(h.logger).Log("msg", "seriesIDs are not nil", "seriesIDs", fmt.Sprintf("%v", seriesIDs))
+	}
 	remoteWrites := make(distributedSeries)
 	localWrites := make(distributedSeries)
+	totalLocal := 0
+	totalRemote := 0
 	for tsIndex, ts := range timeseries {
 		for _, rn := range replicas {
 			endpoint, err := h.hashring.GetN(tenant, &ts, rn+uint64(hashOffset))
@@ -614,6 +626,9 @@ func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint6
 			var writeDestination = remoteWrites
 			if endpoint == h.options.Endpoint {
 				writeDestination = localWrites
+				totalLocal++
+			} else {
+				totalRemote++
 			}
 			writeableSeries, ok := writeDestination[endpointReplica]
 			if !ok {
@@ -622,12 +637,17 @@ func (h *Handler) distributeTimeseriesToReplicas(tenant string, replicas []uint6
 					timeSeries: make([]prompb.TimeSeries, 0),
 				}
 			}
-			writeableSeries.timeSeries = append(writeDestination[endpointReplica].timeSeries, ts)
-			writeableSeries.seriesIDs = append(writeDestination[endpointReplica].seriesIDs, tsIndex)
-			writeableSeries.failureCount = hashOffset
+			if seriesIDs != nil {
+				writeableSeries.timeSeries = append(writeDestination[endpointReplica].timeSeries, timeseries[tsIndex])
+				writeableSeries.seriesIDs = append(writeDestination[endpointReplica].seriesIDs, seriesIDs[tsIndex])
+			} else {
+				writeableSeries.timeSeries = append(writeDestination[endpointReplica].timeSeries, ts)
+				writeableSeries.seriesIDs = append(writeDestination[endpointReplica].seriesIDs, tsIndex)
+			}
 			writeDestination[endpointReplica] = writeableSeries
 		}
 	}
+	level.Debug(h.logger).Log("msg", "distributed timeseries to replicas", "local", totalLocal, "remote", totalRemote)
 	return localWrites, remoteWrites, nil
 }
 
@@ -649,31 +669,36 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 		requestLogger = log.With(requestLogger, "request-id", id)
 	}
 
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(tenant, replicas, 0, writeRequest.Timeseries)
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(tenant, replicas, 0, writeRequest.Timeseries, nil)
 	if err != nil {
 		return err
 	}
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
+	var wg sync.WaitGroup
 	maxBufferedResponses := len(remoteWrites) + len(localWrites)
+	wg.Add(maxBufferedResponses)
 	responses := make(chan writeResponse, maxBufferedResponses)
 
 	// Do the writes to the local node first. This should be easy and fast.
 	for writeDestination := range localWrites {
-		h.sendLocalWrite(ctx, writeDestination, tenant, localWrites[writeDestination], requestLogger, responses)
+		h.sendLocalWrite(ctx, &wg, writeDestination, tenant, localWrites[writeDestination], requestLogger, retriesLeft, responses)
 	}
 
 	// Do the writes to remote nodes. Run them all in parallel.
-	var wg sync.WaitGroup
 	for writeDestination := range remoteWrites {
-		wg.Add(1)
-		go h.sendRemoteWrite(ctx, &wg, tenant, writeDestination, remoteWrites[writeDestination], alreadyReplicated, true, retriesLeft, responses)
+		go func(writeDestination endpointReplica) {
+			h.sendRemoteWrite(ctx, &wg, tenant, writeDestination, remoteWrites[writeDestination], alreadyReplicated, retriesLeft, responses)
+		}(writeDestination)
 	}
+
+	retryChan := make(chan writeResponse, len(writeRequest.Timeseries))
 
 	go func() {
 		wg.Wait()
 		close(responses)
+		close(retryChan)
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
@@ -698,6 +723,29 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case retryResp := <-retryChan:
+			level.Debug(requestLogger).Log("msg", "retrying failed series to achieve sloppy quorum", "series", fmt.Sprintf("%v", retryResp.seriesIDs), "retries_left", retryResp.retriesLeft)
+			failedSeries := make([]prompb.TimeSeries, 0, len(retryResp.seriesIDs))
+			for _, seriesID := range retryResp.seriesIDs {
+				failedSeries = append(failedSeries, writeRequest.Timeseries[seriesID])
+			}
+			local, remote, err := h.distributeTimeseriesToReplicas(tenant, replicas, retryResp.retriesLeft-1, failedSeries, retryResp.seriesIDs)
+			if err != nil {
+				level.Error(requestLogger).Log("msg", "failed to distribute failed series in retry", "err", err)
+				return err
+			}
+			for writeDestination := range local {
+				wg.Add(1)
+				h.sendLocalWrite(ctx, &wg, writeDestination, tenant, localWrites[writeDestination], requestLogger, retryResp.retriesLeft-1, responses)
+				h.logger.Log("msg", "sent local write", "writeDestination", fmt.Sprintf("%v", writeDestination))
+			}
+			for writeDestination := range remote {
+				wg.Add(1)
+				go func(writeDestination endpointReplica) {
+					h.logger.Log("msg", "sent remote write", "writeDestination", fmt.Sprintf("%v", writeDestination))
+					h.sendRemoteWrite(ctx, &wg, tenant, writeDestination, remoteWrites[writeDestination], alreadyReplicated, retryResp.retriesLeft-1, responses)
+				}(writeDestination)
+			}
 		case resp, hasMore := <-responses:
 			// At the end, aggregate all errors if there are any and return them.
 			if !hasMore {
@@ -709,6 +757,11 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 
 			// Track errors and successes on a per-series basis.
 			if resp.err != nil {
+				if resp.retriesLeft > 0 {
+					level.Debug(requestLogger).Log("msg", "sending series to retry", "series", fmt.Sprintf("%v", resp.seriesIDs), "retries_left", resp.retriesLeft)
+					retryChan <- resp
+					continue
+				}
 				for _, seriesID := range resp.seriesIDs {
 					seriesErrs[seriesID].Add(resp.err)
 				}
@@ -725,14 +778,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 	}
 }
 
-func (h *Handler) sendLocalWrite(
-	ctx context.Context,
-	writeDestination endpointReplica,
-	tenant string,
-	trackedSeries trackedSeries,
-	requestLogger log.Logger,
-	responses chan writeResponse,
-) {
+func (h *Handler) sendLocalWrite(ctx context.Context, wg *sync.WaitGroup, writeDestination endpointReplica, tenant string, trackedSeries trackedSeries, requestLogger log.Logger, retriesLeft int, responses chan writeResponse) {
+	if wg != nil {
+		defer wg.Done()
+	}
 	span, tracingCtx := tracing.StartSpan(ctx, "receive_local_tsdb_write")
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
@@ -743,25 +792,27 @@ func (h *Handler) sendLocalWrite(
 		level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, false, 0)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, retriesLeft)
 		return
 	}
-	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, false, 0)
+	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, 0)
 	span.Finish()
 }
 
-func (h *Handler) sendRemoteWrite(ctx context.Context, wg *sync.WaitGroup, tenant string, endpointReplica endpointReplica, trackedSeries trackedSeries, alreadyReplicated, shouldRetry bool, retriesLeft int, responses chan writeResponse) {
-	defer wg.Done()
+func (h *Handler) sendRemoteWrite(ctx context.Context, wg *sync.WaitGroup, tenant string, endpointReplica endpointReplica, trackedSeries trackedSeries, alreadyReplicated bool, retriesLeft int, responses chan writeResponse) {
+	if wg != nil {
+		defer wg.Done()
+	}
 	endpoint := endpointReplica.endpoint
 	cl, err := h.peers.get(ctx, endpoint)
 	if err != nil {
 		h.peers.markPeerDown(endpoint)
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, shouldRetry, retriesLeft)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, retriesLeft)
 		return
 	}
 	if peerUp := h.peers.isPeerUp(endpoint); !peerUp {
 		err := errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, shouldRetry, retriesLeft)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, retriesLeft)
 		return
 	}
 
@@ -785,14 +836,14 @@ func (h *Handler) sendRemoteWrite(ctx context.Context, wg *sync.WaitGroup, tenan
 		if !alreadyReplicated {
 			h.replications.WithLabelValues(labelError).Inc()
 		}
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, shouldRetry, retriesLeft)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, retriesLeft)
 		return
 	}
 	h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 	if !alreadyReplicated {
 		h.replications.WithLabelValues(labelSuccess).Inc()
 	}
-	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, shouldRetry, retriesLeft)
+	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, 0)
 	h.peers.markPeerUp(endpoint)
 }
 
