@@ -170,6 +170,51 @@ func DefaultModifiedLabelValues() [][]string {
 	}
 }
 
+type BlockIDsFetcher interface {
+	GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs[]ulid.ULID, partialBlocks map[ulid.ULID]bool, err error)
+}
+
+type BaseBlockIDsFetcher struct {
+	logger log.Logger
+	bkt objstore.InstrumentedBucketReader
+}
+
+func NewBaseBlockIDsFetcher(logger log.Logger, bkt objstore.InstrumentedBucketReader) *BaseBlockIDsFetcher{
+	return &BaseBlockIDsFetcher{
+		logger: logger,
+		bkt: bkt,
+	}
+}
+
+func (f *BaseBlockIDsFetcher) GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs[]ulid.ULID, partialBlocks map[ulid.ULID]bool, err error) {
+	metaIDs = make([]ulid.ULID, 0)
+	partialBlocks = make(map[ulid.ULID]bool)
+	err = f.bkt.Iter(ctx, "", func(name string) error {
+		parts := strings.Split(name, "/")
+		dir, file := parts[0], parts[len(parts)-1]
+		id, ok := IsBlockDir(dir)
+		if !ok {
+			return nil
+		}
+		if _, ok := partialBlocks[id]; !ok {
+			partialBlocks[id] = true
+		}
+		if !IsBlockMetaFile(file) {
+			return nil
+		}
+		partialBlocks[id] = false
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		metaIDs = append(metaIDs, id)
+		return nil
+	}, objstore.WithRecursiveIter)
+	return metaIDs, partialBlocks, err
+}
+
 type MetadataFetcher interface {
 	Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error)
 	UpdateOnChange(func([]metadata.Meta, error))
@@ -191,6 +236,7 @@ type BaseFetcher struct {
 	logger      log.Logger
 	concurrency int
 	bkt         objstore.InstrumentedBucketReader
+	blockIDsFetcher BlockIDsFetcher
 
 	// Optional local directory to cache meta.json files.
 	cacheDir string
@@ -202,12 +248,12 @@ type BaseFetcher struct {
 }
 
 // NewBaseFetcher constructs BaseFetcher.
-func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer) (*BaseFetcher, error) {
-	return NewBaseFetcherWithMetrics(logger, concurrency, bkt, dir, NewBaseFetcherMetrics(reg))
+func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, blockIDsFetcher BlockIDsFetcher, dir string, reg prometheus.Registerer) (*BaseFetcher, error) {
+	return NewBaseFetcherWithMetrics(logger, concurrency, bkt, blockIDsFetcher, dir, NewBaseFetcherMetrics(reg))
 }
 
 // NewBaseFetcherWithMetrics constructs BaseFetcher.
-func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, metrics *BaseFetcherMetrics) (*BaseFetcher, error) {
+func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, blockIDsFetcher BlockIDsFetcher, dir string, metrics *BaseFetcherMetrics) (*BaseFetcher, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -224,6 +270,7 @@ func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 		logger:      log.With(logger, "component", "block.BaseFetcher"),
 		concurrency: concurrency,
 		bkt:         bkt,
+		blockIDsFetcher: blockIDsFetcher,
 		cacheDir:    cacheDir,
 		cached:      map[ulid.ULID]*metadata.Meta{},
 		syncs:       metrics.Syncs,
@@ -232,13 +279,13 @@ func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 
 // NewRawMetaFetcher returns basic meta fetcher without proper handling for eventual consistent backends or partial uploads.
 // NOTE: Not suitable to use in production.
-func NewRawMetaFetcher(logger log.Logger, bkt objstore.InstrumentedBucketReader) (*MetaFetcher, error) {
-	return NewMetaFetcher(logger, 1, bkt, "", nil, nil)
+func NewRawMetaFetcher(logger log.Logger, bkt objstore.InstrumentedBucketReader, blockIDsFetcher BlockIDsFetcher) (*MetaFetcher, error) {
+	return NewMetaFetcher(logger, 1, bkt, blockIDsFetcher, "", nil, nil)
 }
 
 // NewMetaFetcher returns meta fetcher.
-func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer, filters []MetadataFilter) (*MetaFetcher, error) {
-	b, err := NewBaseFetcher(logger, concurrency, bkt, dir, reg)
+func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, blockIDsFetcher BlockIDsFetcher, dir string, reg prometheus.Registerer, filters []MetadataFilter) (*MetaFetcher, error) {
+	b, err := NewBaseFetcher(logger, concurrency, bkt, blockIDsFetcher, dir, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -246,8 +293,8 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 }
 
 // NewMetaFetcherWithMetrics returns meta fetcher.
-func NewMetaFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, baseFetcherMetrics *BaseFetcherMetrics, fetcherMetrics *FetcherMetrics, filters []MetadataFilter) (*MetaFetcher, error) {
-	b, err := NewBaseFetcherWithMetrics(logger, concurrency, bkt, dir, baseFetcherMetrics)
+func NewMetaFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, blockIDsFetcher BlockIDsFetcher, dir string, baseFetcherMetrics *BaseFetcherMetrics, fetcherMetrics *FetcherMetrics, filters []MetadataFilter) (*MetaFetcher, error) {
+	b, err := NewBaseFetcherWithMetrics(logger, concurrency, bkt, blockIDsFetcher, dir,baseFetcherMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -392,33 +439,17 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		})
 	}
 
-	partialBlocks := make(map[ulid.ULID]bool)
+	metaIDs, partialBlocks, err := f.blockIDsFetcher.GetActiveAndPartialBlockIDs(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "BlockIDsFetcher failed")
+	}
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
 		defer close(ch)
-		return f.bkt.Iter(ctx, "", func(name string) error {
-			parts := strings.Split(name, "/")
-			dir, file := parts[0], parts[len(parts)-1]
-			id, ok := IsBlockDir(dir)
-			if !ok {
-				return nil
-			}
-			if _, ok := partialBlocks[id]; !ok {
-				partialBlocks[id] = true
-			}
-			if !IsBlockMetaFile(file) {
-				return nil
-			}
-			partialBlocks[id] = false
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ch <- id:
-			}
-
-			return nil
-		}, objstore.WithRecursiveIter)
+		for _, id := range metaIDs {
+			ch <- id
+		}
+		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
