@@ -44,6 +44,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -162,7 +163,7 @@ func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
 
-func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
+func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm, sloppyQuorum bool) ([]*Handler, Hashring, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
@@ -184,14 +185,16 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 
 	ag := addrGen{}
 	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	logger := logging.NewLogger("debug", "logfmt", "receive_test")
 	for i := range appendables {
-		h := NewHandler(nil, &Options{
+		h := NewHandler(logger, &Options{
 			TenantHeader:      tenancy.DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Minute,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), wOpts),
 			Limiter:           limiter,
+			sloppyQuorum:      sloppyQuorum,
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -230,6 +233,8 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		replicationFactor uint64
 		wreq              *prompb.WriteRequest
 		appendables       []*fakeAppendable
+		sloppyQuorum      bool
+		randomNode        bool
 	}{
 		{
 			name:              "size 1 success",
@@ -580,24 +585,67 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				},
 			},
 		},
+		{
+			name:              "size 5 with replication 3, two faulty, sloppy quorum",
+			status:            http.StatusOK,
+			sloppyQuorum:      true,
+			randomNode:        true,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo)
+			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo, tc.sloppyQuorum)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
 			tenant := "test"
-			// Test from the point of view of every node
-			// so that we know status code does not depend
-			// on which node is erroring and which node is receiving.
-			for i, handler := range handlers {
-				// Test that the correct status is returned.
+
+			if tc.randomNode {
+				handler := handlers[0]
 				rec, err := makeRequest(handler, tenant, tc.wreq)
 				if err != nil {
-					t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					t.Fatalf("handler: unexpectedly failed making HTTP request: %v", err)
 				}
 				if rec.Code != tc.status {
-					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
+				}
+			} else {
+				// Test from the point of view of every node
+				// so that we know status code does not depend
+				// on which node is erroring and which node is receiving.
+				for i, handler := range handlers {
+					// Test that the correct status is returned.
+					rec, err := makeRequest(handler, tenant, tc.wreq)
+					if err != nil {
+						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					}
+					if rec.Code != tc.status {
+						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					}
 				}
 			}
 
@@ -715,7 +763,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					appender: newFakeAppender(nil, nil, nil),
 				},
 			}
-			handlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+			handlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -927,7 +975,7 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir := b.TempDir()
 
-	handlers, _, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod)
+	handlers, _, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
 	if err != nil {
 		b.Fatalf("unable to create test handler: %v", err)
 	}
