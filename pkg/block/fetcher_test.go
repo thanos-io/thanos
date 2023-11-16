@@ -74,7 +74,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
 		baseBlockIDsFetcher := NewBaseBlockIDsFetcher(noopLogger, insBkt)
-		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher,dir, r)
+		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
 		testutil.Ok(t, err)
 
 		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{

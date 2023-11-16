@@ -246,7 +246,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 			}
 
 			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
-			metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, baseBlockIDsFetcher,"", nil, nil)
+			metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, baseBlockIDsFetcher, "", nil, nil)
 			testutil.Ok(t, err)
 
 			blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})

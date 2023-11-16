@@ -171,22 +171,22 @@ func DefaultModifiedLabelValues() [][]string {
 }
 
 type BlockIDsFetcher interface {
-	GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs[]ulid.ULID, partialBlocks map[ulid.ULID]bool, err error)
+	GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs []ulid.ULID, partialBlocks map[ulid.ULID]bool, err error)
 }
 
 type BaseBlockIDsFetcher struct {
 	logger log.Logger
-	bkt objstore.InstrumentedBucketReader
+	bkt    objstore.InstrumentedBucketReader
 }
 
-func NewBaseBlockIDsFetcher(logger log.Logger, bkt objstore.InstrumentedBucketReader) *BaseBlockIDsFetcher{
+func NewBaseBlockIDsFetcher(logger log.Logger, bkt objstore.InstrumentedBucketReader) *BaseBlockIDsFetcher {
 	return &BaseBlockIDsFetcher{
 		logger: logger,
-		bkt: bkt,
+		bkt:    bkt,
 	}
 }
 
-func (f *BaseBlockIDsFetcher) GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs[]ulid.ULID, partialBlocks map[ulid.ULID]bool, err error) {
+func (f *BaseBlockIDsFetcher) GetActiveAndPartialBlockIDs(ctx context.Context) (metaIDs []ulid.ULID, partialBlocks map[ulid.ULID]bool, err error) {
 	metaIDs = make([]ulid.ULID, 0)
 	partialBlocks = make(map[ulid.ULID]bool)
 	err = f.bkt.Iter(ctx, "", func(name string) error {
@@ -233,9 +233,9 @@ type MetadataFilter interface {
 // BaseFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
 // Go-routine safe.
 type BaseFetcher struct {
-	logger      log.Logger
-	concurrency int
-	bkt         objstore.InstrumentedBucketReader
+	logger          log.Logger
+	concurrency     int
+	bkt             objstore.InstrumentedBucketReader
 	blockIDsFetcher BlockIDsFetcher
 
 	// Optional local directory to cache meta.json files.
@@ -267,13 +267,13 @@ func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 	}
 
 	return &BaseFetcher{
-		logger:      log.With(logger, "component", "block.BaseFetcher"),
-		concurrency: concurrency,
-		bkt:         bkt,
+		logger:          log.With(logger, "component", "block.BaseFetcher"),
+		concurrency:     concurrency,
+		bkt:             bkt,
 		blockIDsFetcher: blockIDsFetcher,
-		cacheDir:    cacheDir,
-		cached:      map[ulid.ULID]*metadata.Meta{},
-		syncs:       metrics.Syncs,
+		cacheDir:        cacheDir,
+		cached:          map[ulid.ULID]*metadata.Meta{},
+		syncs:           metrics.Syncs,
 	}, nil
 }
 
@@ -294,7 +294,7 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 
 // NewMetaFetcherWithMetrics returns meta fetcher.
 func NewMetaFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, blockIDsFetcher BlockIDsFetcher, dir string, baseFetcherMetrics *BaseFetcherMetrics, fetcherMetrics *FetcherMetrics, filters []MetadataFilter) (*MetaFetcher, error) {
-	b, err := NewBaseFetcherWithMetrics(logger, concurrency, bkt, blockIDsFetcher, dir,baseFetcherMetrics)
+	b, err := NewBaseFetcherWithMetrics(logger, concurrency, bkt, blockIDsFetcher, dir, baseFetcherMetrics)
 	if err != nil {
 		return nil, err
 	}

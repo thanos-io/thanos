@@ -96,7 +96,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		insBkt := objstore.WithNoopInstr(bkt)
 		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(nil, insBkt)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher,"", nil, []block.MetadataFilter{
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			duplicateBlocksFilter,
 		})
 		testutil.Ok(t, err)
@@ -198,7 +198,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
 		insBkt := objstore.WithNoopInstr(bkt)
 		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher,"", nil, []block.MetadataFilter{
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 			noCompactMarkerFilter,
@@ -510,7 +510,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		insBkt := objstore.WithNoopInstr(bkt)
 		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher,"", nil, []block.MetadataFilter{
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 		})
