@@ -170,8 +170,9 @@ func DefaultModifiedLabelValues() [][]string {
 	}
 }
 
+// Fetcher interface to retieve blockId information from a bucket
 type BlockIDsFetcher interface {
-	//Get the Ative Block IDs and sent to ch, and return the partialBlock sets
+	//Get active blocksIds returning it via channel (streaming) and response
 	GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error)
 }
 
