@@ -49,5 +49,3 @@ On enabling you get a view of the component setup and traffic flow on the Hubble
 ## Example Thanos deployment with Cilium and Hubble Overview
 <img src="../../docs/img/Thanos_with_cilium.png" class="img-fluid" alt="querier-steps"/>
 <img src="../../docs/img/hubble_network_flow.png" class="img-fluid" alt="querier-steps"/>
-
-
