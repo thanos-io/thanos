@@ -35,6 +35,7 @@ jobs:
             fi
       - run:
           name: "Run unit tests."
+          no_output_timeout: "30m"
           environment:
             THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS
             # Variables for Swift testing.
