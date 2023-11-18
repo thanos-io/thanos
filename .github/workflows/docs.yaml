@@ -9,7 +9,7 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     name: Documentation check
     env:
       GOBIN: /tmp/.bin

@@ -10,7 +10,7 @@ on:
 # TODO(bwplotka): Add tests here.
 jobs:
   cross-build-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     name: Go build for different platforms
     env:
       GOBIN: /tmp/.bin
@@ -37,7 +37,7 @@ jobs:
         run: make crossbuild
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     name: Linters (Static Analysis) for Go
     env:
       GOBIN: /tmp/.bin
@@ -72,7 +72,7 @@ jobs:
       matrix:
         parallelism: [4]
         index: [0, 1, 2, 3]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     name: Thanos end-to-end tests
     env:
       GOBIN: /tmp/.bin
