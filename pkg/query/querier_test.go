@@ -60,7 +60,6 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 		false,
 		nil,
 		NoopSeriesStatsReporter,
-		NoopSeriesResponseHints,
 	)
 
 	q, err := queryable.Querier(0, 42)
@@ -105,7 +104,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		nil,
 		NoopSeriesStatsReporter,
 		// seriesResonponseHints,
-		NoopSeriesResponseHints,
+
 	)
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -401,7 +400,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, NoopSeriesResponseHints)
+								return newQuerier(nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 							},
 						}
 						t.Cleanup(func() {
@@ -795,7 +794,6 @@ func TestQuerier_Select(t *testing.T) {
 					timeout,
 					nil,
 					NoopSeriesStatsReporter,
-					NoopSeriesResponseHints,
 				)
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
@@ -1085,7 +1083,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, NoopSeriesResponseHints)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -1155,7 +1153,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, NoopSeriesResponseHints)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})

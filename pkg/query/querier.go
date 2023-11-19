@@ -5,7 +5,6 @@ package query
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -44,32 +43,6 @@ func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsR
 	}
 }
 
-type seriesResponseHints func(hc *store.HintsCollector)
-
-func NewResponseHints(h *store.HintsCollector) seriesResponseHints {
-	return func(hc *store.HintsCollector) {
-		hc.AppendHints(hc, h)
-	}
-}
-
-func NewSeriesResponseHintsCollector(h *store.HintsCollector) seriesResponseHints {
-	var mutex sync.Mutex
-	return func(hc *store.HintsCollector) {
-		mutex.Lock()
-		defer mutex.Unlock()
-
-		if h.Hints == nil {
-			h.Hints = make(map[string][]*storepb.SeriesResponse)
-		}
-
-		for key, value := range hc.Hints {
-			h.Hints[key] = append(h.Hints[key], value...)
-		}
-	}
-}
-
-var NoopSeriesResponseHints seriesResponseHints = func(_ *store.HintsCollector) {}
-
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
@@ -86,7 +59,6 @@ type QueryableCreator func(
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
-	seriesResponseHints seriesResponseHints,
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -110,7 +82,7 @@ func NewQueryableCreator(
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
-		seriesResponseHints seriesResponseHints,
+
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -129,7 +101,6 @@ func NewQueryableCreator(
 			enableQueryPushdown:  enableQueryPushdown,
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
-			seriesResponseHints:  seriesResponseHints,
 		}
 	}
 }
@@ -149,12 +120,11 @@ type queryable struct {
 	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
-	seriesResponseHints  seriesResponseHints
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.seriesResponseHints), nil
+	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
 }
 
 type StoreServerWithHints interface {
@@ -177,7 +147,6 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
-	seriesResponseHints     seriesResponseHints
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -198,7 +167,7 @@ func newQuerier(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
-	seriesResponseHints seriesResponseHints,
+
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -229,7 +198,6 @@ func newQuerier(
 		enableQueryPushdown:     enableQueryPushdown,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
-		seriesResponseHints:     seriesResponseHints,
 	}
 }
 
@@ -265,7 +233,6 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 		if err := types.UnmarshalAny(r.GetHints(), &tmp); err != nil {
 			return err
 		}
-		fmt.Println(tmp)
 
 		s.hints = append(s.hints, *tmp.QueryStats)
 	}
@@ -384,8 +351,7 @@ func (q *querier) originalSelect(ctx context.Context, _ bool, hints *storage.Sel
 			return
 		}
 		q.seriesStatsReporter(stats)
-		q.seriesResponseHints(responseHints)
-
+		hc.AppendHints(responseHints, hc)
 		promise <- set
 	}()
 

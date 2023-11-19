@@ -553,9 +553,6 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	var seriesStats []storepb.SeriesStatsCounter
-
-	var seriesResponseHints store.HintsCollector
-
 	qry, err := engine.NewInstantQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -568,7 +565,6 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-			query.NewSeriesResponseHintsCollector(&seriesResponseHints),
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -663,8 +659,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	var seriesStats []storepb.SeriesStatsCounter
 
-	var seriesResponseHints store.HintsCollector
-
 	qry, err := engine.NewInstantQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -677,7 +671,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-			query.NewSeriesResponseHintsCollector(&seriesResponseHints),
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -729,7 +722,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-		QueryMetadata: seriesResponseHints,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
@@ -835,8 +827,6 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 
 	var seriesStats []storepb.SeriesStatsCounter
 
-	var seriesResponseHints store.HintsCollector
-
 	qry, err := engine.NewRangeQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -849,7 +839,6 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-			query.NewSeriesResponseHintsCollector(&seriesResponseHints),
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -974,8 +963,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	var seriesStats []storepb.SeriesStatsCounter
 
-	var seriesResponseHints store.HintsCollector
-
 	qry, err := engine.NewRangeQuery(
 		ctx,
 		qapi.queryableCreate(
@@ -988,7 +975,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-			query.NewSeriesResponseHintsCollector(&seriesResponseHints),
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
 		r.FormValue("query"),
@@ -1041,7 +1027,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-		QueryMetadata: seriesResponseHints,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
@@ -1094,7 +1079,6 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-		query.NoopSeriesResponseHints,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -1198,7 +1182,6 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-		query.NoopSeriesResponseHints,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
@@ -1266,7 +1249,6 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
-		query.NoopSeriesResponseHints,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}

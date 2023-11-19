@@ -15,12 +15,14 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/types"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -759,6 +761,10 @@ func newEagerRespSet(
 					if hc == nil {
 						l.bufferedResponses = append(l.bufferedResponses, resp)
 					} else {
+						h := hintspb.SeriesResponseHints{}
+						if err := types.UnmarshalAny(resp.GetHints(), &h); err != nil {
+							return false
+						}
 						hc.AddHint(storeName, resp)
 					}
 				} else {
@@ -915,9 +921,4 @@ func (hc *HintsCollector) AppendHints(src *HintsCollector, dest *HintsCollector)
 	for key, value := range src.Hints {
 		dest.Hints[key] = append(dest.Hints[key], value...)
 	}
-}
-
-func (hc *HintsCollector) New() *HintsCollector {
-
-	return &HintsCollector{Hints: make(map[string][]*storepb.SeriesResponse)}
 }
