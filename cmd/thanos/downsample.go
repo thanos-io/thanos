@@ -92,7 +92,7 @@ func RunDownsample(
 	// While fetching blocks, filter out blocks that were marked for no downsample.
 	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
 		block.NewDeduplicateFilter(block.FetcherConcurrency),
-		downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt),
+		downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, block.FetcherConcurrency),
 	})
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
