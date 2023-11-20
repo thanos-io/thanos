@@ -38,7 +38,7 @@ We are looking for awesome talks around:
 * Innovative integrations with Thanos e.g. operators, tailored collectors, proxies, storages.
 * Thanos contributor experience and tips.
 
-If you can’t decide on the topic or need help in preparing the CFP or talk (title, abstract, notes), contact `thanos-io@googlegroup.io` so we can help you brainstorm and prepare the topic!
+If you can’t decide on the topic or need help in preparing the CFP or talk (title, abstract, notes), contact `thanos-io@googlegroup.io` or reach out to us via the [`#thanos-dev` Slack channel](https://cloud-native.slack.com/archives/CL25937SP), so we can help you brainstorm and prepare the topic!
 
 ## Would you like to co-sponsor ThanosCon? (Deadline: 17st January)
 
