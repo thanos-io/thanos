@@ -40,7 +40,7 @@ We are looking for awesome talks around:
 
 If you can’t decide on the topic or need help in preparing the CFP or talk (title, abstract, notes), contact `thanos-io@googlegroup.io` or reach out to us via the [`#thanos-dev` Slack channel](https://cloud-native.slack.com/archives/CL25937SP), so we can help you brainstorm and prepare the topic!
 
-## Would you like to co-sponsor ThanosCon? (Deadline: 17st January)
+## Would you like to co-sponsor ThanosCon? (Deadline: 17th January)
 
 Sponsoring ThanosCon is an amazing opportunity to engage with Thanos developers and users, show support and associate your brand with cloud-native, fully open-source scalable observability.
 
