@@ -1,8 +1,10 @@
 ---
 title: Introducing ThanosCon in Paris KubeCon EU 2024!
-date: 2023-20-11
+date: "2023-11-20"
 author: The Thanos Team
 ---
+
+<p align="center"><img height="40%" src="img/ThanosCon.png" width="40%"/></p>
 
 Hello Thanos Community! 👋
 
@@ -50,4 +52,6 @@ We are super excited to connect with the Thanos community on our first ThanosCon
 
 We cannot wait to hear about all the cool stuff you are doing with Thanos and to celebrate what we achieved together so far. Thanks to CNCF for helping us organize such a co-located event!
 
-**See you at KubeCon!** **Thanos Team**
+**See you at KubeCon!** 
+
+**Thanos Team**
