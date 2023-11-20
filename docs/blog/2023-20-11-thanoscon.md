@@ -52,6 +52,6 @@ We are super excited to connect with the Thanos community on our first ThanosCon
 
 We cannot wait to hear about all the cool stuff you are doing with Thanos and to celebrate what we achieved together so far. Thanks to CNCF for helping us organize such a co-located event!
 
-**See you at KubeCon!** 
+**See you at KubeCon!**
 
 **Thanos Team**
