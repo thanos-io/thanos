@@ -149,7 +149,7 @@ type RedisClient struct {
 	durationSetMulti prometheus.Observer
 	durationGetMulti prometheus.Observer
 
-	p *asyncOperationProcessor
+	p *AsyncOperationProcessor
 }
 
 // NewRedisClient makes a new RedisClient.
@@ -221,7 +221,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		client: client,
 		config: config,
 		logger: logger,
-		p:      newAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
+		p:      NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_redis_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
@@ -247,7 +247,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 
 // SetAsync implement RemoteCacheClient.
 func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) error {
-	return c.p.enqueueAsync(func() {
+	return c.p.EnqueueAsync(func() {
 		start := time.Now()
 		if err := c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
 			level.Warn(c.logger).Log("msg", "failed to set item into redis", "err", err, "key", key, "value_size", len(value))
