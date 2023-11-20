@@ -16,13 +16,13 @@ To continue and celebrate this energy, we are extremely happy to announce the ve
 
 ThanosCon will be an event entirely focussed on the Thanos project, where people can learn from experts, network with maintainers and other users/community members and get into the world of open-source, scalable monitoring.
 
-The intention is to curate talks for an enjoyable, high-quality event, by and for Thanos users and contributors! We want the audience and community to connect and experience the excitement, love and friendliness of open-source, the values that led us from the beginning of the Thanos journey.
+The intention is to curate talks for an enjoyable, high-quality event by and for Thanos users and contributors! We want the audience and community to connect and experience the excitement, love and friendliness of open-source, the values that led us from the beginning of the Thanos journey.
 
 Finally, we want you to learn from people running Thanos in production or building on top of it. We want you to walk away from this event, feeling excited about the future of Thanos and knowing how you can get involved!
 
 You might have heard about the Thanos project in various talks at popular conferences like KubeCon, FOSDEM, PromCon, Prometheus Day or Observability Day. It's finally time for a one-off, dedicated and Thanos-focused event to celebrate, connect and learn!
 
-We are planning a lot of surprises for you. Will there be a SWAG? Will we celebrate a potential Thanos 1.0 release? Will you be able to talk to initial authors like Fabian Reinartz and Bartłomiej Płotka? Join us to learn, it will be fun for sure!
+We are planning a lot of surprises for you. Will there be a SWAG? Will we celebrate a potential Thanos 1.0 release? Will there be initial authors like Fabian Reinartz and Bartłomiej Płotka to learn from? Join us to learn; it will be fun for sure!
 
 ## Would you like to speak at ThanosCon? (Deadline: 3rd December)
 
