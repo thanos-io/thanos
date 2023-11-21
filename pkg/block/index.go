@@ -373,11 +373,11 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 			// Refer to Prometheus #12874
 			if c.MinTime == c0.MaxTime {
 				stats.DuplicatedSample++
-				level.Warn(logger).Log("msg", "found duplicate sample", "labels", lset, "index", i, "chuck", c, "chuck_last_one", c0)
+				level.Warn(logger).Log("msg", "found duplicate sample", "labels", lset, "index", i, "chuck", c.Ref, "chuck_last_one", c0.Ref)
 				continue
 			}
 			// Chunks partly overlaps or out of order.
-			level.Debug(logger).Log("msg", "found out of order chunk", "labels", lset, "index", i, "chuck", c, "chuck_last_one", c0)
+			level.Debug(logger).Log("msg", "found out of order chunk", "labels", lset, "index", i, "chuck", c.Ref, "chuck_last_one", c0.Ref)
 			ooo++
 		}
 		if ooo > 0 {
@@ -574,14 +574,20 @@ func FixDuplicateSamplesOutsideChunk(last, curr *chunks.Meta) (*chunks.Meta, err
 		MaxTime: curr.MaxTime,
 		Chunk:   c,
 	}
+	// when two chunks have the same sample values
 	if curr.MinTime == last.MaxTime {
 		var it chunkenc.Iterator
 		it = curr.Chunk.Iterator(it)
-		app, _ := ncurr.Chunk.Appender()
+		app, err := ncurr.Chunk.Appender()
+		if err != nil {
+			return curr, err
+		}
 		typ := it.Next()
 		for ; typ != chunkenc.ValNone; typ = it.Next() {
-			var t int64
-			var v float64
+			var (
+				t int64
+				v float64
+			)
 			switch typ {
 			case chunkenc.ValFloat:
 				t, v = it.At()
@@ -596,7 +602,7 @@ func FixDuplicateSamplesOutsideChunk(last, curr *chunks.Meta) (*chunks.Meta, err
 				ncurr.MinTime = t
 			}
 		}
-		if ncurr.Chunk.Bytes() == nil {
+		if ncurr.Chunk.NumSamples() == 0 || ncurr.Chunk.Bytes() == nil {
 			return curr, errors.Errorf("empty chunk")
 		}
 	} else {
@@ -640,7 +646,10 @@ OUTER:
 			}
 		}
 		// TODO: error on duplicate samples
-		chk, _ := FixDuplicateSamplesOutsideChunk(last, &chks[i])
+		chk, err := FixDuplicateSamplesOutsideChunk(last, &chks[i])
+		if err != nil {
+			continue
+		}
 		last = &chks[i]
 		repl = append(repl, *chk)
 	}
@@ -748,11 +757,9 @@ func rewrite(
 			continue
 		}
 		if err := chunkw.WriteChunks(s.chks...); err != nil {
-			level.Error(logger).Log("msg", "write chunks failed", "err", err)
 			return errors.Wrap(err, "write chunks")
 		}
 		if err := indexw.AddSeries(i, s.lset, s.chks...); err != nil {
-			level.Error(logger).Log("msg", "index add series failed", "err", err)
 			return errors.Wrap(err, "add series")
 		}
 

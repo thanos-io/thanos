@@ -1162,7 +1162,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 				}
 
 				if err := stats.DuplicatedSampleErr(); err != nil {
-					return errors.Wrapf(err, "block with duplicated samples found %s; Compaction level %v; Labels: %v", bdir, meta.Compaction.Level, meta.Thanos.Labels)
+					return errors.Wrapf(err, "block with duplicated samples found %s; Labels: %v", bdir, meta.Thanos.Labels)
 				}
 
 				level.Debug(cg.logger).Log("msg", "verified block", "block", meta.ULID.String(), "duration", time.Since(start), "duration_ms", time.Since(start).Milliseconds())
