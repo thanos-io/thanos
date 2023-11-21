@@ -305,6 +305,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			status:            http.StatusOK,
 			replicationFactor: 3,
 			wreq:              wreq,
+			randomNode:        true,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -684,6 +685,9 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							// We have len(handlers) copies of each sample because the test case
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
+							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
 						}
 						if uint64(expectedMin) > got {
 							t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
