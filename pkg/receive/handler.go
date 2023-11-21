@@ -656,36 +656,18 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case retryResp := <-retryChan:
-			level.Debug(requestLogger).Log("msg", "retrying failed series to achieve sloppy quorum", "series", fmt.Sprintf("%v", retryResp.seriesIDs), "retries_left", retryResp.retriesLeft)
-			failedSeries := make([]prompb.TimeSeries, 0, len(retryResp.seriesIDs))
-			for _, seriesID := range retryResp.seriesIDs {
-				failedSeries = append(failedSeries, writeRequest.Timeseries[seriesID])
-			}
-			local, remote, err := h.distributeTimeseriesToReplicas(tenant, replicas, retryResp.retriesLeft-1, failedSeries, retryResp.seriesIDs)
-			// There's a -1 at the end because only at this moment we consider the initial request that failed.
-			// This helps to prevent the WaitGroup from going to 0 before counting the retries.
-			wg.Add(len(local) + len(remote) - 1)
-			if err != nil {
-				// level.Error(requestLogger).Log("msg", "failed to distribute failed series in retry", "err", err)
-				return err
-			}
-			h.sendWrites(ctx, tenant, local, remote, requestLogger, alreadyReplicated, retryResp.retriesLeft-1, responses)
+		// case retryResp := <-retryChan:
+		// 	failedSeries := make([]prompb.TimeSeries, 0, len(retryResp.seriesIDs))
+		// 	for _, seriesID := range retryResp.seriesIDs {
+		// 		failedSeries = append(failedSeries, writeRequest.Timeseries[seriesID])
+		// 	}
+		// 	err := h.distributeAndSendWrites(ctx, wg, tenant, replicas, failedSeries, retryResp.seriesIDs, requestLogger, alreadyReplicated, retryResp.retriesLeft, responses)
+		//  // This done considers the original request that generates this retry as done.
+		//  wg.Done()
+		// 	if err != nil {
+		// 		return err
+		// 	}
 		case resp, hasMore := <-responses:
-			if resp.err != nil {
-				if resp.retriesLeft <= 0 {
-					// Track errors and successes on a per-series basis.
-					for _, seriesID := range resp.seriesIDs {
-						seriesErrs[seriesID].Add(resp.err)
-					}
-					wg.Done()
-					continue
-				}
-				level.Debug(requestLogger).Log("msg", "sending series to retry", "series", fmt.Sprintf("%v", resp.seriesIDs), "retries_left", resp.retriesLeft)
-				retryChan <- resp
-				continue
-			}
-			// At the end, aggregate all errors if there are any and return them.
 			if !hasMore {
 				for _, seriesErr := range seriesErrs {
 					writeErrors.Add(seriesErr)
@@ -693,6 +675,20 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 				return writeErrors.ErrOrNil()
 			}
 			wg.Done()
+
+			if resp.err != nil {
+				// Track errors and successes on a per-series basis.
+				for _, seriesID := range resp.seriesIDs {
+					seriesErrs[seriesID].Add(resp.err)
+				}
+				continue
+				// if resp.retriesLeft <= 0 {
+				// level.Debug(requestLogger).Log("msg", "sending series to retry", "series", fmt.Sprintf("%v", resp.seriesIDs), "retries_left", resp.retriesLeft)
+				// retryChan <- resp
+				// continue
+				// }
+			}
+			// At the end, aggregate all errors if there are any and return them.
 			for _, seriesID := range resp.seriesIDs {
 				successes[seriesID]++
 			}
