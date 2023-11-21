@@ -387,38 +387,6 @@ func newWriteResponse(seriesIDs []int, err error, retryCount int) writeResponse 
 	}
 }
 
-func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
-	tLogger := log.With(h.logger, "tenant", tenant)
-
-	// This replica value is used to detect cycles in cyclic topologies.
-	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
-	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
-	// For acyclic topologies that use RouterOnly and IngestorOnly instances, this causes issues when replicating data.
-	// See discussion in: https://github.com/thanos-io/thanos/issues/4359.
-	if h.receiverMode == RouterOnly || h.receiverMode == IngestorOnly {
-		rep = 0
-	}
-
-	// The replica value in the header is one-indexed, thus we need >.
-	if rep > h.options.ReplicationFactor {
-		level.Error(tLogger).Log("err", errBadReplica, "msg", "write request rejected",
-			"request_replica", rep, "replication_factor", h.options.ReplicationFactor)
-		return errBadReplica
-	}
-
-	r := replica{n: rep, replicated: rep != 0}
-
-	// On the wire, format is 1-indexed and in-code is 0-indexed, so we decrement the value if it was already replicated.
-	if r.replicated {
-		r.n--
-	}
-
-	// Forward any time series as necessary. All time series
-	// destined for the local node will be written to the receiver.
-	// Time series will be replicated as necessary.
-	return h.forward(ctx, tenant, r, wreq)
-}
-
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -559,6 +527,38 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
+}
+
+func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+	tLogger := log.With(h.logger, "tenant", tenant)
+
+	// This replica value is used to detect cycles in cyclic topologies.
+	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
+	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
+	// For acyclic topologies that use RouterOnly and IngestorOnly instances, this causes issues when replicating data.
+	// See discussion in: https://github.com/thanos-io/thanos/issues/4359.
+	if h.receiverMode == RouterOnly || h.receiverMode == IngestorOnly {
+		rep = 0
+	}
+
+	// The replica value in the header is one-indexed, thus we need >.
+	if rep > h.options.ReplicationFactor {
+		level.Error(tLogger).Log("err", errBadReplica, "msg", "write request rejected",
+			"request_replica", rep, "replication_factor", h.options.ReplicationFactor)
+		return errBadReplica
+	}
+
+	r := replica{n: rep, replicated: rep != 0}
+
+	// On the wire, format is 1-indexed and in-code is 0-indexed, so we decrement the value if it was already replicated.
+	if r.replicated {
+		r.n--
+	}
+
+	// Forward any time series as necessary. All time series
+	// destined for the local node will be written to the receiver.
+	// Time series will be replicated as necessary.
+	return h.forward(ctx, tenant, r, wreq)
 }
 
 // forward accepts a write request, batches its time series by
