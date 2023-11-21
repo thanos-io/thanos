@@ -163,7 +163,7 @@ func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
 
-func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm, sloppyQuorum bool) ([]*Handler, Hashring, error) {
+func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
@@ -194,7 +194,6 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			ForwardTimeout:    5 * time.Minute,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), wOpts),
 			Limiter:           limiter,
-			sloppyQuorum:      sloppyQuorum,
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -233,7 +232,6 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		replicationFactor uint64
 		wreq              *prompb.WriteRequest
 		appendables       []*fakeAppendable
-		sloppyQuorum      bool
 		randomNode        bool
 	}{
 		{
@@ -305,7 +303,6 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			status:            http.StatusOK,
 			replicationFactor: 3,
 			wreq:              wreq,
-			randomNode:        true,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -586,40 +583,9 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				},
 			},
 		},
-		{
-			name:              "size 5 with replication 3, two faulty, sloppy quorum",
-			status:            http.StatusOK,
-			sloppyQuorum:      true,
-			randomNode:        true,
-			replicationFactor: 3,
-			wreq:              wreq,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, commitErrFn, nil),
-				},
-				{
-					appender: newFakeAppender(nil, commitErrFn, nil),
-				},
-				{
-					appender: newFakeAppender(nil, commitErrFn, nil),
-				},
-				{
-					appender: newFakeAppender(nil, commitErrFn, nil),
-				},
-			},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo, tc.sloppyQuorum)
+			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -767,7 +733,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					appender: newFakeAppender(nil, nil, nil),
 				},
 			}
-			handlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
+			handlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -979,7 +945,7 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir := b.TempDir()
 
-	handlers, _, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
+	handlers, _, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod)
 	if err != nil {
 		b.Fatalf("unable to create test handler: %v", err)
 	}

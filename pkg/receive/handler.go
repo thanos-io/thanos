@@ -94,7 +94,6 @@ type Options struct {
 	RelabelConfigs    []*relabel.Config
 	TSDBStats         TSDBStats
 	Limiter           *Limiter
-	sloppyQuorum      bool
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -591,11 +590,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		}
 	}
 
-	var retriesLeft int
-	if h.options.sloppyQuorum {
-		retriesLeft = 3
-	}
-	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated, retriesLeft)
+	return h.fanoutForward(ctx, tenant, wreq, replicas, r.replicated, 0)
 }
 
 func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeRequest *prompb.WriteRequest, replicas []uint64, alreadyReplicated bool, retriesLeft int) error {
@@ -620,7 +615,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 	// asynchronously and with this capacity we will never block on writing to the channel.
 	maxBufferedResponses := len(writeRequest.Timeseries)
 	responses := make(chan writeResponse, maxBufferedResponses)
-	retryChan := make(chan writeResponse, maxBufferedResponses)
 	wg := &sync.WaitGroup{}
 
 	err := h.distributeAndSendWrites(ctx, wg, tenant, replicas, writeRequest.Timeseries, nil, requestLogger, alreadyReplicated, retriesLeft, responses)
@@ -631,7 +625,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 	go func() {
 		wg.Wait()
 		close(responses)
-		close(retryChan)
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
@@ -656,17 +649,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		// case retryResp := <-retryChan:
-		// 	failedSeries := make([]prompb.TimeSeries, 0, len(retryResp.seriesIDs))
-		// 	for _, seriesID := range retryResp.seriesIDs {
-		// 		failedSeries = append(failedSeries, writeRequest.Timeseries[seriesID])
-		// 	}
-		// 	err := h.distributeAndSendWrites(ctx, wg, tenant, replicas, failedSeries, retryResp.seriesIDs, requestLogger, alreadyReplicated, retryResp.retriesLeft, responses)
-		//  // This done considers the original request that generates this retry as done.
-		//  wg.Done()
-		// 	if err != nil {
-		// 		return err
-		// 	}
 		case resp, hasMore := <-responses:
 			if !hasMore {
 				for _, seriesErr := range seriesErrs {
@@ -674,7 +656,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 				}
 				return writeErrors.ErrOrNil()
 			}
-			wg.Done()
 
 			if resp.err != nil {
 				// Track errors and successes on a per-series basis.
@@ -682,11 +663,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, writeReques
 					seriesErrs[seriesID].Add(resp.err)
 				}
 				continue
-				// if resp.retriesLeft <= 0 {
-				// level.Debug(requestLogger).Log("msg", "sending series to retry", "series", fmt.Sprintf("%v", resp.seriesIDs), "retries_left", resp.retriesLeft)
-				// retryChan <- resp
-				// continue
-				// }
 			}
 			// At the end, aggregate all errors if there are any and return them.
 			for _, seriesID := range resp.seriesIDs {
@@ -718,8 +694,6 @@ func (h *Handler) distributeAndSendWrites(
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return err
 	}
-	// wg.Add(len(localWrites) + len(remoteWrites)
-	// level.Debug(requestLogger).Log("msg", "distributed timeseries to replicas", "local", len(localWrites), "remote", len(remoteWrites))
 	h.sendWrites(ctx, wg, tenant, localWrites, remoteWrites, requestLogger, alreadyReplicated, retriesLeft, responses)
 	return nil
 }
@@ -773,6 +747,7 @@ func (h *Handler) sendWrites(ctx context.Context, wg *sync.WaitGroup, tenant str
 	for writeDestination := range localWrites {
 		wg.Add(1)
 		go func(writeDestination endpointReplica) {
+			defer wg.Done()
 			h.sendLocalWrite(ctx, writeDestination, tenant, localWrites[writeDestination], requestLogger, retriesLeft, responses)
 		}(writeDestination)
 	}
@@ -781,6 +756,7 @@ func (h *Handler) sendWrites(ctx context.Context, wg *sync.WaitGroup, tenant str
 	for writeDestination := range remoteWrites {
 		wg.Add(1)
 		go func(writeDestination endpointReplica) {
+			defer wg.Done()
 			h.sendRemoteWrite(ctx, tenant, writeDestination, remoteWrites[writeDestination], alreadyReplicated, retriesLeft, responses)
 		}(writeDestination)
 	}
