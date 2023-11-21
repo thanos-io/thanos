@@ -608,9 +608,6 @@ func FixDuplicateSamplesOutsideChunk(last, curr *chunks.Meta) (*chunks.Meta, err
 	} else {
 		return curr, nil
 	}
-	if ncurr.MinTime == 0 {
-		ncurr.MinTime = curr.MinTime
-	}
 	return ncurr, nil
 }
 
