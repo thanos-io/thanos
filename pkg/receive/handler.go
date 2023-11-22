@@ -732,6 +732,8 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	return localWrites, remoteWrites, nil
 }
 
+// sendWrites sends the local and remote writes to execute concurrently, controlling them through the provided sync.WaitGroup.
+// The responses from the writes are sent to the responses channel.
 func (h *Handler) sendWrites(
 	ctx context.Context,
 	wg *sync.WaitGroup,
@@ -760,6 +762,8 @@ func (h *Handler) sendWrites(
 	}
 }
 
+// sendLocalWrite sends a write request to the local node.
+// The responses are sent to the responses channel.
 func (h *Handler) sendLocalWrite(
 	ctx context.Context,
 	writeDestination endpointReplica,
@@ -786,6 +790,9 @@ func (h *Handler) sendLocalWrite(
 	responses <- newWriteResponse(trackedSeries.seriesIDs, nil)
 }
 
+// sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not
+// in the peerGroup, correctly marking them as up or down when appropriate.
+// The responses are sent to the responses channel.
 func (h *Handler) sendRemoteWrite(
 	ctx context.Context,
 	tenant string,
