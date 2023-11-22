@@ -506,7 +506,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	responseStatusCode := http.StatusOK
 	if err := h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
-		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error(), "value", fmt.Sprintf("%v", err))
+		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
 		case errNotReady:
 			responseStatusCode = http.StatusServiceUnavailable
