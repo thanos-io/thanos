@@ -84,15 +84,15 @@ func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
 	cache.StorePostings(ulid.MustNew(0, nil), labels.Label{Name: "test2", Value: "1"}, []byte{42, 33, 14, 67, 11}, tenancy.DefaultTenant)
 
 	testutil.Equals(t, uint64(sliceHeaderSize+5), cache.curSize)
-	testutil.Equals(t, float64(cache.curSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
+	testutil.Equals(t, float64(cache.curSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
 
 	// This triggers deadlock logic.
 	cache.StorePostings(ulid.MustNew(0, nil), labels.Label{Name: "test1", Value: "1"}, []byte{42}, tenancy.DefaultTenant)
 
 	testutil.Equals(t, uint64(sliceHeaderSize+1), cache.curSize)
-	testutil.Equals(t, float64(cache.curSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
+	testutil.Equals(t, float64(cache.curSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
 }
 
 func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
@@ -133,7 +133,7 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 		get func(storage.SeriesRef) ([]byte, bool)
 	}{
 		{
-			typ: cacheTypePostings,
+			typ: CacheTypePostings,
 			set: func(id storage.SeriesRef, b []byte) { cache.StorePostings(uid(id), lbl, b, tenancy.DefaultTenant) },
 			get: func(id storage.SeriesRef) ([]byte, bool) {
 				hits, _ := cache.FetchMultiPostings(ctx, uid(id), []labels.Label{lbl}, tenancy.DefaultTenant)
@@ -143,7 +143,7 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 			},
 		},
 		{
-			typ: cacheTypeSeries,
+			typ: CacheTypeSeries,
 			set: func(id storage.SeriesRef, b []byte) { cache.StoreSeries(uid(id), id, b, tenancy.DefaultTenant) },
 			get: func(id storage.SeriesRef) ([]byte, bool) {
 				hits, _ := cache.FetchMultiSeries(ctx, uid(id), []storage.SeriesRef{id}, tenancy.DefaultTenant)
@@ -153,7 +153,7 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 			},
 		},
 		{
-			typ: cacheTypeExpandedPostings,
+			typ: CacheTypeExpandedPostings,
 			set: func(id storage.SeriesRef, b []byte) {
 				cache.StoreExpandedPostings(uid(id), []*labels.Matcher{matcher}, b, tenancy.DefaultTenant)
 			},
@@ -227,16 +227,16 @@ func TestInMemoryIndexCache_MaxNumberOfItemsHit(t *testing.T) {
 	cache.StorePostings(id, labels.Label{Name: "test", Value: "125"}, []byte{42, 33}, tenancy.DefaultTenant)
 
 	testutil.Equals(t, uint64(2*sliceHeaderSize+4), cache.curSize)
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(3), promtest.ToFloat64(cache.added.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.added.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(3), promtest.ToFloat64(cache.added.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.added.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.RequestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.RequestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.HitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.commonMetrics.HitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 }
 
 func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
@@ -262,16 +262,16 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	// Add sliceHeaderSize + 2 bytes.
 	cache.StorePostings(id, lbls, []byte{42, 33}, tenancy.DefaultTenant)
 	testutil.Equals(t, uint64(sliceHeaderSize+2), cache.curSize)
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(sliceHeaderSize+2), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(sliceHeaderSize+2+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(sliceHeaderSize+2), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(sliceHeaderSize+2+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls}, tenancy.DefaultTenant)
 	testutil.Equals(t, map[labels.Label][]byte{lbls: {42, 33}}, pHits, "key exists")
@@ -288,16 +288,16 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	// Add sliceHeaderSize + 3 more bytes.
 	cache.StoreSeries(id, 1234, []byte{222, 223, 224}, tenancy.DefaultTenant)
 	testutil.Equals(t, uint64(2*sliceHeaderSize+5), cache.curSize)
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(sliceHeaderSize+2), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(sliceHeaderSize+2+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(sliceHeaderSize+3), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(sliceHeaderSize+3+24), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(sliceHeaderSize+2), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(sliceHeaderSize+2+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(sliceHeaderSize+3), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(sliceHeaderSize+3+24), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	sHits, sMisses := cache.FetchMultiSeries(ctx, id, []storage.SeriesRef{1234}, tenancy.DefaultTenant)
 	testutil.Equals(t, map[storage.SeriesRef][]byte{1234: {222, 223, 224}}, sHits, "key exists")
@@ -313,16 +313,16 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	cache.StorePostings(id, lbls2, v, tenancy.DefaultTenant)
 
 	testutil.Equals(t, uint64(2*sliceHeaderSize+5), cache.curSize)
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(2*sliceHeaderSize+5), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(2*sliceHeaderSize+5+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings))) // Eviction.
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))   // Eviction.
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(2*sliceHeaderSize+5), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(2*sliceHeaderSize+5+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings))) // Eviction.
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))   // Eviction.
 
 	// Evicted.
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls}, tenancy.DefaultTenant)
@@ -341,16 +341,16 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	cache.StorePostings(id, lbls2, v, tenancy.DefaultTenant)
 
 	testutil.Equals(t, uint64(2*sliceHeaderSize+5), cache.curSize)
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(2*sliceHeaderSize+5), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(2*sliceHeaderSize+5+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(2*sliceHeaderSize+5), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(2*sliceHeaderSize+5+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls2}, tenancy.DefaultTenant)
 	testutil.Equals(t, map[labels.Label][]byte{lbls2: v}, pHits)
@@ -359,31 +359,31 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	// Add too big item.
 	cache.StorePostings(id, labels.Label{Name: "test", Value: "toobig"}, append(v, 5), tenancy.DefaultTenant)
 	testutil.Equals(t, uint64(2*sliceHeaderSize+5), cache.curSize)
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(2*sliceHeaderSize+5), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(2*sliceHeaderSize+5+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings))) // Overflow.
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(2*sliceHeaderSize+5), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(2*sliceHeaderSize+5+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings))) // Overflow.
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	_, _, ok := cache.lru.RemoveOldest()
 	testutil.Assert(t, ok, "something to remove")
 
 	testutil.Equals(t, uint64(0), cache.curSize)
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	_, _, ok = cache.lru.RemoveOldest()
 	testutil.Assert(t, !ok, "nothing to remove")
@@ -393,16 +393,16 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	cache.StorePostings(id, lbls3, []byte{}, tenancy.DefaultTenant)
 
 	testutil.Equals(t, uint64(sliceHeaderSize), cache.curSize)
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(sliceHeaderSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(sliceHeaderSize+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(sliceHeaderSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(sliceHeaderSize+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls3}, tenancy.DefaultTenant)
 	testutil.Equals(t, map[labels.Label][]byte{lbls3: {}}, pHits, "key exists")
@@ -413,26 +413,26 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	cache.StorePostings(id, lbls4, []byte(nil), tenancy.DefaultTenant)
 
 	testutil.Equals(t, 2*uint64(sliceHeaderSize), cache.curSize)
-	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, 2*float64(sliceHeaderSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, 2*float64(sliceHeaderSize+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, 2*float64(sliceHeaderSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, 2*float64(sliceHeaderSize+55), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.current.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.currentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.totalCurrentSize.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls4}, tenancy.DefaultTenant)
 	testutil.Equals(t, map[labels.Label][]byte{lbls4: {}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// Other metrics.
-	testutil.Equals(t, float64(4), promtest.ToFloat64(cache.added.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.added.WithLabelValues(cacheTypeSeries)))
-	testutil.Equals(t, float64(9), promtest.ToFloat64(cache.commonMetrics.requestTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.commonMetrics.requestTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
-	testutil.Equals(t, float64(5), promtest.ToFloat64(cache.commonMetrics.hitsTotal.WithLabelValues(cacheTypePostings, tenancy.DefaultTenant)))
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.commonMetrics.hitsTotal.WithLabelValues(cacheTypeSeries, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(4), promtest.ToFloat64(cache.added.WithLabelValues(CacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.added.WithLabelValues(CacheTypeSeries)))
+	testutil.Equals(t, float64(9), promtest.ToFloat64(cache.commonMetrics.RequestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.commonMetrics.RequestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(5), promtest.ToFloat64(cache.commonMetrics.HitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.commonMetrics.HitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 }

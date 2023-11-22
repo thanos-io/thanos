@@ -27,7 +27,7 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 	batchsize := 1
 	pushes := 3
 
-	q := NewQueue(nil, nil, qcapacity, batchsize, nil, nil, nil)
+	q := NewQueue(nil, nil, qcapacity, batchsize, labels.EmptyLabels(), nil, nil)
 	for i := 0; i < pushes; i++ {
 		q.Push([]*notifier.Alert{
 			{},
@@ -92,7 +92,7 @@ func TestQueue_Push_Relabelled_Alerts(t *testing.T) {
 }
 
 func TestQueue_Push_RelabelDropAlerts(t *testing.T) {
-	q := NewQueue(nil, nil, 10, 10, nil, nil,
+	q := NewQueue(nil, nil, 10, 10, labels.EmptyLabels(), nil,
 		[]*relabel.Config{
 			{
 				SourceLabels: model.LabelNames{"a"},

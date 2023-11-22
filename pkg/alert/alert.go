@@ -44,7 +44,7 @@ type Queue struct {
 	maxBatchSize        int
 	capacity            int
 	toAddLset           labels.Labels
-	toExcludeLabels     labels.Labels
+	toExcludeLabels     []string
 	alertRelabelConfigs []*relabel.Config
 
 	mtx   sync.Mutex
@@ -56,29 +56,9 @@ type Queue struct {
 	dropped prometheus.Counter
 }
 
-func relabelLabels(lset labels.Labels, excludeLset []string) (toAdd, toExclude labels.Labels) {
-	for _, ln := range excludeLset {
-		toExclude = append(toExclude, labels.Label{Name: ln})
-	}
-
-	for _, l := range lset {
-		// Exclude labels to  to add straight away.
-		if toExclude.Has(l.Name) {
-			continue
-		}
-		toAdd = append(toAdd, labels.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
-	return toAdd, toExclude
-}
-
 // NewQueue returns a new queue. The given label set is attached to all alerts pushed to the queue.
 // The given exclude label set tells what label names to drop including external labels.
 func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSize int, externalLset labels.Labels, excludeLabels []string, alertRelabelConfigs []*relabel.Config) *Queue {
-	toAdd, toExclude := relabelLabels(externalLset, excludeLabels)
-
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -87,8 +67,8 @@ func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSi
 		capacity:            capacity,
 		morec:               make(chan struct{}, 1),
 		maxBatchSize:        maxBatchSize,
-		toAddLset:           toAdd,
-		toExcludeLabels:     toExclude,
+		toAddLset:           labels.NewBuilder(externalLset.Copy()).Del(excludeLabels...).Labels(),
+		toExcludeLabels:     excludeLabels,
 		alertRelabelConfigs: alertRelabelConfigs,
 
 		dropped: promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -172,19 +152,14 @@ func (q *Queue) Push(alerts []*notifier.Alert) {
 
 	// Attach external labels, drop excluded labels and process relabeling before sending.
 	var relabeledAlerts []*notifier.Alert
+	b := labels.NewBuilder(labels.EmptyLabels())
 	for _, a := range alerts {
-		lb := labels.NewBuilder(labels.Labels{})
-		for _, l := range a.Labels {
-			if q.toExcludeLabels.Has(l.Name) {
-				continue
-			}
-			lb.Set(l.Name, l.Value)
-		}
-		for _, l := range q.toAddLset {
-			lb.Set(l.Name, l.Value)
-		}
-
-		if lset, keep := relabel.Process(lb.Labels(), q.alertRelabelConfigs...); keep {
+		b.Reset(a.Labels.Copy())
+		b.Del(q.toExcludeLabels...)
+		q.toAddLset.Range(func(l labels.Label) {
+			b.Set(l.Name, l.Value)
+		})
+		if lset, keep := relabel.Process(b.Labels(), q.alertRelabelConfigs...); keep {
 			a.Labels = lset
 			relabeledAlerts = append(relabeledAlerts, a)
 		}
@@ -284,12 +259,11 @@ func NewSender(
 	return s
 }
 
-func toAPILabels(labels labels.Labels) models.LabelSet {
-	apiLabels := make(models.LabelSet, len(labels))
-	for _, label := range labels {
-		apiLabels[label.Name] = label.Value
-	}
-
+func toAPILabels(lbls labels.Labels) models.LabelSet {
+	apiLabels := make(models.LabelSet, lbls.Len())
+	lbls.Range(func(l labels.Label) {
+		apiLabels[l.Name] = l.Value
+	})
 	return apiLabels
 }
 

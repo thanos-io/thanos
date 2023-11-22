@@ -12,14 +12,16 @@ import (
 type tenantInstrumentationMiddleware struct {
 	metrics          *defaultMetrics
 	tenantHeaderName string
+	defaultTenant    string
 }
 
 // NewTenantInstrumentationMiddleware provides the same instrumentation as defaultInstrumentationMiddleware,
 // but with a tenant label fetched from the given tenantHeaderName header.
 // Passing nil as buckets uses the default buckets.
-func NewTenantInstrumentationMiddleware(tenantHeaderName string, reg prometheus.Registerer, buckets []float64) InstrumentationMiddleware {
+func NewTenantInstrumentationMiddleware(tenantHeaderName string, defaultTenant string, reg prometheus.Registerer, buckets []float64) InstrumentationMiddleware {
 	return &tenantInstrumentationMiddleware{
 		tenantHeaderName: tenantHeaderName,
+		defaultTenant:    defaultTenant,
 		metrics:          newDefaultMetrics(reg, buckets, []string{"tenant"}),
 	}
 }
@@ -33,6 +35,9 @@ func NewTenantInstrumentationMiddleware(tenantHeaderName string, reg prometheus.
 func (ins *tenantInstrumentationMiddleware) NewHandler(handlerName string, next http.Handler) http.HandlerFunc {
 	tenantWrapper := func(w http.ResponseWriter, r *http.Request) {
 		tenant := r.Header.Get(ins.tenantHeaderName)
+		if tenant == "" {
+			tenant = ins.defaultTenant
+		}
 		baseLabels := prometheus.Labels{"handler": handlerName, "tenant": tenant}
 		handlerStack := httpInstrumentationHandler(baseLabels, ins.metrics, next)
 		handlerStack.ServeHTTP(w, r)

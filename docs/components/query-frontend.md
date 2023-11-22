@@ -260,13 +260,17 @@ Flags:
                                  duration. Set to 0 to disable. Set to < 0 to
                                  enable on all queries.
       --query-frontend.org-id-header=<http-header-name> ...
-                                 Request header names used to identify the
-                                 source of slow queries (repeated flag).
-                                 The values of the header will be added to
-                                 the org id field in the slow query log. If
-                                 multiple headers match the request, the first
-                                 matching arg specified will take precedence.
-                                 If no headers match 'anonymous' will be used.
+                                 Deprecation Warning - This flag
+                                 will be soon deprecated in favor of
+                                 query-frontend.tenant-header and both flags
+                                 cannot be used at the same time. Request header
+                                 names used to identify the source of slow
+                                 queries (repeated flag). The values of the
+                                 header will be added to the org id field in
+                                 the slow query log. If multiple headers match
+                                 the request, the first matching arg specified
+                                 will take precedence. If no headers match
+                                 'anonymous' will be used.
       --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
                                  Number of shards to use when
                                  distributing shardable PromQL queries.
