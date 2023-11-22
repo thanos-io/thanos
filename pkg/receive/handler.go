@@ -704,8 +704,6 @@ func (h *Handler) distributeAndSendWrites(
 	return nil
 }
 
-type distributedSeries map[endpointReplica]trackedSeries
-
 // distributeTimeseriesToReplicas distributes the given timeseries from the tenant to different endpoints in a manner
 // that achieves the replication factor indicated by replicas. It is possible to offset the hashing algorithm by using
 // the hashOffset parameter, which can be used to distribute the same series differently.
@@ -715,11 +713,11 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	tenant string,
 	replicas []uint64,
 	timeseries []prompb.TimeSeries,
-) (distributedSeries, distributedSeries, error) {
+) (map[endpointReplica]trackedSeries, map[endpointReplica]trackedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
-	remoteWrites := make(distributedSeries)
-	localWrites := make(distributedSeries)
+	remoteWrites := make(map[endpointReplica]trackedSeries)
+	localWrites := make(map[endpointReplica]trackedSeries)
 	for tsIndex, ts := range timeseries {
 		for _, rn := range replicas {
 			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
@@ -751,8 +749,8 @@ func (h *Handler) sendWrites(
 	wg *sync.WaitGroup,
 	requestLogger log.Logger,
 	params remoteWriteParams,
-	localWrites distributedSeries,
-	remoteWrites distributedSeries,
+	localWrites map[endpointReplica]trackedSeries,
+	remoteWrites map[endpointReplica]trackedSeries,
 	responses chan<- writeResponse,
 ) {
 	// Do the writes to the local node first. This should be easy and fast.
