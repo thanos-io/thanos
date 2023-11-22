@@ -1220,7 +1220,7 @@ func (p *peerGroup) isPeerUp(addr string) bool {
 	if !ok {
 		return true
 	}
-	return time.Now().Before(state.nextAllowed)
+	return time.Now().After(state.nextAllowed)
 }
 
 func (p *peerGroup) resetBackoff() {
