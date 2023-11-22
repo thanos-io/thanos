@@ -17,6 +17,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
@@ -171,7 +172,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
-func reloadRulesSignal(t *testing.T, r *e2emon.InstrumentedRunnable) {
+func reloadRulesSignal(t *testing.T, r *e2eobs.Observable) {
 	c := e2e.NewCommand("kill", "-1", "1")
 	testutil.Ok(t, r.Exec(c))
 }
@@ -623,7 +624,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 		WithReplicaLabels("replica", "receive").Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	rulesSubDir := "rules"
-	var rulers []*e2emon.InstrumentedRunnable
+	var rulers []*e2eobs.Observable
 	for i := 1; i <= 2; i++ {
 		rFuture := e2ethanos.NewRulerBuilder(e, fmt.Sprintf("%d", i))
 		rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)

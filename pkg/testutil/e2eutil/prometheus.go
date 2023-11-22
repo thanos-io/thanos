@@ -104,6 +104,8 @@ type Prometheus struct {
 	addr               string
 
 	config string
+
+	stdout, stderr bytes.Buffer
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -178,7 +180,7 @@ func newPrometheus(binPath, prefix string) (*Prometheus, error) {
 }
 
 // Start running the Prometheus instance and return.
-func (p *Prometheus) Start() error {
+func (p *Prometheus) Start(ctx context.Context, l log.Logger) error {
 	if p.running {
 		return errors.New("Already started")
 	}
@@ -186,12 +188,16 @@ func (p *Prometheus) Start() error {
 	if err := p.db.Close(); err != nil {
 		return err
 	}
-	return p.start()
+	if err := p.start(); err != nil {
+		return err
+	}
+	if err := p.waitPrometheusUp(ctx, l, p.prefix); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *Prometheus) start() error {
-	p.running = true
-
 	port, err := FreePort()
 	if err != nil {
 		return err
@@ -222,23 +228,26 @@ func (p *Prometheus) start() error {
 	p.cmd = exec.Command(p.binPath, args...)
 	p.cmd.SysProcAttr = SysProcAttr()
 
-	go func() {
-		if b, err := p.cmd.CombinedOutput(); err != nil {
-			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
-			fmt.Fprintln(os.Stderr, string(b))
-		}
-	}()
-	time.Sleep(2 * time.Second)
+	p.stderr.Reset()
+	p.stdout.Reset()
 
+	p.cmd.Stdout = &p.stdout
+	p.cmd.Stderr = &p.stderr
+
+	if err := p.cmd.Start(); err != nil {
+		return fmt.Errorf("starting Prometheus failed: %w", err)
+	}
+
+	p.running = true
 	return nil
 }
 
-func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) error {
+func (p *Prometheus) waitPrometheusUp(ctx context.Context, logger log.Logger, prefix string) error {
 	if !p.running {
 		return errors.New("method Start was not invoked.")
 	}
-	return runutil.Retry(time.Second, ctx.Done(), func() error {
-		r, err := http.Get(fmt.Sprintf("http://%s/-/ready", p.addr))
+	return runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		r, err := http.Get(fmt.Sprintf("http://%s%s/-/ready", p.addr, prefix))
 		if err != nil {
 			return err
 		}
@@ -251,12 +260,15 @@ func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) er
 	})
 }
 
-func (p *Prometheus) Restart() error {
+func (p *Prometheus) Restart(ctx context.Context, l log.Logger) error {
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return errors.Wrap(err, "failed to kill Prometheus. Kill it manually")
 	}
 	_ = p.cmd.Wait()
-	return p.start()
+	if err := p.start(); err != nil {
+		return err
+	}
+	return p.waitPrometheusUp(ctx, l, p.prefix)
 }
 
 // Dir returns TSDB dir.
@@ -290,7 +302,7 @@ func (p *Prometheus) writeConfig(config string) (err error) {
 }
 
 // Stop terminates Prometheus and clean up its data directory.
-func (p *Prometheus) Stop() error {
+func (p *Prometheus) Stop() (rerr error) {
 	if !p.running {
 		return nil
 	}
@@ -299,8 +311,25 @@ func (p *Prometheus) Stop() error {
 		if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			return errors.Wrapf(err, "failed to Prometheus. Kill it manually and clean %s dir", p.db.Dir())
 		}
+
+		err := p.cmd.Wait()
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				if exitErr.ExitCode() != -1 {
+					fmt.Fprintln(os.Stderr, "Prometheus exited with", exitErr.ExitCode())
+					fmt.Fprintln(os.Stderr, "stdout:\n", p.stdout.String(), "\nstderr:\n", p.stderr.String())
+				} else {
+					err = nil
+				}
+			}
+		}
+
+		if err != nil {
+			return fmt.Errorf("waiting for Prometheus to exit: %w", err)
+		}
 	}
-	time.Sleep(time.Second / 2)
+
 	return p.cleanup()
 }
 
@@ -509,10 +538,6 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
-					sort.Slice(lset, func(i, j int) bool {
-						return lset[i].Name < lset[j].Name
-					})
-
 					var err error
 					if sampleType == chunkenc.ValFloat {
 						randMutex.Lock()
@@ -667,9 +692,7 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 	}
 
 	lbls := []labels.Labels{
-		[]labels.Label{
-			{Name: "lbl1", Value: "1"},
-		},
+		labels.FromStrings("lbl1", "1"),
 	}
 
 	// Sort labels as the index writer expects series in sorted order.
@@ -677,10 +700,10 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 
 	symbols := map[string]struct{}{}
 	for _, lset := range lbls {
-		for _, l := range lset {
+		lset.Range(func(l labels.Label) {
 			symbols[l.Name] = struct{}{}
 			symbols[l.Value] = struct{}{}
-		}
+		})
 	}
 
 	var input indexWriterSeriesSlice
@@ -738,14 +761,14 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 			return err
 		}
 
-		for _, l := range s.labels {
+		s.labels.Range(func(l labels.Label) {
 			valset, ok := values[l.Name]
 			if !ok {
 				valset = map[string]struct{}{}
 				values[l.Name] = valset
 			}
 			valset[l.Value] = struct{}{}
-		}
+		})
 		postings.Add(storage.SeriesRef(i), s.labels)
 	}
 

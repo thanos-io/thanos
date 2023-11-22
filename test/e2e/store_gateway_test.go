@@ -21,6 +21,7 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -768,7 +769,7 @@ metafile_content_ttl: 0s`
 
 	// Wait for store to sync blocks.
 	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
-	for _, st := range []*e2emon.InstrumentedRunnable{store1, store2, store3} {
+	for _, st := range []*e2eobs.Observable{store1, store2, store3} {
 		t.Run(st.Name(), func(t *testing.T) {
 			testutil.Ok(t, st.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
 			testutil.Ok(t, st.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
@@ -794,7 +795,7 @@ metafile_content_ttl: 0s`
 			},
 		)
 
-		for _, st := range []*e2emon.InstrumentedRunnable{store1, store2, store3} {
+		for _, st := range []*e2eobs.Observable{store1, store2, store3} {
 			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{`thanos_cache_groupcache_loads_total`}))
 			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{`thanos_store_bucket_cache_operation_hits_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "config", "chunks"))))
 		}
@@ -1216,6 +1217,6 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 	})
 
 	// Use greater or equal to handle flakiness.
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.GreaterOrEqual(1), "thanos_bucket_store_lazy_expanded_postings_total"))
-	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_lazy_expanded_postings_total"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.GreaterOrEqual(1), "thanos_bucket_store_lazy_expanded_postings_total"), e2emon.WaitMissingMetrics())
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_lazy_expanded_postings_total"), e2emon.WaitMissingMetrics())
 }

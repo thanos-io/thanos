@@ -234,6 +234,7 @@ func runCompact(
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
 	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
+	noDownsampleMarkerFilter := downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
@@ -260,18 +261,21 @@ func runCompact(
 		sy  *compact.Syncer
 	)
 	{
+		filters := []block.MetadataFilter{
+			timePartitionMetaFilter,
+			labelShardedMetaFilter,
+			consistencyDelayMetaFilter,
+			ignoreDeletionMarkFilter,
+			block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
+			duplicateBlocksFilter,
+			noCompactMarkerFilter,
+		}
+		if !conf.disableDownsampling {
+			filters = append(filters, noDownsampleMarkerFilter)
+		}
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
-			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
-				timePartitionMetaFilter,
-				labelShardedMetaFilter,
-				consistencyDelayMetaFilter,
-				ignoreDeletionMarkFilter,
-				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
-				duplicateBlocksFilter,
-				noCompactMarkerFilter,
-			},
-		)
+			extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			api.SetLoaded(blocks, err)
 		})
@@ -436,12 +440,30 @@ func runCompact(
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
 
-			for _, meta := range sy.Metas() {
+			filteredMetas := sy.Metas()
+			noDownsampleBlocks := noDownsampleMarkerFilter.NoDownsampleMarkedBlocks()
+			for ul := range noDownsampleBlocks {
+				delete(filteredMetas, ul)
+			}
+
+			for _, meta := range filteredMetas {
 				groupKey := meta.Thanos.GroupKey()
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, insBkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, conf.blockFilesConcurrency, metadata.HashFunc(conf.hashFunc), conf.acceptMalformedIndex); err != nil {
+
+			if err := downsampleBucket(
+				ctx,
+				logger,
+				downsampleMetrics,
+				insBkt,
+				filteredMetas,
+				downsamplingDir,
+				conf.downsampleConcurrency,
+				conf.blockFilesConcurrency,
+				metadata.HashFunc(conf.hashFunc),
+				conf.acceptMalformedIndex,
+			); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
@@ -449,9 +471,22 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, insBkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, conf.blockFilesConcurrency, metadata.HashFunc(conf.hashFunc), conf.acceptMalformedIndex); err != nil {
+
+			if err := downsampleBucket(
+				ctx,
+				logger,
+				downsampleMetrics,
+				insBkt,
+				filteredMetas,
+				downsamplingDir,
+				conf.downsampleConcurrency,
+				conf.blockFilesConcurrency,
+				metadata.HashFunc(conf.hashFunc),
+				conf.acceptMalformedIndex,
+			); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
+
 			level.Info(logger).Log("msg", "downsampling iterations done")
 		} else {
 			level.Info(logger).Log("msg", "downsampling was explicitly disabled")

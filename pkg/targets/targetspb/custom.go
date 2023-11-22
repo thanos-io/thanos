@@ -102,7 +102,7 @@ func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
 func (t *ActiveTarget) SetLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
-	if len(ls) > 0 {
+	if !ls.IsEmpty() {
 		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
 	}
 
@@ -112,7 +112,7 @@ func (t *ActiveTarget) SetLabels(ls labels.Labels) {
 func (t *ActiveTarget) SetDiscoveredLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
-	if len(ls) > 0 {
+	if !ls.IsEmpty() {
 		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
 	}
 
@@ -122,7 +122,7 @@ func (t *ActiveTarget) SetDiscoveredLabels(ls labels.Labels) {
 func (t *DroppedTarget) SetDiscoveredLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
-	if len(ls) > 0 {
+	if !ls.IsEmpty() {
 		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
 	}
 

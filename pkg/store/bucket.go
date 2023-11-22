@@ -189,9 +189,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.blockLoadDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_block_load_duration_seconds",
 		Help:    "The total time taken to load a block in seconds.",
-		Buckets: []float64{0.1, 0.5, 1, 10, 20, 30, 60, 120},
+		Buckets: []float64{0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
 	})
-
 	m.seriesDataTouched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_series_data_touched",
 		Help:    "Number of items of a data type touched to fulfill a single Store API series request.",
@@ -795,8 +794,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-
-	sort.Sort(lset)
 
 	set, ok := s.blockSets[h]
 	if !ok {

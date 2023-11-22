@@ -445,6 +445,8 @@ Flags:
                                  Note that rules are not automatically detected,
                                  use SIGHUP or do HTTP POST /-/reload to re-read
                                  them.
+      --shipper.meta-file-name="thanos.shipper.json"
+                                 the file to store shipper metadata in
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.

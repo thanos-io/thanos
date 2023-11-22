@@ -71,6 +71,14 @@ http_requests_total`,
 			name:       "scalar is not shardable",
 			expression: `scalar(sum by (url) (http_requests_total{code="400"}))`,
 		},
+		{
+			name:       "sum by le together with histogram_quantile, not shardable",
+			expression: `sum by (le) (histogram_quantile(0.99, http_requests_duration_seconds_bucket))`,
+		},
+		{
+			name:       "sum by le together with histogram_quantile in binary expression",
+			expression: `sum by (le) (http_requests_duration_seconds_bucket) + histogram_quantile(0.99, http_requests_duration_seconds_bucket)`,
+		},
 	}
 
 	shardableByLabels := []testCase{
@@ -187,6 +195,11 @@ sum by (container) (
 			expression:     `sort_desc(avg(label_replace(label_replace(label_replace(count_over_time(container_memory_working_set_bytes{container!="", container!="POD", instance!="", }[1h] ), "node", "$1", "instance", "(.+)"), "container_name", "$1", "container", "(.+)"), "pod_name", "$1", "pod", "(.+)")*label_replace(label_replace(label_replace(avg_over_time(container_memory_working_set_bytes{container!="", container!="POD", instance!="", }[1h] ), "node", "$1", "instance", "(.+)"), "container_name", "$1", "container", "(.+)"), "pod_name", "$1", "pod", "(.+)")) by (namespace, container_name, pod_name, node, cluster_id))`,
 			shardingLabels: []string{"namespace", "cluster_id"},
 		},
+		{
+			name:           "sum by le without histogram_quantile",
+			expression:     `sum by (le) (http_requests_duration_seconds_bucket)`,
+			shardingLabels: []string{"le"},
+		},
 	}
 
 	shardableWithoutLabels := []testCase{
@@ -229,9 +242,9 @@ http_requests_total`,
 			shardingLabels: []string{"cluster", "pod", model.MetricNameLabel},
 		},
 		{
-			name:           "histogram quantile",
+			name:           "histogram quantile without",
 			expression:     "histogram_quantile(0.95, sum(rate(metric[1m])) without (le, cluster))",
-			shardingLabels: []string{"cluster"},
+			shardingLabels: []string{"cluster", "le"},
 		},
 		{
 			name:           "aggregate without expression with label_replace, sharding label is not dynamic",

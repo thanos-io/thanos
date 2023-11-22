@@ -29,14 +29,14 @@ import (
 func TestShipperTimestamps(t *testing.T) {
 	dir := t.TempDir()
 
-	s := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc)
+	s := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
 
 	// Missing thanos meta file.
 	_, _, err := s.Timestamps()
 	testutil.NotOk(t, err)
 
 	meta := &Meta{Version: MetaVersion1}
-	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), dir, meta))
+	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), s.metadataFilePath, meta))
 
 	// Nothing uploaded, nothing in the filesystem. We assume that
 	// we are still waiting for TSDB to dump first TSDB block.
@@ -79,7 +79,7 @@ func TestShipperTimestamps(t *testing.T) {
 		Version:  MetaVersion1,
 		Uploaded: []ulid.ULID{id1},
 	}
-	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), dir, meta))
+	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), s.metadataFilePath, meta))
 	mint, maxt, err = s.Timestamps()
 	testutil.Ok(t, err)
 	testutil.Equals(t, int64(1000), mint)
@@ -122,7 +122,7 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
 	metas, err := shipper.blockMetasFromOldest()
 	testutil.Ok(t, err)
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
@@ -153,7 +153,7 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
 
 	_, err := shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
@@ -164,8 +164,8 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 
 	inmemory := objstore.NewInMemBucket()
 
-	lbls := []labels.Label{{Name: "test", Value: "test"}}
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, metadata.NoneFunc)
+	lbls := labels.FromStrings("test", "test")
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())
@@ -202,28 +202,29 @@ func TestReadMetaFile(t *testing.T) {
 	t.Run("Missing meta file", func(t *testing.T) {
 		// Create TSDB directory without meta file
 		dpath := t.TempDir()
+		fpath := filepath.Join(dpath, DefaultMetaFilename)
 
-		_, err := ReadMetaFile(dpath)
-		fpath := filepath.Join(dpath, MetaFilename)
+		_, err := ReadMetaFile(fpath)
 		testutil.Equals(t, fmt.Sprintf(`failed to read %s: open %s: no such file or directory`, fpath, fpath), err.Error())
 	})
 
 	t.Run("Non-JSON meta file", func(t *testing.T) {
 		dpath := t.TempDir()
-		fpath := filepath.Join(dpath, MetaFilename)
+		fpath := filepath.Join(dpath, DefaultMetaFilename)
+
 		// Make an invalid JSON file
 		testutil.Ok(t, os.WriteFile(fpath, []byte("{"), 0600))
 
-		_, err := ReadMetaFile(dpath)
+		_, err := ReadMetaFile(fpath)
 		testutil.Equals(t, fmt.Sprintf(`failed to parse %s as JSON: "{": unexpected end of JSON input`, fpath), err.Error())
 	})
 
 	t.Run("Wrongly versioned meta file", func(t *testing.T) {
 		dpath := t.TempDir()
-		fpath := filepath.Join(dpath, MetaFilename)
+		fpath := filepath.Join(dpath, DefaultMetaFilename)
 		testutil.Ok(t, os.WriteFile(fpath, []byte(`{"version": 2}`), 0600))
 
-		_, err := ReadMetaFile(dpath)
+		_, err := ReadMetaFile(fpath)
 		testutil.Equals(t, "unexpected meta file version 2", err.Error())
 	})
 }
