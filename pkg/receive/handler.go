@@ -622,13 +622,19 @@ func (h *Handler) fanoutForward(pctx context.Context, params remoteWriteParams) 
 		requestLogger = log.With(requestLogger, "request-id", id)
 	}
 
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
+	if err != nil {
+		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
+		return err
+	}
+
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
-	maxBufferedResponses := len(params.writeRequest.Timeseries)
+	maxBufferedResponses := len(localWrites) + len(remoteWrites)
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := &sync.WaitGroup{}
 
-	err := h.distributeAndSendWrites(ctx, wg, requestLogger, params, responses)
+	h.sendWrites(ctx, wg, requestLogger, params, localWrites, remoteWrites, responses)
 	if err != nil {
 		return err
 	}
@@ -684,24 +690,6 @@ func (h *Handler) fanoutForward(pctx context.Context, params remoteWriteParams) 
 			}
 		}
 	}
-}
-
-// distributeAndSendWrites will distribute the incoming timeseries to the correct endpoints and write them.
-// It needs a WaitGroup to synchronize on because all the writes are done in concurrent Go-routines.
-func (h *Handler) distributeAndSendWrites(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	requestLogger log.Logger,
-	params remoteWriteParams,
-	responses chan<- writeResponse,
-) error {
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
-	if err != nil {
-		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
-		return err
-	}
-	h.sendWrites(ctx, wg, requestLogger, params, localWrites, remoteWrites, responses)
-	return nil
 }
 
 // distributeTimeseriesToReplicas distributes the given timeseries from the tenant to different endpoints in a manner
