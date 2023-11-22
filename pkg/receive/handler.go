@@ -660,8 +660,8 @@ func (h *Handler) fanoutForward(pctx context.Context, params remoteWriteParams) 
 	if params.alreadyReplicated {
 		quorum = 1
 	}
-	successes := make([]int, maxBufferedResponses)
-	seriesErrs := newReplicationErrors(quorum, maxBufferedResponses)
+	successes := make([]int, len(params.writeRequest.Timeseries))
+	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
 	for {
 		select {
 		case <-ctx.Done():
