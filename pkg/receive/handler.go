@@ -745,9 +745,7 @@ func (h *Handler) sendWrites(
 ) {
 	// Do the writes to the local node first. This should be easy and fast.
 	for writeDestination := range localWrites {
-		wg.Add(1)
-		go func(writeDestination endpointReplica) {
-			defer wg.Done()
+		func(writeDestination endpointReplica) {
 			h.sendLocalWrite(ctx, writeDestination, params.tenant, localWrites[writeDestination], requestLogger, responses)
 		}(writeDestination)
 	}
