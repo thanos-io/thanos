@@ -815,7 +815,7 @@ func (h *Handler) sendRemoteWrite(
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
 		return
 	}
-	if peerUp := h.peers.isPeerUp(endpoint); !peerUp {
+	if !h.peers.isPeerUp(endpoint) {
 		err := errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
 		return
