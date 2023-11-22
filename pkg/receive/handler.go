@@ -368,9 +368,8 @@ type endpointReplica struct {
 }
 
 type trackedSeries struct {
-	seriesIDs    []int
-	timeSeries   []prompb.TimeSeries
-	failureCount int
+	seriesIDs  []int
+	timeSeries []prompb.TimeSeries
 }
 
 type writeResponse struct {
@@ -655,8 +654,8 @@ func (h *Handler) fanoutForward(pctx context.Context, params remoteWriteParams) 
 	if params.alreadyReplicated {
 		quorum = 1
 	}
-	successes := make([]int, len(params.writeRequest.Timeseries))
-	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
+	successes := make([]int, maxBufferedResponses)
+	seriesErrs := newReplicationErrors(quorum, maxBufferedResponses)
 	for {
 		select {
 		case <-ctx.Done():
