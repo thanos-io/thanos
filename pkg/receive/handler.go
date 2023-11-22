@@ -604,8 +604,8 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) fanoutForward(pctx context.Context, params remoteWriteParams) error {
-	ctx, cancel := context.WithTimeout(pctx, h.options.ForwardTimeout)
+func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) error {
+	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
 	defer func() {
@@ -618,7 +618,7 @@ func (h *Handler) fanoutForward(pctx context.Context, params remoteWriteParams) 
 	}()
 
 	requestLogger := log.With(h.logger, "tenant", params.tenant)
-	if id, ok := middleware.RequestIDFromContext(pctx); ok {
+	if id, ok := middleware.RequestIDFromContext(ctx); ok {
 		requestLogger = log.With(requestLogger, "request-id", id)
 	}
 
