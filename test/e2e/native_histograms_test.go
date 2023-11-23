@@ -24,8 +24,8 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/queryconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -376,9 +376,9 @@ func TestRuleNativeHistograms(t *testing.T) {
 	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2, prompb.Label{Name: "series", Value: "two"})
 	testutil.Ok(t, err)
 
-	r := rFuture.InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
+	r := rFuture.InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 		{
-			GRPCConfig: &queryconfig.GRPCConfig{
+			GRPCConfig: &clientconfig.GRPCConfig{
 				EndpointAddrs: []string{q.InternalEndpoint("grpc")},
 			},
 		},

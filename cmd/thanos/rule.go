@@ -50,6 +50,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -63,7 +64,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
-	"github.com/thanos-io/thanos/pkg/queryconfig"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -314,30 +314,30 @@ func runRule(
 ) error {
 	metrics := newRuleMetrics(reg)
 
-	var queryCfg []queryconfig.Config
+	var queryCfg []clientconfig.Config
 	var err error
 	if len(conf.queryConfigYAML) > 0 {
-		queryCfg, err = queryconfig.LoadConfigs(conf.queryConfigYAML)
+		queryCfg, err = clientconfig.LoadConfigs(conf.queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		queryCfg, err = queryconfig.BuildConfigFromHTTPAddresses(conf.query.addrs)
+		queryCfg, err = clientconfig.BuildConfigFromHTTPAddresses(conf.query.addrs)
 		if err != nil {
 			return errors.Wrap(err, "query configuration")
 		}
 
 		// Build the query configuration from the legacy query flags.
-		var fileSDConfigs []queryconfig.HTTPFileSDConfig
+		var fileSDConfigs []clientconfig.HTTPFileSDConfig
 		if len(conf.query.sdFiles) > 0 {
-			fileSDConfigs = append(fileSDConfigs, queryconfig.HTTPFileSDConfig{
+			fileSDConfigs = append(fileSDConfigs, clientconfig.HTTPFileSDConfig{
 				Files:           conf.query.sdFiles,
 				RefreshInterval: model.Duration(conf.query.sdInterval),
 			})
 			queryCfg = append(queryCfg,
-				queryconfig.Config{
-					HTTPConfig: queryconfig.HTTPConfig{
-						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+				clientconfig.Config{
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 							Scheme:        "http",
 							FileSDConfigs: fileSDConfigs,
 						},
@@ -346,7 +346,7 @@ func runRule(
 			)
 		}
 
-		grpcQueryCfg, err := queryconfig.BuildConfigFromGRPCAddresses(conf.grpcQueryEndpoints)
+		grpcQueryCfg, err := clientconfig.BuildConfigFromGRPCAddresses(conf.grpcQueryEndpoints)
 		if err != nil {
 			return errors.Wrap(err, "query configuration")
 		}
@@ -363,7 +363,7 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var (
-		queryClients    []*queryconfig.HTTPClient
+		queryClients    []*clientconfig.HTTPClient
 		promClients     []*promclient.Client
 		grpcEndpointSet *query.EndpointSet
 		grpcEndpoints   []string
@@ -374,12 +374,12 @@ func runRule(
 	for _, cfg := range queryCfg {
 		if cfg.HTTPConfig.NotEmpty() {
 			cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
-			c, err := queryconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
+			c, err := clientconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
 			if err != nil {
 				return err
 			}
 			c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-			queryClient, err := queryconfig.NewClient(logger, cfg.HTTPConfig.EndpointsConfig, c, queryProvider.Clone())
+			queryClient, err := clientconfig.NewClient(logger, cfg.HTTPConfig.EndpointsConfig, c, queryProvider.Clone())
 			if err != nil {
 				return err
 			}
@@ -514,13 +514,13 @@ func runRule(
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
 		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
-		c, err := queryconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := clientconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
-		amClient, err := queryconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
+		amClient, err := clientconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -857,7 +857,7 @@ func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 
 func queryFuncCreator(
 	logger log.Logger,
-	queriers []*queryconfig.HTTPClient,
+	queriers []*clientconfig.HTTPClient,
 	promClients []*promclient.Client,
 	grpcEndpointSet *query.EndpointSet,
 	duplicatedQuery prometheus.Counter,
@@ -942,7 +942,7 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *queryconfig.HTTPClient, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)

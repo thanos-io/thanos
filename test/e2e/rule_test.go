@@ -27,8 +27,8 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/queryconfig"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -323,8 +323,8 @@ func TestRule(t *testing.T) {
 
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: queryconfig.HTTPEndpointsConfig{
-				FileSDConfigs: []queryconfig.HTTPFileSDConfig{
+			EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+				FileSDConfigs: []clientconfig.HTTPFileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
 						Files:           []string{filepath.Join(rFuture.InternalDir(), amTargetsSubDir, "*.yaml")},
@@ -339,12 +339,12 @@ func TestRule(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 		{
-			HTTPConfig: queryconfig.HTTPConfig{
-				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					// We test Statically Addressed queries in other tests. Focus on FileSD here.
-					FileSDConfigs: []queryconfig.HTTPFileSDConfig{
+					FileSDConfigs: []clientconfig.HTTPFileSDConfig{
 						{
 							// FileSD which will be used to register discover dynamically q.
 							Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
@@ -668,7 +668,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+			EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 				StaticAddresses: []string{
 					am.InternalEndpoint("http"),
 				},
@@ -677,10 +677,10 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
+	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 		{
-			HTTPConfig: queryconfig.HTTPConfig{
-				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{
 						q.InternalEndpoint("http"),
 					},
@@ -751,7 +751,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 		}
 		r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{
 						am.InternalEndpoint("http"),
 					},
@@ -762,10 +762,10 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 			},
 		}).WithForGracePeriod("500ms").
 			WithRestoreIgnoredLabels("tenant_id").
-			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
+			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 				{
-					HTTPConfig: queryconfig.HTTPConfig{
-						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 							StaticAddresses: []string{
 								q.InternalEndpoint("http"),
 							},

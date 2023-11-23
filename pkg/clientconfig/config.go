@@ -1,7 +1,9 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package queryconfig
+// Package clientconfig is a wrapper around github.com/prometheus/common/config with additional
+// support for gRPC clients.
+package clientconfig
 
 import (
 	"fmt"
@@ -12,7 +14,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Config is a structure that allows pointing to various HTTP and GRPC query endpoints, e.g. ruler connecting to queriers.
+// Config is a structure that allows pointing to various HTTP and GRPC endpoints, e.g. ruler connecting to queriers.
 type Config struct {
 	HTTPConfig HTTPConfig  `yaml:",inline"`
 	GRPCConfig *GRPCConfig `yaml:"grpc_config"`
@@ -42,11 +44,11 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // LoadConfigs loads a list of Config from YAML data.
 func LoadConfigs(confYAML []byte) ([]Config, error) {
-	var queryCfg []Config
-	if err := yaml.UnmarshalStrict(confYAML, &queryCfg); err != nil {
+	var clientCfg []Config
+	if err := yaml.UnmarshalStrict(confYAML, &clientCfg); err != nil {
 		return nil, err
 	}
-	return queryCfg, nil
+	return clientCfg, nil
 }
 
 // BuildConfigFromHTTPAddresses returns a configuration from static addresses.

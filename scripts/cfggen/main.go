@@ -29,8 +29,8 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/queryconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
@@ -81,12 +81,12 @@ func init() {
 	configs[name(logging.RequestConfig{})] = logging.RequestConfig{}
 
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
-	alertmgrCfg.EndpointsConfig.FileSDConfigs = []queryconfig.HTTPFileSDConfig{{}}
+	alertmgrCfg.EndpointsConfig.FileSDConfigs = []clientconfig.HTTPFileSDConfig{{}}
 	configs[name(alert.AlertingConfig{})] = alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}
 
-	queryCfg := queryconfig.DefaultConfig()
-	queryCfg.HTTPConfig.EndpointsConfig.FileSDConfigs = []queryconfig.HTTPFileSDConfig{{}}
-	configs[name(queryconfig.Config{})] = []queryconfig.Config{queryCfg}
+	queryCfg := clientconfig.DefaultConfig()
+	queryCfg.HTTPConfig.EndpointsConfig.FileSDConfigs = []clientconfig.HTTPFileSDConfig{{}}
+	configs[name(clientconfig.Config{})] = []clientconfig.Config{queryCfg}
 
 	for typ, config := range bucketConfigs {
 		configs[name(config)] = client.BucketConfig{Type: typ, Config: config}

@@ -1,8 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package queryconfig is a wrapper around github.com/prometheus/common/config.
-package queryconfig
+package clientconfig
 
 import (
 	"context"

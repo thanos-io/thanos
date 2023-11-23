@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/queryconfig"
 )
 
 // RootLimitsConfig is the root configuration for limits.
@@ -65,9 +65,9 @@ type GlobalLimitsConfig struct {
 	// MaxConcurrency represents the maximum concurrency during write operations.
 	MaxConcurrency int64 `yaml:"max_concurrency"`
 	// MetaMonitoring options specify the query, url and client for Query API address used in head series limiting.
-	MetaMonitoringURL        string                        `yaml:"meta_monitoring_url"`
-	MetaMonitoringHTTPClient *queryconfig.HTTPClientConfig `yaml:"meta_monitoring_http_client"`
-	MetaMonitoringLimitQuery string                        `yaml:"meta_monitoring_limit_query"`
+	MetaMonitoringURL        string                         `yaml:"meta_monitoring_url"`
+	MetaMonitoringHTTPClient *clientconfig.HTTPClientConfig `yaml:"meta_monitoring_http_client"`
+	MetaMonitoringLimitQuery string                         `yaml:"meta_monitoring_limit_query"`
 
 	metaMonitoringURL *url.URL
 }

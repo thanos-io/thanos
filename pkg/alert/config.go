@@ -15,8 +15,8 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
-	"github.com/thanos-io/thanos/pkg/queryconfig"
 )
 
 type AlertingConfig struct {
@@ -25,10 +25,10 @@ type AlertingConfig struct {
 
 // AlertmanagerConfig represents a client to a cluster of Alertmanager endpoints.
 type AlertmanagerConfig struct {
-	HTTPClientConfig queryconfig.HTTPClientConfig    `yaml:"http_config"`
-	EndpointsConfig  queryconfig.HTTPEndpointsConfig `yaml:",inline"`
-	Timeout          model.Duration                  `yaml:"timeout"`
-	APIVersion       APIVersion                      `yaml:"api_version"`
+	HTTPClientConfig clientconfig.HTTPClientConfig    `yaml:"http_config"`
+	EndpointsConfig  clientconfig.HTTPEndpointsConfig `yaml:",inline"`
+	Timeout          model.Duration                   `yaml:"timeout"`
+	APIVersion       APIVersion                       `yaml:"api_version"`
 }
 
 // APIVersion represents the API version of the Alertmanager endpoint.
@@ -61,10 +61,10 @@ func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func DefaultAlertmanagerConfig() AlertmanagerConfig {
 	return AlertmanagerConfig{
-		EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+		EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 			Scheme:          "http",
 			StaticAddresses: []string{},
-			FileSDConfigs:   []queryconfig.HTTPFileSDConfig{},
+			FileSDConfigs:   []clientconfig.HTTPFileSDConfig{},
 		},
 		Timeout:    model.Duration(time.Second * 10),
 		APIVersion: APIv1,
@@ -119,7 +119,7 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 			break
 		}
 	}
-	var basicAuth queryconfig.BasicAuth
+	var basicAuth clientconfig.BasicAuth
 	if parsed.User != nil && parsed.User.String() != "" {
 		basicAuth.Username = parsed.User.Username()
 		pw, _ := parsed.User.Password()
@@ -127,10 +127,10 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 	}
 
 	return AlertmanagerConfig{
-		HTTPClientConfig: queryconfig.HTTPClientConfig{
+		HTTPClientConfig: clientconfig.HTTPClientConfig{
 			BasicAuth: basicAuth,
 		},
-		EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+		EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 			PathPrefix:      parsed.Path,
 			Scheme:          scheme,
 			StaticAddresses: []string{host},
