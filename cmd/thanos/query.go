@@ -501,33 +501,30 @@ func runQuery(
 		options = append(options, store.WithProxyStoreDebugLogging())
 	}
 
-	endpoints, err := prepareEndpointSet(
-		g,
-		logger,
-		reg,
-		[]*dns.Provider{
-			dnsStoreProvider,
-			dnsRuleProvider,
-			dnsExemplarProvider,
-			dnsMetadataProvider,
-			dnsTargetProvider,
-			dnsEndpointProvider,
-		},
-		duplicatedStores,
-		strictStores,
-		strictEndpoints,
-		endpointGroupAddrs,
-		strictEndpointGroups,
-		dialOpts,
-		unhealthyStoreTimeout,
-		endpointInfoTimeout,
-		queryConnMetricLabels...,
-	)
-	if err != nil {
-		return err
-	}
-
 	var (
+		endpoints = prepareEndpointSet(
+			g,
+			logger,
+			reg,
+			[]*dns.Provider{
+				dnsStoreProvider,
+				dnsRuleProvider,
+				dnsExemplarProvider,
+				dnsMetadataProvider,
+				dnsTargetProvider,
+				dnsEndpointProvider,
+			},
+			duplicatedStores,
+			strictStores,
+			strictEndpoints,
+			endpointGroupAddrs,
+			strictEndpointGroups,
+			dialOpts,
+			unhealthyStoreTimeout,
+			endpointInfoTimeout,
+			queryConnMetricLabels...,
+		)
+
 		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
@@ -837,7 +834,7 @@ func prepareEndpointSet(
 	unhealthyStoreTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
 	queryConnMetricLabels ...string,
-) (*query.EndpointSet, error) {
+) *query.EndpointSet {
 	endpointSet := query.NewEndpointSet(
 		time.Now,
 		logger,
@@ -896,7 +893,7 @@ func prepareEndpointSet(
 		})
 	}
 
-	return endpointSet, nil
+	return endpointSet
 }
 
 // LookbackDeltaFactory creates from 1 to 3 lookback deltas depending on

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"html/template"
 	"math/rand"
 	"net/http"
@@ -55,6 +54,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -421,7 +421,7 @@ func runRule(
 			return err
 		}
 
-		grpcEndpointSet, err = prepareEndpointSet(
+		grpcEndpointSet = prepareEndpointSet(
 			g,
 			logger,
 			reg,
@@ -435,9 +435,6 @@ func runRule(
 			5*time.Minute,
 			5*time.Second,
 		)
-		if err != nil {
-			return err
-		}
 
 		// Periodically update the GRPC addresses from query config by resolving them using DNS SD if necessary.
 		{
