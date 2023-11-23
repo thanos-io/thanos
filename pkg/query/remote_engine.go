@@ -14,7 +14,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -272,7 +271,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			// timestamp as that is when we ran the evaluation.
 			// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
 			if len(ts.Histograms) > 0 {
-				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), H: fromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
+				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
 			} else {
 				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
@@ -361,13 +360,5 @@ func (r *remoteQuery) String() string { return r.qs }
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {
 		r.cancel()
-	}
-}
-
-func fromProtoHistogram(hp prompb.Histogram) *histogram.FloatHistogram {
-	if hp.IsFloatHistogram() {
-		return prompb.FloatHistogramProtoToFloatHistogram(hp)
-	} else {
-		return prompb.HistogramProtoToFloatHistogram(hp)
 	}
 }

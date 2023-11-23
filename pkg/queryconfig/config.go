@@ -49,7 +49,7 @@ func LoadConfigs(confYAML []byte) ([]Config, error) {
 	return queryCfg, nil
 }
 
-// BuildConfigFromHTTPAddresses returns a configuration from a static addresses.
+// BuildConfigFromHTTPAddresses returns a configuration from static addresses.
 func BuildConfigFromHTTPAddresses(addrs []string) ([]Config, error) {
 	configs := make([]Config, 0, len(addrs))
 	for i, addr := range addrs {
