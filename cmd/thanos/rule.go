@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"html/template"
 	"math/rand"
 	"net/http"
@@ -54,7 +55,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -400,9 +400,60 @@ func runRule(
 			Help: "The number of times a duplicated grpc endpoint is detected from the different configs in rule",
 		})
 
-		grpcEndpointSet, err = prepareEndpointSet(g, logger, reg, dnsSDResolver, tracer, duplicatedGRPCEndpoints, grpcEndpoints)
+		dnsEndpointProvider := dns.NewProvider(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_rule_grpc_endpoints_", reg),
+			dnsSDResolver,
+		)
+
+		dialOpts, err := extgrpc.StoreClientGRPCOpts(
+			logger,
+			reg,
+			tracer,
+			false,
+			false,
+			"",
+			"",
+			"",
+			"",
+		)
 		if err != nil {
 			return err
+		}
+
+		grpcEndpointSet, err = prepareEndpointSet(
+			g,
+			logger,
+			reg,
+			[]*dns.Provider{dnsEndpointProvider},
+			duplicatedGRPCEndpoints,
+			nil,
+			nil,
+			nil,
+			nil,
+			dialOpts,
+			5*time.Minute,
+			5*time.Second,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Periodically update the GRPC addresses from query config by resolving them using DNS SD if necessary.
+		{
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+					resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
+					defer resolveCancel()
+					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints); err != nil {
+						level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
+					}
+					return nil
+				})
+			}, func(error) {
+				cancel()
+			})
 		}
 	}
 
@@ -1034,89 +1085,4 @@ func validateTemplate(tmplStr string) error {
 		return fmt.Errorf("failed to execute the template: %w", err)
 	}
 	return nil
-}
-
-func prepareEndpointSet(
-	g *run.Group,
-	logger log.Logger,
-	reg *prometheus.Registry,
-	dnsSDResolver dns.ResolverType,
-	tracer opentracing.Tracer,
-	duplicatedGRPCEndpoints prometheus.Counter,
-	endpointAddrs []string,
-) (*query.EndpointSet, error) {
-	dnsEndpointProvider := dns.NewProvider(
-		logger,
-		extprom.WrapRegistererWithPrefix("thanos_rule_grpc_endpoints_", reg),
-		dnsSDResolver,
-	)
-
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(
-		logger,
-		reg,
-		tracer,
-		false,
-		false,
-		"",
-		"",
-		"",
-		"",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	endpointSet := query.NewEndpointSet(
-		time.Now,
-		logger,
-		reg,
-		func() (specs []*query.GRPCEndpointSpec) {
-			var tmpSpecs []*query.GRPCEndpointSpec
-
-			for _, addr := range dnsEndpointProvider.Addresses() {
-				tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
-			}
-			tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedGRPCEndpoints, tmpSpecs)
-			specs = append(specs, tmpSpecs...)
-
-			return specs
-		},
-		dialOpts,
-		time.Minute*5,
-		time.Second*5,
-	)
-
-	// Periodically update the grpc query API set with the addresses we see in our cluster.
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				endpointSet.Update(ctx)
-				return nil
-			})
-		}, func(error) {
-			cancel()
-			endpointSet.Close()
-		})
-	}
-
-	// Periodically update the GRPC addresses from query config by resolving them using DNS SD if necessary.
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
-				defer resolveCancel()
-				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs); err != nil {
-					level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
-
-				}
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
-
-	return endpointSet, nil
 }
