@@ -34,7 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 
-	// "github.com/thanos-io/thanos/pkg/store/hintspb"
+	// "github.com/thanos-io/thanos/pkg/store/hintspb".
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
