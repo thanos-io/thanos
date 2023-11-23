@@ -94,9 +94,7 @@ type Reloader struct {
 	watchedDirs   []string
 	watcher       *watcher
 
-	tr       TriggerReloader
-	preHook  CallbackFunc
-	postHook CallbackFunc
+	tr TriggerReloader
 
 	lastCfgHash         []byte
 	lastWatchedDirsHash []byte
@@ -108,6 +106,7 @@ type Reloader struct {
 	lastReloadSuccessTimestamp prometheus.Gauge
 	configApplyErrors          prometheus.Counter
 	configApply                prometheus.Counter
+	reloaderInfo               *prometheus.GaugeVec
 }
 
 // TriggerReloader reloads the configuration of the process.
@@ -119,12 +118,21 @@ type TriggerReloader interface {
 type Options struct {
 	// ReloadURL is the Prometheus URL to trigger reloads.
 	ReloadURL *url.URL
+
 	// HTTP client used to connect to the web server.
 	HTTPClient http.Client
+
 	// ProcessName is the process executable name to trigger reloads. If not
 	// empty, the reloader sends a SIGHUP signal to the matching process ID
 	// instead of using the HTTP reload endpoint.
 	ProcessName string
+	// RuntimeInfoURL is the Prometheus URL returning runtime information
+	// including the last configuration status (e.g. `/api/v1/status/runtimeinfo`).
+	// It is only relevant for signal-based reloads.
+	// If empty, the reloader will not be able to assess that the reloading is
+	// successful.
+	RuntimeInfoURL *url.URL
+
 	// CfgFile is a path to the prometheus config file to watch.
 	CfgFile string
 	// CfgOutputFile is a path for the output config file.
@@ -142,19 +150,7 @@ type Options struct {
 	// RetryInterval controls how often the reloader retries a reloading of the
 	// configuration in case the reload operation returned an error.
 	RetryInterval time.Duration
-
-	// PreReloadHook is a function called before reloading the configuration.
-	// If it returns an error, the reloader doesn't proceed with the config
-	// reload.
-	PreReloadHook CallbackFunc
-
-	// PostReloadHook is a function called after reloading the configuration.
-	// The config reload will not be considered successful until it returns no
-	// error.
-	PostReloadHook CallbackFunc
 }
-
-type CallbackFunc func(context.Context) error
 
 var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
 
@@ -172,9 +168,6 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 		watchedDirs:   o.WatchedDirs,
 		watchInterval: o.WatchInterval,
 		retryInterval: o.RetryInterval,
-
-		preHook:  o.PreReloadHook,
-		postHook: o.PostReloadHook,
 
 		reloads: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
@@ -212,20 +205,21 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 				Help: "Total number of config apply operations that failed.",
 			},
 		),
-	}
-
-	if r.preHook == nil {
-		r.preHook = func(context.Context) error { return nil }
-	}
-
-	if r.postHook == nil {
-		r.postHook = func(context.Context) error { return nil }
+		reloaderInfo: promauto.With(reg).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "reloader_info",
+				Help: "A metric with a constant '1' value labeled by reload method (either 'http' or 'signal').",
+			},
+			[]string{"method"},
+		),
 	}
 
 	if o.ProcessName != "" {
-		r.tr = NewPIDReloader(o.ProcessName)
+		r.tr = NewPIDReloader(r.logger, o.ProcessName, o.RuntimeInfoURL, o.HTTPClient)
+		r.reloaderInfo.WithLabelValues("signal").Set(1)
 	} else {
 		r.tr = NewHTTPReloader(r.logger, o.ReloadURL, o.HTTPClient)
+		r.reloaderInfo.WithLabelValues("http").Set(1)
 	}
 
 	return r
@@ -444,16 +438,8 @@ func (r *Reloader) apply(ctx context.Context) error {
 }
 
 func (r *Reloader) triggerReload(ctx context.Context) error {
-	if err := r.preHook(ctx); err != nil {
-		return fmt.Errorf("prehook reload: %w", err)
-	}
-
 	if err := r.tr.TriggerReload(ctx); err != nil {
 		return err
-	}
-
-	if err := r.postHook(ctx); err != nil {
-		return fmt.Errorf("posthook reload: %w", err)
 	}
 
 	return nil
@@ -484,15 +470,25 @@ func hashFile(h hash.Hash, fn string) error {
 
 type PIDReloader struct {
 	pname string
+	prt   *prometheusReloadTracker
 }
 
-func NewPIDReloader(pname string) *PIDReloader {
+func NewPIDReloader(logger log.Logger, processName string, u *url.URL, c http.Client) *PIDReloader {
 	return &PIDReloader{
-		pname: pname,
+		pname: processName,
+		prt: &prometheusReloadTracker{
+			client:     c,
+			runtimeURL: u,
+			logger:     logger,
+		},
 	}
 }
 
 func (pr *PIDReloader) TriggerReload(ctx context.Context) error {
+	if err := pr.prt.preReload(ctx); err != nil {
+		return fmt.Errorf("pre-reload check failed: %w", err)
+	}
+
 	procs, err := ps.Processes()
 	if err != nil {
 		return fmt.Errorf("list processes: %w", err)
@@ -515,12 +511,16 @@ func (pr *PIDReloader) TriggerReload(ctx context.Context) error {
 		return fmt.Errorf("find process err: %w", err)
 	}
 
-	if proc == nil {
+	if p == nil {
 		return fmt.Errorf("failed to find process with pid %d", proc.Pid())
 	}
 
 	if err := p.Signal(syscall.SIGHUP); err != nil {
 		return fmt.Errorf("failed to send SIGHUP to pid %d: %w", p.Pid, err)
+	}
+
+	if err := pr.prt.postReload(ctx); err != nil {
+		return fmt.Errorf("post-reload check failed: %w", err)
 	}
 
 	return nil
@@ -570,6 +570,11 @@ func ReloadURLFromBase(u *url.URL) *url.URL {
 	r := *u
 	r.Path = path.Join(r.Path, "/-/reload")
 	return &r
+}
+
+// RuntimeInfoURLFromBase returns the standard Prometheus runtime info URL from its base URL.
+func RuntimeInfoURLFromBase(u *url.URL) *url.URL {
+	return u.JoinPath("/api/v1/status/runtimeinfo")
 }
 
 var envRe = regexp.MustCompile(`\$\(([a-zA-Z_0-9]+)\)`)
