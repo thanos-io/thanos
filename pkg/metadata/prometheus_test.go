@@ -31,6 +31,14 @@ func TestPrometheus_Metadata_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer upcancel()
+
+	logger := log.NewNopLogger()
+
 	p.SetConfig(fmt.Sprintf(`
 global:
   external_labels:
@@ -43,17 +51,7 @@ scrape_configs:
   static_configs:
   - targets: ['%s']
 `, e2eutil.PromAddrPlaceHolder))
-	testutil.Ok(t, p.Start())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
-	defer upcancel()
-
-	logger := log.NewNopLogger()
-	err = p.WaitPrometheusUp(upctx, logger)
-	testutil.Ok(t, err)
+	testutil.Ok(t, p.Start(upctx, logger))
 
 	u, err := url.Parse("http://" + p.Addr())
 	testutil.Ok(t, err)

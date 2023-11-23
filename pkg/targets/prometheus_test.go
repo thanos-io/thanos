@@ -45,17 +45,11 @@ scrape_configs:
     regex: '^.+:80$'
     action: drop
 `, e2eutil.PromAddrPlaceHolder))
-	testutil.Ok(t, p.Start())
+	logger := log.NewNopLogger()
+	testutil.Ok(t, p.Start(context.Background(), logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
-	defer upcancel()
-
-	logger := log.NewNopLogger()
-	err = p.WaitPrometheusUp(upctx, logger)
-	testutil.Ok(t, err)
 
 	u, err := url.Parse("http://" + p.Addr())
 	testutil.Ok(t, err)

@@ -12,9 +12,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#6874](https://github.com/thanos-io/thanos/pull/6874) Sidecar: fix labels returned by 'api/v1/series' in presence of conflicting external and inner labels.
+
 ### Added
 
 - [#6756](https://github.com/thanos-io/thanos/pull/6756) Query: Add the following options to allow enforcement of tenancy on the query path: `query.enable-tenancy`, `query.tenant-label-name`.
+- [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
 
 ### Changed
 

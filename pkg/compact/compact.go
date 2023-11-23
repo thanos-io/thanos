@@ -68,7 +68,7 @@ type SyncerMetrics struct {
 	GarbageCollectedBlocks    prometheus.Counter
 	GarbageCollections        prometheus.Counter
 	GarbageCollectionFailures prometheus.Counter
-	GarbageCollectionDuration prometheus.Histogram
+	GarbageCollectionDuration prometheus.Observer
 	BlocksMarkedForDeletion   prometheus.Counter
 }
 

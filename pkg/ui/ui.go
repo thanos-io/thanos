@@ -5,7 +5,9 @@ package ui
 
 import (
 	"bytes"
+	"embed"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,6 +41,9 @@ var reactRouterPaths = []string{
 	"/tsdb-status",
 }
 
+//go:embed static/react
+var reactUI embed.FS
+
 type BaseUI struct {
 	logger                       log.Logger
 	tmplFuncs                    template.FuncMap
@@ -55,7 +60,7 @@ func NewBaseUI(logger log.Logger, funcMap template.FuncMap, tmplVariables map[st
 }
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
-	bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
+	bu.serveReactIndex("static/react/index.html", w, req)
 }
 
 func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http.Request) {
@@ -81,14 +86,18 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 }
 
 func (bu *BaseUI) getAssetFile(filename string) (os.FileInfo, []byte, error) {
-	info, err := AssetInfo(filename)
+	filesys := fs.FS(reactUI)
+
+	info, err := fs.Stat(filesys, filename)
 	if err != nil {
 		return nil, nil, err
 	}
-	file, err := Asset(filename)
+
+	file, err := fs.ReadFile(filesys, filename)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return info, file, nil
 }
 
@@ -142,7 +151,7 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	// The favicon and manifest are bundled as part of the React app, but we want to serve
 	// them on the root.
 	for _, p := range []string{"/favicon.ico", "/manifest.json"} {
-		assetPath := "pkg/ui/static/react" + p
+		assetPath := "static/react" + p
 		r.Get(p, func(w http.ResponseWriter, r *http.Request) {
 			if err := bu.serveAsset(assetPath, w, r); err != nil {
 				level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", assetPath)
@@ -154,7 +163,7 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	// Static files required by the React app.
 	r.Get("/static/*filepath", func(w http.ResponseWriter, r *http.Request) {
 		fp := route.Param(r.Context(), "filepath")
-		fp = filepath.Join("pkg/ui/static/react/static", fp)
+		fp = filepath.Join("static/react/static", fp)
 		if err := bu.serveAsset(fp, w, r); err != nil {
 			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 			w.WriteHeader(http.StatusNotFound)

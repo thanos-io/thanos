@@ -4,12 +4,14 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/efficientgo/core/testutil"
@@ -35,7 +37,7 @@ rule_files:
   - %s/examples/alerts/alerts.yaml
   - %s/examples/alerts/rules.yaml
 `, root, root))
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)

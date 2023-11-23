@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/go-kit/log"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -62,7 +64,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewLogfmtLogger(os.Stderr)))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -169,9 +171,9 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
 		testutil.Equals(t, []labelpb.ZLabel{
+			{Name: "__thanos_pushed_down", Value: "true"},
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
-			{Name: "__thanos_pushed_down", Value: "true"},
 		}, srv.SeriesSet[0].Labels)
 		testutil.Equals(t, []string(nil), srv.Warnings)
 		testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
@@ -224,7 +226,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -406,7 +408,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -469,7 +471,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -578,7 +580,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testin
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, p.Appender(), func() storepb.StoreServer {
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
