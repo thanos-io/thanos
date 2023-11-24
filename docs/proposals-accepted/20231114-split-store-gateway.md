@@ -21,7 +21,7 @@ Currently, store gateway performs two distinct operations on blocks in object st
 
 #### Queries heavy on postings
 
-Queries that fetch a lot of postings but selects few series after postings intersection will have a higher load on index operations than chunks.
+Queries that fetch a lot of postings but matches a few series after postings intersection will have a higher load on index operations than chunks.
 
 ```
 http_requests_total{pod="abc", method=~"GET", pod=~".+"}
@@ -49,7 +49,7 @@ The VectorOperator in Thanos PromQL engine exposes two distinct APIs `Series()` 
 
 ### Increase concurrency for chunks fetch
 
-Store gateway fetches series and chunks in batches. With a default batch size of 10000, Store Gateway tries to fetch the a batch of series first, then fetch the chunks for matched series of the current batch. It continues to next batch until all required series are processed. The code can be found here.
+Store gateway fetches series and chunks in batches. With a default batch size of 10000, Store Gateway tries to fetch the a batch of series first, then fetch the chunks for matched series of the current batch. It continues to next batch until all required series are processed. The code can be found ![here](https://github.com/thanos-io/thanos/blob/v0.32.5/pkg/store/bucket.go#L1038).
 
 Although within the same batch, Store Gateway can usually use multiple goroutines to fetch series and chunks, it doesn’t parallelize data fetching for different batches. For example, it needs to finish fetching chunks of batch 1 before fetching chunks of batch 2.
 
@@ -87,13 +87,13 @@ The `IndexStore` will be responsible for querying the TSDB index for the series 
 
 #### API
 
-The `IndexStore` will implement the `Select()` API. The `SelectRequest` will be same as the `SeriesRequest`. The `SelectResponse` will return the blockID, the series labels and the chunks metadata for each `SelectedSeries`.
+The `IndexStore` will implement the `Match()` API. The `MatchRequest` will be same as the `SeriesRequest`. The `MatchResponse` will return the blockID, the series labels and the chunks metadata for each `MatchedSeries`.
 
 #### Service
 
 ```
 service IndexStore {
-  rpc Select(SelectRequest) returns (stream SelectResponse);
+  rpc Match(MatchRequest) returns (stream MatchResponse);
   rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse);
   rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
 }
@@ -102,15 +102,28 @@ service IndexStore {
 #### Models
 
 ```
-message SelectResponse {
+message MatchRequest {
+  int64 min_time = 1;
+  int64 max_time = 2;
+  repeated LabelMatcher matchers = 3;
+  int64 max_resolution_window = 4;
+  google.protobuf.Any hints = 5;
+  QueryHints query_hints = 6;
+  ShardInfo shard_info = 7;
+  repeated string without_replica_labels = 8;
+}
+```
+
+```
+message MatchResponse {
     oneof result {
-        typespb.SelectedSeries series = 1;
+        typespb.MatchedSeries series = 1;
         string warning = 2;
         google.protobuf.Any hints = 3;
     }
 }
 
-message SelectedSeries {
+message MatchedSeries {
   string blockId = 1;
   repeated Label labels = 2;
   repeated ChunkMeta chunks = 3;
@@ -143,6 +156,7 @@ service ChunkStore {
 message ChunksRequest {
     string blockId = 1;
     repeated uint64 chunkref = 2;
+    repeated Aggr aggregates = 5;
 }
 
 message ChunksResponse {
@@ -154,13 +168,13 @@ message ChunksResponse {
 
 #### Fetching series and chunks
 
-The querier will first make a `Select()` call to the `IndexStore` to retrieve the Series labels and the metadata about the chunks. The querier would make concurrent calls to multiple `ChunkStore`s to read the corresponding chunks. A `SeriesSet` will be created by stitching together the chunks with the corresponding series.
+The querier will first make a `Match()` call to the `IndexStore` to retrieve the Series labels and the metadata about the chunks. The querier would make concurrent calls to multiple `ChunkStore`s to read the corresponding chunks. A `SeriesSet` will be created by stitching together the chunks with the corresponding series.
 
-#### Adapting the Select()/Chunks() into Series()
+#### Adapting the Match()/Chunks() into Series()
 
-Querier fetches data from Stores using Store API, which uses Series API to fetch series labels and chunks at the same time. The new Select and Chunks API are not compatible with Series API and we don’t want to introduce breaking changes.
+Querier fetches data from Stores using Store API, which uses Series API to fetch series labels and chunks at the same time. The new Match and Chunks API are not compatible with Series API and we don’t want to introduce breaking changes.
 
-To allow querying `IndexStore` and `ChunkStore` using `Select()` and `Chunks()` requests, we can add an adapter in querier which exposes Store API, but uses `Select()` and `Chunks()` API to fetch data instead.
+To allow querying `IndexStore` and `ChunkStore` using `Match()` and `Chunks()` requests, we can add an adapter in querier which exposes Store API, but uses `Match()` and `Chunks()` API to fetch data instead.
 
 The adapter can be implemented as a `storepb.StoreClient`. https://github.com/thanos-io/thanos/blob/v0.32.5/pkg/store/proxy.go#L49
 
@@ -170,7 +184,7 @@ Currently the `Series()` API implemented by `Store` allows querying multiple blo
 
 #### Merge both series and chunks on querier
 
-The `IndexStore` only supports querying a single block per request. Each Thanos querier would make separate `Select()` request to the `IndexStore` for each block. The merging and the de-dupes will be done on the querier after getting the chunks.
+The `IndexStore` only supports querying a single block per request. Each Thanos querier would make separate `Match()` request to the `IndexStore` for each block. The merging and the de-dupes will be done on the querier after getting the chunks.
 
 #### Merge series on IndexStore and de-dupe chunks on querier [preferred]
 
@@ -193,11 +207,11 @@ Querier can fetches chunks directly from either cache or object storage using bl
 We didn’t pick up this because of some downsides:
 
 * Querier needs to have a dedicated chunk pool, which might cause higher memory usage.
-* In order to do chunks look up, Querier needs to sync blocks metadata to get chunk files information
+* In order to do chunks look up, Querier needs to sync blocks metadata to get chunk files information.
 
 ### Index Gateway fetches chunks from chunks gateway
 
-Instead of having Querier to call `Select()` and `Chunks()` to get index and chunks information separately, Querier can perform the work of fetching chunks from the IndexStore as well. Basically, `IndexStore` fetches chunks from `ChunkStore` and returns both series and chunks back to Querier. There are pros and cons for this approach.
+Instead of having Querier to call `Match()` and `Chunks()` to get index and chunks information separately, Querier can perform the work of fetching chunks from the IndexStore as well. Basically, `IndexStore` fetches chunks from `ChunkStore` and returns both series and chunks back to Querier. There are pros and cons for this approach.
 
 Pros:
 
@@ -209,10 +223,10 @@ Cons:
 
 ## Work Plan
 
-* Add `Select()` and `Chunks()` method and refactor Store Gateway code.
-* Add an adapter in querier to adapt `Select()` and `Chunks()` into `Series()`.
+* Add `Match()` and `Chunks()` method and refactor Store Gateway code.
+* Add an adapter in querier to adapt `Match()` and `Chunks()` into `Series()`.
 
 ## Open questions
 * Should the chunks request be made per block?
-* Should the `Chunks()` API accept an array of `ChunksRequest` instead of bi-directional streaming.
-* Should the `Chunks()` calls be bootstraped with the blockID first to avoid having to send blockID for every .
+* Should the `Chunks()` API accept an array of `ChunksRequest` instead of bi-directional streaming?
+* Should the `Chunks()` calls be bootstraped with the blockID first to avoid having to send blockID in every `ChunksRequest`?
