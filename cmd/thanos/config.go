@@ -114,7 +114,17 @@ type reloaderConfig struct {
 	ruleDirectories []string
 	watchInterval   time.Duration
 	retryInterval   time.Duration
+	method          string
+	processName     string
 }
+
+const (
+	// HTTPReloadMethod reloads the configuration using the HTTP reload endpoint.
+	HTTPReloadMethod = "http"
+
+	// SignalReloadMethod reloads the configuration sending a SIGHUP signal to the process.
+	SignalReloadMethod = "signal"
+)
 
 func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfig {
 	cmd.Flag("reloader.config-file",
@@ -132,6 +142,12 @@ func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfi
 	cmd.Flag("reloader.retry-interval",
 		"Controls how often reloader retries config reload in case of error.").
 		Default("5s").DurationVar(&rc.retryInterval)
+	cmd.Flag("reloader.method",
+		"Method used to reload the configuration.").
+		Default(HTTPReloadMethod).EnumVar(&rc.method, HTTPReloadMethod, SignalReloadMethod)
+	cmd.Flag("reloader.process-name",
+		"Executable name used to match the process being reloaded when using the signal method.").
+		Default("prometheus").StringVar(&rc.processName)
 
 	return rc
 }
