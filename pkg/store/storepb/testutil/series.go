@@ -226,13 +226,19 @@ func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opt
 
 func appendFloatHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
 	sample := &histogram.FloatHistogram{
-		ZeroThreshold:   0.01,
-		ZeroCount:       5.5,
-		Count:           15,
-		Sum:             11.5,
-		PositiveSpans:   []histogram.Span{{-2, 2}, {1, 3}},
+		ZeroThreshold: 0.01,
+		ZeroCount:     5.5,
+		Count:         15,
+		Sum:           11.5,
+		PositiveSpans: []histogram.Span{
+			{Offset: -2, Length: 2},
+			{Offset: 1, Length: 3},
+		},
 		PositiveBuckets: []float64{0.5, 0, 1.5, 2, 3.5},
-		NegativeSpans:   []histogram.Span{{3, 2}, {3, 2}},
+		NegativeSpans: []histogram.Span{
+			{Offset: 3, Length: 2},
+			{Offset: 3, Length: 2},
+		},
 		NegativeBuckets: []float64{1.5, 0.5, 2.5, 3},
 	}
 
