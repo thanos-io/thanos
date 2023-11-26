@@ -96,11 +96,13 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	floatSeries := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
 	nativeHistogramSeries := []labels.Labels{labels.FromStrings("a", "1", "b", "3")}
+	floatHistogramSeries := []labels.Labels{labels.FromStrings("a", "2", "b", "3")}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
 	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
 	extLset4 := labels.FromStrings("ext1", "value1", "replica", "3")
 	extLset5 := labels.FromStrings("ext1", "value3", "replica", "1")
+	extLset6 := labels.FromStrings("ext1", "value2", "replica", "1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
@@ -116,6 +118,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, err)
 	id5, err := e2eutil.CreateHistogramBlockWithDelay(ctx, dir, nativeHistogramSeries, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset5, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
+	id6, err := e2eutil.CreateFloatHistogramBlockWithDelay(ctx, dir, floatHistogramSeries, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset6, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
 		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
@@ -126,13 +130,14 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id3.String()), id3.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id4.String()), id4.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id5.String()), id5.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id6.String()), id6.String()))
 
 	// Wait for store to sync blocks.
 	// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta.
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(6), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_blocks_loaded"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4), "thanos_bucket_store_blocks_loaded"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_drops_total"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -161,13 +166,19 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "2",
+					"b":       "3",
+					"ext1":    "value2",
+					"replica": "1",
+				},
 			},
 		)
 
 		// 2 x postings, 3 x series, 2 x chunks.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(9), "thanos_bucket_store_series_data_touched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(9), "thanos_bucket_store_series_data_fetched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_touched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_fetched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4), "thanos_bucket_store_series_blocks_queried"))
 
 		tenant1Opts := []e2emon.MetricsOption{
 			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1")),
@@ -195,6 +206,11 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"b":    "3",
 					"ext1": "value3",
 				},
+				{
+					"a":    "2",
+					"b":    "3",
+					"ext1": "value2",
+				},
 			},
 		)
 
@@ -202,9 +218,9 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-2")),
 			e2emon.WaitMissingMetrics(),
 		}
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(18), "thanos_bucket_store_series_data_touched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_fetched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3+3), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(24), "thanos_bucket_store_series_data_touched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(16), "thanos_bucket_store_series_data_fetched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4+4), "thanos_bucket_store_series_blocks_queried"))
 
 		// Test tenant some tenant specific store metrics
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(9), []string{"thanos_bucket_store_series_data_touched"}, tenant2Opts...))
@@ -222,10 +238,10 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 		// Wait for store to sync blocks.
 		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(6), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_blocks_loaded"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_blocks_loaded"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -245,6 +261,12 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"a":       "1",
 					"b":       "3",
 					"ext1":    "value3",
+					"replica": "1",
+				},
+				{
+					"a":       "2",
+					"b":       "3",
+					"ext1":    "value2",
 					"replica": "1",
 				},
 			},
@@ -288,6 +310,12 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "2",
+					"b":       "3",
+					"ext1":    "value2",
+					"replica": "1",
+				},
 			},
 		)
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(11+2), "thanos_bucket_store_series_blocks_queried"))
@@ -297,10 +325,10 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 		// Wait for store to sync blocks.
 		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(6), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_blocks_loaded"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_blocks_loaded"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1+1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -319,6 +347,12 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"a":       "1",
 					"b":       "3",
 					"ext1":    "value3",
+					"replica": "1",
+				},
+				{
+					"a":       "2",
+					"b":       "3",
+					"ext1":    "value2",
 					"replica": "1",
 				},
 			},
@@ -342,6 +376,12 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"a":       "1",
 					"b":       "3",
 					"ext1":    "value3",
+					"replica": "1",
+				},
+				{
+					"a":       "2",
+					"b":       "3",
+					"ext1":    "value2",
 					"replica": "1",
 				},
 			},
