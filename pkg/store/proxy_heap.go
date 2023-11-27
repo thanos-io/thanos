@@ -913,12 +913,16 @@ func (hc *HintsCollector) GetHints() map[string][]*storepb.SeriesResponse {
 	return hc.Hints
 }
 
-func (hc *HintsCollector) AppendHints(src *HintsCollector, dest *HintsCollector) {
+func (hc *HintsCollector) AppendHints(h *HintsCollector) {
 
-	src.l.Lock()
-	defer src.l.Unlock()
+	hc.l.Lock()
+	defer hc.l.Unlock()
 
-	for key, value := range src.Hints {
-		dest.Hints[key] = append(dest.Hints[key], value...)
+	if hc.Hints == nil {
+		hc.Hints = make(map[string][]*storepb.SeriesResponse)
+	}
+
+	for key, value := range h.Hints {
+		hc.Hints[key] = append(hc.Hints[key], value...)
 	}
 }

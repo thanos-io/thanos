@@ -835,6 +835,63 @@ func TestQuerier_Select(t *testing.T) {
 	}
 }
 
+func TestQuerier_SelectWithHints(t *testing.T) {
+	mint := int64(1)
+	maxt := int64(300)
+	replicaLabels := []string{"a"}
+	storeEndpoints := []storepb.StoreServer{
+		&testStoreServer{
+			resps: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storepb.NewWarnSeriesResponse(errors.New("partial error")),
+				storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
+			},
+		},
+	}
+	matchers := []*labels.Matcher{{
+		Value: "a|b|c",
+		Name:  "a",
+		Type:  labels.MatchRegexp,
+	}}
+	hints := &storage.SelectHints{
+		Start: realSeriesWithStaleMarkerMint,
+		End:   realSeriesWithStaleMarkerMaxt,
+		Step:  100000,
+	}
+
+	g := gate.New(2)
+	q := newQuerier(
+		nil,
+		mint,
+		maxt,
+		replicaLabels,
+		nil,
+		newProxyStore(storeEndpoints...),
+		false,
+		0,
+		true,
+		false,
+		false,
+		g,
+		5*time.Second,
+		nil,
+		NoopSeriesStatsReporter,
+	)
+
+	t.Run("querier.SelectWithHints", func(t *testing.T) {
+		_, hintsCollector := q.SelectWithHints(context.Background(), false, hints, matchers...)
+
+		if hintsCollector.GetHints() == nil {
+			t.Errorf("Got empty hints map")
+		} else {
+			t.Logf("PASS")
+		}
+	})
+}
+
 func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 	cls := make([]store.Client, len(storeAPIs))
 	for i, s := range storeAPIs {

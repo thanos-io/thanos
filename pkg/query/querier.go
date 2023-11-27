@@ -351,10 +351,12 @@ func (q *querier) originalSelect(ctx context.Context, _ bool, hints *storage.Sel
 			return
 		}
 		q.seriesStatsReporter(stats)
-		hc.AppendHints(responseHints, hc)
+
+		if hc != nil {
+			hc.AppendHints(responseHints)
+		}
 		promise <- set
 	}()
-
 	return &lazySeriesSet{create: func() (storage.SeriesSet, bool) {
 		defer cancel()
 		defer span.Finish()
