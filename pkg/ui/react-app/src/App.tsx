@@ -44,7 +44,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
           thanosComponent={thanosComponent}
           defaultRoute={defaultRouteConfig[thanosComponent]}
         />
-        <Container fluid style={{ paddingTop: 70 }}>
+        <Container fluid style={{ paddingTop: 70, marginTop: 15, marginBottom: 10 }}>
           <QueryParamProvider reachHistory={globalHistory}>
             <Router basepath={`${pathPrefix}`}>
               <Redirect from="/" to={`${pathPrefix}${defaultRouteConfig[thanosComponent]}`} />
