@@ -172,6 +172,7 @@ message Chunk {
     UNKNOWN = 0;
     XOR = 1;
     HISTOGRAM = 2;
+    FLOAT_HISTOGRAM = 3;
   }
   Encoding type = 3;
   bytes data = 4;
