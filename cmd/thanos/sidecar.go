@@ -68,12 +68,12 @@ func registerSidecar(app *extkingpin.App) {
 		if err != nil {
 			return errors.Wrap(err, "getting http client config")
 		}
-		httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+		httpClientConfig, err := clientconfig.NewHTTPClientConfigFromYAML(httpConfContentYaml)
 		if err != nil {
 			return errors.Wrap(err, "parsing http config YAML")
 		}
 
-		httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+		httpClient, err := clientconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
 		if err != nil {
 			return errors.Wrap(err, "Improper http client config")
 		}
