@@ -437,6 +437,7 @@ Flags:
                                  refer to the Tenant lifecycle management
                                  section in the Receive documentation:
                                  https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
+      --tsdb.max-block-bytes     Added a flag for maximum retention bytes
       --tsdb.too-far-in-future.time-window=0s
                                  [EXPERIMENTAL] Configures the allowed time
                                  window for ingesting samples too far in the
