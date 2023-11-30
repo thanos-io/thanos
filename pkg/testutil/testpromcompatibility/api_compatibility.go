@@ -61,7 +61,6 @@ type AlertingRule struct {
 	Name           string           `json:"name"`
 	Query          string           `json:"query"`
 	Duration       float64          `json:"duration"`
-	KeepFiringFor  float64          `json:"keepFiringFor"`
 	Labels         labels.Labels    `json:"labels"`
 	Annotations    labels.Labels    `json:"annotations"`
 	Alerts         []*Alert         `json:"alerts"`
@@ -69,6 +68,7 @@ type AlertingRule struct {
 	LastError      string           `json:"lastError,omitempty"`
 	EvaluationTime float64          `json:"evaluationTime"`
 	LastEvaluation time.Time        `json:"lastEvaluation"`
+	KeepFiringFor  float64          `json:"keepFiringFor"`
 	// Type of an AlertingRule is always "alerting".
 	Type string `json:"type"`
 }
