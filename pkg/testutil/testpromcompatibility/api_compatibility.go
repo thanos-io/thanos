@@ -61,6 +61,7 @@ type AlertingRule struct {
 	Name           string           `json:"name"`
 	Query          string           `json:"query"`
 	Duration       float64          `json:"duration"`
+	KeepFiringFor  float64          `json:"keepFiringFor"`
 	Labels         labels.Labels    `json:"labels"`
 	Annotations    labels.Labels    `json:"annotations"`
 	Alerts         []*Alert         `json:"alerts"`

@@ -141,6 +141,27 @@ groups:
       summary: "I always complain and allow partial response in query."
 `
 
+	testAlertRuleKeepFiringFor = `
+groups:
+- name: example_rule_keep_firing_for
+  interval: 1s
+  rules:
+  - alert: TestAlert_KeepFiringFor
+    expr: absent(metric_keep_firing_for)
+    for: 2s
+    keep_firing_for: 10m
+    labels:
+      severity: page
+`
+	testRecordingRuleKeepFiringFor = `
+groups:
+- name: recording_rule_keep_firing_for
+  interval: 1s
+  rules:
+  - record: metric_keep_firing_for
+    expr: 1
+`
+
 	amTimeout = model.Duration(10 * time.Second)
 )
 
@@ -512,6 +533,98 @@ func TestRule(t *testing.T) {
 		for i, a := range alrts {
 			testutil.Assert(t, a.Labels.Equal(expAlertLabels[i]), "unexpected labels %s", a.Labels)
 		}
+	})
+}
+
+func TestRule_KeepFiringFor(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2eKeepFiringFor")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+
+	queryTargetsSubDir := filepath.Join("rules_query_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
+
+	rulesSubDir := filepath.Join("rules")
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFile(t, filepath.Join(rulesPath, "alert_keep_firing_for.yaml"), testAlertRuleKeepFiringFor)
+
+	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+		{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				// We test Statically Addressed queries in other tests. Focus on FileSD here.
+				FileSDConfigs: []httpconfig.FileSDConfig{
+					{
+						// FileSD which will be used to register discover dynamically q.
+						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
+						RefreshInterval: model.Duration(time.Second),
+					},
+				},
+				Scheme: "http",
+			},
+		},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	// Attach querier to target files.
+	writeTargets(t, filepath.Join(rFuture.Dir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
+
+	t.Run("check keep_firing_for alert is triggering", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_KeepFiringFor",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+		})
+	})
+
+	t.Run("resolve keep_firing_for condition", func(t *testing.T) {
+		// Create a recording rule that will add the missing metric
+		createRuleFile(t, filepath.Join(rulesPath, "record_metric_keep_firing_for.yaml"), testRecordingRuleKeepFiringFor)
+		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
+
+		// Wait for metric to pop up
+		queryWaitAndAssert(t, ctx, q.Endpoint("http"), func() string { return "metric_keep_firing_for" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"__name__": "metric_keep_firing_for",
+					"replica":  "1",
+				},
+				Value: model.SampleValue(1),
+			},
+		})
+	})
+
+	t.Run("keep_firing_for should continue triggering", func(t *testing.T) {
+		// Alert should still be firing
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_KeepFiringFor",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+		})
 	})
 }
 
