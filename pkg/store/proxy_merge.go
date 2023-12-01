@@ -210,8 +210,7 @@ func (l *lazyRespSet) StoreLabels() map[string]struct{} {
 // in Next().
 type lazyRespSet struct {
 	// Generic parameters.
-	span opentracing.Span
-	// cl             storepb.Store_SeriesClient
+	span           opentracing.Span
 	closeSeries    context.CancelFunc
 	storeName      string
 	storeLabelSets []labels.Labels
