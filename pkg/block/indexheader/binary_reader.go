@@ -983,7 +983,7 @@ func (r *BinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, erro
 	}
 	r.valueSymbolsMx.RUnlock()
 
-	s, err := r.symbols.Lookup(ctx, o)
+	s, err := r.symbols.Lookup(o)
 	if err != nil {
 		return s, err
 	}

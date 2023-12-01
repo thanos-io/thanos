@@ -616,7 +616,8 @@ func rewrite(
 		builder.Sort()
 
 		for i, c := range chks {
-			chks[i].Chunk, err = chunkr.Chunk(c)
+			// Ignore iterable as it should be nil.
+			chks[i].Chunk, _, err = chunkr.ChunkOrIterable(c)
 			if err != nil {
 				return errors.Wrap(err, "chunk read")
 			}

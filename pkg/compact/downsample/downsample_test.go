@@ -1188,7 +1188,8 @@ func TestDownsample(t *testing.T) {
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {
-				chk, err := chunkr.Chunk(c)
+				// Ignore iterable as it should be nil.
+				chk, _, err := chunkr.ChunkOrIterable(c)
 				testutil.Ok(t, err)
 
 				m := map[AggrType][]sample{}
@@ -1312,7 +1313,8 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 
 	var got []map[AggrType][]sample
 	for _, c := range chks {
-		chk, err := chunkr.Chunk(c)
+		// Ignore iterable as it should be nil.
+		chk, _, err := chunkr.ChunkOrIterable(c)
 		testutil.Ok(t, err)
 
 		m := map[AggrType][]sample{}
