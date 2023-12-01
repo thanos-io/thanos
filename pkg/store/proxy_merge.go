@@ -217,7 +217,6 @@ type lazyRespSet struct {
 	storeLabelSets []labels.Labels
 	storeLabels    map[string]struct{}
 	frameTimeout   time.Duration
-	ctx            context.Context
 
 	// Internal bookkeeping.
 	dataOrFinishEvent    *sync.Cond
@@ -540,8 +539,6 @@ func (l *lazyRespSet) Close() {
 type eagerRespSet struct {
 	// Generic parameters.
 	span opentracing.Span
-	cl   storepb.Store_SeriesClient
-	ctx  context.Context
 
 	closeSeries  context.CancelFunc
 	frameTimeout time.Duration
