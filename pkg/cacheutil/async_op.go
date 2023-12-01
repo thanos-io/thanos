@@ -68,3 +68,9 @@ func (p *AsyncOperationProcessor) EnqueueAsync(op func()) error {
 		return ErrAsyncBufferFull
 	}
 }
+
+// AsyncQueue exposes the async channel to caller directly. This is useful in unit test
+// to drain the queue to make sure deterministic results.
+func (p *AsyncOperationProcessor) AsyncQueue() <-chan func() {
+	return p.asyncQueue
+}
