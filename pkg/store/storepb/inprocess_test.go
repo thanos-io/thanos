@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
@@ -184,6 +186,41 @@ func TestServerAsClient(t *testing.T) {
 						}
 						testutil.Equals(t, s.series[:len(s.series)/2], resps)
 						testutil.Equals(t, r, s.seriesLastReq)
+						s.seriesLastReq = nil
+					}
+				})
+				t.Run("context cancel", func(t *testing.T) {
+					for i := 0; i < 20; i++ {
+						r := &SeriesRequest{
+							MinTime:                 -214,
+							MaxTime:                 213,
+							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
+							PartialResponseStrategy: PartialResponseStrategy_ABORT,
+						}
+						before := runtime.NumGoroutine()
+						ctx, cancel := context.WithCancel(context.Background())
+						client, err := ServerAsClient(s, 0).Series(ctx, r)
+						cancel()
+						testutil.Ok(t, err)
+						// var resps []*SeriesResponse
+						for {
+							_, err := client.Recv()
+							if err == io.EOF {
+								break
+							}
+							if err != nil {
+								break
+							}
+							// testutil.Ok(t, err)
+							// resps = append(resps, resp)
+						}
+						time.Sleep(10 * time.Millisecond)
+						after := runtime.NumGoroutine()
+						if after > before {
+							t.Errorf("Possible goroutine leak detected. Before: %d, After: %d", before, after)
+						}
+						// testutil.Equals(t, s.series[:len(s.series)/2], resps)
+						// testutil.Equals(t, r, s.seriesLastReq)
 						s.seriesLastReq = nil
 					}
 				})
