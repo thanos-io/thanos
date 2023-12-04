@@ -44,6 +44,7 @@ func (p *AsyncOperationProcessor) Stop() {
 
 	// Wait until all workers have terminated.
 	p.workers.Wait()
+	close(p.asyncQueue)
 }
 
 func (p *AsyncOperationProcessor) asyncQueueProcessLoop() {
