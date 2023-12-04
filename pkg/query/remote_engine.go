@@ -7,6 +7,7 @@ import (
 	"context"
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -261,7 +262,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		lbls := labels.NewScratchBuilder(len(ts.Labels))
 		for _, l := range ts.Labels {
-			lbls.Add(l.Name, l.Value)
+			lbls.Add(strings.Clone(l.Name), strings.Clone(l.Value))
 		}
 		series := promql.Series{
 			Metric:     lbls.Labels(),
