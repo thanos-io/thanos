@@ -675,7 +675,8 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 		s.lset = builder.Labels()
 
 		for _, c := range chks {
-			c.Chunk, err = chunkr.Chunk(c)
+			// Ignore iterable as it should be nil.
+			c.Chunk, _, err = chunkr.ChunkOrIterable(c)
 			testutil.Ok(t, err)
 
 			var chk []sample
