@@ -413,6 +413,8 @@ type BucketStore struct {
 
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
+
+	lazyDownloadIndexHeaderFunc indexheader.LazyDownloadIndexHeaderFunc
 }
 
 func (s *BucketStore) validate() error {
@@ -531,6 +533,12 @@ func WithDontResort(true bool) BucketStoreOption {
 	}
 }
 
+func WithLazyDownloadIndexHeaderFunc(f indexheader.LazyDownloadIndexHeaderFunc) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.lazyDownloadIndexHeaderFunc = f
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -574,6 +582,7 @@ func NewBucketStore(
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
 		sortingStrategy:             sortingStrategyStore,
+		lazyDownloadIndexHeaderFunc: indexheader.DisableLazyDownloadIndexHeader,
 	}
 
 	for _, option := range options {
@@ -582,7 +591,7 @@ func NewBucketStore(
 
 	// Depend on the options
 	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
-	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics)
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics, s.lazyDownloadIndexHeaderFunc)
 	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
 
 	if err := s.validate(); err != nil {
@@ -759,6 +768,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.dir,
 		meta.ULID,
 		s.postingOffsetsInMemSampling,
+		meta,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create index header reader")

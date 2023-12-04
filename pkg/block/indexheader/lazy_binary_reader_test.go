@@ -31,7 +31,7 @@ func TestNewLazyBinaryReader_ShouldFailIfUnableToBuildIndexHeader(t *testing.T) 
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
-	_, err = NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, ulid.MustNew(0, nil), 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil)
+	_, err = NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, ulid.MustNew(0, nil), 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil, false)
 	testutil.NotOk(t, err)
 }
 
@@ -54,7 +54,7 @@ func TestNewLazyBinaryReader_ShouldBuildIndexHeaderFromBucket(t *testing.T) {
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	bm := NewBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, false)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadCount))
@@ -98,7 +98,7 @@ func TestNewLazyBinaryReader_ShouldRebuildCorruptedIndexHeader(t *testing.T) {
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	bm := NewBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, false)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadCount))
@@ -133,7 +133,7 @@ func TestLazyBinaryReader_ShouldReopenOnUsageAfterClose(t *testing.T) {
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	bm := NewBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, false)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 
@@ -184,7 +184,7 @@ func TestLazyBinaryReader_unload_ShouldReturnErrorIfNotIdle(t *testing.T) {
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	bm := NewBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, false)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 
@@ -234,7 +234,7 @@ func TestLazyBinaryReader_LoadUnloadRaceCondition(t *testing.T) {
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	bm := NewBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, false)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 	t.Cleanup(func() {
