@@ -1188,7 +1188,8 @@ func TestDownsample(t *testing.T) {
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {
-				chk, err := chunkr.Chunk(c)
+				// Ignore iterable as it should be nil.
+				chk, _, err := chunkr.ChunkOrIterable(c)
 				testutil.Ok(t, err)
 
 				m := map[AggrType][]sample{}
@@ -1312,7 +1313,8 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 
 	var got []map[AggrType][]sample
 	for _, c := range chks {
-		chk, err := chunkr.Chunk(c)
+		// Ignore iterable as it should be nil.
+		chk, _, err := chunkr.ChunkOrIterable(c)
 		testutil.Ok(t, err)
 
 		m := map[AggrType][]sample{}
@@ -1876,12 +1878,12 @@ func (b *memBlock) Series(id storage.SeriesRef, builder *labels.ScratchBuilder, 
 	return nil
 }
 
-func (b *memBlock) Chunk(m chunks.Meta) (chunkenc.Chunk, error) {
+func (b *memBlock) ChunkOrIterable(m chunks.Meta) (chunkenc.Chunk, chunkenc.Iterable, error) {
 	if uint64(m.Ref) >= b.numberOfChunks {
-		return nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", m.Ref)
+		return nil, nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", m.Ref)
 	}
 
-	return b.chunks[m.Ref], nil
+	return b.chunks[m.Ref], nil, nil
 }
 
 func (b *memBlock) Symbols() index.StringIter {

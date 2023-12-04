@@ -157,7 +157,8 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 		}
 
 		for _, c := range chunkMetas {
-			chEnc, err := chks.Chunk(c)
+			// Ignore iterable as it happens in OOOHead only.
+			chEnc, _, err := chks.ChunkOrIterable(c)
 			testutil.Ok(t, err)
 
 			// Open Chunk.

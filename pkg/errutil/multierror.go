@@ -47,7 +47,7 @@ func (es *SyncMultiError) Add(err error) {
 	es.mtx.Lock()
 	defer es.mtx.Unlock()
 
-	es.Add(err)
+	es.es.Add(err)
 }
 
 // Err returns the error list as an error or nil if it is empty.

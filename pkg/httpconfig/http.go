@@ -163,7 +163,8 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		}
 
 		if cfg.BasicAuth != nil {
-			rt = config_util.NewBasicAuthRoundTripper(cfg.BasicAuth.Username, cfg.BasicAuth.Password, cfg.BasicAuth.PasswordFile, rt)
+			// TODO(yeya24): expose UsernameFile as a config.
+			rt = config_util.NewBasicAuthRoundTripper(cfg.BasicAuth.Username, cfg.BasicAuth.Password, "", cfg.BasicAuth.PasswordFile, rt)
 		}
 		// Return a new configured RoundTripper.
 		return rt, nil
