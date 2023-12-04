@@ -135,8 +135,7 @@ func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string,
 	CloseWithLogOnErr(logger, r, format, a...)
 }
 
-// CloseWithErrCapture runs function and on error return error by argument including the given error (usually
-// from caller function).
+// CloseWithErrCapture closes closer, wraps any error with message from fmt and args, and stores this in err.
 func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
 	merr := errutil.MultiError{}
 
