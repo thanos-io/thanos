@@ -23,15 +23,9 @@ type FilteredIndexCache struct {
 // NewFilteredIndexCache creates a filtered index cache based on enabled items.
 func NewFilteredIndexCache(cache IndexCache, enabledItems []string) *FilteredIndexCache {
 	c := &FilteredIndexCache{cache: cache}
-	if len(enabledItems) == 0 || slices.Contains(enabledItems, CacheTypePostings) {
-		c.postingsEnabled = true
-	}
-	if len(enabledItems) == 0 || slices.Contains(enabledItems, CacheTypeExpandedPostings) {
-		c.expandedPostingsEnabled = true
-	}
-	if len(enabledItems) == 0 || slices.Contains(enabledItems, CacheTypeSeries) {
-		c.seriesEnabled = true
-	}
+	c.postingsEnabled = len(enabledItems) == 0 || slices.Contains(enabledItems, CacheTypePostings)
+	c.expandedPostingsEnabled = len(enabledItems) == 0 || slices.Contains(enabledItems, CacheTypeExpandedPostings)
+	c.seriesEnabled = len(enabledItems) == 0 || slices.Contains(enabledItems, CacheTypeSeries)
 	return c
 }
 
