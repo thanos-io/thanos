@@ -15,8 +15,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6874](https://github.com/thanos-io/thanos/pull/6874) Sidecar: fix labels returned by 'api/v1/series' in presence of conflicting external and inner labels.
 
 ### Added
-
+- [#6944](https://github.com/thanos-io/thanos/pull/6944) Receive: Added a new flag for maximum retention bytes.
 - [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
+- [#6453](https://github.com/thanos-io/thanos/pull/6453) Sidecar: Added `--reloader.method` to support configuration reloads via SIHUP signal.
+- [#6925](https://github.com/thanos-io/thanos/pull/6925) Store Gateway: Support float native histogram.
 
 ### Changed
 

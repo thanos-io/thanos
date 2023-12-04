@@ -138,7 +138,8 @@ func Downsample(
 		// While #183 exists, we sanitize the chunks we retrieved from the block
 		// before retrieving their samples.
 		for i, c := range chks {
-			chk, err := chunkr.Chunk(c)
+			// Ignore iterable as it should be nil.
+			chk, _, err := chunkr.ChunkOrIterable(c)
 			if err != nil {
 				return id, errors.Wrapf(err, "get chunk %d, series %d", c.Ref, postings.At())
 			}
@@ -808,11 +809,11 @@ type GatherNoDownsampleMarkFilter struct {
 }
 
 // NewGatherNoDownsampleMarkFilter creates GatherNoDownsampleMarkFilter.
-func NewGatherNoDownsampleMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader) *GatherNoDownsampleMarkFilter {
+func NewGatherNoDownsampleMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, concurrency int) *GatherNoDownsampleMarkFilter {
 	return &GatherNoDownsampleMarkFilter{
 		logger:      logger,
 		bkt:         bkt,
-		concurrency: 1,
+		concurrency: concurrency,
 	}
 }
 

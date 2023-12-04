@@ -153,6 +153,10 @@ Flags:
                                  Output file for environment variable
                                  substituted config file.
       --reloader.config-file=""  Config file watched by the reloader.
+      --reloader.method=http     Method used to reload the configuration.
+      --reloader.process-name="prometheus"
+                                 Executable name used to match the process being
+                                 reloaded when using the signal method.
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
