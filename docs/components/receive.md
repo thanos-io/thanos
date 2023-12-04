@@ -253,7 +253,8 @@ NOTE:
 ```$ mdox-exec="thanos receive --help"
 usage: thanos receive [<flags>]
 
-Accept Prometheus remote write API requests and write to local tsdb.
+Accept Prometheus remote write API requests and write to local tsdb. All the
+tsdb flags are as per tenant.
 
 Flags:
       --grpc-address="0.0.0.0:10901"
