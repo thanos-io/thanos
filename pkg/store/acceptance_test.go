@@ -190,6 +190,13 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					end:            timestamp.FromTime(maxTime),
 					label:          "region",
 					expectedValues: []string(nil),
+					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "nonexistent"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "region",
+					expectedValues: []string(nil),
 					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-east"}},
 				},
 				{
