@@ -15,12 +15,14 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/types"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -366,6 +368,7 @@ func newLazyRespSet(
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
+	hc *HintsCollector,
 ) respSet {
 	bufferedResponses := []*storepb.SeriesResponse{}
 	bufferedResponsesMtx := &sync.Mutex{}
@@ -469,10 +472,22 @@ func newLazyRespSet(
 					seriesStats.Count(resp.GetSeries())
 				}
 
-				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, resp)
-				l.dataOrFinishEvent.Signal()
-				l.bufferedResponsesMtx.Unlock()
+				if resp.GetHints() != nil {
+					if hc == nil {
+						l.bufferedResponsesMtx.Lock()
+						l.bufferedResponses = append(l.bufferedResponses, resp)
+						l.dataOrFinishEvent.Signal()
+						l.bufferedResponsesMtx.Unlock()
+					} else {
+						hc.AddHint(storeName, resp)
+					}
+				} else {
+					l.bufferedResponsesMtx.Lock()
+					l.bufferedResponses = append(l.bufferedResponses, resp)
+					l.dataOrFinishEvent.Signal()
+					l.bufferedResponsesMtx.Unlock()
+				}
+
 				return true
 			}
 		}
@@ -516,6 +531,7 @@ func newAsyncRespSet(
 	shardInfo *storepb.ShardInfo,
 	logger log.Logger,
 	emptyStreamResponses prometheus.Counter,
+	hc *HintsCollector,
 ) (respSet, error) {
 
 	var span opentracing.Span
@@ -581,6 +597,7 @@ func newAsyncRespSet(
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
+			hc,
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
@@ -595,6 +612,7 @@ func newAsyncRespSet(
 			applySharding,
 			emptyStreamResponses,
 			labelsToRemove,
+			hc,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -649,6 +667,7 @@ func newEagerRespSet(
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
 	removeLabels map[string]struct{},
+	hc *HintsCollector,
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -738,7 +757,20 @@ func newEagerRespSet(
 					seriesStats.Count(resp.GetSeries())
 				}
 
-				l.bufferedResponses = append(l.bufferedResponses, resp)
+				if resp.GetHints() != nil {
+					if hc == nil {
+						l.bufferedResponses = append(l.bufferedResponses, resp)
+					} else {
+						h := hintspb.SeriesResponseHints{}
+						if err := types.UnmarshalAny(resp.GetHints(), &h); err != nil {
+							return false
+						}
+						hc.AddHint(storeName, resp)
+					}
+				} else {
+					l.bufferedResponses = append(l.bufferedResponses, resp)
+				}
+
 				return true
 			}
 		}
@@ -854,4 +886,43 @@ type respSet interface {
 	Labelset() string
 	StoreLabels() map[string]struct{}
 	Empty() bool
+}
+
+type HintsCollector struct {
+	Hints map[string][]*storepb.SeriesResponse
+	l     sync.Mutex
+}
+
+func (hc *HintsCollector) AddHint(storeID string, r *storepb.SeriesResponse) {
+	hc.l.Lock()
+	defer hc.l.Unlock()
+
+	if hc.Hints == nil {
+		hc.Hints = make(map[string][]*storepb.SeriesResponse)
+	}
+
+	hc.Hints[storeID] = append(hc.Hints[storeID], r)
+}
+
+func (hc *HintsCollector) GetHints() map[string][]*storepb.SeriesResponse {
+	hc.l.Lock()
+	defer hc.l.Unlock()
+
+	// TODO(GiedriusS): we need to copy hc.hints here otherwise we have a race condition.
+
+	return hc.Hints
+}
+
+func (hc *HintsCollector) AppendHints(h *HintsCollector) {
+
+	hc.l.Lock()
+	defer hc.l.Unlock()
+
+	if hc.Hints == nil {
+		hc.Hints = make(map[string][]*storepb.SeriesResponse)
+	}
+
+	for key, value := range h.Hints {
+		hc.Hints[key] = append(hc.Hints[key], value...)
+	}
 }

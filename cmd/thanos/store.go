@@ -405,7 +405,7 @@ func runStore(
 		conf.blockSyncConcurrency,
 		conf.advertiseCompatibilityLabel,
 		conf.postingOffsetsInMemSampling,
-		false,
+		true,
 		conf.lazyIndexReaderEnabled,
 		conf.lazyIndexReaderIdleTimeout,
 		options...,
