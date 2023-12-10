@@ -2777,6 +2777,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					nil,
 					blk,
 					req,
+					seriesLimiter,
 					chunksLimiter,
 					NewBytesLimiterFactory(0)(nil),
 					matchers,
