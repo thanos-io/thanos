@@ -3650,3 +3650,155 @@ func TestQueryStatsMerge(t *testing.T) {
 	s.merge(o)
 	testutil.Equals(t, e, s)
 }
+
+func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+	bktDir := filepath.Join(tmpDir, "bkt")
+	auxDir := filepath.Join(tmpDir, "aux")
+	metaDir := filepath.Join(tmpDir, "meta")
+	extLset := labels.FromStrings("region", "eu-west")
+
+	testutil.Ok(t, os.MkdirAll(metaDir, os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(auxDir, os.ModePerm))
+
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+	app := h.Appender(context.Background())
+	_, err = app.Append(0, labels.FromStrings("z", "1"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = app.Append(0, labels.FromStrings("z", "2"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = app.Append(0, labels.FromStrings("z", "3"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = app.Append(0, labels.FromStrings("z", "4"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = app.Append(0, labels.FromStrings("z", "5"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = app.Append(0, labels.FromStrings("z", "6"), 0, 1)
+	testutil.Ok(t, err)
+	testutil.Ok(t, app.Commit())
+
+	id := createBlockFromHead(t, auxDir, h)
+
+	auxBlockDir := filepath.Join(auxDir, id.String())
+	_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+
+	chunkPool, err := NewDefaultChunkBytesPool(2e5)
+	testutil.Ok(t, err)
+
+	insBkt := objstore.WithNoopInstr(bkt)
+	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(
+		objstore.WithNoopInstr(bkt),
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(10e6),
+		NewSeriesLimiterFactory(10e6),
+		NewBytesLimiterFactory(10e6),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+
+	// Vertical sharding enabled and only 4 out of 6 series will be matched.
+	req := &storepb.SeriesRequest{
+		MinTime: timestamp.FromTime(minTime),
+		MaxTime: timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_NEQ, Name: "z", Value: ""},
+		},
+		ShardInfo: &storepb.ShardInfo{
+			TotalShards: 3,
+			ShardIndex:  2,
+			By:          true,
+			Labels:      []string{"z"},
+		},
+	}
+	srv := newStoreSeriesServer(context.Background())
+	testutil.Ok(t, bucketStore.Series(req, srv))
+	testutil.Equals(t, 4, len(srv.SeriesSet))
+
+	// Create another bucket store with a smaller series limiter. 5 < 6 so it hits series limit.
+	bucketStore2, err := NewBucketStore(
+		objstore.WithNoopInstr(bkt),
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(10e6),
+		NewSeriesLimiterFactory(5),
+		NewBytesLimiterFactory(10e6),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore2.Close()) })
+
+	testutil.Ok(t, bucketStore2.SyncBlocks(context.Background()))
+	srv2 := newStoreSeriesServer(context.Background())
+	testutil.NotOk(t, bucketStore2.Series(req, srv2))
+
+	// Create another bucket store with a streaming series limiter set to 5.
+	// 5 is larger than the actual series matched number 4 so it won't hit series limit.
+	bucketStore3, err := NewBucketStore(
+		objstore.WithNoopInstr(bkt),
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(10e6),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(10e6),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
+		WithStreamingSeriesLimiterFactory(NewSeriesLimiterFactory(5)),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore3.Close()) })
+
+	testutil.Ok(t, bucketStore3.SyncBlocks(context.Background()))
+	srv3 := newStoreSeriesServer(context.Background())
+	testutil.Ok(t, bucketStore3.Series(req, srv3))
+	testutil.Equals(t, 4, len(srv3.SeriesSet))
+}

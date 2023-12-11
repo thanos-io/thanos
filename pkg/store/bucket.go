@@ -587,6 +587,8 @@ func NewBucketStore(
 		sortingStrategy:             sortingStrategyStore,
 	}
 
+	streamingSeriesLimiter := NewLimiter(0, prometheus.NewCounter(prometheus.CounterOpts{}))
+	s.streamingSeriesLimiterFactory = func(failedCounter prometheus.Counter) SeriesLimiter { return streamingSeriesLimiter }
 	for _, option := range options {
 		option(s)
 	}
