@@ -3709,7 +3709,7 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	// Set series limit to 1. Only pass if series limiter applies
+	// Set series limit to 2. Only pass if series limiter applies
 	// for lazy postings only.
 	bucketStore, err := NewBucketStore(
 		objstore.WithNoopInstr(bkt),
