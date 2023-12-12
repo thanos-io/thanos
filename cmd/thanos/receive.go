@@ -167,6 +167,8 @@ func runReceive(
 	// Has this thanos receive instance been configured to ingest metrics into a local TSDB?
 	enableIngestion := receiveMode == receive.IngestorOnly || receiveMode == receive.RouterIngestor
 
+	isOOOEnabled := tsdbOpts.OutOfOrderTimeWindow > 0
+
 	upload := len(confContentYaml) > 0
 	if enableIngestion {
 		if upload {
@@ -176,6 +178,9 @@ func runReceive(
 						"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
 				}
 				level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
+				if isOOOEnabled {
+					level.Warn(logger).Log("msg", "out-of-order support is also enabled which means that Receiver will now upload compacted blocks to not lose any data. Vertical compaction needs to be enabled on Compactor! See https://github.com/prometheus/prometheus/issues/13112")
+				}
 			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
@@ -213,6 +218,7 @@ func runReceive(
 		conf.tenantLabelName,
 		bkt,
 		conf.allowOutOfOrderUpload,
+		isOOOEnabled,
 		hashFunc,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
