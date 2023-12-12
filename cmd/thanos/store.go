@@ -89,7 +89,6 @@ type storeConfig struct {
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
 	lazyExpandedPostingsEnabled bool
-	streamingSeriesLimit        uint64
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -186,9 +185,6 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
-
-	cmd.Flag("store.streaming-series-limit", "The maximum series allowed to match when streaming series. The Series/LabelNames/LabelValues call fails if this limit is exceeded. 0 means no limit.").
-		Hidden().Default("0").Uint64Var(&sc.streamingSeriesLimit)
 
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&sc.disableWeb)
 
@@ -392,7 +388,6 @@ func runStore(
 			return conf.estimatedMaxChunkSize
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
-		store.WithStreamingSeriesLimiterFactory(store.NewSeriesLimiterFactory(conf.streamingSeriesLimit)),
 	}
 
 	if conf.debugLogging {

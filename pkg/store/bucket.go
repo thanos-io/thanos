@@ -390,9 +390,6 @@ type BucketStore struct {
 	// seriesLimiterFactory creates a new limiter used to limit the number of touched series by each Series() call,
 	// or LabelName and LabelValues calls when used with matchers.
 	seriesLimiterFactory SeriesLimiterFactory
-	// streamingSeriesLimiterFactory creates a series limiter but applies series limit for actual matched series
-	// rather than touched series when stremaing series. Can be useful for vertical sharding or lazy postings scenario.
-	streamingSeriesLimiterFactory SeriesLimiterFactory
 
 	// bytesLimiterFactory creates a new limiter used to limit the amount of bytes fetched/touched by each Series() call.
 	bytesLimiterFactory BytesLimiterFactory
@@ -534,14 +531,6 @@ func WithDontResort(true bool) BucketStoreOption {
 	}
 }
 
-func WithStreamingSeriesLimiterFactory(factory SeriesLimiterFactory) BucketStoreOption {
-	return func(s *BucketStore) {
-		if true {
-			s.streamingSeriesLimiterFactory = factory
-		}
-	}
-}
-
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -587,8 +576,6 @@ func NewBucketStore(
 		sortingStrategy:             sortingStrategyStore,
 	}
 
-	streamingSeriesLimiter := NewLimiter(0, prometheus.NewCounter(prometheus.CounterOpts{}))
-	s.streamingSeriesLimiterFactory = func(failedCounter prometheus.Counter) SeriesLimiter { return streamingSeriesLimiter }
 	for _, option := range options {
 		option(s)
 	}
@@ -966,9 +953,9 @@ type blockSeriesClient struct {
 	chunkr         *bucketChunkReader
 	loadAggregates []storepb.Aggr
 
-	streamingSeriesLimiter SeriesLimiter
-	chunksLimiter          ChunksLimiter
-	bytesLimiter           BytesLimiter
+	seriesLimiter SeriesLimiter
+	chunksLimiter ChunksLimiter
+	bytesLimiter  BytesLimiter
 
 	lazyExpandedPostingEnabled                    bool
 	lazyExpandedPostingsCount                     prometheus.Counter
@@ -1001,7 +988,7 @@ func newBlockSeriesClient(
 	logger log.Logger,
 	b *bucketBlock,
 	req *storepb.SeriesRequest,
-	streamingSeriesLimiter SeriesLimiter,
+	seriesLimiter SeriesLimiter,
 	chunksLimiter ChunksLimiter,
 	bytesLimiter BytesLimiter,
 	blockMatchers []*labels.Matcher,
@@ -1038,7 +1025,7 @@ func newBlockSeriesClient(
 		maxt:                   req.MaxTime,
 		indexr:                 b.indexReader(),
 		chunkr:                 chunkr,
-		streamingSeriesLimiter: streamingSeriesLimiter,
+		seriesLimiter:          seriesLimiter,
 		chunksLimiter:          chunksLimiter,
 		bytesLimiter:           bytesLimiter,
 		skipChunks:             req.SkipChunks,
@@ -1108,20 +1095,21 @@ func (b *blockSeriesClient) ExpandPostings(
 	}
 	b.lazyPostings = ps
 
-	// If lazy expanded posting enabled, it is possible to fetch more series
-	//  so easier to hit the series limit.
-	if err := seriesLimiter.Reserve(uint64(len(ps.postings))); err != nil {
-		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
+	if b.lazyPostings.lazyExpanded() {
+		// Assume lazy expansion could cut actual expanded postings length to 50%.
+		b.expandedPostings = make([]storage.SeriesRef, 0, len(b.lazyPostings.postings)/2)
+		b.lazyExpandedPostingsCount.Inc()
+	} else {
+		// Apply series limiter eargerly if lazy postings not enabled.
+		if err := seriesLimiter.Reserve(uint64(len(ps.postings))); err != nil {
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
+		}
 	}
 
 	if b.batchSize > len(ps.postings) {
 		b.batchSize = len(ps.postings)
 	}
-	if b.lazyPostings.lazyExpanded() {
-		// Assume lazy expansion could cut actual expanded postings length to 50%.
-		b.expandedPostings = make([]storage.SeriesRef, 0, len(b.lazyPostings.postings)/2)
-		b.lazyExpandedPostingsCount.Inc()
-	}
+
 	b.entries = make([]seriesEntry, 0, b.batchSize)
 	return nil
 }
@@ -1257,9 +1245,11 @@ OUTER:
 		b.entries = append(b.entries, s)
 	}
 
-	// Apply series limit before fetching chunks, for actual series matched.
-	if err := b.streamingSeriesLimiter.Reserve(uint64(seriesMatched)); err != nil {
-		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
+	if b.lazyPostings.lazyExpanded() {
+		// Apply series limit before fetching chunks, for actual series matched.
+		if err := b.seriesLimiter.Reserve(uint64(seriesMatched)); err != nil {
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
+		}
 	}
 
 	if !b.skipChunks {
@@ -1430,9 +1420,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		resHints         = &hintspb.SeriesResponseHints{}
 		reqBlockMatchers []*labels.Matcher
 
-		chunksLimiter          = s.chunksLimiterFactory(s.metrics.queriesDropped.WithLabelValues("chunks", tenant))
-		seriesLimiter          = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-		streamingSeriesLimiter = s.streamingSeriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
+		chunksLimiter = s.chunksLimiterFactory(s.metrics.queriesDropped.WithLabelValues("chunks", tenant))
+		seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 
 		queryStatsEnabled = false
 	)
@@ -1490,7 +1479,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				s.logger,
 				blk,
 				req,
-				streamingSeriesLimiter,
+				seriesLimiter,
 				chunksLimiter,
 				bytesLimiter,
 				sortedBlockMatchers,
@@ -1728,7 +1717,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-	var streamingSeriesLimiter = s.streamingSeriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 
 	for _, b := range s.blocks {
@@ -1792,7 +1780,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					s.logger,
 					b,
 					seriesReq,
-					streamingSeriesLimiter,
+					seriesLimiter,
 					nil,
 					bytesLimiter,
 					reqSeriesMatchersNoExtLabels,
@@ -1930,7 +1918,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-	var streamingSeriesLimiter = s.streamingSeriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 
 	for _, b := range s.blocks {
@@ -1997,7 +1984,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					s.logger,
 					b,
 					seriesReq,
-					streamingSeriesLimiter,
+					seriesLimiter,
 					nil,
 					bytesLimiter,
 					reqSeriesMatchersNoExtLabels,

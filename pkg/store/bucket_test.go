@@ -3674,17 +3674,17 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
 
 	app := h.Appender(context.Background())
-	_, err = app.Append(0, labels.FromStrings("z", "1"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "1"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("z", "2"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "2"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("z", "3"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "3"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("z", "4"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "4"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("z", "5"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "5"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("z", "6"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "6"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, app.Commit())
 
@@ -3709,12 +3709,14 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
+	// Set series limit to 1. Only pass if series limiter applies
+	// for lazy postings only.
 	bucketStore, err := NewBucketStore(
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
 		"",
 		NewChunksLimiterFactory(10e6),
-		NewSeriesLimiterFactory(10e6),
+		NewSeriesLimiterFactory(2),
 		NewBytesLimiterFactory(10e6),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
@@ -3725,80 +3727,25 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 		1*time.Minute,
 		WithChunkPool(chunkPool),
 		WithFilterConfig(allowAllFilterConf),
+		WithLazyExpandedPostings(true),
+		WithBlockEstimatedMaxSeriesFunc(func(_ metadata.Meta) uint64 {
+			return 1
+		}),
 	)
 	testutil.Ok(t, err)
 	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
 
 	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
 
-	// Vertical sharding enabled and only 4 out of 6 series will be matched.
 	req := &storepb.SeriesRequest{
 		MinTime: timestamp.FromTime(minTime),
 		MaxTime: timestamp.FromTime(maxTime),
 		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_NEQ, Name: "z", Value: ""},
-		},
-		ShardInfo: &storepb.ShardInfo{
-			TotalShards: 3,
-			ShardIndex:  2,
-			By:          true,
-			Labels:      []string{"z"},
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+			{Type: storepb.LabelMatcher_RE, Name: "z", Value: "1|2"},
 		},
 	}
 	srv := newStoreSeriesServer(context.Background())
 	testutil.Ok(t, bucketStore.Series(req, srv))
-	testutil.Equals(t, 4, len(srv.SeriesSet))
-
-	// Create another bucket store with a smaller series limiter. 5 < 6 so it hits series limit.
-	bucketStore2, err := NewBucketStore(
-		objstore.WithNoopInstr(bkt),
-		metaFetcher,
-		"",
-		NewChunksLimiterFactory(10e6),
-		NewSeriesLimiterFactory(5),
-		NewBytesLimiterFactory(10e6),
-		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		20,
-		true,
-		DefaultPostingOffsetInMemorySampling,
-		false,
-		false,
-		1*time.Minute,
-		WithChunkPool(chunkPool),
-		WithFilterConfig(allowAllFilterConf),
-	)
-	testutil.Ok(t, err)
-	t.Cleanup(func() { testutil.Ok(t, bucketStore2.Close()) })
-
-	testutil.Ok(t, bucketStore2.SyncBlocks(context.Background()))
-	srv2 := newStoreSeriesServer(context.Background())
-	testutil.NotOk(t, bucketStore2.Series(req, srv2))
-
-	// Create another bucket store with a streaming series limiter set to 5.
-	// 5 is larger than the actual series matched number 4 so it won't hit series limit.
-	bucketStore3, err := NewBucketStore(
-		objstore.WithNoopInstr(bkt),
-		metaFetcher,
-		"",
-		NewChunksLimiterFactory(10e6),
-		NewSeriesLimiterFactory(0),
-		NewBytesLimiterFactory(10e6),
-		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		20,
-		true,
-		DefaultPostingOffsetInMemorySampling,
-		false,
-		false,
-		1*time.Minute,
-		WithChunkPool(chunkPool),
-		WithFilterConfig(allowAllFilterConf),
-		WithStreamingSeriesLimiterFactory(NewSeriesLimiterFactory(5)),
-	)
-	testutil.Ok(t, err)
-	t.Cleanup(func() { testutil.Ok(t, bucketStore3.Close()) })
-
-	testutil.Ok(t, bucketStore3.SyncBlocks(context.Background()))
-	srv3 := newStoreSeriesServer(context.Background())
-	testutil.Ok(t, bucketStore3.Series(req, srv3))
-	testutil.Equals(t, 4, len(srv3.SeriesSet))
+	testutil.Equals(t, 2, len(srv.SeriesSet))
 }
