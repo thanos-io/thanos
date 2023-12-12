@@ -93,6 +93,7 @@ func NewMultiTSDB(
 		tenantLabelName:       tenantLabelName,
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
+		uploadCompactedBlocks: allowCompactedUpload,
 		hashFunc:              hashFunc,
 	}
 }
