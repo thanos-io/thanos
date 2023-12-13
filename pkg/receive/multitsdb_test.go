@@ -51,6 +51,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			false,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
@@ -135,6 +136,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			false,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
@@ -177,6 +179,7 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 			false,
 			metadata.NoneFunc,
 		)
@@ -445,6 +448,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				"tenant_id",
 				test.bucket,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -506,6 +510,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		"tenant_id",
 		objstore.NewInMemBucket(),
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
@@ -566,6 +571,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 				labels.FromStrings("replica", "test"),
 				"tenant_id",
 				test.bucket,
+				false,
 				false,
 				metadata.NoneFunc,
 			)
@@ -641,6 +647,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				"tenant_id",
 				nil,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -669,6 +676,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -710,6 +718,7 @@ func TestProxyLabelValues(t *testing.T) {
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -800,6 +809,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	}, labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)

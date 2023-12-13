@@ -617,10 +617,12 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 		}
 	}()
 
-	requestLogger := log.With(h.logger, "tenant", params.tenant)
+	logTags := []interface{}{"tenant", params.tenant}
 	if id, ok := middleware.RequestIDFromContext(ctx); ok {
-		requestLogger = log.With(requestLogger, "request-id", id)
+		logTags = append(logTags, "request-id", id)
 	}
+	requestLogger = log.With(h.logger, logTags...)
+
 
 	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {

@@ -30,7 +30,8 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	logger := log.NewNopLogger()
 
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil)
+	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
 	// 1. No meta, old block, should be removed.

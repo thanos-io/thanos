@@ -307,7 +307,7 @@ type nowFunc func() time.Time
 func NewEndpointSet(
 	now nowFunc,
 	logger log.Logger,
-	reg *prometheus.Registry,
+	reg prometheus.Registerer,
 	endpointSpecs func() []*GRPCEndpointSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
