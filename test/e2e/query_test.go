@@ -26,6 +26,8 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/matchers"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -94,7 +96,7 @@ func TestQueryServiceAttribute(t *testing.T) {
 			Image:     "jaegertracing/all-in-one:1.33",
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
-	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	newJaeger := e2eobs.AsObservable(newJaegerRunnable, "http.admin")
 	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
 
 	otelcolConfig := fmt.Sprintf(`---
@@ -799,13 +801,22 @@ func TestQueryStoreMetrics(t *testing.T) {
 			Deduplicate: true,
 		}, 10001)
 		testutil.Ok(t, err)
+
+		// query with a non-default tenant
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+			return "max_over_time(one_series{instance='foo_0'}[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+			HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+		}, 1)
+		testutil.Ok(t, err)
 	}
 
 	mon, err := e2emon.Start(e)
 	testutil.Ok(t, err)
 
 	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-		return "thanos_store_api_query_duration_seconds_count{samples_le='100000',series_le='10000'}"
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100000',series_le='10000',tenant='default-tenant'}"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, model.Vector{
@@ -816,13 +827,14 @@ func TestQueryStoreMetrics(t *testing.T) {
 				"job":        "querier-1",
 				"samples_le": "100000",
 				"series_le":  "10000",
+				"tenant":     "default-tenant",
 			},
 			Value: model.SampleValue(1),
 		},
 	})
 
 	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10'}"
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10',tenant='default-tenant'}"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, model.Vector{
@@ -833,13 +845,14 @@ func TestQueryStoreMetrics(t *testing.T) {
 				"job":        "querier-1",
 				"samples_le": "100",
 				"series_le":  "10",
+				"tenant":     "default-tenant",
 			},
 			Value: model.SampleValue(1),
 		},
 	})
 
 	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-		return "thanos_store_api_query_duration_seconds_count{samples_le='+Inf',series_le='+Inf'}"
+		return "thanos_store_api_query_duration_seconds_count{samples_le='+Inf',series_le='+Inf',tenant='default-tenant'}"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, model.Vector{
@@ -850,6 +863,25 @@ func TestQueryStoreMetrics(t *testing.T) {
 				"job":        "querier-1",
 				"samples_le": "+Inf",
 				"series_le":  "+Inf",
+				"tenant":     "default-tenant",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10',tenant='test-tenant-1'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "storemetrics01-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "100",
+				"series_le":  "10",
+				"tenant":     "test-tenant-1",
 			},
 			Value: model.SampleValue(1),
 		},
@@ -1708,7 +1740,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2eobs.Observable, testSamples []fakeMetricSample) error {
 	samples := make([]model.Sample, len(testSamples))
 	for i, s := range testSamples {
 		samples[i] = newSample(s)
@@ -1717,7 +1749,7 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.Instrum
 	return synthesizeSamples(ctx, prometheus, samples)
 }
 
-func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, samples []model.Sample) error {
+func synthesizeSamples(ctx context.Context, prometheus *e2eobs.Observable, samples []model.Sample) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(samples))
@@ -1747,7 +1779,7 @@ func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunna
 	return storeWriteRequest(ctx, rawRemoteWriteURL, writeRequest)
 }
 
-func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, series []seriesWithLabels) error {
+func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2eobs.Observable, series []seriesWithLabels) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(series))
@@ -2303,4 +2335,88 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 		Value:     model.SampleValue(2),
 		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
 	}}, retv)
+}
+
+func TestTenantHTTPMetrics(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("tenant-metrics")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// scrape the local prometheus, and our querier metrics
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+	// Query once with default-tenant to ensure everything is ready
+	// for the following requests
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "prometheus_api_remote_read_queries"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, 1)
+	testutil.Ok(t, err)
+
+	// Query a few times with tenant 1
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "prometheus_api_remote_read_queries"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 1)
+	testutil.Ok(t, err)
+
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "go_goroutines"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "go_memstats_frees_total"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	// query just once with tenant-2
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "go_memstats_heap_alloc_bytes"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-2"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	// tenant-1 made 3 requests
+	tenant1Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-1")
+	testutil.Ok(t, err)
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(
+		e2emon.GreaterOrEqual(3),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant1Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+
+	// tenant 2 just made one request
+	tenant2Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-2")
+	testutil.Ok(t, err)
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(
+		e2emon.Equals(1),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant2Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
 }

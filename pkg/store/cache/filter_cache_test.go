@@ -43,7 +43,7 @@ func TestFilterCache(t *testing.T) {
 		{
 			name:          "invalid item type with 1 valid cache type",
 			expectedError: "unsupported item type foo",
-			enabledItems:  []string{cacheTypeExpandedPostings, "foo"},
+			enabledItems:  []string{CacheTypeExpandedPostings, "foo"},
 		},
 		{
 			name: "empty enabled items",
@@ -67,7 +67,7 @@ func TestFilterCache(t *testing.T) {
 		},
 		{
 			name:         "all enabled items",
-			enabledItems: []string{cacheTypeSeries, cacheTypePostings, cacheTypeExpandedPostings},
+			enabledItems: []string{CacheTypeSeries, CacheTypePostings, CacheTypeExpandedPostings},
 			verifyFunc: func(t *testing.T, c IndexCache) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
@@ -88,7 +88,7 @@ func TestFilterCache(t *testing.T) {
 		},
 		{
 			name:         "only enable postings",
-			enabledItems: []string{cacheTypePostings},
+			enabledItems: []string{CacheTypePostings},
 			verifyFunc: func(t *testing.T, c IndexCache) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
@@ -108,7 +108,7 @@ func TestFilterCache(t *testing.T) {
 		},
 		{
 			name:         "only enable expanded postings",
-			enabledItems: []string{cacheTypeExpandedPostings},
+			enabledItems: []string{CacheTypeExpandedPostings},
 			verifyFunc: func(t *testing.T, c IndexCache) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
@@ -129,7 +129,7 @@ func TestFilterCache(t *testing.T) {
 		},
 		{
 			name:         "only enable series",
-			enabledItems: []string{cacheTypeSeries},
+			enabledItems: []string{CacheTypeSeries},
 			verifyFunc: func(t *testing.T, c IndexCache) {
 				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
 				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)

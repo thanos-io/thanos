@@ -5,7 +5,7 @@ package queryrange
 
 import (
 	"context"
-	"io/ioutil"
+	io "io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,10 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weaveworks/common/httpgrpc"
-
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
+	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/middleware"
 	"github.com/weaveworks/common/user"
 	"go.uber.org/atomic"
@@ -273,7 +272,7 @@ func TestSplitByDay(t *testing.T) {
 	mergedHTTPResponse, err := PrometheusCodec.EncodeResponse(context.Background(), mergedResponse)
 	require.NoError(t, err)
 
-	mergedHTTPResponseBody, err := ioutil.ReadAll(mergedHTTPResponse.Body)
+	mergedHTTPResponseBody, err := io.ReadAll(mergedHTTPResponse.Body)
 	require.NoError(t, err)
 
 	for i, tc := range []struct {
@@ -313,7 +312,7 @@ func TestSplitByDay(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 200, resp.StatusCode)
 
-			bs, err := ioutil.ReadAll(resp.Body)
+			bs, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedBody, string(bs))
 			require.Equal(t, tc.expectedQueryCount, actualCount.Load())

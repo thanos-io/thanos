@@ -231,3 +231,9 @@ adopters:
 - name: Banco do Brasil
   url: https://www.bb.com.br/
   logo: bb.png
+- name: Grupo OLX
+  url: https://www.olx.com.br/
+  logo: grupo-olx.png
+- name: TrueLayer
+  url: https://truelayer.com/
+  logo: truelayer.png

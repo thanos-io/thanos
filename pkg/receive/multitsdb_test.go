@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +50,7 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 			false,
 			metadata.NoneFunc,
 		)
@@ -134,6 +136,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			false,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
@@ -176,6 +179,7 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 			false,
 			metadata.NoneFunc,
 		)
@@ -444,6 +448,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				"tenant_id",
 				test.bucket,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -505,6 +510,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		"tenant_id",
 		objstore.NewInMemBucket(),
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
@@ -515,6 +521,88 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 
 	testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
 	testutil.Equals(t, 1, len(m.TSDBLocalClients()))
+}
+
+func TestAlignedHeadFlush(t *testing.T) {
+	hourInSeconds := int64(1 * 60 * 60)
+
+	tests := []struct {
+		name                string
+		tsdbStart           int64
+		headDurationSeconds int64
+		bucket              objstore.Bucket
+		expectedUploads     int
+		expectedMaxTs       []int64
+	}{
+		{
+			name:                "short head",
+			bucket:              objstore.NewInMemBucket(),
+			headDurationSeconds: hourInSeconds,
+			expectedUploads:     1,
+			expectedMaxTs:       []int64{hourInSeconds * 1000},
+		},
+		{
+			name:                "aligned head start",
+			bucket:              objstore.NewInMemBucket(),
+			headDurationSeconds: 3 * hourInSeconds,
+			expectedUploads:     2,
+			expectedMaxTs:       []int64{2 * hourInSeconds * 1000, 3 * hourInSeconds * 1000},
+		},
+		{
+			name:                "unaligned TSDB start",
+			bucket:              objstore.NewInMemBucket(),
+			headDurationSeconds: 3 * hourInSeconds,
+			tsdbStart:           90 * 60, // 90 minutes
+			expectedUploads:     2,
+			expectedMaxTs:       []int64{2 * hourInSeconds * 1000, 3*hourInSeconds*1000 + 90*60},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				test.bucket,
+				false,
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			for i := 0; i <= int(test.headDurationSeconds); i += 60 {
+				tsMillis := int64(i*1000) + test.tsdbStart
+				testutil.Ok(t, appendSample(m, "test-tenant", time.UnixMilli(tsMillis)))
+			}
+
+			testutil.Ok(t, m.Flush())
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			_, err := m.Sync(ctx)
+			testutil.Ok(t, err)
+
+			var shippedBlocks int
+			var maxts []int64
+			testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
+				meta, err := metadata.ReadFromDir(path.Join(m.dataDir, "test-tenant", s))
+				testutil.Ok(t, err)
+
+				maxts = append(maxts, meta.MaxTime)
+				shippedBlocks++
+				return nil
+			}))
+			testutil.Equals(t, test.expectedUploads, shippedBlocks)
+			testutil.Equals(t, test.expectedMaxTs, maxts)
+		})
+	}
 }
 
 func TestMultiTSDBStats(t *testing.T) {
@@ -559,6 +647,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				"tenant_id",
 				nil,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -587,6 +676,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -628,6 +718,7 @@ func TestProxyLabelValues(t *testing.T) {
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -718,6 +809,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	}, labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)

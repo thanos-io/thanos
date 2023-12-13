@@ -13,7 +13,7 @@ import (
 
 func TestIndexCacheMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	commonMetrics := newCommonMetrics(reg)
+	commonMetrics := NewCommonMetrics(reg)
 
 	memcached := newMockedMemcachedClient(nil)
 	_, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, commonMetrics, reg, memcachedDefaultTTL)

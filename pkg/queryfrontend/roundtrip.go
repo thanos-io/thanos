@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/tenancy"
+
 	"github.com/thanos-io/thanos/pkg/querysharding"
 
 	"github.com/go-kit/log"
@@ -78,7 +80,14 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		config.ForwardHeaders,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
-		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
+		tripper := newRoundTripper(
+			next,
+			queryRangeTripperware(next),
+			labelsTripperware(next),
+			queryInstantTripperware(next),
+			reg,
+		)
+		return tenancy.InternalTenancyConversionTripper(config.TenantHeader, config.TenantCertField, tripper)
 	}, nil
 }
 

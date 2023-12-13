@@ -425,6 +425,11 @@ Flags:
                                  ingesting a new exemplar will evict the oldest
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
+      --tsdb.max-retention-bytes=0
+                                 Maximum number of bytes that can be stored for
+                                 blocks. A unit is required, supported units: B,
+                                 KB, MB, GB, TB, PB, EB. Ex: "512MB". Based on
+                                 powers-of-2, so 1KB is 1024B.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.

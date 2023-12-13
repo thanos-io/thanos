@@ -68,7 +68,7 @@ type SyncerMetrics struct {
 	GarbageCollectedBlocks    prometheus.Counter
 	GarbageCollections        prometheus.Counter
 	GarbageCollectionFailures prometheus.Counter
-	GarbageCollectionDuration prometheus.Histogram
+	GarbageCollectionDuration prometheus.Observer
 	BlocksMarkedForDeletion   prometheus.Counter
 }
 
@@ -98,10 +98,10 @@ func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
 func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
-	return NewMetaSyncerWithMetrics(logger, NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks), bkt, fetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
+	return NewMetaSyncerWithMetrics(logger, NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks), bkt, fetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter)
 }
 
-func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
+func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -283,6 +283,43 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
+		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
+		garbageCollectedBlocks:        garbageCollectedBlocks,
+		blocksMarkedForDeletion:       blocksMarkedForDeletion,
+		hashFunc:                      hashFunc,
+		blockFilesConcurrency:         blockFilesConcurrency,
+		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
+	}
+}
+
+// NewDefaultGrouperWithMetrics makes a new DefaultGrouper.
+func NewDefaultGrouperWithMetrics(
+	logger log.Logger,
+	bkt objstore.Bucket,
+	acceptMalformedIndex bool,
+	enableVerticalCompaction bool,
+	compactions *prometheus.CounterVec,
+	compactionRunsStarted *prometheus.CounterVec,
+	compactionRunsCompleted *prometheus.CounterVec,
+	compactionFailures *prometheus.CounterVec,
+	verticalCompactions *prometheus.CounterVec,
+	blocksMarkedForDeletion prometheus.Counter,
+	garbageCollectedBlocks prometheus.Counter,
+	blocksMarkedForNoCompact prometheus.Counter,
+	hashFunc metadata.HashFunc,
+	blockFilesConcurrency int,
+	compactBlocksFetchConcurrency int,
+) *DefaultGrouper {
+	return &DefaultGrouper{
+		bkt:                           bkt,
+		logger:                        logger,
+		acceptMalformedIndex:          acceptMalformedIndex,
+		enableVerticalCompaction:      enableVerticalCompaction,
+		compactions:                   compactions,
+		compactionRunsStarted:         compactionRunsStarted,
+		compactionRunsCompleted:       compactionRunsCompleted,
+		compactionFailures:            compactionFailures,
+		verticalCompactions:           verticalCompactions,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
@@ -1078,7 +1115,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
 	}
-	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "plan", fmt.Sprintf("%v", toCompact), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
 	begin = time.Now()
 	g, errCtx := errgroup.WithContext(ctx)
@@ -1136,7 +1173,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		return false, ulid.ULID{}, err
 	}
 
-	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", sourceBlockStr)
 
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
@@ -1167,7 +1204,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		cg.verticalCompactions.Inc()
 	}
 	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
-		"blocks", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", overlappingBlocks)
+		"duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", overlappingBlocks, "blocks", sourceBlockStr)
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
@@ -1249,8 +1286,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 	level.Info(cg.logger).Log("msg", "finished running post compaction callback", "result_block", compID)
 
-	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
-		"duration", time.Since(groupCompactionBegin), "duration_ms", time.Since(groupCompactionBegin).Milliseconds())
+	level.Info(cg.logger).Log("msg", "finished compacting blocks", "duration", time.Since(groupCompactionBegin),
+		"duration_ms", time.Since(groupCompactionBegin).Milliseconds(), "result_block", compID, "source_blocks", sourceBlockStr)
 	return true, compID, nil
 }
 

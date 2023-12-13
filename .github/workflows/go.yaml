@@ -70,8 +70,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        parallelism: [4]
-        index: [0, 1, 2, 3]
+        parallelism: [8]
+        index: [0, 1, 2, 3, 4, 5, 6, 7]
     runs-on: ubuntu-latest
     name: Thanos end-to-end tests
     env:

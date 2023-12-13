@@ -4,6 +4,8 @@
 
 [![CI](https://github.com/thanos-io/thanos/workflows/CI/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3ACI) [![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos) [![go](https://github.com/thanos-io/thanos/workflows/go/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ago) [![react](https://github.com/thanos-io/thanos/workflows/react/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Areact) [![docs](https://github.com/thanos-io/thanos/workflows/docs/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Adocs) [![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=109162639)
 
+> 📢 [ThanosCon](https://thanos.io/blog/2023-20-11-thanoscon/) is happening on 19th March as a co-located half-day on KubeCon EU in Paris. Join us there! 🤗 CFP is open until 3rd December!
+
 ## Overview
 
 Thanos is a set of components that can be composed into a highly available metric system with unlimited storage capacity, which can be added seamlessly on top of existing Prometheus deployments.

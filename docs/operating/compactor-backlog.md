@@ -4,6 +4,20 @@ The compactor is one of the most important components in Thanos. It is responsib
 
 When your system contains a lot of block producers (Sidecar, Rule, Receiver, etc) or the scale is large, the compactor might not be able to keep up with the data producing rate and it falls behind, which causes a lot of backlogged work. This document will help you to troubleshoot the backlog compaction issue and how to scale the compactor.
 
+## Make sure compactors are `running`
+
+Before checking whether your compactor has backlog issues, please make sure compactors are `running`. `Running` here means compactors don't halt.
+
+If compactors halt, any compaction or downsample process stops so it is crucial to make sure no halt happens for compactor deployment.
+
+`thanos_compact_halted` metric will be set to 1 when halt happens. You can also find logs like below, telling that compactor is halting.
+
+```
+msg="critical error detected; halting" err="compaction failed...
+```
+
+There could be different reasons that caused the compactor to halt. A very common case is overlapping blocks. Please refer to our doc https://thanos.io/tip/operating/troubleshooting.md/#overlaps for more information.
+
 ## Detect the backlog
 
 Self-monitoring for the monitoring system is important. We highly recommend you set up the Thanos Grafana dashboards and alerts to monitor the Thanos components. Without self-monitoring, it is hard to detect the issue and fix the problems.

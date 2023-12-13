@@ -6,7 +6,7 @@ package queryrange
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	io "io"
 	"math/rand"
 	"net/http"
 	"testing"
@@ -34,7 +34,7 @@ func BenchmarkPrometheusCodec_DecodeResponse(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		_, err := PrometheusCodec.DecodeResponse(context.Background(), &http.Response{
 			StatusCode:    200,
-			Body:          ioutil.NopCloser(bytes.NewReader(encodedRes)),
+			Body:          io.NopCloser(bytes.NewReader(encodedRes)),
 			ContentLength: int64(len(encodedRes)),
 		}, nil)
 		require.NoError(b, err)
