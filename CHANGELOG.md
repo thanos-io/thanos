@@ -146,7 +146,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6773](https://github.com/thanos-io/thanos/pull/6773) Index Cache: Add `ttl` to control the ttl to store items in remote index caches like memcached and redis.
 - [#6794](https://github.com/thanos-io/thanos/pull/6794) Query: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing custom dashboard queries to be incorrect due to the added label.
 - [#6847](https://github.com/thanos-io/thanos/pull/6847) Store: Add `thanos_bucket_store_indexheader_download_duration_seconds` and `thanos_bucket_store_indexheader_load_duration_seconds` metrics for tracking latency of downloading and initializing the index-header.
-- [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
 
 ### Changed
 
@@ -238,8 +237,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 ## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - 23.08.2023
-
-## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - Release in progress
 
 ### Added
 
