@@ -94,7 +94,9 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(nil, insBkt)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			duplicateBlocksFilter,
 		})
 		testutil.Ok(t, err)
@@ -194,7 +196,9 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 			noCompactMarkerFilter,
@@ -504,7 +508,9 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 		})
