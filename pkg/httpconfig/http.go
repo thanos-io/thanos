@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
 	"github.com/go-kit/log"
@@ -324,7 +326,7 @@ type Client struct {
 }
 
 // NewClient returns a new Client.
-func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
+func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider, reg prometheus.Registerer) (*Client, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -335,7 +337,11 @@ func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, prov
 		if err != nil {
 			return nil, err
 		}
-		discoverers = append(discoverers, file.NewDiscovery(&fileSDCfg, logger))
+		discovery, err := file.NewDiscovery(&fileSDCfg, logger, reg)
+		if err != nil {
+			return nil, err
+		}
+		discoverers = append(discoverers, discovery)
 	}
 	return &Client{
 		logger:          logger,
