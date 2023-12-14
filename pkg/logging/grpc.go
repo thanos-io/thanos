@@ -4,17 +4,12 @@
 package logging
 
 import (
+	"context"
 	"fmt"
-	"math/rand"
-	"sort"
-	"strings"
-	"time"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
-	"github.com/oklog/ulid"
-	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v2"
 )
 
@@ -79,17 +74,17 @@ func fillGlobalOptionConfig(reqLogConfig *RequestConfig, isgRPC bool) (string, b
 }
 
 // getGRPCLoggingOption returns the logging ENUM based on logStart and logEnd values.
-func getGRPCLoggingOption(logStart, logEnd bool) (grpc_logging.Decision, error) {
+func getGRPCLoggingOption(logStart, logEnd bool) (grpc_logging.Option, error) {
 	if !logStart && !logEnd {
-		return grpc_logging.NoLogCall, nil
+		return grpc_logging.WithLogOnEvents(), nil
 	}
 	if !logStart && logEnd {
-		return grpc_logging.LogFinishCall, nil
+		return grpc_logging.WithLogOnEvents(grpc_logging.FinishCall), nil
 	}
 	if logStart && logEnd {
-		return grpc_logging.LogStartAndFinishCall, nil
+		return grpc_logging.WithLogOnEvents(grpc_logging.StartCall, grpc_logging.FinishCall), nil
 	}
-	return -1, fmt.Errorf("log start call is not supported")
+	return nil, fmt.Errorf("log decision combination is not supported")
 }
 
 // validateLevel validates the list of level entries.
@@ -104,104 +99,79 @@ func validateLevel(level string) error {
 	return fmt.Errorf("the format of level is invalid. Expected INFO/DEBUG/ERROR/WARNING, got this %v", level)
 }
 
-// NewGRPCOption adds in the config options and returns tags for logging middleware.
-func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
+func InterceptorLogger(l log.Logger) grpc_logging.Logger {
+	return grpc_logging.LoggerFunc(func(_ context.Context, lvl grpc_logging.Level, msg string, fields ...any) {
+		largs := append([]any{"msg", msg}, fields...)
+		switch lvl {
+		case grpc_logging.LevelDebug:
+			_ = level.Debug(l).Log(largs...)
+		case grpc_logging.LevelInfo:
+			_ = level.Info(l).Log(largs...)
+		case grpc_logging.LevelWarn:
+			_ = level.Warn(l).Log(largs...)
+		case grpc_logging.LevelError:
+			_ = level.Error(l).Log(largs...)
+		default:
+			panic(fmt.Sprintf("unknown level %v", lvl))
+		}
+	})
+}
 
-	// Configure tagOpts and logOpts.
-	tagOpts := []tags.Option{
-		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
-			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
-			// If a request-id exists for a given request.
-			if tagMap != nil {
-				if _, ok := tagMap["request-id"]; ok {
-					return tagMap
-				}
-			}
-			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
-			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-			tagMap = make(map[string]string)
-			tagMap["request-id"] = reqID.String()
-			return tagMap
-		}),
-	}
-	logOpts := []grpc_logging.Option{
-		grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
-			return grpc_logging.NoLogCall
-		}),
-		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
-	}
+// NewGRPCOption adds in the config options for logging middleware.
+func NewGRPCOption(configYAML []byte) ([]grpc_logging.Option, []string, error) {
 
-	// Unmarshal YAML.
+	var logOpts []grpc_logging.Option
+
+	// Unmarshal YAML
 	// if req logging is disabled.
 	if len(configYAML) == 0 {
-		return tagOpts, logOpts, nil
+		return nil, nil, nil
 	}
 
 	reqLogConfig, err := NewRequestConfig(configYAML)
 	// If unmarshalling is an issue.
 	if err != nil {
-		return tagOpts, logOpts, err
+		return logOpts, nil, err
 	}
 
 	globalLevel, globalStart, globalEnd, err := fillGlobalOptionConfig(reqLogConfig, true)
 	// If global options have invalid entries.
 	if err != nil {
-		return tagOpts, logOpts, err
+		return logOpts, nil, err
+	}
+	if !globalStart && !globalEnd {
+		//Nothing to do
+		return nil, nil, nil
 	}
 
 	// If the level entry does not matches our entries.
 	if err := validateLevel(globalLevel); err != nil {
-		return tagOpts, logOpts, err
-	}
-
-	// If the combination is valid, use them, otherwise return error.
-	reqLogDecision, err := getGRPCLoggingOption(globalStart, globalEnd)
-	if err != nil {
-		return tagOpts, logOpts, err
-	}
-
-	if len(reqLogConfig.GRPC.Config) == 0 {
-		logOpts = []grpc_logging.Option{
-			grpc_logging.WithDecider(func(_ string, err error) grpc_logging.Decision {
-
-				runtimeLevel := grpc_logging.DefaultServerCodeToLevel(status.Code(err))
-				for _, lvl := range MapAllowedLevels[globalLevel] {
-					if string(runtimeLevel) == strings.ToLower(lvl) {
-						return reqLogDecision
-					}
-				}
-				return grpc_logging.NoLogCall
-			}),
-			grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
-		}
-		return tagOpts, logOpts, nil
+		return logOpts, nil, err
 	}
 
 	logOpts = []grpc_logging.Option{
 		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
+		grpc_logging.WithFieldsFromContext(GetTraceIDAndRequestIDAsField),
+	}
+	// If the combination is valid, use them, otherwise return error.
+	reqLogDecision, err := getGRPCLoggingOption(globalStart, globalEnd)
+	if err != nil {
+		return logOpts, nil, err
 	}
 
-	methodNameSlice := []string{}
+	if len(reqLogConfig.GRPC.Config) == 0 {
+		// If no config is present, use the global config.
+		logOpts = append(logOpts, reqLogDecision)
+		return logOpts, nil, nil
+	}
 
+	logOpts = append(logOpts, reqLogDecision)
+
+	var methodNameSlice []string
 	for _, eachConfig := range reqLogConfig.GRPC.Config {
-		eachConfigMethodName := interceptors.FullMethod(eachConfig.Service, eachConfig.Method)
+		eachConfigMethodName := fmt.Sprintf("/%s/%s", eachConfig.Service, eachConfig.Method)
 		methodNameSlice = append(methodNameSlice, eachConfigMethodName)
 	}
 
-	logOpts = append(logOpts, []grpc_logging.Option{
-		grpc_logging.WithDecider(func(runtimeMethodName string, err error) grpc_logging.Decision {
-
-			idx := sort.SearchStrings(methodNameSlice, runtimeMethodName)
-			if idx < len(methodNameSlice) && methodNameSlice[idx] == runtimeMethodName {
-				runtimeLevel := grpc_logging.DefaultServerCodeToLevel(status.Code(err))
-				for _, lvl := range MapAllowedLevels[globalLevel] {
-					if string(runtimeLevel) == strings.ToLower(lvl) {
-						return reqLogDecision
-					}
-				}
-			}
-			return grpc_logging.NoLogCall
-		}),
-	}...)
-	return tagOpts, logOpts, nil
+	return logOpts, methodNameSlice, nil
 }

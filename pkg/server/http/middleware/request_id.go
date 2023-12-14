@@ -17,7 +17,7 @@ type ctxKey int
 const reqIDKey = ctxKey(0)
 
 // newContextWithRequestID creates a context with a request id.
-func newContextWithRequestID(ctx context.Context, rid string) context.Context {
+func NewContextWithRequestID(ctx context.Context, rid string) context.Context {
 	return context.WithValue(ctx, reqIDKey, rid)
 }
 
@@ -36,7 +36,7 @@ func RequestID(h http.Handler) http.HandlerFunc {
 			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
 			r.Header.Set("X-Request-ID", reqID.String())
 		}
-		ctx := newContextWithRequestID(r.Context(), reqID)
+		ctx := NewContextWithRequestID(r.Context(), reqID)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	}
 }

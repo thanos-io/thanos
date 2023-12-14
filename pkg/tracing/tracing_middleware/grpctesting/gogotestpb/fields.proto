@@ -1,0 +1,50 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+/*
+This was copied over from https://github.com/grpc-ecosystem/go-grpc-middleware/tree/v2.0.0-rc.3
+and modified to support tracing in Thanos till migration to Otel is supported.
+*/
+
+syntax = "proto3";
+
+//  This file is used for grpctesting discovery of log fields from requests using reflection and gogo proto more tags.
+package grpc_middleware.gogotestpb;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+option (gogoproto.gogoproto_import) = false;
+
+option go_package = "gogotestpb";
+
+message Metadata {
+    repeated string tags = 1 [(gogoproto.moretags) = "log_field:\"meta_tags\""];
+}
+
+message PingId {
+    int32 id = 1 [(gogoproto.moretags) = "log_field:\"ping_id\""];
+}
+
+message Ping {
+    PingId id = 1;
+    string value = 2;
+}
+
+message PingRequest {
+    Ping ping = 1;
+    Metadata meta = 2;
+}
+
+message Pong {
+    string id = 1 [(gogoproto.moretags) = "log_field:\"pong_id\""];
+}
+
+message PongRequest {
+    Pong pong = 1;
+    Metadata meta = 2;
+}
+
+message GoGoProtoStdTime {
+    google.protobuf.Timestamp timestamp = 1 [(gogoproto.stdtime) = true];
+}

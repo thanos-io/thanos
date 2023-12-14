@@ -4,14 +4,21 @@
 package logging
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"time"
+
+	"github.com/oklog/ulid"
+	"github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/trace"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
+	middleware "github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
 	"google.golang.org/grpc/codes"
 )
 
@@ -127,9 +134,9 @@ func DefaultCodeToLevel(logger log.Logger, code int) log.Logger {
 func DefaultCodeToLevelGRPC(c codes.Code) grpc_logging.Level {
 	switch c {
 	case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss:
-		return grpc_logging.ERROR
+		return grpc_logging.LevelError
 	default:
-		return grpc_logging.DEBUG
+		return grpc_logging.LevelDebug
 	}
 }
 
@@ -158,6 +165,33 @@ var MapAllowedLevels = map[string][]string{
 	"WARN":  {"WARN", "ERROR"},
 }
 
+func GetTraceIDAndRequestIDAsField(ctx context.Context) grpc_logging.Fields {
+	logFields := grpc_logging.Fields{}
+
+	//get traceID from context
+	span := opentracing.SpanFromContext(ctx)
+	TraceID, _ := migration.GetTraceIDFromBridgeSpan(span)
+	if span := trace.SpanContextFromContext(ctx); span.IsSampled() {
+		logFields = logFields.AppendUnique(grpc_logging.Fields{"traceID", TraceID})
+	}
+	//get requestID from context
+	reqID, ok := middleware.RequestIDFromContext(ctx)
+	if ok {
+		logFields = logFields.AppendUnique(grpc_logging.Fields{"requestID", reqID})
+		return logFields
+	}
+
+	entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
+	newReqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
+	logFields = logFields.AppendUnique(grpc_logging.Fields{"requestID", newReqID})
+
+	// Insert into context (Note: This updated context isn't being used later, so this might be redundant)
+	_ = middleware.NewContextWithRequestID(ctx, newReqID)
+
+	return logFields
+
+}
+
 // TODO: @yashrsharma44 - To be deprecated in the next release.
 func ParseHTTPOptions(reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 	// Default Option: No Logging.
@@ -175,21 +209,17 @@ func ParseHTTPOptions(reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
-	// Default Option: No Logging.
-	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
-		return grpc_logging.NoLogCall
-	})}
-
+func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]grpc_logging.Option, []string, error) {
+	var logOpts []grpc_logging.Option
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return []tags.Option{}, logOpts, fmt.Errorf("getting request logging config failed. %v", err)
+		return logOpts, nil, fmt.Errorf("getting request logging config failed. %v", err)
 	}
 
-	tagOpts, logOpts, err := NewGRPCOption(configYAML)
+	logOpts, logFilterMethods, err := NewGRPCOption(configYAML)
 	if err != nil {
-		return []tags.Option{}, logOpts, err
+		return logOpts, logFilterMethods, err
 	}
-	return tagOpts, logOpts, nil
 
+	return logOpts, logFilterMethods, nil
 }
