@@ -326,7 +326,7 @@ type Client struct {
 }
 
 // NewClient returns a new Client.
-func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider, reg prometheus.Registerer) (*Client, error) {
+func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -337,7 +337,8 @@ func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, prov
 		if err != nil {
 			return nil, err
 		}
-		discovery, err := file.NewDiscovery(&fileSDCfg, logger, reg)
+		// We provide an empty registry and ignore metrics for now.
+		discovery, err := file.NewDiscovery(&fileSDCfg, logger, prometheus.NewRegistry())
 		if err != nil {
 			return nil, err
 		}
