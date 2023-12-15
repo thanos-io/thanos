@@ -533,6 +533,8 @@ func WithDontResort(true bool) BucketStoreOption {
 	}
 }
 
+// WithLazyDownloadIndexHeaderFunc specifies what block to lazy download its index header.
+// Only used when lazy mmap is enabled at the same time.
 func WithLazyDownloadIndexHeaderFunc(f indexheader.LazyDownloadIndexHeaderFunc) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.lazyDownloadIndexHeaderFunc = f

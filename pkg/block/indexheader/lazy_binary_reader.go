@@ -84,6 +84,7 @@ type LazyBinaryReader struct {
 	// Keep track of the last time it was used.
 	usedAt *atomic.Int64
 
+	// If true, index header will be downloaded at query time rather than initialization time.
 	lazyDownload bool
 }
 

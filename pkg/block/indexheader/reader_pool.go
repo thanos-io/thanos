@@ -52,8 +52,11 @@ type ReaderPool struct {
 	lazyDownloadFunc LazyDownloadIndexHeaderFunc
 }
 
+// LazyDownloadIndexHeaderFunc is used to determinte whether to download the index header lazily
+// or not by checking its block metadata. Usecase can be by time or by index file size.
 type LazyDownloadIndexHeaderFunc func(meta *metadata.Meta) bool
 
+// DisableLazyDownloadIndexHeader disables lazy downloaded index header.
 func DisableLazyDownloadIndexHeader(meta *metadata.Meta) bool {
 	return false
 }
