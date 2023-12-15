@@ -904,7 +904,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				false,
 				false,
 				0,
-				WithLogger(logger),
+				WithLogger[BucketStore](logger),
 				WithFilterConfig(allowAllFilterConf),
 			)
 			testutil.Ok(t, err)
@@ -1427,7 +1427,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 		false,
 		false,
 		0,
-		WithLogger(logger),
+		WithLogger[BucketStore](logger),
 		WithChunkPool(chunkPool),
 		WithLazyExpandedPostings(lazyExpandedPostings),
 	)
@@ -1877,7 +1877,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		true,
 		false,
 		0,
-		WithLogger(logger),
+		WithLogger[BucketStore](logger),
 		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
@@ -1969,7 +1969,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		true,
 		false,
 		0,
-		WithLogger(logger),
+		WithLogger[BucketStore](logger),
 		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
@@ -2128,7 +2128,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 				true,
 				false,
 				0,
-				WithLogger(logger),
+				WithLogger[BucketStore](logger),
 				WithIndexCache(indexCache),
 			)
 			testutil.Ok(tb, err)
@@ -2315,7 +2315,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		true,
 		false,
 		0,
-		WithLogger(logger),
+		WithLogger[BucketStore](logger),
 		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
@@ -2532,7 +2532,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 		true,
 		false,
 		0,
-		WithLogger(logger),
+		WithLogger[BucketStore](logger),
 		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)

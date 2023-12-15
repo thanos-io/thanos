@@ -48,6 +48,7 @@ import (
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
 	logger           log.Logger
+	reg              prometheus.Registerer
 	base             *url.URL
 	client           *promclient.Client
 	buffers          sync.Pool
@@ -72,20 +73,16 @@ const initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size
 // to talk to Prometheus.
 // It attaches the provided external labels to all results. Provided external labels has to be sorted.
 func NewPrometheusStore(
-	logger log.Logger,
-	reg prometheus.Registerer,
 	client *promclient.Client,
 	baseURL *url.URL,
 	component component.StoreAPI,
 	externalLabelsFn func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
 	promVersion func() string,
+	options ...StoreOption[PrometheusStore],
 ) (*PrometheusStore, error) {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
 	p := &PrometheusStore{
-		logger:                        logger,
+		logger:                        log.NewNopLogger(),
 		base:                          baseURL,
 		client:                        client,
 		component:                     component,
@@ -97,14 +94,19 @@ func NewPrometheusStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
-		framesRead: promauto.With(reg).NewHistogram(
-			prometheus.HistogramOpts{
-				Name:    "prometheus_store_received_frames",
-				Help:    "Number of frames received per streamed response.",
-				Buckets: prometheus.ExponentialBuckets(10, 10, 5),
-			},
-		),
 	}
+
+	for _, option := range options {
+		option(p)
+	}
+
+	p.framesRead = promauto.With(p.reg).NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "prometheus_store_received_frames",
+			Help:    "Number of frames received per streamed response.",
+			Buckets: prometheus.ExponentialBuckets(10, 10, 5),
+		},
+	)
 	return p, nil
 }
 

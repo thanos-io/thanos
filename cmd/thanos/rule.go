@@ -634,7 +634,7 @@ func runRule(
 	}
 	infoOptions := []info.ServerOptionFunc{info.WithRulesInfoFunc()}
 	if tsdbDB != nil {
-		tsdbStore := store.NewTSDBStore(logger, tsdbDB, component.Rule, conf.lset)
+		tsdbStore := store.NewTSDBStore(tsdbDB, component.Rule, conf.lset, store.WithLogger[store.TSDBStore](logger))
 		infoOptions = append(
 			infoOptions,
 			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
@@ -654,6 +654,7 @@ func runRule(
 				return nil
 			}),
 		)
+
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
 	}

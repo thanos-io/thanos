@@ -70,7 +70,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	testutil.Ok(t, err)
 
 	limitMinT := int64(0)
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+	proxy, err := NewPrometheusStore(promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return limitMinT, -1 },
 		nil,
@@ -231,7 +231,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+	promStore, err := NewPrometheusStore(promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 },
 		nil,
@@ -413,7 +413,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+	proxy, err := NewPrometheusStore(promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return 0, math.MaxInt64 },
 		nil)
@@ -476,7 +476,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+	proxy, err := NewPrometheusStore(promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return 0, math.MaxInt64 },
 		nil)
@@ -506,7 +506,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), nil, component.Sidecar,
+	proxy, err := NewPrometheusStore(promclient.NewDefaultClient(), nil, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return 123, 456 },
 		nil)
@@ -585,7 +585,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testin
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+		proxy, err := NewPrometheusStore(promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 			func() (int64, int64) { return 0, math.MaxInt64 },
 			nil)

@@ -62,12 +62,9 @@ type ReadWriteTSDBStore struct {
 
 // NewTSDBStore creates a new TSDBStore.
 // NOTE: Given lset has to be sorted.
-func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-	return &TSDBStore{
-		logger:           logger,
+func NewTSDBStore(db TSDBReader, component component.StoreAPI, extLset labels.Labels, options ...StoreOption[TSDBStore]) *TSDBStore {
+	s := &TSDBStore{
+		logger:           log.NewNopLogger(),
 		db:               db,
 		component:        component,
 		extLset:          extLset,
@@ -77,6 +74,10 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 			return &b
 		}},
 	}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
