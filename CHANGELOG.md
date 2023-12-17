@@ -18,7 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - in progress
+## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - 18.12.2023
 
 ### Fixed
 
