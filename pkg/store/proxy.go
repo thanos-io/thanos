@@ -29,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type ctxKey int
@@ -556,12 +555,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 
 	for _, st := range s.stores() {
 		st := st
-
-		storeAddr, isLocalStore := st.Addr()
-		storeID := labelpb.PromLabelSetsToString(st.LabelSets())
-		if storeID == "" {
-			storeID = "Store Gateway"
-		}
+		gctx := gctx
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
@@ -575,14 +569,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		}
 
 		g.Go(func() error {
-			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-				"store.id":       storeID,
-				"store.addr":     storeAddr,
-				"store.is_local": isLocalStore,
-			})
-			defer span.Finish()
-
-			resp, err := st.LabelValues(spanCtx, &storepb.LabelValuesRequest{
+			resp, err := st.LabelValues(gctx, &storepb.LabelValuesRequest{
 				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 				Start:                   r.Start,

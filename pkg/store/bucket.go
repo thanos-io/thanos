@@ -43,7 +43,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/objstore"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -61,7 +60,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
@@ -1391,13 +1389,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	srv := newFlushableServer(seriesSrv, sortingStrategyNone)
 
 	if s.queryGate != nil {
-		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
-			err = s.queryGate.Start(srv.Context())
-		})
-		if err != nil {
+		if err := s.queryGate.Start(srv.Context()); err != nil {
 			return errors.Wrapf(err, "failed to wait for turn")
 		}
-
 		defer s.queryGate.Done()
 	}
 
@@ -1412,11 +1406,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 	var (
 		bytesLimiter     = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
-		ctx              = srv.Context()
 		stats            = &queryStats{}
 		respSets         []respSet
 		mtx              sync.Mutex
-		g, gctx          = errgroup.WithContext(ctx)
+		g, _             = errgroup.WithContext(srv.Context())
 		resHints         = &hintspb.SeriesResponseHints{}
 		reqBlockMatchers []*labels.Matcher
 
@@ -1465,7 +1458,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 		for _, b := range blocks {
 			blk := b
-			gctx := gctx
 
 			if s.enableSeriesResponseHints {
 				// Keep track of queried blocks.
@@ -1500,14 +1492,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 			defer blockClient.Close()
 
 			g.Go(func() error {
-
-				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
-					"block.id":         blk.meta.ULID,
-					"block.mint":       blk.meta.MinTime,
-					"block.maxt":       blk.meta.MaxTime,
-					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
-				})
-
 				onClose := func() {
 					mtx.Lock()
 					stats = blockClient.MergeStats(stats)
@@ -1519,7 +1503,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					seriesLimiter,
 				); err != nil {
 					onClose()
-					span.Finish()
 					return errors.Wrapf(err, "fetch postings for block %s", blk.meta.ULID)
 				}
 
@@ -1527,7 +1510,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				if s.sortingStrategy == sortingStrategyStore {
 					resp = newEagerRespSet(
 						srv.Context(),
-						span,
 						10*time.Minute,
 						blk.meta.ULID.String(),
 						[]labels.Labels{blk.extLset},
@@ -1541,7 +1523,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				} else {
 					resp = newLazyRespSet(
 						srv.Context(),
-						span,
 						10*time.Minute,
 						blk.meta.ULID.String(),
 						[]labels.Labels{blk.extLset},
@@ -1597,10 +1578,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	// Concurrently get data from all blocks.
 	{
 		begin := time.Now()
-		tracing.DoInSpan(ctx, "bucket_store_preload_all", func(_ context.Context) {
-			err = g.Wait()
-		})
-		if err != nil {
+		if err := g.Wait(); err != nil {
 			code := codes.Aborted
 			if s, ok := status.FromError(errors.Cause(err)); ok {
 				code = s.Code()
@@ -1614,7 +1592,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	}
 
 	// Merge the sub-results from each selected block.
-	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
+	func() {
 		defer func() {
 			for _, resp := range respSets {
 				resp.Close()
@@ -1650,7 +1628,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		s.metrics.seriesMergeDuration.WithLabelValues(tenant).Observe(stats.MergeDuration.Seconds())
 
 		err = nil
-	})
+	}()
 	if err != nil {
 		return err
 	}
@@ -1721,7 +1699,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 	for _, b := range s.blocks {
 		b := b
-		gctx := gctx
 
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
@@ -1742,13 +1719,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		indexr := b.indexReader()
 
 		g.Go(func() error {
-			span, newCtx := tracing.StartSpan(gctx, "bucket_store_block_label_names", tracing.Tags{
-				"block.id":         b.meta.ULID,
-				"block.mint":       b.meta.MinTime,
-				"block.maxt":       b.meta.MaxTime,
-				"block.resolution": b.meta.Thanos.Downsample.Resolution,
-			})
-			defer span.Finish()
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
 			var result []string
@@ -1776,7 +1746,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					SkipChunks: true,
 				}
 				blockClient := newBlockSeriesClient(
-					newCtx,
+					gctx,
 					s.logger,
 					b,
 					seriesReq,
@@ -1951,13 +1921,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 		indexr := b.indexReader()
 		g.Go(func() error {
-			span, newCtx := tracing.StartSpan(gctx, "bucket_store_block_label_values", tracing.Tags{
-				"block.id":         b.meta.ULID,
-				"block.mint":       b.meta.MinTime,
-				"block.maxt":       b.meta.MaxTime,
-				"block.resolution": b.meta.Thanos.Downsample.Resolution,
-			})
-			defer span.Finish()
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
 			var result []string
@@ -1980,7 +1943,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					SkipChunks: true,
 				}
 				blockClient := newBlockSeriesClient(
-					newCtx,
+					gctx,
 					s.logger,
 					b,
 					seriesReq,

@@ -15,7 +15,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,7 +23,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type dedupResponseHeap struct {
@@ -272,7 +271,6 @@ func (l *lazyRespSet) StoreLabels() map[string]struct{} {
 // in Next().
 type lazyRespSet struct {
 	// Generic parameters.
-	span           opentracing.Span
 	cl             storepb.Store_SeriesClient
 	closeSeries    context.CancelFunc
 	storeName      string
@@ -357,7 +355,6 @@ func (l *lazyRespSet) At() *storepb.SeriesResponse {
 
 func newLazyRespSet(
 	ctx context.Context,
-	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
 	storeLabelSets []labels.Labels,
@@ -377,7 +374,6 @@ func newLazyRespSet(
 		storeName:            storeName,
 		storeLabelSets:       storeLabelSets,
 		closeSeries:          closeSeries,
-		span:                 span,
 		ctx:                  ctx,
 		dataOrFinishEvent:    dataAvailable,
 		bufferedResponsesMtx: bufferedResponsesMtx,
@@ -395,14 +391,6 @@ func newLazyRespSet(
 		bytesProcessed := 0
 		seriesStats := &storepb.SeriesStatsCounter{}
 
-		defer func() {
-			l.span.SetTag("processed.series", seriesStats.Series)
-			l.span.SetTag("processed.chunks", seriesStats.Chunks)
-			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
-			l.span.Finish()
-		}()
-
 		numResponses := 0
 		defer func() {
 			if numResponses == 0 {
@@ -418,8 +406,6 @@ func newLazyRespSet(
 			select {
 			case <-l.ctx.Done():
 				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st)
-				l.span.SetTag("err", err.Error())
-
 				l.bufferedResponsesMtx.Lock()
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 				l.noMoreData = true
@@ -447,8 +433,6 @@ func newLazyRespSet(
 					} else {
 						rerr = errors.Wrapf(err, "receive series from %s", st)
 					}
-
-					l.span.SetTag("err", rerr.Error())
 
 					l.bufferedResponsesMtx.Lock()
 					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
@@ -518,23 +502,16 @@ func newAsyncRespSet(
 	emptyStreamResponses prometheus.Counter,
 ) (respSet, error) {
 
-	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
-	storeAddr, isLocalStore := st.Addr()
+	storeAddr, _ := st.Addr()
 	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
 	if storeID == "" {
 		storeID = "Store Gateway"
 	}
 
-	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
+	seriesCtx := tracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
-	})
-
-	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-		"store.id":       storeID,
-		"store.is_local": isLocalStore,
-		"store.addr":     storeAddr,
 	})
 
 	seriesCtx, closeSeries = context.WithCancel(seriesCtx)
@@ -548,12 +525,8 @@ func newAsyncRespSet(
 
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
-		err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
-
-		span.SetTag("err", err.Error())
-		span.Finish()
 		closeSeries()
-		return nil, err
+		return nil, errors.Wrapf(err, "fetch series for %s %s", storeID, st)
 	}
 
 	var labelsToRemove map[string]struct{}
@@ -572,7 +545,6 @@ func newAsyncRespSet(
 	case LazyRetrieval:
 		return newLazyRespSet(
 			seriesCtx,
-			span,
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
@@ -585,7 +557,6 @@ func newAsyncRespSet(
 	case EagerRetrieval:
 		return newEagerRespSet(
 			seriesCtx,
-			span,
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
@@ -617,9 +588,8 @@ func (l *lazyRespSet) Close() {
 // NOTE(bwplotka): It also resorts the series (and emits warning) if the client.SupportsWithoutReplicaLabels() is false.
 type eagerRespSet struct {
 	// Generic parameters.
-	span opentracing.Span
-	cl   storepb.Store_SeriesClient
-	ctx  context.Context
+	cl  storepb.Store_SeriesClient
+	ctx context.Context
 
 	closeSeries  context.CancelFunc
 	frameTimeout time.Duration
@@ -639,7 +609,6 @@ type eagerRespSet struct {
 
 func newEagerRespSet(
 	ctx context.Context,
-	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
 	storeLabelSets []labels.Labels,
@@ -651,7 +620,6 @@ func newEagerRespSet(
 	removeLabels map[string]struct{},
 ) respSet {
 	ret := &eagerRespSet{
-		span:              span,
 		closeSeries:       closeSeries,
 		cl:                cl,
 		frameTimeout:      frameTimeout,
@@ -674,18 +642,10 @@ func newEagerRespSet(
 
 	// Start a goroutine and immediately buffer everything.
 	go func(l *eagerRespSet) {
+		defer ret.wg.Done()
+
 		seriesStats := &storepb.SeriesStatsCounter{}
 		bytesProcessed := 0
-
-		defer func() {
-			l.span.SetTag("processed.series", seriesStats.Series)
-			l.span.SetTag("processed.chunks", seriesStats.Chunks)
-			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
-			l.span.Finish()
-			ret.wg.Done()
-		}()
-
 		numResponses := 0
 		defer func() {
 			if numResponses == 0 {
@@ -704,7 +664,6 @@ func newEagerRespSet(
 			case <-l.ctx.Done():
 				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", storeName)
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
-				l.span.SetTag("err", err.Error())
 				return false
 			default:
 				resp, err := cl.Recv()
@@ -723,7 +682,6 @@ func newEagerRespSet(
 						rerr = errors.Wrapf(err, "receive series from %s", storeName)
 					}
 					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
-					l.span.SetTag("err", rerr.Error())
 					return false
 				}
 
