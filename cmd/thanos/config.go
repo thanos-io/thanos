@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/common/model"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/shipper"
 )
 
 type grpcConfig struct {
@@ -113,7 +114,17 @@ type reloaderConfig struct {
 	ruleDirectories []string
 	watchInterval   time.Duration
 	retryInterval   time.Duration
+	method          string
+	processName     string
 }
+
+const (
+	// HTTPReloadMethod reloads the configuration using the HTTP reload endpoint.
+	HTTPReloadMethod = "http"
+
+	// SignalReloadMethod reloads the configuration sending a SIGHUP signal to the process.
+	SignalReloadMethod = "signal"
+)
 
 func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfig {
 	cmd.Flag("reloader.config-file",
@@ -131,6 +142,12 @@ func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfi
 	cmd.Flag("reloader.retry-interval",
 		"Controls how often reloader retries config reload in case of error.").
 		Default("5s").DurationVar(&rc.retryInterval)
+	cmd.Flag("reloader.method",
+		"Method used to reload the configuration.").
+		Default(HTTPReloadMethod).EnumVar(&rc.method, HTTPReloadMethod, SignalReloadMethod)
+	cmd.Flag("reloader.process-name",
+		"Executable name used to match the process being reloaded when using the signal method.").
+		Default("prometheus").StringVar(&rc.processName)
 
 	return rc
 }
@@ -140,6 +157,7 @@ type shipperConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	hashFunc              string
+	metaFileName          string
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -156,6 +174,7 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
+	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)
 	return sc
 }
 

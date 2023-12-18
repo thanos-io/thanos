@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
@@ -27,10 +28,10 @@ import (
 
 func TestIsWALFileAccessible_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		testutil.Ok(t, p.Start())
-
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
+		testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
+
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error { return IsWALDirAccessible(p.Dir()) }))
 
 		testutil.NotOk(t, IsWALDirAccessible(path.Join(p.Dir(), "/non-existing")))
@@ -49,7 +50,7 @@ func TestExternalLabels_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		p.SetConfig(string(cfgData))
 
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -65,7 +66,7 @@ func TestExternalLabels_e2e(t *testing.T) {
 
 func TestConfiguredFlags_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -101,7 +102,7 @@ func TestSnapshot_e2e(t *testing.T) {
 		)
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -172,7 +173,7 @@ func TestQueryRange_e2e(t *testing.T) {
 		)
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)

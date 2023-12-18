@@ -118,14 +118,8 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 	   @echo ">> building React app"
 	   @scripts/build-react-app.sh
 
-.PHONY: assets
-assets: # Repacks all static assets into go file for easier deploy.
-assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
-	@echo ">> deleting asset file"
-	@rm pkg/ui/bindata.go || true
-	@echo ">> writing assets"
-	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go  pkg/ui/static/...
-	@$(MAKE) format
+.PHONY: react-app
+react-app: $(REACT_APP_OUTPUT_DIR)
 
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
@@ -133,7 +127,7 @@ react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   cd $(REACT_APP_PATH) && npm run lint:ci
 
 .PHONY: react-app-lint-fix
-react-app-lint-fix:
+react-app-lint-fix: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app linting and fixing errors where possible"
 	cd $(REACT_APP_PATH) && npm run lint
 
@@ -314,7 +308,7 @@ test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
-	@go test -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+	@go test -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.

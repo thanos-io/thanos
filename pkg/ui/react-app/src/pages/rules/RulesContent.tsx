@@ -91,7 +91,11 @@ export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ resp
                               <strong>for:</strong> {formatDuration(r.duration * 1000)}
                             </div>
                           )}
-
+                          {r.keepFiringFor > 0 && (
+                            <div>
+                              <strong>keep_firing_for:</strong> {formatDuration(r.keepFiringFor * 1000)}
+                            </div>
+                          )}
                           <div>
                             <strong>labels:</strong>
                             {Object.entries(r.labels).map(([key, value]) => (

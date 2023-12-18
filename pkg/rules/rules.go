@@ -116,15 +116,16 @@ func matches(matcherSets [][]*labels.Matcher, l labels.Labels) bool {
 		return true
 	}
 
-	var nonTemplatedLabels labels.Labels
+	b := labels.NewBuilder(labels.EmptyLabels())
 	labelTemplate := template.New("label")
-	for _, label := range l {
+	l.Range(func(label labels.Label) {
 		t, err := labelTemplate.Parse(label.Value)
 		// Label value is non-templated if it is one node of type NodeText.
 		if err == nil && len(t.Root.Nodes) == 1 && t.Root.Nodes[0].Type() == parse.NodeText {
-			nonTemplatedLabels = append(nonTemplatedLabels, label)
+			b.Set(label.Name, label.Value)
 		}
-	}
+	})
+	nonTemplatedLabels := b.Labels()
 
 	for _, matchers := range matcherSets {
 		for _, m := range matchers {
@@ -143,12 +144,9 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 		return rules
 	}
 
-	// Remove replica labels and sort each rule's label names such that they are comparable.
+	// Remove replica labels
 	for _, r := range rules {
 		removeReplicaLabels(r, replicaLabels)
-		sort.Slice(r.GetLabels(), func(i, j int) bool {
-			return r.GetLabels()[i].Name < r.GetLabels()[j].Name
-		})
 	}
 
 	// Sort rules globally.
@@ -187,14 +185,11 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 }
 
 func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
-	lbls := r.GetLabels()
-	newLabels := make(labels.Labels, 0, len(lbls))
-	for _, l := range lbls {
-		if _, ok := replicaLabels[l.Name]; !ok {
-			newLabels = append(newLabels, l)
-		}
+	b := labels.NewBuilder(r.GetLabels())
+	for k := range replicaLabels {
+		b.Del(k)
 	}
-	r.SetLabels(newLabels)
+	r.SetLabels(b.Labels())
 }
 
 func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {

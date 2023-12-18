@@ -97,14 +97,14 @@ func ZLabelSetsFromPromLabels(lss ...labels.Labels) []ZLabelSet {
 	sets := make([]ZLabelSet, 0, len(lss))
 	for _, ls := range lss {
 		set := ZLabelSet{
-			Labels: make([]ZLabel, 0, len(ls)),
+			Labels: make([]ZLabel, 0, ls.Len()),
 		}
-		for _, lbl := range ls {
+		ls.Range(func(lbl labels.Label) {
 			set.Labels = append(set.Labels, ZLabel{
 				Name:  lbl.Name,
 				Value: lbl.Value,
 			})
-		}
+		})
 		sets = append(sets, set)
 	}
 
@@ -292,30 +292,40 @@ func (m *ZLabel) Compare(other ZLabel) int {
 //
 // In case of existing labels already present in given label set, it will be overwritten by external one.
 // NOTE: Labels and extend has to be sorted.
-func ExtendSortedLabels(lset, extend labels.Labels) labels.Labels {
-	ret := make(labels.Labels, 0, len(lset)+len(extend))
-
-	// Inject external labels in place.
-	for len(lset) > 0 && len(extend) > 0 {
-		d := strings.Compare(lset[0].Name, extend[0].Name)
-		if d == 0 {
-			// Duplicate, prefer external labels.
-			// NOTE(fabxc): Maybe move it to a prefixed version to still ensure uniqueness of series?
-			ret = append(ret, extend[0])
-			lset, extend = lset[1:], extend[1:]
-		} else if d < 0 {
-			ret = append(ret, lset[0])
-			lset = lset[1:]
-		} else if d > 0 {
-			ret = append(ret, extend[0])
-			extend = extend[1:]
+func ExtendSortedLabels(lset labels.Labels, extend []labels.Label) labels.Labels {
+	if len(extend) == 0 {
+		return lset.Copy()
+	}
+	b := labels.NewScratchBuilder(lset.Len() + len(extend))
+	lset.Range(func(l labels.Label) {
+		for {
+			if len(extend) == 0 {
+				b.Add(l.Name, l.Value)
+				break
+			} else {
+				e := extend[0]
+				d := strings.Compare(l.Name, e.Name)
+				if d == 0 {
+					// Duplicate, prefer external labels.
+					// NOTE(fabxc): Maybe move it to a prefixed version to still ensure uniqueness of series?
+					b.Add(e.Name, e.Value)
+					extend = extend[1:]
+					break
+				} else if d < 0 {
+					b.Add(l.Name, l.Value)
+					break
+				} else if d > 0 {
+					b.Add(e.Name, e.Value)
+					extend = extend[1:]
+				}
+			}
 		}
+	})
+	for j := 0; j < len(extend); j++ {
+		b.Add(extend[j].Name, extend[j].Value)
 	}
 
-	// Append all remaining elements.
-	ret = append(ret, lset...)
-	ret = append(ret, extend...)
-	return ret
+	return b.Labels()
 }
 
 func PromLabelSetsToString(lsets []labels.Labels) string {
@@ -332,7 +342,6 @@ func (m *ZLabelSet) UnmarshalJSON(entry []byte) error {
 	if err := lbls.UnmarshalJSON(entry); err != nil {
 		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
 	}
-	sort.Sort(lbls)
 	m.Labels = ZLabelsFromPromLabels(lbls)
 	return nil
 }
