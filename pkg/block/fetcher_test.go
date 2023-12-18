@@ -71,7 +71,10 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 		var ulidToDelete ulid.ULID
 		r := prometheus.NewRegistry()
-		baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, objstore.WithNoopInstr(bkt), dir, r)
+		noopLogger := log.NewNopLogger()
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := NewBaseBlockIDsFetcher(noopLogger, insBkt)
+		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
 		testutil.Ok(t, err)
 
 		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{

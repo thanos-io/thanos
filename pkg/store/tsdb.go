@@ -341,10 +341,15 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	}
 
 	if !match {
-		return &storepb.LabelValuesResponse{Values: nil}, nil
+		return &storepb.LabelValuesResponse{}, nil
 	}
 
 	if v := s.getExtLset().Get(r.Label); v != "" {
+		for _, m := range matchers {
+			if !m.Matches(v) {
+				return &storepb.LabelValuesResponse{}, nil
+			}
+		}
 		return &storepb.LabelValuesResponse{Values: []string{v}}, nil
 	}
 

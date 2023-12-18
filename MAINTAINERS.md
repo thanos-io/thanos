@@ -10,8 +10,7 @@
 | Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
 | Matthias Loibl        | mail@matthiasloibl.com    | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)       | Polar Signals       |
 | Ben Ye                | yb532204897@gmail.com     | `@yeya24`                | [@yeya24](https://github.com/yeya24)               | Amazon Web Services |
-| Wiard van Rij         | wiard@outlook.com         | `@wiard van Rij`         | [@wiardvanrij](https://github.com/wiardvanrij)     | Roku                |
-| Matej Gera            | matejgera@gmail.com       | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)             | Red Hat             |
+| Matej Gera            | matejgera@gmail.com       | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)             | Coralogix           |
 | Filip Petkovski       | filip.petkovsky@gmail.com | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)       | Shopify             |
 | Saswata Mukherjee     | saswata.mukhe@gmail.com   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode)   | Red Hat             |
 | Michael Hoffmann      | mhoffm@posteo.de          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Aiven               |

@@ -649,7 +649,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		if id, ok := middleware.RequestIDFromContext(pctx); ok {
 			logTags = append(logTags, "request-id", id)
 		}
-		tLogger = log.With(h.logger, logTags)
+		tLogger = log.With(h.logger, logTags...)
 	}
 
 	// NOTE(GiedriusS): First write locally because inside of the function we check if the local TSDB has cached strings.

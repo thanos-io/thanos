@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -62,18 +64,44 @@ func registerSidecar(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
+		httpConfContentYaml, err := conf.prometheus.httpClient.Content()
+		if err != nil {
+			return errors.Wrap(err, "getting http client config")
+		}
+		httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "parsing http config YAML")
+		}
+
+		httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+		if err != nil {
+			return errors.Wrap(err, "Improper http client config")
+		}
+
+		opts := reloader.Options{
+			HTTPClient:    *httpClient,
+			CfgFile:       conf.reloader.confFile,
+			CfgOutputFile: conf.reloader.envVarConfFile,
+			WatchedDirs:   conf.reloader.ruleDirectories,
+			WatchInterval: conf.reloader.watchInterval,
+			RetryInterval: conf.reloader.retryInterval,
+		}
+
+		switch conf.reloader.method {
+		case HTTPReloadMethod:
+			opts.ReloadURL = reloader.ReloadURLFromBase(conf.prometheus.url)
+		case SignalReloadMethod:
+			opts.ProcessName = conf.reloader.processName
+			opts.RuntimeInfoURL = reloader.RuntimeInfoURLFromBase(conf.prometheus.url)
+		default:
+			return fmt.Errorf("invalid reload method: %s", conf.reloader.method)
+		}
+
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
-			&reloader.Options{
-				ReloadURL:     reloader.ReloadURLFromBase(conf.prometheus.url),
-				CfgFile:       conf.reloader.confFile,
-				CfgOutputFile: conf.reloader.envVarConfFile,
-				WatchedDirs:   conf.reloader.ruleDirectories,
-				WatchInterval: conf.reloader.watchInterval,
-				RetryInterval: conf.reloader.retryInterval,
-			})
+			&opts)
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, grpcLogOpts, tagOpts)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, httpClient, grpcLogOpts, tagOpts)
 	})
 }
 
@@ -85,28 +113,13 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	comp component.Component,
 	conf sidecarConfig,
+	httpClient *http.Client,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 ) error {
-	httpConfContentYaml, err := conf.prometheus.httpClient.Content()
-	if err != nil {
-		return errors.Wrap(err, "getting http client config")
-	}
-	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
-	if err != nil {
-		return errors.Wrap(err, "parsing http config YAML")
-	}
-
-	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
-	if err != nil {
-		return errors.Wrap(err, "Improper http client config")
-	}
-
-	reloader.SetHttpClient(*httpClient)
 
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
-
 		// Start out with the full time range. The shipper will constrain it later.
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
 		mint: conf.limitMinTime.PrometheusTimestamp(),

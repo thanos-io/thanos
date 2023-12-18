@@ -57,18 +57,37 @@ const (
 	PromAddrPlaceHolder = "PROMETHEUS_ADDRESS"
 )
 
-var histogramSample = histogram.Histogram{
-	Schema:        0,
-	Count:         20,
-	Sum:           -3.1415,
-	ZeroCount:     12,
-	ZeroThreshold: 0.001,
-	NegativeSpans: []histogram.Span{
-		{Offset: 0, Length: 4},
-		{Offset: 1, Length: 1},
-	},
-	NegativeBuckets: []int64{1, 2, -2, 1, -1},
-}
+var (
+	histogramSample = histogram.Histogram{
+		Schema:        0,
+		Count:         20,
+		Sum:           -3.1415,
+		ZeroCount:     12,
+		ZeroThreshold: 0.001,
+		NegativeSpans: []histogram.Span{
+			{Offset: 0, Length: 4},
+			{Offset: 1, Length: 1},
+		},
+		NegativeBuckets: []int64{1, 2, -2, 1, -1},
+	}
+
+	floatHistogramSample = histogram.FloatHistogram{
+		ZeroThreshold: 0.01,
+		ZeroCount:     5.5,
+		Count:         15,
+		Sum:           11.5,
+		PositiveSpans: []histogram.Span{
+			{Offset: -2, Length: 2},
+			{Offset: 1, Length: 3},
+		},
+		PositiveBuckets: []float64{0.5, 0, 1.5, 2, 3.5},
+		NegativeSpans: []histogram.Span{
+			{Offset: 3, Length: 2},
+			{Offset: 3, Length: 2},
+		},
+		NegativeBuckets: []float64{1.5, 0.5, 2.5, 3},
+	}
+)
 
 func PrometheusBinary() string {
 	return "prometheus-" + defaultPrometheusVersion
@@ -463,6 +482,22 @@ func CreateHistogramBlockWithDelay(
 	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValHistogram)
 }
 
+// CreateFloatHistogramBlockWithDelay writes a block with the given float native histogram series and numSamples samples each.
+// Samples will be in the time range [mint, maxt).
+func CreateFloatHistogramBlockWithDelay(
+	ctx context.Context,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	blockDelay time.Duration,
+	extLset labels.Labels,
+	resolution int64,
+	hashFunc metadata.HashFunc,
+) (id ulid.ULID, err error) {
+	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValFloatHistogram)
+}
+
 func createBlockWithDelay(ctx context.Context, dir string, series []labels.Labels, numSamples int, mint int64, maxt int64, blockDelay time.Duration, extLset labels.Labels, resolution int64, hashFunc metadata.HashFunc, samplesType chunkenc.ValueType) (ulid.ULID, error) {
 	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, samplesType)
 	if err != nil {
@@ -545,6 +580,8 @@ func createBlock(
 						randMutex.Unlock()
 					} else if sampleType == chunkenc.ValHistogram {
 						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
+					} else if sampleType == chunkenc.ValFloatHistogram {
+						_, err = app.AppendHistogram(0, lset, t, nil, &floatHistogramSample)
 					}
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
