@@ -56,6 +56,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"hash"
 	"io"
 	"net/http"
@@ -66,12 +67,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/minio/sha256-simd"
+	ps "github.com/mitchellh/go-ps"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -84,14 +87,14 @@ import (
 // Referenced environment variables must be of the form `$(var)` (not `$var` or `${var}`).
 type Reloader struct {
 	logger        log.Logger
-	reloadURL     *url.URL
-	httpClient    http.Client
 	cfgFile       string
 	cfgOutputFile string
 	watchInterval time.Duration
 	retryInterval time.Duration
 	watchedDirs   []string
 	watcher       *watcher
+
+	tr TriggerReloader
 
 	lastCfgHash         []byte
 	lastWatchedDirsHash []byte
@@ -103,12 +106,33 @@ type Reloader struct {
 	lastReloadSuccessTimestamp prometheus.Gauge
 	configApplyErrors          prometheus.Counter
 	configApply                prometheus.Counter
+	reloaderInfo               *prometheus.GaugeVec
+}
+
+// TriggerReloader reloads the configuration of the process.
+type TriggerReloader interface {
+	TriggerReload(ctx context.Context) error
 }
 
 // Options bundles options for the Reloader.
 type Options struct {
-	// ReloadURL is a prometheus URL to trigger reloads.
+	// ReloadURL is the Prometheus URL to trigger reloads.
 	ReloadURL *url.URL
+
+	// HTTP client used to connect to the web server.
+	HTTPClient http.Client
+
+	// ProcessName is the process executable name to trigger reloads. If not
+	// empty, the reloader sends a SIGHUP signal to the matching process ID
+	// instead of using the HTTP reload endpoint.
+	ProcessName string
+	// RuntimeInfoURL is the Prometheus URL returning runtime information
+	// including the last configuration status (e.g. `/api/v1/status/runtimeinfo`).
+	// It is only relevant for signal-based reloads.
+	// If empty, the reloader will not be able to assess that the reloading is
+	// successful.
+	RuntimeInfoURL *url.URL
+
 	// CfgFile is a path to the prometheus config file to watch.
 	CfgFile string
 	// CfgOutputFile is a path for the output config file.
@@ -124,7 +148,7 @@ type Options struct {
 	// WatchInterval controls how often reloader re-reads config and directories.
 	WatchInterval time.Duration
 	// RetryInterval controls how often the reloader retries a reloading of the
-	// configuration in case the endpoint returned an error.
+	// configuration in case the reload operation returned an error.
 	RetryInterval time.Duration
 }
 
@@ -138,7 +162,6 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 	}
 	r := &Reloader{
 		logger:        logger,
-		reloadURL:     o.ReloadURL,
 		cfgFile:       o.CfgFile,
 		cfgOutputFile: o.CfgOutputFile,
 		watcher:       newWatcher(logger, reg, o.DelayInterval),
@@ -182,7 +205,23 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 				Help: "Total number of config apply operations that failed.",
 			},
 		),
+		reloaderInfo: promauto.With(reg).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "reloader_info",
+				Help: "A metric with a constant '1' value labeled by reload method (either 'http' or 'signal').",
+			},
+			[]string{"method"},
+		),
 	}
+
+	if o.ProcessName != "" {
+		r.tr = NewPIDReloader(r.logger, o.ProcessName, o.RuntimeInfoURL, o.HTTPClient)
+		r.reloaderInfo.WithLabelValues("signal").Set(1)
+	} else {
+		r.tr = NewHTTPReloader(r.logger, o.ReloadURL, o.HTTPClient)
+		r.reloaderInfo.WithLabelValues("http").Set(1)
+	}
+
 	return r
 }
 
@@ -199,6 +238,12 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		level.Info(r.logger).Log("msg", "nothing to be watched")
 		<-ctx.Done()
 		return nil
+	}
+
+	if _, ok := r.tr.(*PIDReloader); ok {
+		level.Info(r.logger).Log("msg", "reloading via process signal")
+	} else {
+		level.Info(r.logger).Log("msg", "reloading via HTTP")
 	}
 
 	defer runutil.CloseWithLogOnErr(r.logger, r.watcher, "config watcher close")
@@ -274,6 +319,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		cfgHash         []byte
 		watchedDirsHash []byte
 	)
+
 	if r.cfgFile != "" {
 		h := sha256.New()
 		if err := hashFile(h, r.cfgFile); err != nil {
@@ -350,6 +396,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return errors.Wrap(err, "build hash")
 		}
 	}
+
 	if len(r.watchedDirs) > 0 {
 		watchedDirsHash = h.Sum(nil)
 	}
@@ -363,6 +410,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		if r.watchInterval == 0 {
 			return nil
 		}
+
 		r.reloads.Inc()
 		if err := r.triggerReload(ctx); err != nil {
 			r.reloadErrors.Inc()
@@ -384,6 +432,14 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}); err != nil {
 		r.forceReload = true
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
+	}
+
+	return nil
+}
+
+func (r *Reloader) triggerReload(ctx context.Context) error {
+	if err := r.tr.TriggerReload(ctx); err != nil {
+		return err
 	}
 
 	return nil
@@ -412,28 +468,101 @@ func hashFile(h hash.Hash, fn string) error {
 	return nil
 }
 
-func (r *Reloader) triggerReload(ctx context.Context) error {
-	req, err := http.NewRequest("POST", r.reloadURL.String(), nil)
+type PIDReloader struct {
+	pname string
+	prt   *prometheusReloadTracker
+}
+
+func NewPIDReloader(logger log.Logger, processName string, u *url.URL, c http.Client) *PIDReloader {
+	return &PIDReloader{
+		pname: processName,
+		prt: &prometheusReloadTracker{
+			client:     c,
+			runtimeURL: u,
+			logger:     logger,
+		},
+	}
+}
+
+func (pr *PIDReloader) TriggerReload(ctx context.Context) error {
+	if err := pr.prt.preReload(ctx); err != nil {
+		return fmt.Errorf("pre-reload check failed: %w", err)
+	}
+
+	procs, err := ps.Processes()
+	if err != nil {
+		return fmt.Errorf("list processes: %w", err)
+	}
+
+	var proc ps.Process
+	for i := range procs {
+		if pr.pname == procs[i].Executable() {
+			proc = procs[i]
+			break
+		}
+	}
+
+	if proc == nil {
+		return fmt.Errorf("failed to find process matching %q", pr.pname)
+	}
+
+	p, err := os.FindProcess(proc.Pid())
+	if err != nil {
+		return fmt.Errorf("find process err: %w", err)
+	}
+
+	if p == nil {
+		return fmt.Errorf("failed to find process with pid %d", proc.Pid())
+	}
+
+	if err := p.Signal(syscall.SIGHUP); err != nil {
+		return fmt.Errorf("failed to send SIGHUP to pid %d: %w", p.Pid, err)
+	}
+
+	if err := pr.prt.postReload(ctx); err != nil {
+		return fmt.Errorf("post-reload check failed: %w", err)
+	}
+
+	return nil
+}
+
+var _ = TriggerReloader(&PIDReloader{})
+
+type HTTPReloader struct {
+	logger log.Logger
+
+	u *url.URL
+	c http.Client
+}
+
+var _ = TriggerReloader(&HTTPReloader{})
+
+func NewHTTPReloader(logger log.Logger, u *url.URL, c http.Client) *HTTPReloader {
+	return &HTTPReloader{
+		logger: logger,
+		u:      u,
+		c:      c,
+	}
+}
+
+func (hr *HTTPReloader) TriggerReload(ctx context.Context) error {
+	req, err := http.NewRequest("POST", hr.u.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "create request")
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := r.httpClient.Do(req)
+	resp, err := hr.c.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "reload request failed")
 	}
-	defer runutil.ExhaustCloseWithLogOnErr(r.logger, resp.Body, "trigger reload resp body")
+	defer runutil.ExhaustCloseWithLogOnErr(hr.logger, resp.Body, "trigger reload resp body")
 
 	if resp.StatusCode != 200 {
 		return errors.Errorf("received non-200 response: %s; have you set `--web.enable-lifecycle` Prometheus flag?", resp.Status)
 	}
-	return nil
-}
 
-// SetHttpClient sets Http client for reloader.
-func (r *Reloader) SetHttpClient(client http.Client) {
-	r.httpClient = client
+	return nil
 }
 
 // ReloadURLFromBase returns the standard Prometheus reload URL from its base URL.
@@ -441,6 +570,11 @@ func ReloadURLFromBase(u *url.URL) *url.URL {
 	r := *u
 	r.Path = path.Join(r.Path, "/-/reload")
 	return &r
+}
+
+// RuntimeInfoURLFromBase returns the standard Prometheus runtime info URL from its base URL.
+func RuntimeInfoURLFromBase(u *url.URL) *url.URL {
+	return u.JoinPath("/api/v1/status/runtimeinfo")
 }
 
 var envRe = regexp.MustCompile(`\$\(([a-zA-Z_0-9]+)\)`)

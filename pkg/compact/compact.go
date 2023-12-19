@@ -1286,8 +1286,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 	level.Info(cg.logger).Log("msg", "finished running post compaction callback", "result_block", compID)
 
-	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
-		"duration", time.Since(groupCompactionBegin), "duration_ms", time.Since(groupCompactionBegin).Milliseconds())
+	level.Info(cg.logger).Log("msg", "finished compacting blocks", "duration", time.Since(groupCompactionBegin),
+		"duration_ms", time.Since(groupCompactionBegin).Milliseconds(), "result_block", compID, "source_blocks", sourceBlockStr)
 	return true, compID, nil
 }
 

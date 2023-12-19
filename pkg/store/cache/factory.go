@@ -78,6 +78,7 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s index cache", cacheConfig.Type))
 	}
 
+	cache = NewTracingIndexCache(string(cacheConfig.Type), cache)
 	if len(cacheConfig.EnabledItems) > 0 {
 		if err = ValidateEnabledItems(cacheConfig.EnabledItems); err != nil {
 			return nil, err

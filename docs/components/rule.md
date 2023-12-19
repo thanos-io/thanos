@@ -111,6 +111,10 @@ expr: <string>
 # Alerts which have not yet fired for long enough are considered pending.
 [ for: <duration> | default = 0s ]
 
+# How long an alert will continue firing after the condition that triggered it
+# has cleared.
+[ keep_firing_for: <duration> | default = 0s ]
+
 # Labels to add or overwrite for each alert.
 labels:
   [ <labelname>: <tmpl_string> ]
@@ -445,6 +449,8 @@ Flags:
                                  Note that rules are not automatically detected,
                                  use SIGHUP or do HTTP POST /-/reload to re-read
                                  them.
+      --shipper.meta-file-name="thanos.shipper.json"
+                                 the file to store shipper metadata in
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
