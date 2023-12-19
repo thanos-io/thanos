@@ -57,7 +57,7 @@ import (
 const compressionNone = "none"
 
 func registerReceive(app *extkingpin.App) {
-	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
+	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb. All the tsdb flags are as per tenant.")
 
 	conf := &receiveConfig{}
 	conf.registerFlag(cmd)
