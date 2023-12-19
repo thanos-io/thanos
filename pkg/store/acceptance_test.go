@@ -190,6 +190,13 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					end:            timestamp.FromTime(maxTime),
 					label:          "region",
 					expectedValues: []string(nil),
+					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "nonexistent"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "region",
+					expectedValues: []string(nil),
 					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-east"}},
 				},
 				{
@@ -805,7 +812,9 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			chunkPool, err := NewDefaultChunkBytesPool(2e5)
 			testutil.Ok(tt, err)
 
-			metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), metaDir, nil, []block.MetadataFilter{
+			insBkt := objstore.WithNoopInstr(bkt)
+			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 			})
 			testutil.Ok(tt, err)

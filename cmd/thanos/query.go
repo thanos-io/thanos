@@ -259,7 +259,10 @@ func registerQuery(app *extkingpin.App) {
 				Files:           *fileSDFiles,
 				RefreshInterval: *fileSDInterval,
 			}
-			fileSD = file.NewDiscovery(conf, logger)
+			var err error
+			if fileSD, err = file.NewDiscovery(conf, logger, reg); err != nil {
+				return err
+			}
 		}
 
 		if *webRoutePrefix == "" {
