@@ -43,8 +43,14 @@ func TestQueryFrontend(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+	
+	// prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	// testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -160,7 +166,7 @@ func TestQueryFrontend(t *testing.T) {
 			queryFrontend.Endpoint("http"),
 			e2ethanos.QueryUpWithoutInstance,
 			timestamp.FromTime(now.Add(-time.Hour)),
-			timestamp.FromTime(now.Add(time.Hour)),
+			timestamp.FromTime(now.Add(5 * time.Hour)),
 			14,
 			promclient.QueryOptions{
 				Deduplicate: true,
