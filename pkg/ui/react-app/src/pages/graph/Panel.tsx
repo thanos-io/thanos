@@ -520,7 +520,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`force-tracing-checkbox-${id}`}
                 onChange={this.handleChangeForceTracing}
-                defaultchecked={options.forceTracing}
+                defaultChecked={options.forceTracing}
               >
                 Force Tracing
               </Checkbox>

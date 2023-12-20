@@ -14,8 +14,9 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 )
 
@@ -86,13 +87,13 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 	limit.tenantCurrentSeriesMap = map[string]float64{}
 
 	// Use specified HTTPConfig (if any) to make requests to meta-monitoring.
-	c := httpconfig.NewDefaultClientConfig()
+	c := clientconfig.NewDefaultHTTPClientConfig()
 	if w.GlobalLimits.MetaMonitoringHTTPClient != nil {
 		c = *w.GlobalLimits.MetaMonitoringHTTPClient
 	}
 
 	var err error
-	limit.metaMonitoringClient, err = httpconfig.NewHTTPClient(c, "meta-mon-for-limit")
+	limit.metaMonitoringClient, err = clientconfig.NewHTTPClient(c, "meta-mon-for-limit")
 	if err != nil {
 		level.Error(logger).Log("msg", "improper http client config", "err", err.Error())
 	}
@@ -104,7 +105,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 // solution with the configured query for getting current active (head) series of all tenants.
 // It then populates tenantCurrentSeries map with result.
 func (h *headSeriesLimit) QueryMetaMonitoring(ctx context.Context) error {
-	c := promclient.NewWithTracingClient(h.logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
+	c := promclient.NewWithTracingClient(h.logger, h.metaMonitoringClient, clientconfig.ThanosUserAgent)
 
 	vectorRes, _, _, err := c.QueryInstant(ctx, h.metaMonitoringURL, h.metaMonitoringQuery, time.Now(), promclient.QueryOptions{Deduplicate: true})
 	if err != nil {

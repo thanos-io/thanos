@@ -1,8 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package httpconfig is a wrapper around github.com/prometheus/common/config.
-package httpconfig
+package clientconfig
 
 import (
 	"context"
@@ -14,6 +13,8 @@ import (
 	"path"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
@@ -30,8 +31,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 )
 
-// ClientConfig configures an HTTP client.
-type ClientConfig struct {
+// HTTPConfig is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
+type HTTPConfig struct {
+	HTTPClientConfig HTTPClientConfig    `yaml:"http_config"`
+	EndpointsConfig  HTTPEndpointsConfig `yaml:",inline"`
+}
+
+func (c *HTTPConfig) NotEmpty() bool {
+	return len(c.EndpointsConfig.FileSDConfigs) > 0 || len(c.EndpointsConfig.StaticAddresses) > 0
+}
+
+// HTTPClientConfig configures an HTTP client.
+type HTTPClientConfig struct {
 	// The HTTP basic authentication credentials for the targets.
 	BasicAuth BasicAuth `yaml:"basic_auth"`
 	// The bearer token for the targets.
@@ -75,7 +86,7 @@ func (b BasicAuth) IsZero() bool {
 	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
 }
 
-// Transport configures client's transport properties.
+// TransportConfig configures client's transport properties.
 type TransportConfig struct {
 	MaxIdleConns          int   `yaml:"max_idle_conns"`
 	MaxIdleConnsPerHost   int   `yaml:"max_idle_conns_per_host"`
@@ -100,12 +111,12 @@ var defaultTransportConfig TransportConfig = TransportConfig{
 	DialerTimeout:         int64(5 * time.Second),
 }
 
-func NewDefaultClientConfig() ClientConfig {
-	return ClientConfig{TransportConfig: defaultTransportConfig}
+func NewDefaultHTTPClientConfig() HTTPClientConfig {
+	return HTTPClientConfig{TransportConfig: defaultTransportConfig}
 }
 
-func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
-	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
+func NewHTTPClientConfigFromYAML(cfg []byte) (*HTTPClientConfig, error) {
+	conf := &HTTPClientConfig{TransportConfig: defaultTransportConfig}
 	if err := yaml.Unmarshal(cfg, conf); err != nil {
 		return nil, err
 	}
@@ -188,7 +199,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 }
 
 // NewHTTPClient returns a new HTTP client.
-func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
+func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -272,13 +283,13 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 	return u.rt.RoundTrip(r)
 }
 
-// EndpointsConfig configures a cluster of HTTP endpoints from static addresses and
+// HTTPEndpointsConfig configures a cluster of HTTP endpoints from static addresses and
 // file service discovery.
-type EndpointsConfig struct {
+type HTTPEndpointsConfig struct {
 	// List of addresses with DNS prefixes.
 	StaticAddresses []string `yaml:"static_configs"`
 	// List of file  configurations (our FileSD supports different DNS lookups).
-	FileSDConfigs []FileSDConfig `yaml:"file_sd_configs"`
+	FileSDConfigs []HTTPFileSDConfig `yaml:"file_sd_configs"`
 
 	// The URL scheme to use when talking to targets.
 	Scheme string `yaml:"scheme"`
@@ -287,13 +298,13 @@ type EndpointsConfig struct {
 	PathPrefix string `yaml:"path_prefix"`
 }
 
-// FileSDConfig represents a file service discovery configuration.
-type FileSDConfig struct {
+// HTTPFileSDConfig represents a file service discovery configuration.
+type HTTPFileSDConfig struct {
 	Files           []string       `yaml:"files"`
 	RefreshInterval model.Duration `yaml:"refresh_interval"`
 }
 
-func (c FileSDConfig) convert() (file.SDConfig, error) {
+func (c HTTPFileSDConfig) convert() (file.SDConfig, error) {
 	var fileSDConfig file.SDConfig
 	b, err := yaml.Marshal(c)
 	if err != nil {
@@ -308,8 +319,8 @@ type AddressProvider interface {
 	Addresses() []string
 }
 
-// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
-type Client struct {
+// HTTPClient represents a client that can send requests to a cluster of HTTP-based endpoints.
+type HTTPClient struct {
 	logger log.Logger
 
 	httpClient *http.Client
@@ -324,7 +335,7 @@ type Client struct {
 }
 
 // NewClient returns a new Client.
-func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
+func NewClient(logger log.Logger, cfg HTTPEndpointsConfig, client *http.Client, provider AddressProvider) (*HTTPClient, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -335,9 +346,14 @@ func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, prov
 		if err != nil {
 			return nil, err
 		}
-		discoverers = append(discoverers, file.NewDiscovery(&fileSDCfg, logger))
+		// We provide an empty registry and ignore metrics for now.
+		discovery, err := file.NewDiscovery(&fileSDCfg, logger, prometheus.NewRegistry())
+		if err != nil {
+			return nil, err
+		}
+		discoverers = append(discoverers, discovery)
 	}
-	return &Client{
+	return &HTTPClient{
 		logger:          logger,
 		httpClient:      client,
 		scheme:          cfg.Scheme,
@@ -350,12 +366,12 @@ func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, prov
 }
 
 // Do executes an HTTP request with the underlying HTTP client.
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
+func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
 // Endpoints returns the list of known endpoints.
-func (c *Client) Endpoints() []*url.URL {
+func (c *HTTPClient) Endpoints() []*url.URL {
 	var urls []*url.URL
 	for _, addr := range c.provider.Addresses() {
 		urls = append(urls,
@@ -370,7 +386,7 @@ func (c *Client) Endpoints() []*url.URL {
 }
 
 // Discover runs the service to discover endpoints until the given context is done.
-func (c *Client) Discover(ctx context.Context) {
+func (c *HTTPClient) Discover(ctx context.Context) {
 	var wg sync.WaitGroup
 	ch := make(chan []*targetgroup.Group)
 
@@ -400,6 +416,6 @@ func (c *Client) Discover(ctx context.Context) {
 }
 
 // Resolve refreshes and resolves the list of targets.
-func (c *Client) Resolve(ctx context.Context) error {
+func (c *HTTPClient) Resolve(ctx context.Context) error {
 	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
 }

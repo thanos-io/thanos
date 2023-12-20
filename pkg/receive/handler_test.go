@@ -162,6 +162,10 @@ func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
 
+func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
 func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}

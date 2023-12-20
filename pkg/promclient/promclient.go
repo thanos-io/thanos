@@ -33,8 +33,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -85,7 +85,7 @@ func NewClient(c HTTPClient, logger log.Logger, userAgent string) *Client {
 
 // NewDefaultClient returns Client with tracing tripperware.
 func NewDefaultClient() *Client {
-	client, _ := httpconfig.NewHTTPClient(httpconfig.ClientConfig{}, "")
+	client, _ := clientconfig.NewHTTPClient(clientconfig.HTTPClientConfig{}, "")
 	return NewWithTracingClient(
 		log.NewNopLogger(),
 		client,
