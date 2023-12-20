@@ -6,6 +6,8 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -14,19 +16,33 @@ import (
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
+	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
-const testHistogramMetricName = "fake_histogram"
+const (
+	testHistogramMetricName = "fake_histogram"
+
+	testRuleRecordHistogramSum = `
+groups:
+- name: fake_histogram_sum
+  interval: 1s
+  rules:
+  - record: fake_histogram:sum
+    expr: sum(fake_histogram)
+`
+)
 
 func TestQueryNativeHistograms(t *testing.T) {
 	e, err := e2e.NewDockerEnvironment("nat-hist-query")
@@ -73,7 +89,6 @@ func TestQueryNativeHistograms(t *testing.T) {
 			&model.Sample{
 				Value: 39,
 				Metric: model.Metric{
-					"foo":        "bar",
 					"prometheus": "prom-ha",
 				},
 			},
@@ -184,9 +199,8 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	// doesn't need to retry when we send queries to the frontend later.
 	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), func() string { return testHistogramMetricName }, time.Now, promclient.QueryOptions{Deduplicate: true}, []model.Metric{
 		{
-			"__name__":   testHistogramMetricName,
-			"prometheus": "prom-ha",
-			"foo":        "bar",
+			model.MetricNameLabel: testHistogramMetricName,
+			"prometheus":          "prom-ha",
 		},
 	})
 
@@ -323,7 +337,66 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	})
 }
 
-func writeHistograms(ctx context.Context, now time.Time, name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, rawRemoteWriteURL string) (time.Time, error) {
+func TestRuleNativeHistograms(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("hist-rule-rw")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+	rulesSubDir := "rules"
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+
+	for i, rule := range []string{testRuleRecordHistogramSum} {
+		createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
+	}
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().WithNativeHistograms().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
+
+	receiver2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().WithNativeHistograms().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
+	rwURL2 := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).WithReplicaLabels("receive", "replica").Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	histograms := tsdbutil.GenerateTestHistograms(4)
+	ts := time.Now().Add(-2 * time.Minute)
+	rawRemoteWriteURL1 := "http://" + receiver.Endpoint("remote-write") + "/api/v1/receive"
+	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL1, prompb.Label{Name: "series", Value: "one"})
+	testutil.Ok(t, err)
+	rawRemoteWriteURL2 := "http://" + receiver2.Endpoint("remote-write") + "/api/v1/receive"
+	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2, prompb.Label{Name: "series", Value: "two"})
+	testutil.Ok(t, err)
+
+	r := rFuture.InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
+		{
+			GRPCConfig: &clientconfig.GRPCConfig{
+				EndpointAddrs: []string{q.InternalEndpoint("grpc")},
+			},
+		},
+	}, []*config.RemoteWriteConfig{
+		{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver", SendNativeHistograms: true},
+		{URL: &common_cfg.URL{URL: rwURL2}, Name: "thanos-receiver2", SendNativeHistograms: true},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	// Wait until remote write samples are written to receivers successfully.
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"prometheus_remote_storage_histograms_total"}, e2emon.WaitMissingMetrics()))
+
+	expectedRecordedName := testHistogramMetricName + ":sum"
+	expectedRecordedHistogram := histograms[len(histograms)-1].ToFloat(nil).Mul(2)
+	queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return expectedRecordedName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(expectedRecordedName, nil, expectedRecordedHistogram, map[string]string{"tenant_id": "default-tenant"}))
+}
+
+func writeHistograms(ctx context.Context, now time.Time, name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, rawRemoteWriteURL string, labels ...prompb.Label) (time.Time, error) {
 	startTime := now.Add(time.Duration(len(histograms)-1) * -30 * time.Second).Truncate(30 * time.Second)
 	prompbHistograms := make([]prompb.Histogram, 0, len(histograms))
 
@@ -338,10 +411,9 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 	}
 
 	timeSeriespb := prompb.TimeSeries{
-		Labels: []prompb.Label{
-			{Name: "__name__", Value: name},
-			{Name: "foo", Value: "bar"},
-		},
+		Labels: append([]prompb.Label{
+			{Name: model.MetricNameLabel, Value: name},
+		}, labels...),
 		Histograms: prompbHistograms,
 	}
 
@@ -352,8 +424,7 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 
 func expectedHistogramModelVector(metricName string, histogram *histogram.Histogram, floatHistogram *histogram.FloatHistogram, externalLabels map[string]string) model.Vector {
 	metrics := model.Metric{
-		"__name__": model.LabelValue(metricName),
-		"foo":      "bar",
+		model.MetricNameLabel: model.LabelValue(metricName),
 	}
 	for labelKey, labelValue := range externalLabels {
 		metrics[model.LabelName(labelKey)] = model.LabelValue(labelValue)
@@ -377,8 +448,7 @@ func expectedHistogramModelVector(metricName string, histogram *histogram.Histog
 
 func expectedHistogramModelMatrix(metricName string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, startTime time.Time, externalLabels map[string]string) model.Matrix {
 	metrics := model.Metric{
-		"__name__": model.LabelValue(metricName),
-		"foo":      "bar",
+		model.MetricNameLabel: model.LabelValue(metricName),
 	}
 	for labelKey, labelValue := range externalLabels {
 		metrics[model.LabelName(labelKey)] = model.LabelValue(labelValue)

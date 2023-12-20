@@ -502,56 +502,29 @@ func runQuery(
 	}
 
 	var (
-		endpoints = query.NewEndpointSet(
-			time.Now,
+		endpoints = prepareEndpointSet(
+			g,
 			logger,
 			reg,
-			func() (specs []*query.GRPCEndpointSpec) {
-				// Add strict & static nodes.
-				for _, addr := range strictStores {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
-				}
-
-				for _, addr := range strictEndpoints {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
-				}
-
-				for _, dnsProvider := range []*dns.Provider{
-					dnsStoreProvider,
-					dnsRuleProvider,
-					dnsExemplarProvider,
-					dnsMetadataProvider,
-					dnsTargetProvider,
-					dnsEndpointProvider,
-				} {
-					var tmpSpecs []*query.GRPCEndpointSpec
-
-					for _, addr := range dnsProvider.Addresses() {
-						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
-					}
-					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
-					specs = append(specs, tmpSpecs...)
-				}
-
-				for _, eg := range endpointGroupAddrs {
-					addr := fmt.Sprintf("dns:///%s", eg)
-					spec := query.NewGRPCEndpointSpec(addr, false, extgrpc.EndpointGroupGRPCOpts()...)
-					specs = append(specs, spec)
-				}
-
-				for _, eg := range strictEndpointGroups {
-					addr := fmt.Sprintf("dns:///%s", eg)
-					spec := query.NewGRPCEndpointSpec(addr, true, extgrpc.EndpointGroupGRPCOpts()...)
-					specs = append(specs, spec)
-				}
-
-				return specs
+			[]*dns.Provider{
+				dnsStoreProvider,
+				dnsRuleProvider,
+				dnsExemplarProvider,
+				dnsMetadataProvider,
+				dnsTargetProvider,
+				dnsEndpointProvider,
 			},
+			duplicatedStores,
+			strictStores,
+			strictEndpoints,
+			endpointGroupAddrs,
+			strictEndpointGroups,
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
+
 		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
@@ -565,20 +538,6 @@ func runQuery(
 			queryTimeout,
 		)
 	)
-
-	// Periodically update the store set with the addresses we see in our cluster.
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				endpoints.Update(ctx)
-				return nil
-			})
-		}, func(error) {
-			cancel()
-			endpoints.Close()
-		})
-	}
 
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
@@ -859,6 +818,82 @@ func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus
 		deduplicated = append(deduplicated, value)
 	}
 	return deduplicated
+}
+
+func prepareEndpointSet(
+	g *run.Group,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	dnsProviders []*dns.Provider,
+	duplicatedStores prometheus.Counter,
+	strictStores []string,
+	strictEndpoints []string,
+	endpointGroupAddrs []string,
+	strictEndpointGroups []string,
+	dialOpts []grpc.DialOption,
+	unhealthyStoreTimeout time.Duration,
+	endpointInfoTimeout time.Duration,
+	queryConnMetricLabels ...string,
+) *query.EndpointSet {
+	endpointSet := query.NewEndpointSet(
+		time.Now,
+		logger,
+		reg,
+		func() (specs []*query.GRPCEndpointSpec) {
+			// Add strict & static nodes.
+			for _, addr := range strictStores {
+				specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
+			}
+
+			for _, addr := range strictEndpoints {
+				specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
+			}
+
+			for _, dnsProvider := range dnsProviders {
+				var tmpSpecs []*query.GRPCEndpointSpec
+
+				for _, addr := range dnsProvider.Addresses() {
+					tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+				}
+				tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
+				specs = append(specs, tmpSpecs...)
+			}
+
+			for _, eg := range endpointGroupAddrs {
+				addr := fmt.Sprintf("dns:///%s", eg)
+				spec := query.NewGRPCEndpointSpec(addr, false, extgrpc.EndpointGroupGRPCOpts()...)
+				specs = append(specs, spec)
+			}
+
+			for _, eg := range strictEndpointGroups {
+				addr := fmt.Sprintf("dns:///%s", eg)
+				spec := query.NewGRPCEndpointSpec(addr, true, extgrpc.EndpointGroupGRPCOpts()...)
+				specs = append(specs, spec)
+			}
+
+			return specs
+		},
+		dialOpts,
+		unhealthyStoreTimeout,
+		endpointInfoTimeout,
+		queryConnMetricLabels...,
+	)
+
+	// Periodically update the store set with the addresses we see in our cluster.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+				endpointSet.Update(ctx)
+				return nil
+			})
+		}, func(error) {
+			cancel()
+			endpointSet.Close()
+		})
+	}
+
+	return endpointSet
 }
 
 // LookbackDeltaFactory creates from 1 to 3 lookback deltas depending on
