@@ -558,18 +558,20 @@ func TestRule_KeepFiringFor(t *testing.T) {
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 	createRuleFile(t, filepath.Join(rulesPath, "alert_keep_firing_for.yaml"), testAlertRuleKeepFiringFor)
 
-	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				// We test Statically Addressed queries in other tests. Focus on FileSD here.
-				FileSDConfigs: []httpconfig.FileSDConfig{
-					{
-						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
-						RefreshInterval: model.Duration(time.Second),
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+					// We test Statically Addressed queries in other tests. Focus on FileSD here.
+					FileSDConfigs: []clientconfig.HTTPFileSDConfig{
+						{
+							// FileSD which will be used to register discover dynamically q.
+							Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
+							RefreshInterval: model.Duration(time.Second),
+						},
 					},
+					Scheme: "http",
 				},
-				Scheme: "http",
 			},
 		},
 	})

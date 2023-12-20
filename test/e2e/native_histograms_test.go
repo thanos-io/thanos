@@ -392,7 +392,7 @@ func TestRuleNativeHistograms(t *testing.T) {
 	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"prometheus_remote_storage_histograms_total"}, e2emon.WaitMissingMetrics()))
 
 	expectedRecordedName := testHistogramMetricName + ":sum"
-	expectedRecordedHistogram := histograms[len(histograms)-1].ToFloat().Mul(2)
+	expectedRecordedHistogram := histograms[len(histograms)-1].ToFloat(nil).Mul(2)
 	queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return expectedRecordedName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(expectedRecordedName, nil, expectedRecordedHistogram, map[string]string{"tenant_id": "default-tenant"}))
 }
 
