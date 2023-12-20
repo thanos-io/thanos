@@ -237,3 +237,9 @@ adopters:
 - name: TrueLayer
   url: https://truelayer.com/
   logo: truelayer.png
+- name: Cloudraft
+  url: https://cloudraft.io/observability
+  logo: cloudraft-logo.png
+- name: O11y
+  url: https://o11y.eu
+  logo: o11y_logo.jpeg
