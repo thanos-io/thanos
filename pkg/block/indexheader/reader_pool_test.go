@@ -59,7 +59,7 @@ func TestReaderPool_NewBinaryReader(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			pool := NewReaderPool(log.NewNopLogger(), testData.lazyReaderEnabled, testData.lazyReaderIdleTimeout, NewReaderPoolMetrics(nil), DisableLazyDownloadIndexHeader)
+			pool := NewReaderPool(log.NewNopLogger(), testData.lazyReaderEnabled, testData.lazyReaderIdleTimeout, NewReaderPoolMetrics(nil), AlwaysEagerDownloadIndexHeader)
 			defer pool.Close()
 
 			r, err := pool.NewBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, meta)
@@ -96,7 +96,7 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	testutil.Ok(t, err)
 
 	metrics := NewReaderPoolMetrics(nil)
-	pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, metrics, DisableLazyDownloadIndexHeader)
+	pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, metrics, AlwaysEagerDownloadIndexHeader)
 	defer pool.Close()
 
 	r, err := pool.NewBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, meta)

@@ -193,6 +193,12 @@ Flags:
                                  DEPRECATED: use store.limits.request-samples.
       --store.grpc.touched-series-limit=0
                                  DEPRECATED: use store.limits.request-series.
+      --store.index-header-lazy-download-strategy=eager
+                                 Strategy of how to download index headers
+                                 lazily. Supported values: eager, lazy.
+                                 If eager, always download index header during
+                                 initial load. If lazy, download index header
+                                 during query time.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if

@@ -52,13 +52,39 @@ type ReaderPool struct {
 	lazyDownloadFunc LazyDownloadIndexHeaderFunc
 }
 
+// IndexHeaderLazyDownloadStrategy specifies how to download index headers
+// lazily. Only used when lazy mmap is enabled.
+type IndexHeaderLazyDownloadStrategy string
+
+const (
+	// EagerDownloadStrategy always disables lazy downloading index headers.
+	EagerDownloadStrategy IndexHeaderLazyDownloadStrategy = "eager"
+	// LazyDownloadStrategy always lazily download index headers.
+	LazyDownloadStrategy IndexHeaderLazyDownloadStrategy = "lazy"
+)
+
+func (s IndexHeaderLazyDownloadStrategy) StrategyToDownloadFunc() LazyDownloadIndexHeaderFunc {
+	switch s {
+	case LazyDownloadStrategy:
+		return AlwaysLazyDownloadIndexHeader
+	default:
+		// Always fallback to eager download index header.
+		return AlwaysEagerDownloadIndexHeader
+	}
+}
+
 // LazyDownloadIndexHeaderFunc is used to determinte whether to download the index header lazily
 // or not by checking its block metadata. Usecase can be by time or by index file size.
 type LazyDownloadIndexHeaderFunc func(meta *metadata.Meta) bool
 
-// DisableLazyDownloadIndexHeader disables lazy downloaded index header.
-func DisableLazyDownloadIndexHeader(meta *metadata.Meta) bool {
+// AlwaysEagerDownloadIndexHeader always eagerly download index header.
+func AlwaysEagerDownloadIndexHeader(meta *metadata.Meta) bool {
 	return false
+}
+
+// AlwaysLazyDownloadIndexHeader always lazily download index header.
+func AlwaysLazyDownloadIndexHeader(meta *metadata.Meta) bool {
+	return true
 }
 
 // NewReaderPool makes a new ReaderPool.

@@ -414,7 +414,7 @@ type BucketStore struct {
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
 
-	lazyDownloadIndexHeaderFunc indexheader.LazyDownloadIndexHeaderFunc
+	indexHeaderLazyDownloadStrategy indexheader.LazyDownloadIndexHeaderFunc
 }
 
 func (s *BucketStore) validate() error {
@@ -533,11 +533,11 @@ func WithDontResort(true bool) BucketStoreOption {
 	}
 }
 
-// WithLazyDownloadIndexHeaderFunc specifies what block to lazy download its index header.
+// WithIndexHeaderLazyDownloadStrategy specifies what block to lazy download its index header.
 // Only used when lazy mmap is enabled at the same time.
-func WithLazyDownloadIndexHeaderFunc(f indexheader.LazyDownloadIndexHeaderFunc) BucketStoreOption {
+func WithIndexHeaderLazyDownloadStrategy(strategy indexheader.LazyDownloadIndexHeaderFunc) BucketStoreOption {
 	return func(s *BucketStore) {
-		s.lazyDownloadIndexHeaderFunc = f
+		s.indexHeaderLazyDownloadStrategy = strategy
 	}
 }
 
@@ -569,22 +569,22 @@ func NewBucketStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
-		chunkPool:                   pool.NoopBytes{},
-		blocks:                      map[ulid.ULID]*bucketBlock{},
-		blockSets:                   map[uint64]*bucketBlockSet{},
-		blockSyncConcurrency:        blockSyncConcurrency,
-		queryGate:                   gate.NewNoop(),
-		chunksLimiterFactory:        chunksLimiterFactory,
-		seriesLimiterFactory:        seriesLimiterFactory,
-		bytesLimiterFactory:         bytesLimiterFactory,
-		partitioner:                 partitioner,
-		enableCompatibilityLabel:    enableCompatibilityLabel,
-		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
-		enableSeriesResponseHints:   enableSeriesResponseHints,
-		enableChunkHashCalculation:  enableChunkHashCalculation,
-		seriesBatchSize:             SeriesBatchSize,
-		sortingStrategy:             sortingStrategyStore,
-		lazyDownloadIndexHeaderFunc: indexheader.DisableLazyDownloadIndexHeader,
+		chunkPool:                       pool.NoopBytes{},
+		blocks:                          map[ulid.ULID]*bucketBlock{},
+		blockSets:                       map[uint64]*bucketBlockSet{},
+		blockSyncConcurrency:            blockSyncConcurrency,
+		queryGate:                       gate.NewNoop(),
+		chunksLimiterFactory:            chunksLimiterFactory,
+		seriesLimiterFactory:            seriesLimiterFactory,
+		bytesLimiterFactory:             bytesLimiterFactory,
+		partitioner:                     partitioner,
+		enableCompatibilityLabel:        enableCompatibilityLabel,
+		postingOffsetsInMemSampling:     postingOffsetsInMemSampling,
+		enableSeriesResponseHints:       enableSeriesResponseHints,
+		enableChunkHashCalculation:      enableChunkHashCalculation,
+		seriesBatchSize:                 SeriesBatchSize,
+		sortingStrategy:                 sortingStrategyStore,
+		indexHeaderLazyDownloadStrategy: indexheader.AlwaysEagerDownloadIndexHeader,
 	}
 
 	for _, option := range options {
@@ -593,7 +593,7 @@ func NewBucketStore(
 
 	// Depend on the options
 	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
-	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics, s.lazyDownloadIndexHeaderFunc)
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics, s.indexHeaderLazyDownloadStrategy)
 	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
 
 	if err := s.validate(); err != nil {
