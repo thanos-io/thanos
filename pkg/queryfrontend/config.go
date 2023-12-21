@@ -142,6 +142,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 				Timeout:        config.Memcached.Timeout,
 				MaxIdleConns:   config.Memcached.MaxIdleConnections,
 				Addresses:      strings.Join(config.Memcached.Addresses, ","),
+				AutoDicovery:   config.Memcached.AutoDiscovery,
 				UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
 				MaxItemSize:    int(config.Memcached.MaxItemSize),
 			},
