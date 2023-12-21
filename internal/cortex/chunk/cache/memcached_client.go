@@ -19,10 +19,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sony/gobreaker"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	memcacheDiscovery "github.com/thanos-io/thanos/pkg/discovery/memcache"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 )
 
 // MemcachedClient interface exists for mocking memcacheClient.
@@ -48,7 +48,7 @@ type memcachedClient struct {
 	service  string
 
 	addresses []string
-	provider  httpconfig.AddressProvider
+	provider  clientconfig.AddressProvider
 
 	cbs        map[ /*address*/ string]*gobreaker.CircuitBreaker
 	cbFailures uint
@@ -111,7 +111,7 @@ func NewMemcachedClient(cfg MemcachedClientConfig, name string, r prometheus.Reg
 	client.Timeout = cfg.Timeout
 	client.MaxIdleConns = cfg.MaxIdleConns
 
-	var addressProvider httpconfig.AddressProvider
+	var addressProvider clientconfig.AddressProvider
 	if cfg.AutoDicovery {
 		addressProvider = memcacheDiscovery.NewProvider(
 			logger,
