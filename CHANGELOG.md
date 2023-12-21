@@ -31,6 +31,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#7004](https://github.com/thanos-io/thanos/pull/7004) Query Frontend: support documented auto discovery for memcached
 - [#6817](https://github.com/thanos-io/thanos/pull/6817) Store Gateway: fix `matchersToPostingGroups` label values variable got shadowed bug.
 
 ### Added
