@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { shallow } from 'enzyme';
+import { mount } from 'enzyme';
 import QueryStatsView from './QueryStatsView';
 
 describe('QueryStatsView', () => {
@@ -10,11 +10,11 @@ describe('QueryStatsView', () => {
       resultSeries: 10000,
       traceID: 'e575f9d4eab63a90cdc3dc4ef1b8dda0',
     };
-    const queryStatsView = shallow(<QueryStatsView {...queryStatsProps} />);
-    expect(queryStatsView.prop('className')).toEqual('query-stats');
-    expect(queryStatsView.children().prop('className')).toEqual('float-right');
-    expect(queryStatsView.children().text()).toEqual(
-      `Load time: ${queryStatsProps.loadTime}ms   Resolution: ${queryStatsProps.resolution}s   Result series: ${queryStatsProps.resultSeries}   Trace ID: ${queryStatsProps.traceID}`
+    const queryStatsView = mount(<QueryStatsView {...queryStatsProps} />);
+    expect(queryStatsView.find('.query-stats').prop('className')).toEqual('query-stats');
+    expect(queryStatsView.find('.float-right').prop('className')).toEqual('float-right');
+    expect(queryStatsView.find('.float-right').html()).toEqual(
+      `<span class="float-right">Load time: ${queryStatsProps.loadTime}ms   Resolution: ${queryStatsProps.resolution}s   Result series: ${queryStatsProps.resultSeries}   Trace ID: ${queryStatsProps.traceID}</span>`
     );
   });
 });

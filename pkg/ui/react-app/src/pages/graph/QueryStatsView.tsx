@@ -10,7 +10,8 @@ export interface QueryStats {
 const QueryStatsView: FC<QueryStats> = (props) => {
   const { loadTime, resolution, resultSeries, traceID } = props;
   const prev = `Load time: ${loadTime}ms &ensp; Resolution: ${resolution}s &ensp; Result series: ${resultSeries}`;
-  const str = traceID ? prev + ` &ensp; TraceID: ${traceID}` : prev;
+  const str = traceID ? prev + ` &ensp; Trace ID: ${traceID}` : prev;
+
   return (
     <div className="query-stats">
       <span className="float-right" dangerouslySetInnerHTML={{ __html: str }}></span>
