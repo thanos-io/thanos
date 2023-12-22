@@ -14,7 +14,7 @@ describe('QueryStatsView', () => {
     expect(queryStatsView.prop('className')).toEqual('query-stats');
     expect(queryStatsView.children().prop('className')).toEqual('float-right');
     expect(queryStatsView.children().text()).toEqual(
-      'Load time: 100ms   Resolution: 5s   Result series: 10000   Trace ID: e575f9d4eab63a90cdc3dc4ef1b8dda0'
+      `Load time: ${queryStatsProps.loadTime}ms   Resolution: ${queryStatsProps.resolution}s   Result series: ${queryStatsProps.resultSeries}   Trace ID: ${queryStatsProps.traceID}`
     );
   });
 });
