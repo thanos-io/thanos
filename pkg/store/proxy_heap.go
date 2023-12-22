@@ -273,13 +273,11 @@ func (l *lazyRespSet) StoreLabels() map[string]struct{} {
 type lazyRespSet struct {
 	// Generic parameters.
 	span           opentracing.Span
-	cl             storepb.Store_SeriesClient
 	closeSeries    context.CancelFunc
 	storeName      string
 	storeLabelSets []labels.Labels
 	storeLabels    map[string]struct{}
 	frameTimeout   time.Duration
-	ctx            context.Context
 
 	// Internal bookkeeping.
 	dataOrFinishEvent    *sync.Cond
@@ -356,7 +354,6 @@ func (l *lazyRespSet) At() *storepb.SeriesResponse {
 }
 
 func newLazyRespSet(
-	ctx context.Context,
 	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
@@ -373,12 +370,10 @@ func newLazyRespSet(
 
 	respSet := &lazyRespSet{
 		frameTimeout:         frameTimeout,
-		cl:                   cl,
 		storeName:            storeName,
 		storeLabelSets:       storeLabelSets,
 		closeSeries:          closeSeries,
 		span:                 span,
-		ctx:                  ctx,
 		dataOrFinishEvent:    dataAvailable,
 		bufferedResponsesMtx: bufferedResponsesMtx,
 		bufferedResponses:    bufferedResponses,
@@ -415,19 +410,9 @@ func newLazyRespSet(
 				defer t.Reset(frameTimeout)
 			}
 
-			select {
-			case <-l.ctx.Done():
-				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st)
-				l.span.SetTag("err", err.Error())
+			resp, err := cl.Recv()
 
-				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
-				l.noMoreData = true
-				l.dataOrFinishEvent.Signal()
-				l.bufferedResponsesMtx.Unlock()
-				return false
-			default:
-				resp, err := cl.Recv()
+			if err != nil {
 				if err == io.EOF {
 					l.bufferedResponsesMtx.Lock()
 					l.noMoreData = true
@@ -436,45 +421,44 @@ func newLazyRespSet(
 					return false
 				}
 
-				if err != nil {
-					// TODO(bwplotka): Return early on error. Don't wait of dedup, merge and sort if partial response is disabled.
-					var rerr error
-					if t != nil && !t.Stop() && errors.Is(err, context.Canceled) {
-						// Most likely the per-Recv timeout has been reached.
-						// There's a small race between canceling and the Recv()
-						// but this is most likely true.
+				var rerr error
+				// If timer is already stopped
+				if t != nil && !t.Stop() {
+					<-t.C // Drain the channel if it was already stopped.
+					if errors.Is(err, context.Canceled) {
+						// The per-Recv timeout has been reached.
 						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st)
-					} else {
-						rerr = errors.Wrapf(err, "receive series from %s", st)
 					}
-
-					l.span.SetTag("err", rerr.Error())
-
-					l.bufferedResponsesMtx.Lock()
-					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
-					l.noMoreData = true
-					l.dataOrFinishEvent.Signal()
-					l.bufferedResponsesMtx.Unlock()
-					return false
+				} else {
+					rerr = errors.Wrapf(err, "receive series from %s", st)
 				}
 
-				numResponses++
-				bytesProcessed += resp.Size()
-
-				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
-					return true
-				}
-
-				if resp.GetSeries() != nil {
-					seriesStats.Count(resp.GetSeries())
-				}
+				l.span.SetTag("err", rerr.Error())
 
 				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, resp)
+				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
+				l.noMoreData = true
 				l.dataOrFinishEvent.Signal()
 				l.bufferedResponsesMtx.Unlock()
+				return false
+			}
+
+			numResponses++
+			bytesProcessed += resp.Size()
+
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
+
+			if resp.GetSeries() != nil {
+				seriesStats.Count(resp.GetSeries())
+			}
+
+			l.bufferedResponsesMtx.Lock()
+			l.bufferedResponses = append(l.bufferedResponses, resp)
+			l.dataOrFinishEvent.Signal()
+			l.bufferedResponsesMtx.Unlock()
+			return true
 		}
 
 		var t *time.Timer
@@ -571,7 +555,6 @@ func newAsyncRespSet(
 	switch retrievalStrategy {
 	case LazyRetrieval:
 		return newLazyRespSet(
-			seriesCtx,
 			span,
 			frameTimeout,
 			st.String(),
@@ -584,7 +567,6 @@ func newAsyncRespSet(
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
-			seriesCtx,
 			span,
 			frameTimeout,
 			st.String(),
@@ -618,8 +600,6 @@ func (l *lazyRespSet) Close() {
 type eagerRespSet struct {
 	// Generic parameters.
 	span opentracing.Span
-	cl   storepb.Store_SeriesClient
-	ctx  context.Context
 
 	closeSeries  context.CancelFunc
 	frameTimeout time.Duration
@@ -638,7 +618,6 @@ type eagerRespSet struct {
 }
 
 func newEagerRespSet(
-	ctx context.Context,
 	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
@@ -653,9 +632,7 @@ func newEagerRespSet(
 	ret := &eagerRespSet{
 		span:              span,
 		closeSeries:       closeSeries,
-		cl:                cl,
 		frameTimeout:      frameTimeout,
-		ctx:               ctx,
 		bufferedResponses: []*storepb.SeriesResponse{},
 		wg:                &sync.WaitGroup{},
 		shardMatcher:      shardMatcher,
@@ -700,48 +677,45 @@ func newEagerRespSet(
 				defer t.Reset(frameTimeout)
 			}
 
-			select {
-			case <-l.ctx.Done():
-				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", storeName)
-				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
-				l.span.SetTag("err", err.Error())
-				return false
-			default:
-				resp, err := cl.Recv()
+			resp, err := cl.Recv()
+
+			if err != nil {
 				if err == io.EOF {
 					return false
 				}
-				if err != nil {
-					// TODO(bwplotka): Return early on error. Don't wait of dedup, merge and sort if partial response is disabled.
-					var rerr error
-					if t != nil && !t.Stop() && errors.Is(err, context.Canceled) {
-						// Most likely the per-Recv timeout has been reached.
-						// There's a small race between canceling and the Recv()
-						// but this is most likely true.
+
+				var rerr error
+				// If timer is already stopped
+				if t != nil && !t.Stop() {
+					<-t.C // Drain the channel if it was already stopped.
+					if errors.Is(err, context.Canceled) {
+						// The per-Recv timeout has been reached.
 						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, storeName)
-					} else {
-						rerr = errors.Wrapf(err, "receive series from %s", storeName)
 					}
-					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
-					l.span.SetTag("err", rerr.Error())
-					return false
+				} else {
+					rerr = errors.Wrapf(err, "receive series from %s", storeName)
 				}
 
-				numResponses++
-				bytesProcessed += resp.Size()
+				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
+				l.span.SetTag("err", rerr.Error())
+				return false
+			}
 
-				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
-					return true
-				}
+			numResponses++
+			bytesProcessed += resp.Size()
 
-				if resp.GetSeries() != nil {
-					seriesStats.Count(resp.GetSeries())
-				}
-
-				l.bufferedResponses = append(l.bufferedResponses, resp)
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
+
+			if resp.GetSeries() != nil {
+				seriesStats.Count(resp.GetSeries())
+			}
+
+			l.bufferedResponses = append(l.bufferedResponses, resp)
+			return true
 		}
+
 		var t *time.Timer
 		if frameTimeout > 0 {
 			t = time.AfterFunc(frameTimeout, closeSeries)
