@@ -17,6 +17,7 @@ export interface QueryParams {
   startTime: number;
   endTime: number;
   resolution: number;
+  traceID: string;
 }
 
 export type Rule = {
