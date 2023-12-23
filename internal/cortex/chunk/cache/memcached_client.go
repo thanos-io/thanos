@@ -71,7 +71,7 @@ type MemcachedClientConfig struct {
 	Host           string        `yaml:"host"`
 	Service        string        `yaml:"service"`
 	Addresses      string        `yaml:"addresses"` // EXPERIMENTAL.
-	AutoDicovery   bool          `yaml:"auto_dicovery"`
+	AutoDiscovery  bool          `yaml:"auto_discovery"`
 	Timeout        time.Duration `yaml:"timeout"`
 	MaxIdleConns   int           `yaml:"max_idle_conns"`
 	MaxItemSize    int           `yaml:"max_item_size"`
@@ -112,7 +112,7 @@ func NewMemcachedClient(cfg MemcachedClientConfig, name string, r prometheus.Reg
 	client.MaxIdleConns = cfg.MaxIdleConns
 
 	var addressProvider clientconfig.AddressProvider
-	if cfg.AutoDicovery {
+	if cfg.AutoDiscovery {
 		addressProvider = memcacheDiscovery.NewProvider(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_memcached_", r),
