@@ -115,7 +115,7 @@ func NewMemcachedClient(cfg MemcachedClientConfig, name string, r prometheus.Reg
 	if cfg.AutoDiscovery {
 		addressProvider = memcacheDiscovery.NewProvider(
 			logger,
-			extprom.WrapRegistererWithPrefix("thanos_memcached_", r),
+			extprom.WrapRegistererWithPrefix("cortex_", r),
 			cfg.Timeout,
 		)
 	} else {
