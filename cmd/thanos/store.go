@@ -28,6 +28,7 @@ import (
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	hidden "github.com/thanos-io/thanos/pkg/extflag"
@@ -89,6 +90,8 @@ type storeConfig struct {
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
 	lazyExpandedPostingsEnabled bool
+
+	indexHeaderLazyDownloadStrategy string
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -185,6 +188,10 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
+
+	cmd.Flag("store.index-header-lazy-download-strategy", "Strategy of how to download index headers lazily. Supported values: eager, lazy. If eager, always download index header during initial load. If lazy, download index header during query time.").
+		Default(string(indexheader.EagerDownloadStrategy)).
+		EnumVar(&sc.indexHeaderLazyDownloadStrategy, string(indexheader.EagerDownloadStrategy), string(indexheader.LazyDownloadStrategy))
 
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&sc.disableWeb)
 
@@ -388,6 +395,9 @@ func runStore(
 			return conf.estimatedMaxChunkSize
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
+		store.WithIndexHeaderLazyDownloadStrategy(
+			indexheader.IndexHeaderLazyDownloadStrategy(conf.indexHeaderLazyDownloadStrategy).StrategyToDownloadFunc(),
+		),
 	}
 
 	if conf.debugLogging {
