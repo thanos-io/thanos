@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	texttemplate "text/template"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -939,7 +940,7 @@ func tableLinkForExpression(tmpl string, expr string) (string, error) {
 	escapedExpression := url.QueryEscape(expr)
 
 	escapedExpr := Expression{Expr: escapedExpression}
-	t, err := template.New("url").Parse(tmpl)
+	t, err := texttemplate.New("url").Parse(tmpl)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse template")
 	}
