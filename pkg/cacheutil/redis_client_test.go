@@ -197,6 +197,24 @@ func TestValidateRedisConfig(t *testing.T) {
 			},
 			expect_err: true,
 		},
+		{
+			name: "invalidCircuitBreakerFailurePercent",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.SetAsyncCircuitBreakerConsecutiveFailures = 0
+				return cfg
+			},
+			expect_err: true,
+		},
+		{
+			name: "invalidCircuitBreakerFailurePercent",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.SetAsyncCircuitBreakerFailurePercent = 0
+				return cfg
+			},
+			expect_err: true,
+		},
 	}
 
 	for _, tt := range tests {
