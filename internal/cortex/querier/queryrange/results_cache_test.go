@@ -532,6 +532,45 @@ func TestShouldCache(t *testing.T) {
 			input:    Response(&PrometheusResponse{}),
 			expected: false,
 		},
+		// offset on vector selectors.
+		{
+			name:     "positive offset on vector selector",
+			request:  &PrometheusRequest{Query: "metric offset 10ms", End: 125000},
+			input:    Response(&PrometheusResponse{}),
+			expected: true,
+		},
+		{
+			name:     "negative offset on vector selector",
+			request:  &PrometheusRequest{Query: "metric offset -10ms", End: 125000},
+			input:    Response(&PrometheusResponse{}),
+			expected: false,
+		},
+		// offset on matrix selectors.
+		{
+			name:     "positive offset on matrix selector",
+			request:  &PrometheusRequest{Query: "rate(metric[5m] offset 10ms)", End: 125000},
+			input:    Response(&PrometheusResponse{}),
+			expected: true,
+		},
+		{
+			name:     "negative offset on matrix selector",
+			request:  &PrometheusRequest{Query: "rate(metric[5m] offset -10ms)", End: 125000},
+			input:    Response(&PrometheusResponse{}),
+			expected: false,
+		},
+		// offset on subqueries.
+		{
+			name:     "positive offset on subqueries",
+			request:  &PrometheusRequest{Query: "sum_over_time(rate(metric[1m])[10m:1m] offset 10ms)", End: 125000},
+			input:    Response(&PrometheusResponse{}),
+			expected: true,
+		},
+		{
+			name:     "negative offset on subqueries",
+			request:  &PrometheusRequest{Query: "sum_over_time(rate(metric[1m])[10m:1m] offset -10ms)", End: 125000},
+			input:    Response(&PrometheusResponse{}),
+			expected: false,
+		},
 	} {
 		{
 			t.Run(tc.name, func(t *testing.T) {
