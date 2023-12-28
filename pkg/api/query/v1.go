@@ -391,7 +391,7 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 		if len(query) > 0 {
 			expr, err := parser.ParseExpr(query)
 			if err != nil {
-				return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'query' parameter")}
+				return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "'query' parameter")}
 			}
 			if minRes := MinResolutionFromExpr(expr); minRes > 0 {
 				maxSourceResolution = minRes
@@ -1601,6 +1601,8 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 	}
 }
 
+// MinResolutionFromExpr inspects the query expression and find the minimum required resolution for the
+// query. Right now it only considers promql functions that require at least 2 samples such as rate, irate, etc.
 func MinResolutionFromExpr(expr parser.Expr) time.Duration {
 	var minRes time.Duration
 	parser.Inspect(expr, func(n parser.Node, nodes []parser.Node) error {
