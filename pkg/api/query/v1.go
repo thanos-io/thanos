@@ -1609,6 +1609,7 @@ func MinResolutionFromExpr(expr parser.Expr) time.Duration {
 		switch e := n.(type) {
 		case *parser.MatrixSelector:
 			var found bool
+		OUTER:
 			for i := len(nodes) - 1; i >= 0; i-- {
 				node := nodes[i]
 				if f, ok := node.(*parser.Call); ok {
@@ -1616,7 +1617,7 @@ func MinResolutionFromExpr(expr parser.Expr) time.Duration {
 					// Functions that require at least 2 samples.
 					case "rate", "irate", "increase", "idelta", "deriv", "predict_linear":
 						found = true
-						break
+						break OUTER
 					}
 				}
 			}
