@@ -199,7 +199,7 @@ Flags:
                                  DEPRECATED: use store.limits.request-samples.
       --store.grpc.touched-series-limit=0
                                  DEPRECATED: use store.limits.request-series.
-      --store.index-header-lazy-download-strategy=eager  
+      --store.index-header-lazy-download-strategy=eager
                                  Strategy of how to download index headers
                                  lazily. Supported values: eager, lazy.
                                  If eager, always download index header during
