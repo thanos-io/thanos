@@ -534,7 +534,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			if tcase.isCounter {
 				f = "rate"
 			}
-			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f, false)
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())
@@ -659,39 +659,4 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	}
 	testutil.Ok(t, it.Err())
 	return res
-}
-
-func TestPushdownSeriesIterator(t *testing.T) {
-	cases := []struct {
-		a, b, exp []sample
-		function  string
-		tcase     string
-	}{
-		{
-			tcase:    "simple case",
-			a:        []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:        []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			exp:      []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			function: "max",
-		},
-		{
-			tcase:    "gaps but catches up",
-			a:        []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:        []sample{{10000, 20}, {40000, 23}},
-			exp:      []sample{{10000, 20}, {20000, 11}, {30000, 12}, {40000, 23}},
-			function: "max",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.tcase, func(t *testing.T) {
-			it := newPushdownSeriesIterator(
-				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
-				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.b)},
-				c.function,
-			)
-			res := expandSeries(t, noopAdjustableSeriesIterator{it})
-			testutil.Equals(t, c.exp, res)
-		})
-
-	}
 }
