@@ -349,7 +349,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		}
 
 		// We ignore any block that has the deletion marker file.
-		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)}
+		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, false, block.FetcherConcurrency)}
 		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
@@ -405,7 +405,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		var filters []block.MetadataFilter
 
 		if tbc.excludeDelete {
-			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)
+			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, false, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
 		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
@@ -825,7 +825,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, tbc.deleteDelay/2, tbc.blockSyncConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, tbc.deleteDelay/2, false, tbc.blockSyncConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(tbc.blockSyncConcurrency)
 		blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
@@ -1370,7 +1370,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, tbc.deleteDelay/2, tbc.blockSyncConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, tbc.deleteDelay/2, false, tbc.blockSyncConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(tbc.blockSyncConcurrency)
 		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 

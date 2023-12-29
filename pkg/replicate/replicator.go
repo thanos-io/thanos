@@ -242,7 +242,7 @@ func newMetaFetcher(
 		thanosblock.NewTimePartitionMetaFilter(minTime, maxTime),
 	}
 	if ignoreMarkedForDeletion {
-		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, concurrency))
+		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, false, concurrency))
 	}
 	baseBlockIDsFetcher := thanosblock.NewBaseBlockIDsFetcher(logger, fromBkt)
 	return thanosblock.NewMetaFetcher(

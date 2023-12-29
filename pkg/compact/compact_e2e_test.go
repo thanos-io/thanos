@@ -104,7 +104,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		blockMarkedForNoCompact := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour, fetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour, false, fetcherConcurrency)
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
 		testutil.Ok(t, err)
 
@@ -193,7 +193,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		reg := prometheus.NewRegistry()
 
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, false, fetcherConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
 		insBkt := objstore.WithNoopInstr(bkt)
@@ -505,7 +505,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, false, fetcherConcurrency)
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		insBkt := objstore.WithNoopInstr(bkt)
