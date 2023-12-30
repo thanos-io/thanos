@@ -6,28 +6,33 @@ package store
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slices"
+
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"golang.org/x/exp/slices"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
-	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -62,8 +67,10 @@ type seriesCallCase struct {
 	expectErr      error
 }
 
+type startStoreFn func(t *testing.T, extLset labels.Labels, append func(app storage.Appender)) storepb.StoreServer
+
 // testStoreAPIsAcceptance tests StoreAPI from closed box perspective.
-func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset labels.Labels, append func(app storage.Appender)) storepb.StoreServer) {
+func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 	t.Helper()
 
 	now := time.Now()
@@ -232,7 +239,6 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 			appendFn: func(app storage.Appender) {
 				_, err := app.Append(0, labels.FromStrings("foo", "bar", "region", "somewhere"), 0, 0)
 				testutil.Ok(t, err)
-
 				testutil.Ok(t, app.Commit())
 			},
 			seriesCalls: []seriesCallCase{
@@ -743,9 +749,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 					}
 					testutil.Ok(t, err)
 
-					testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) int {
+					testutil.Assert(t, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) int {
 						return labels.Compare(x.PromLabels(), y.PromLabels())
-					}))
+					}), "Unsorted Series response returned")
 
 					receivedLabels := make([]labels.Labels, 0)
 					for _, s := range srv.SeriesSet {
@@ -759,12 +765,70 @@ func testStoreAPIsAcceptance(t *testing.T, startStore func(t *testing.T, extLset
 	}
 }
 
+// Regression test for https://github.com/thanos-io/thanos/issues/396.
+// Note: Only TSDB and Prometheus Stores do this.
+func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, startStore startStoreFn) {
+	t.Run("should split into chunks of max size 120", func(t *testing.T) {
+		baseT := timestamp.FromTime(time.Now().AddDate(0, 0, -2)) / 1000 * 1000
+		offset := int64(2*math.MaxUint16 + 5)
+
+		extLset := labels.FromStrings("region", "eu-west")
+		appendFn := func(app storage.Appender) {
+
+			var (
+				ref storage.SeriesRef
+				err error
+			)
+			for i := int64(0); i < offset; i++ {
+				ref, err = app.Append(ref, labels.FromStrings("a", "b"), baseT+i, 1)
+				testutil.Ok(t, err)
+			}
+			testutil.Ok(t, app.Commit())
+
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		client := startStore(t, extLset, appendFn)
+		srv := newStoreSeriesServer(ctx)
+
+		testutil.Ok(t, client.Series(&storepb.SeriesRequest{
+			MinTime: baseT,
+			MaxTime: baseT + offset,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+				{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+			},
+		}, srv))
+
+		testutil.Equals(t, 1, len(srv.SeriesSet))
+
+		firstSeries := srv.SeriesSet[0]
+
+		testutil.Equals(t, []labelpb.ZLabel{
+			{Name: "a", Value: "b"},
+			{Name: "region", Value: "eu-west"},
+		}, firstSeries.Labels)
+
+		testutil.Equals(t, 1093, len(firstSeries.Chunks))
+		for i := 0; i < len(firstSeries.Chunks)-1; i++ {
+			chunk, err := chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[i].Raw.Data)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 120, chunk.NumSamples())
+		}
+
+		chunk, err := chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[len(firstSeries.Chunks)-1].Raw.Data)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 35, chunk.NumSamples())
+	})
+}
+
 func TestBucketStore_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 	ctx := context.Background()
 
-	for _, lazyExpandedPosting := range []bool{false, true} {
-		testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(lazyExpandedPostings bool) func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		return func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 			tmpDir := tt.TempDir()
 			bktDir := filepath.Join(tmpDir, "bkt")
 			auxDir := filepath.Join(tmpDir, "aux")
@@ -835,7 +899,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 				1*time.Minute,
 				WithChunkPool(chunkPool),
 				WithFilterConfig(allowAllFilterConf),
-				WithLazyExpandedPostings(lazyExpandedPosting),
+				WithLazyExpandedPostings(lazyExpandedPostings),
 			)
 			testutil.Ok(tt, err)
 			tt.Cleanup(func() { testutil.Ok(tt, bucketStore.Close()) })
@@ -843,6 +907,12 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			testutil.Ok(tt, bucketStore.SyncBlocks(context.Background()))
 
 			return bucketStore
+		}
+	}
+
+	for _, lazyExpandedPostings := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lazyExpandedPostings:%t", lazyExpandedPostings), func(t *testing.T) {
+			testStoreAPIsAcceptance(t, startStore(lazyExpandedPostings))
 		})
 	}
 }
@@ -850,7 +920,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 func TestPrometheusStore_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 
-	testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		p, err := e2eutil.NewPrometheus()
 		testutil.Ok(tt, err)
 		tt.Cleanup(func() { testutil.Ok(tt, p.Stop()) })
@@ -870,21 +940,28 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 			func() string { return version })
 		testutil.Ok(tt, err)
 
+		// We build chunks only for SAMPLES method. Make sure we ask for SAMPLES only.
+		promStore.remoteReadAcceptableResponses = []prompb.ReadRequest_ResponseType{prompb.ReadRequest_SAMPLES}
+
 		return promStore
-	})
+	}
+
+	testStoreAPIsAcceptance(t, startStore)
+	testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t, startStore)
 }
 
 func TestTSDBStore_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 
-	testStoreAPIsAcceptance(t, func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		db, err := e2eutil.NewTSDB()
 		testutil.Ok(tt, err)
 		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-
-		tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
-
 		appendFn(db.Appender(context.Background()))
-		return tsdbStore
-	})
+
+		return NewTSDBStore(nil, db, component.Rule, extLset)
+	}
+
+	testStoreAPIsAcceptance(t, startStore)
+	testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t, startStore)
 }

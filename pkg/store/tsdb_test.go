@@ -228,20 +228,6 @@ func TestTSDBStore_Series(t *testing.T) {
 	}
 }
 
-// Regression test for https://github.com/thanos-io/thanos/issues/1038.
-func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, db.Appender(context.Background()), func() storepb.StoreServer {
-		return NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
-	})
-}
-
 type delegatorServer struct {
 	*storetestutil.SeriesServer
 
