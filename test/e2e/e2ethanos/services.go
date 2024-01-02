@@ -280,6 +280,7 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
 		replicaLabels:  []string{replicaLabel},
+		engine:         apiv1.PromqlEnginePrometheus,
 	}
 }
 
