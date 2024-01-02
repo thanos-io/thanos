@@ -168,7 +168,8 @@ The most important metrics to alert on are:
 
 Those metrics are important for vanilla Prometheus as well, but even more important when we rely on (sometimes WAN) network.
 
-// TODO(bwplotka): Rereview them after recent changes in metrics.
+<!-- TODO(bwplotka): Rereview them after recent changes in metrics. -->
+
 
 See [alerts](https://github.com/thanos-io/thanos/blob/e3b0baf7de9dde1887253b1bb19d78ae71a01bf8/examples/alerts/alerts.md#ruler) for more example alerts for ruler.
 
