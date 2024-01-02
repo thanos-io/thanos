@@ -280,7 +280,6 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
 		replicaLabels:  []string{replicaLabel},
-		engine:         apiv1.PromqlEnginePrometheus,
 	}
 }
 
@@ -418,7 +417,6 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		"--log.level":             infoLogLevel,
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
-		"--query.promql-engine":   string(q.engine),
 	})
 
 	for _, repl := range q.replicaLabels {
@@ -495,6 +493,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.enableXFunctions {
 		args = append(args, "--query.enable-x-functions")
+	}
+	if q.engine != "" {
+		args = append(args, "--query.promql-engine="+string(q.engine))
 	}
 
 	return args, nil
