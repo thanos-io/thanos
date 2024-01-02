@@ -291,9 +291,9 @@ func runQueryFrontend(
 	}
 
 	if cfg.EnableXFunctions {
-		parser.Functions["xrate"] = parse.XFunctions["xrate"]
-		parser.Functions["xincrease"] = parse.XFunctions["xincrease"]
-		parser.Functions["xdelta"] = parse.XFunctions["xdelta"]
+		for fname, v := range parse.XFunctions {
+			parser.Functions[fname] = v
+		}
 	}
 
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)

@@ -29,6 +29,7 @@ import (
 	"github.com/thanos-io/objstore/exthttp"
 
 	"github.com/thanos-io/thanos/pkg/alert"
+	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -253,8 +254,9 @@ type QuerierBuilder struct {
 	endpoints               []string
 	strictEndpoints         []string
 
-	engine    string
-	queryMode string
+	engine           apiv1.PromqlEngineType
+	queryMode        string
+	enableXFunctions bool
 
 	replicaLabels []string
 	tracingConfig string
@@ -362,13 +364,18 @@ func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuild
 	return q
 }
 
-func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+func (q *QuerierBuilder) WithEngine(engine apiv1.PromqlEngineType) *QuerierBuilder {
 	q.engine = engine
 	return q
 }
 
 func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	q.queryMode = mode
+	return q
+}
+
+func (q *QuerierBuilder) WithEnableXFunctions(enable bool) *QuerierBuilder {
+	q.enableXFunctions = enable
 	return q
 }
 
@@ -410,6 +417,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		"--log.level":             infoLogLevel,
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
+		"--query.promql-engine":   string(q.engine),
 	})
 
 	for _, repl := range q.replicaLabels {
@@ -484,6 +492,10 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	for _, bucket := range q.telemetrySeriesQuantiles {
 		args = append(args, "--query.telemetry.request-series-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
 	}
+	if q.enableXFunctions {
+		args = append(args, "--query.enable-x-functions")
+	}
+
 	return args, nil
 }
 

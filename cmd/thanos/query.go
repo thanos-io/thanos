@@ -102,7 +102,7 @@ func registerQuery(app *extkingpin.App) {
 
 	defaultEngine := cmd.Flag("query.promql-engine", "Default PromQL engine to use.").Default(string(apiv1.PromqlEnginePrometheus)).
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
-	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta).").Default("false").Bool()
+	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
 		Hidden().
 		Default(string(queryModeLocal)).
