@@ -102,7 +102,7 @@ func registerQuery(app *extkingpin.App) {
 
 	defaultEngine := cmd.Flag("query.promql-engine", "Default PromQL engine to use.").Default(string(apiv1.PromqlEnginePrometheus)).
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
-	extendedFunctionsEnabled := cmd.Flag("query.xfunctions-enabled", "Whether to enable using extended functions.").Default("false").Bool()
+	extendedFunctionsEnabled := cmd.Flag("query.xfunctions-enabled", "Whether to enable extended rate functions (xrate, xincrease and xdelta).").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
 		Hidden().
 		Default(string(queryModeLocal)).
@@ -342,7 +342,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySeriesQuantiles,
 			*defaultEngine,
 			storeRateLimits,
-			extendedFunctionsEnabled,
+			*extendedFunctionsEnabled,
 			queryMode(*promqlQueryMode),
 			*tenantHeader,
 			*defaultTenant,
@@ -353,7 +353,7 @@ func registerQuery(app *extkingpin.App) {
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
 // store nodes, merging and duplicating the data to satisfy user query.
-func runQuery(g *run.Group, logger log.Logger, debugLogging bool, reg *prometheus.Registry, tracer opentracing.Tracer, httpLogOpts []logging.Option, grpcLogOpts []grpc_logging.Option, tagOpts []tags.Option, grpcServerConfig grpcConfig, grpcCompression string, secure bool, skipVerify bool, cert string, key string, caCert string, serverName string, httpBindAddr string, httpTLSConfig string, httpGracePeriod time.Duration, webRoutePrefix string, webExternalPrefix string, webPrefixHeaderName string, maxConcurrentQueries int, maxConcurrentSelects int, defaultRangeQueryStep time.Duration, queryTimeout time.Duration, lookbackDelta time.Duration, dynamicLookbackDelta bool, defaultEvaluationInterval time.Duration, storeResponseTimeout time.Duration, queryConnMetricLabels []string, queryReplicaLabels []string, selectorLset labels.Labels, flagsMap map[string]string, endpointAddrs []string, endpointGroupAddrs []string, storeAddrs []string, ruleAddrs []string, targetAddrs []string, metadataAddrs []string, exemplarAddrs []string, enableAutodownsampling bool, enableQueryPartialResponse bool, enableRulePartialResponse bool, enableTargetPartialResponse bool, enableMetricMetadataPartialResponse bool, enableExemplarPartialResponse bool, activeQueryDir string, fileSD *file.Discovery, dnsSDInterval time.Duration, dnsSDResolver string, unhealthyStoreTimeout time.Duration, endpointInfoTimeout time.Duration, instantDefaultMaxSourceResolution time.Duration, defaultMetadataTimeRange time.Duration, strictStores []string, strictEndpoints []string, strictEndpointGroups []string, disableCORS bool, enableQueryPushdown bool, alertQueryURL string, grpcProxyStrategy string, comp component.Component, queryTelemetryDurationQuantiles []float64, queryTelemetrySamplesQuantiles []float64, queryTelemetrySeriesQuantiles []float64, defaultEngine string, storeRateLimits store.SeriesSelectLimits, extendedFunctionsEnabled *bool, queryMode queryMode, tenantHeader string, defaultTenant string, tenantCertField string) error {
+func runQuery(g *run.Group, logger log.Logger, debugLogging bool, reg *prometheus.Registry, tracer opentracing.Tracer, httpLogOpts []logging.Option, grpcLogOpts []grpc_logging.Option, tagOpts []tags.Option, grpcServerConfig grpcConfig, grpcCompression string, secure bool, skipVerify bool, cert string, key string, caCert string, serverName string, httpBindAddr string, httpTLSConfig string, httpGracePeriod time.Duration, webRoutePrefix string, webExternalPrefix string, webPrefixHeaderName string, maxConcurrentQueries int, maxConcurrentSelects int, defaultRangeQueryStep time.Duration, queryTimeout time.Duration, lookbackDelta time.Duration, dynamicLookbackDelta bool, defaultEvaluationInterval time.Duration, storeResponseTimeout time.Duration, queryConnMetricLabels []string, queryReplicaLabels []string, selectorLset labels.Labels, flagsMap map[string]string, endpointAddrs []string, endpointGroupAddrs []string, storeAddrs []string, ruleAddrs []string, targetAddrs []string, metadataAddrs []string, exemplarAddrs []string, enableAutodownsampling bool, enableQueryPartialResponse bool, enableRulePartialResponse bool, enableTargetPartialResponse bool, enableMetricMetadataPartialResponse bool, enableExemplarPartialResponse bool, activeQueryDir string, fileSD *file.Discovery, dnsSDInterval time.Duration, dnsSDResolver string, unhealthyStoreTimeout time.Duration, endpointInfoTimeout time.Duration, instantDefaultMaxSourceResolution time.Duration, defaultMetadataTimeRange time.Duration, strictStores []string, strictEndpoints []string, strictEndpointGroups []string, disableCORS bool, enableQueryPushdown bool, alertQueryURL string, grpcProxyStrategy string, comp component.Component, queryTelemetryDurationQuantiles []float64, queryTelemetrySamplesQuantiles []float64, queryTelemetrySeriesQuantiles []float64, defaultEngine string, storeRateLimits store.SeriesSelectLimits, extendedFunctionsEnabled bool, queryMode queryMode, tenantHeader string, defaultTenant string, tenantCertField string) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
 		if lastColon != -1 {
@@ -577,14 +577,10 @@ func runQuery(g *run.Group, logger log.Logger, debugLogging bool, reg *prometheu
 		})
 	}
 
-	enableXFunctions := false
-	if extendedFunctionsEnabled != nil && *extendedFunctionsEnabled {
-		enableXFunctions = true
-	}
 	engineFactory := apiv1.NewQueryEngineFactory(
 		engineOpts,
 		remoteEngineEndpoints,
-		enableXFunctions,
+		extendedFunctionsEnabled,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
