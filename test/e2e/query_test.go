@@ -315,6 +315,49 @@ func TestQuery(t *testing.T) {
 	})
 }
 
+func TestQueryWithExtendedFunctions(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("e2e-qry-xfunc"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// create prom + sidecar
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	// create querier
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnableXFunctions().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// send series to prom
+	samples := []seriesWithLabels{
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "1")},
+	}
+	testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom, samples))
+
+	// query
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return `xrate(my_fake_metric{a="1", b="1"}[1m])`
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"a":          "1",
+			"b":          "1",
+			"instance":   "1",
+			"prometheus": "prom",
+			"replica":    "0",
+		},
+	})
+}
+
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 

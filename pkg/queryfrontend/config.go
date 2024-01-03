@@ -209,6 +209,7 @@ type Config struct {
 	TenantHeader           string
 	DefaultTenant          string
 	TenantCertField        string
+	EnableXFunctions       bool
 }
 
 // QueryRangeConfig holds the config for query range tripperware.
