@@ -363,6 +363,10 @@ Flags:
       --query.default-tenant-id="default-tenant"
                                  Default tenant ID to use if tenant header is
                                  not present
+      --query.enable-x-functions
+                                 Whether to enable extended rate functions
+                                 (xrate, xincrease and xdelta). Only has effect
+                                 when used with Thanos engine.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
