@@ -25,5 +25,3 @@ website/docs-pre-processed/
 !website/data
 
 tmp/
-
-.build/

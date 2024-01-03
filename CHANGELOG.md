@@ -27,8 +27,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6984](https://github.com/thanos-io/thanos/pull/6984) Store Gateway: Added `--store.index-header-lazy-download-strategy` to specify how to lazily download index headers when lazy mmap is enabled.
 
 - [#6887](https://github.com/thanos-io/thanos/pull/6887) Query Frontend: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing custom dashboard queries to be incorrect due to the added label.
-- [#7028](https://github.com/thanos-io/thanos/pull/7028): Query Frontend: Add new `--query-frontend.enable-x-functions` flag to enable experimental extended functions.
-- [#7028](https://github.com/thanos-io/thanos/pull/7028): Query: Add new `--query.enable-x-functions` flag to enable experimental extended functions.
+- [#7028](https://github.com/thanos-io/thanos/pull/7028) Query|Query Frontend: Add new `--query-frontend.enable-x-functions` flag to enable experimental extended functions.
 
 ### Changed
 

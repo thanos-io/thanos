@@ -374,8 +374,8 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	return q
 }
 
-func (q *QuerierBuilder) WithEnableXFunctions(enable bool) *QuerierBuilder {
-	q.enableXFunctions = enable
+func (q *QuerierBuilder) WithEnableXFunctions() *QuerierBuilder {
+	q.enableXFunctions = true
 	return q
 }
 

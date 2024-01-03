@@ -327,7 +327,7 @@ func TestQueryWithExtendedFunctions(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	// create querier
-	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnableXFunctions(true).Init()
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnableXFunctions().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
