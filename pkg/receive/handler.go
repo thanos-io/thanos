@@ -1247,10 +1247,7 @@ func newPeerWorker(cc *grpc.ClientConn) *peerWorker {
 					return
 				case w := <-work:
 					_, err := storepb.NewWriteableStoreClient(cc).RemoteWrite(w.ctx, w.req)
-					if err != nil {
-						w.errResult = &err
-					}
-					w.wg.Done()
+					w.errResult <- err
 				}
 			}
 		}()
@@ -1264,29 +1261,22 @@ func newPeerWorker(cc *grpc.ClientConn) *peerWorker {
 }
 
 type peerWorkItem struct {
-	wg  *sync.WaitGroup
 	cc  *grpc.ClientConn
 	req *storepb.WriteRequest
 	ctx context.Context
 
-	errResult *error
+	errResult chan error
 }
 
 func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
-	var err error
-
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-
-	pw.work <- peerWorkItem{
-		wg:        wg,
+	w := peerWorkItem{
 		cc:        pw.cc,
 		req:       in,
-		errResult: &err,
+		errResult: make(chan error, 1),
 		ctx:       ctx,
 	}
 
-	wg.Wait()
+	pw.work <- w
 
-	return nil, err
+	return nil, <-w.errResult
 }
