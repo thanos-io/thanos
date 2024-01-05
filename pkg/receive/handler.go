@@ -1164,7 +1164,7 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 func newPeerGroup(dialOpts ...grpc.DialOption) peersContainer {
 	return &peerGroup{
 		dialOpts: dialOpts,
-		cache:    map[string]*grpc.ClientConn{},
+		cache:    map[string]*peerWorker{},
 		m:        sync.RWMutex{},
 		dialer:   grpc.DialContext,
 	}
@@ -1177,7 +1177,7 @@ type peersContainer interface {
 
 type peerGroup struct {
 	dialOpts []grpc.DialOption
-	cache    map[string]*grpc.ClientConn
+	cache    map[string]*peerWorker
 	m        sync.RWMutex
 
 	// dialer is used for testing.
@@ -1196,7 +1196,7 @@ func (p *peerGroup) close(addr string) error {
 	}
 
 	delete(p.cache, addr)
-	if err := c.Close(); err != nil {
+	if err := c.cc.Close(); err != nil {
 		return fmt.Errorf("closing connection for %s", addr)
 	}
 
@@ -1209,7 +1209,7 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	c, ok := p.cache[addr]
 	p.m.RUnlock()
 	if ok {
-		return storepb.NewWriteableStoreClient(c), nil
+		return c, nil
 	}
 
 	p.m.Lock()
@@ -1217,13 +1217,76 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	// Make sure that another caller hasn't created the connection since obtaining the write lock.
 	c, ok = p.cache[addr]
 	if ok {
-		return storepb.NewWriteableStoreClient(c), nil
+		return c, nil
 	}
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to dial peer")
 	}
 
-	p.cache[addr] = conn
-	return storepb.NewWriteableStoreClient(conn), nil
+	p.cache[addr] = newPeerWorker(conn)
+	return p.cache[addr], nil
+}
+
+type peerWorker struct {
+	cc *grpc.ClientConn
+
+	work              chan peerWorkItem
+	turnOffGoroutines func()
+}
+
+func newPeerWorker(cc *grpc.ClientConn) *peerWorker {
+	work := make(chan peerWorkItem)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	for i := 0; i < 20; i++ {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case w := <-work:
+					_, err := storepb.NewWriteableStoreClient(cc).RemoteWrite(w.ctx, w.req)
+					if err != nil {
+						w.errResult = &err
+					}
+					w.wg.Done()
+				}
+			}
+		}()
+	}
+
+	return &peerWorker{
+		cc:                cc,
+		work:              work,
+		turnOffGoroutines: cancel,
+	}
+}
+
+type peerWorkItem struct {
+	wg  *sync.WaitGroup
+	cc  *grpc.ClientConn
+	req *storepb.WriteRequest
+	ctx context.Context
+
+	errResult *error
+}
+
+func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	var err error
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	pw.work <- peerWorkItem{
+		wg:        wg,
+		cc:        pw.cc,
+		req:       in,
+		errResult: &err,
+		ctx:       ctx,
+	}
+
+	wg.Wait()
+
+	return nil, err
 }
