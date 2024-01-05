@@ -10,6 +10,7 @@ import { FetchMock } from 'jest-fetch-mock/types';
 describe('ScrapePoolList', () => {
   const defaultProps = {
     pathPrefix: '..',
+    onLoadingChange: jest.fn(),
   };
 
   beforeEach(() => {
