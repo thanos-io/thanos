@@ -1195,11 +1195,11 @@ func (p *peerGroup) close(addr string) error {
 		return nil
 	}
 
+	delete(p.cache, addr)
 	if err := c.Close(); err != nil {
 		return fmt.Errorf("closing connection for %s", addr)
 	}
 
-	delete(p.cache, addr)
 	return nil
 }
 
