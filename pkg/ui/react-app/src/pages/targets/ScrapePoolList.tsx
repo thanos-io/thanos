@@ -111,10 +111,18 @@ ScrapePoolListContent.displayName = 'ScrapePoolListContent';
 
 const ScrapePoolListWithStatusIndicator = withStatusIndicator(ScrapePoolListContent);
 
-const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
+const ScrapePoolList: FC<PathPrefixProps & { onLoadingChange: (loadingState: boolean) => void }> = ({
+  pathPrefix,
+  onLoadingChange,
+}) => {
   const { response, error, isLoading } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
   const { status: responseStatus } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
+
+  useEffect(() => {
+    onLoadingChange(isLoading); // Inform Targets.tsx about the loading state
+  }, [isLoading, onLoadingChange]);
+
   return (
     <ScrapePoolListWithStatusIndicator
       {...response.data}
