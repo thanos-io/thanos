@@ -252,9 +252,9 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	w.WriteHeader(http.StatusOK)
 
 	resp := &response{
-		Status: StatusSuccess,
+		Status:   StatusSuccess,
 		Warnings: warningsToString(warnings),
-		Data:   data,
+		Data:     data,
 	}
 	for _, warn := range warnings {
 		resp.Warnings = append(resp.Warnings, warn.Error())
