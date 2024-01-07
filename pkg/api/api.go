@@ -253,6 +253,7 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 
 	resp := &response{
 		Status: StatusSuccess,
+		Warnings: warningsToString(warnings),
 		Data:   data,
 	}
 	for _, warn := range warnings {
@@ -286,4 +287,16 @@ func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
 		Error:     apiErr.Err.Error(),
 		Data:      data,
 	})
+}
+
+func warningsToString(errors []error) []string {
+	warningStrings := make([]string, len(errors))
+
+	for i, err := range errors {
+		if err != nil {
+			warningStrings[i] = err.Error()
+		}
+	}
+
+	return warningStrings
 }

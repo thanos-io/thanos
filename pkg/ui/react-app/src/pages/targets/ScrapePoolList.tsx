@@ -11,6 +11,7 @@ import styles from './ScrapePoolPanel.module.css';
 import { Col, Collapse, Row } from 'reactstrap';
 import SearchBar from '../../components/SearchBar';
 import { ScrapePoolContent } from './ScrapePoolContent';
+import { UncontrolledAlert } from 'reactstrap';
 
 interface ScrapePoolListProps {
   activeTargets: Target[];
@@ -113,15 +114,25 @@ const ScrapePoolListWithStatusIndicator = withStatusIndicator(ScrapePoolListCont
 
 const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
   const { response, error, isLoading } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
-  const { status: responseStatus } = response;
+  const { status: responseStatus, Warnings: warningsList } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
   return (
-    <ScrapePoolListWithStatusIndicator
-      {...response.data}
-      error={badResponse ? new Error(responseStatus) : error}
-      isLoading={isLoading}
-      componentTitle="Targets information"
-    />
+    <div>
+      {warningsList && warningsList.length > 0 ? (
+        <div>
+          {warningsList.map((warning: string) => (
+            <UncontrolledAlert color="danger">{warning}</UncontrolledAlert>
+          ))}
+        </div>
+      ) : null}
+
+      <ScrapePoolListWithStatusIndicator
+        {...response.data}
+        error={badResponse ? new Error(responseStatus) : error}
+        isLoading={isLoading}
+        componentTitle="Targets information"
+      />
+    </div>
   );
 };
 

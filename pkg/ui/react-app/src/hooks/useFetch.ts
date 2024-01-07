@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type APIResponse<T> = { status: string; data: T };
+export type APIResponse<T> = { status: string; data: T; Warnings: string[] };
 
 export interface FetchState<T> {
   response: APIResponse<T>;
