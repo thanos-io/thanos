@@ -260,6 +260,20 @@ Example file SD file in YAML:
 
 `--query.active-query-path` is an option which allows the user to specify a directory which will contain a `queries.active` file to track active queries. To enable this feature, the user has to specify a directory other than "", since that is skipped being the default.
 
+## Tenancy
+
+### Tenant Metrics
+
+Tenant information is captured in relevant Thanos exported metrics in the Querier, Query Frontend and Store. In order make use of this functionality requests to the Query/Query Frontend component should include the tenant-id in the appropriate HTTP request header as configured with `--query.tenant-header`. The tenant information is passed through components (including Query Frontend), down to the Thanos Store, enabling per-tenant metrics in these components also. If no tenant header is set to requests to the query component, the default tenant as defined by `--query.tenant-default-id` will be used.
+
+### Tenant Enforcement
+
+Enforcement of tenancy can be enabled using `--query.enforce-tenancy`. If enabled, queries will only return results which contains a matching label, where the label name is `--query.tenant-label-name` and the label value matches the tenant as sent to the querier in the HTTP header configured with `--query-tenant-header`. This functionality requires that metrics are injected with a tenant label when ingested into Thanos. This can be done for example by enabling tenancy in the Thanos Receive component.
+
+In case of nested Thanos Query components, it's important to note that tenancy enforcement will only occur in the querier which the initial request is sent to, the layered queriers will not perform any enforcement.
+
+Further, note that there are no authentication mechanisms in Thanos, so anyone can set an arbitrary tenant in the HTTP header. It is recommended to use a proxy in front of the querier in case an authentication mechanism is needed. The Query UI also includes an option to set an arbitrary tenant, and should therefore not be exposed to end-users if users should not be able to see each others data.
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
