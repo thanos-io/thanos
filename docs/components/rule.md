@@ -168,7 +168,7 @@ The most important metrics to alert on are:
 
 Those metrics are important for vanilla Prometheus as well, but even more important when we rely on (sometimes WAN) network.
 
-// TODO(bwplotka): Rereview them after recent changes in metrics.
+ <!-- TODO(bwplotka): Rereview them after recent changes in metrics. -->
 
 See [alerts](https://github.com/thanos-io/thanos/blob/e3b0baf7de9dde1887253b1bb19d78ae71a01bf8/examples/alerts/alerts.md#ruler) for more example alerts for ruler.
 
@@ -330,6 +330,11 @@ Flags:
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-query-endpoint=<endpoint> ...
+                                 Addresses of Thanos gRPC query API servers
+                                 (repeatable). The scheme may be prefixed
+                                 with 'dns+' or 'dnssrv+' to detect Thanos API
+                                 servers through respective DNS lookups.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
@@ -551,7 +556,9 @@ Supported values for `api_version` are `v1` or `v2`.
 
 ### Query API
 
-The `--query.config` and `--query.config-file` flags allow specifying multiple query endpoints. Those entries are treated as a single HA group. This means that query failure is claimed only if the Ruler fails to query all instances.
+The `--query.config` and `--query.config-file` flags allow specifying multiple query endpoints. Those entries are treated as a single HA group, where HTTP endpoints are given priority over gRPC Query API endpoints. This means that query failure is claimed only if the Ruler fails to query all instances.
+
+Rules that produce native histograms (experimental feature) are exclusively supported through the gRPC Query API. However, for all other rules, there is no difference in functionality between HTTP and gRPC.
 
 The configuration format is the following:
 
@@ -576,4 +583,6 @@ The configuration format is the following:
     refresh_interval: 0s
   scheme: http
   path_prefix: ""
+  grpc_config:
+    endpoint_addresses: []
 ```

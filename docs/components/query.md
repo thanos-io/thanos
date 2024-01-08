@@ -182,7 +182,7 @@ Available options:
 
 ### Partial Response Strategy
 
-// TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto)
+ <!-- TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto) -->
 
 | HTTP URL/FORM parameter | Type      | Default                                       | Example                                |
 |-------------------------|-----------|-----------------------------------------------|----------------------------------------|
@@ -363,6 +363,10 @@ Flags:
       --query.default-tenant-id="default-tenant"
                                  Default tenant ID to use if tenant header is
                                  not present
+      --query.enable-x-functions
+                                 Whether to enable extended rate functions
+                                 (xrate, xincrease and xdelta). Only has effect
+                                 when used with Thanos engine.
       --query.enforce-tenancy    Enforce tenancy on Query APIs. Only
                                  responses where the value of the configured
                                  tenant-label-name and value of the tenant

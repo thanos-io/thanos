@@ -99,6 +99,7 @@ type QueryEngineFactory struct {
 
 	createThanosEngine sync.Once
 	thanosEngine       v1.QueryEngine
+	enableXFunctions   bool
 }
 
 func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
@@ -118,7 +119,7 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 			return
 		}
 		if f.remoteEngineEndpoints == nil {
-			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true})
+			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
 		} else {
 			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
 		}
@@ -127,13 +128,11 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 	return f.thanosEngine
 }
 
-func NewQueryEngineFactory(
-	engineOpts promql.EngineOpts,
-	remoteEngineEndpoints promqlapi.RemoteEndpoints,
-) *QueryEngineFactory {
+func NewQueryEngineFactory(engineOpts promql.EngineOpts, remoteEngineEndpoints promqlapi.RemoteEndpoints, enableExtendedFunctions bool) *QueryEngineFactory {
 	return &QueryEngineFactory{
 		engineOpts:            engineOpts,
 		remoteEngineEndpoints: remoteEngineEndpoints,
+		enableXFunctions:      enableExtendedFunctions,
 	}
 }
 

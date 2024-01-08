@@ -29,8 +29,8 @@ import (
 	"github.com/thanos-io/objstore/exthttp"
 
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
-
+	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
@@ -254,8 +254,9 @@ type QuerierBuilder struct {
 	endpoints               []string
 	strictEndpoints         []string
 
-	engine    string
-	queryMode string
+	engine           apiv1.PromqlEngineType
+	queryMode        string
+	enableXFunctions bool
 
 	replicaLabels []string
 	tracingConfig string
@@ -365,13 +366,18 @@ func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuild
 	return q
 }
 
-func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+func (q *QuerierBuilder) WithEngine(engine apiv1.PromqlEngineType) *QuerierBuilder {
 	q.engine = engine
 	return q
 }
 
 func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	q.queryMode = mode
+	return q
+}
+
+func (q *QuerierBuilder) WithEnableXFunctions() *QuerierBuilder {
+	q.enableXFunctions = true
 	return q
 }
 
@@ -495,6 +501,13 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.enforceTenancy {
 		args = append(args, "--query.enforce-tenancy")
 	}
+	if q.enableXFunctions {
+		args = append(args, "--query.enable-x-functions")
+	}
+	if q.engine != "" {
+		args = append(args, "--query.promql-engine="+string(q.engine))
+	}
+
 	return args, nil
 }
 
@@ -745,15 +758,15 @@ func (r *RulerBuilder) WithRestoreIgnoredLabels(labels ...string) *RulerBuilder 
 	return r
 }
 
-func (r *RulerBuilder) InitTSDB(internalRuleDir string, queryCfg []httpconfig.Config) *e2eobs.Observable {
+func (r *RulerBuilder) InitTSDB(internalRuleDir string, queryCfg []clientconfig.Config) *e2eobs.Observable {
 	return r.initRule(internalRuleDir, queryCfg, nil)
 }
 
-func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2eobs.Observable {
+func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []clientconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2eobs.Observable {
 	return r.initRule(internalRuleDir, queryCfg, remoteWriteCfg)
 }
 
-func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2eobs.Observable {
+func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []clientconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2eobs.Observable {
 	if err := os.MkdirAll(r.f.Dir(), 0750); err != nil {
 		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "create rule dir"))}
 	}

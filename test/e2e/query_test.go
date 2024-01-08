@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -313,6 +314,49 @@ func TestQuery(t *testing.T) {
 		{
 			"job":        "myself",
 			"prometheus": "prom-ha",
+		},
+	})
+}
+
+func TestQueryWithExtendedFunctions(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("e2e-qry-xfunc"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// create prom + sidecar
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	// create querier
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnableXFunctions().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// send series to prom
+	samples := []seriesWithLabels{
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "1")},
+	}
+	testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom, samples))
+
+	// query
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return `xrate(my_fake_metric{a="1", b="1"}[1m])`
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"a":          "1",
+			"b":          "1",
+			"instance":   "1",
+			"prometheus": "prom",
+			"replica":    "0",
 		},
 	})
 }
@@ -1721,6 +1765,39 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 	}))
 
 	return retExplanation
+}
+
+// Performs a remote write at the receiver external endpoint.
+func remoteWrite(ctx context.Context, timeseries []prompb.TimeSeries, addr string) error {
+	// Create write request
+	data, err := proto.Marshal(&prompb.WriteRequest{Timeseries: timeseries})
+	if err != nil {
+		return err
+	}
+
+	// Create HTTP request
+	compressed := snappy.Encode(nil, data)
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/api/v1/receive", addr), bytes.NewReader(compressed))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Add("Content-Encoding", "snappy")
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
+
+	// Execute HTTP request
+	res, err := promclient.NewDefaultClient().HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer runutil.ExhaustCloseWithErrCapture(&err, res.Body, "%s: close body", req.URL.String())
+
+	if res.StatusCode/100 != 2 {
+		return errors.Errorf("request failed with code %s", res.Status)
+	}
+
+	return nil
 }
 
 func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) error) {
