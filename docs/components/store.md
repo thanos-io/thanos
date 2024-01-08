@@ -210,7 +210,7 @@ Flags:
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --sync-block-duration=15m   Repeat interval for syncing the blocks between
+      --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
