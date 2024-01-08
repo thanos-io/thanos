@@ -43,9 +43,11 @@ export interface PanelProps {
   stores: Store[];
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
+  usePartialResponse: boolean;
   enableLinter: boolean;
   defaultStep: string;
   defaultEngine: string;
+  onUsePartialResponseChange: (value: boolean) => void;
 }
 
 interface PanelState {
@@ -93,7 +95,7 @@ export const PanelDefaultOptions: PanelOptions = {
   maxSourceResolution: '0s',
   useDeduplication: true,
   forceTracing: false,
-  usePartialResponse: false,
+  usePartialResponse: true,
   storeMatches: [],
   engine: '',
   analyze: false,
@@ -166,6 +168,13 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   componentDidMount(): void {
     this.executeQuery();
+    const storedValue = localStorage.getItem('usePartialResponse');
+    if (storedValue !== null) {
+      // Set the default value in state and local storage
+      this.setOptions({ usePartialResponse: true });
+      this.props.onUsePartialResponseChange(true);
+      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+    }
   }
 
   executeQuery = (): void => {
@@ -231,6 +240,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'X-Thanos-Force-Tracing': 'true',
         // Conditionally add the header if the checkbox is enabled
         ...(this.props.options.forceTracing ? { 'X-Thanos-Force-Tracing': 'true' } : {}),
       },
@@ -238,8 +248,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then((resp) => resp.json())
-      .then((json) => {
+      .then((resp) => {
+        return resp.json().then((json) => {
+          return {
+            json,
+            headers: resp.headers,
+          };
+        });
+      })
+      .then(({ json, headers }) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
@@ -254,7 +271,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           }
           analysis = json.data.analysis;
         }
-
+        const traceID = headers.get('X-Thanos-Trace-ID');
         this.setState({
           error: null,
           data: json.data,
@@ -262,12 +279,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             startTime,
             endTime,
             resolution,
+            traceID: traceID ? traceID : '',
           },
           warnings: json.warnings,
           stats: {
             loadTime: Date.now() - queryStart,
             resolution,
             resultSeries,
+            traceID,
           },
           loading: false,
           analysis: analysis,
@@ -336,7 +355,17 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ usePartialResponse: event.target.checked });
+    let newValue = event.target.checked;
+
+    const storedValue = localStorage.getItem('usePartialResponse');
+
+    if (storedValue === 'true') {
+      newValue = true;
+    }
+    this.setOptions({ usePartialResponse: newValue });
+    this.props.onUsePartialResponseChange(newValue);
+
+    localStorage.setItem('usePartialResponse', JSON.stringify(event.target.checked));
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
@@ -510,7 +539,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`force-tracing-checkbox-${id}`}
                 onChange={this.handleChangeForceTracing}
-                defaultchecked={options.forceTracing}
+                defaultChecked={options.forceTracing}
               >
                 Force Tracing
               </Checkbox>

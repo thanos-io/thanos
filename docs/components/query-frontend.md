@@ -252,6 +252,11 @@ Flags:
       --query-frontend.downstream-url="http://localhost:9090"
                                  URL of downstream Prometheus Query compatible
                                  API.
+      --query-frontend.enable-x-functions
+                                 Enable experimental x-
+                                 functions in query-frontend.
+                                 --no-query-frontend.enable-x-functions for
+                                 disabling.
       --query-frontend.forward-header=<http-header-name> ...
                                  List of headers forwarded by the query-frontend
                                  to downstream queriers, default is empty

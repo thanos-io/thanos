@@ -19,7 +19,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sony/gobreaker"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	memcacheDiscovery "github.com/thanos-io/thanos/pkg/discovery/memcache"
+	"github.com/thanos-io/thanos/pkg/extprom"
 )
 
 // MemcachedClient interface exists for mocking memcacheClient.
@@ -45,7 +48,7 @@ type memcachedClient struct {
 	service  string
 
 	addresses []string
-	provider  *dns.Provider
+	provider  clientconfig.AddressProvider
 
 	cbs        map[ /*address*/ string]*gobreaker.CircuitBreaker
 	cbFailures uint
@@ -68,6 +71,7 @@ type MemcachedClientConfig struct {
 	Host           string        `yaml:"host"`
 	Service        string        `yaml:"service"`
 	Addresses      string        `yaml:"addresses"` // EXPERIMENTAL.
+	AutoDiscovery  bool          `yaml:"auto_discovery"`
 	Timeout        time.Duration `yaml:"timeout"`
 	MaxIdleConns   int           `yaml:"max_idle_conns"`
 	MaxItemSize    int           `yaml:"max_item_size"`
@@ -107,9 +111,19 @@ func NewMemcachedClient(cfg MemcachedClientConfig, name string, r prometheus.Reg
 	client.Timeout = cfg.Timeout
 	client.MaxIdleConns = cfg.MaxIdleConns
 
-	dnsProviderRegisterer := prometheus.WrapRegistererWithPrefix("cortex_", prometheus.WrapRegistererWith(prometheus.Labels{
-		"name": name,
-	}, r))
+	var addressProvider clientconfig.AddressProvider
+	if cfg.AutoDiscovery {
+		addressProvider = memcacheDiscovery.NewProvider(
+			logger,
+			extprom.WrapRegistererWithPrefix("cortex_", r),
+			cfg.Timeout,
+		)
+	} else {
+		dnsProviderRegisterer := prometheus.WrapRegistererWithPrefix("cortex_", prometheus.WrapRegistererWith(prometheus.Labels{
+			"name": name,
+		}, r))
+		addressProvider = dns.NewProvider(logger, dnsProviderRegisterer, dns.GolangResolverType)
+	}
 
 	newClient := &memcachedClient{
 		name:        name,
@@ -118,7 +132,7 @@ func NewMemcachedClient(cfg MemcachedClientConfig, name string, r prometheus.Reg
 		hostname:    cfg.Host,
 		service:     cfg.Service,
 		logger:      logger,
-		provider:    dns.NewProvider(logger, dnsProviderRegisterer, dns.GolangResolverType),
+		provider:    addressProvider,
 		cbs:         make(map[string]*gobreaker.CircuitBreaker),
 		cbFailures:  cfg.CBFailures,
 		cbInterval:  cfg.CBInterval,

@@ -83,6 +83,9 @@ type LazyBinaryReader struct {
 
 	// Keep track of the last time it was used.
 	usedAt *atomic.Int64
+
+	// If true, index header will be downloaded at query time rather than initialization time.
+	lazyDownload bool
 }
 
 // NewLazyBinaryReader makes a new LazyBinaryReader. If the index-header does not exist
@@ -99,8 +102,9 @@ func NewLazyBinaryReader(
 	metrics *LazyBinaryReaderMetrics,
 	binaryReaderMetrics *BinaryReaderMetrics,
 	onClosed func(*LazyBinaryReader),
+	lazyDownload bool,
 ) (*LazyBinaryReader, error) {
-	if dir != "" {
+	if dir != "" && !lazyDownload {
 		indexHeaderFile := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
 		// If the index-header doesn't exist we should download it.
 		if _, err := os.Stat(indexHeaderFile); err != nil {
@@ -131,6 +135,7 @@ func NewLazyBinaryReader(
 		binaryReaderMetrics:         binaryReaderMetrics,
 		usedAt:                      atomic.NewInt64(time.Now().UnixNano()),
 		onClosed:                    onClosed,
+		lazyDownload:                lazyDownload,
 	}, nil
 }
 

@@ -282,6 +282,9 @@ func (s resultsCache) shouldCacheResponse(ctx context.Context, req Request, r Re
 	if !s.isAtModifierCachable(req, maxCacheTime) {
 		return false
 	}
+	if !s.isOffsetCachable(req) {
+		return false
+	}
 
 	if s.cacheGenNumberLoader == nil {
 		return true
@@ -305,11 +308,10 @@ func (s resultsCache) shouldCacheResponse(ctx context.Context, req Request, r Re
 	return true
 }
 
-var errAtModifierAfterEnd = errors.New("at modifier after end")
-
 // isAtModifierCachable returns true if the @ modifier result
 // is safe to cache.
 func (s resultsCache) isAtModifierCachable(r Request, maxCacheTime int64) bool {
+	var errAtModifierAfterEnd = errors.New("at modifier after end")
 	// There are 2 cases when @ modifier is not safe to cache:
 	//   1. When @ modifier points to time beyond the maxCacheTime.
 	//   2. If the @ modifier time is > the query range end while being
@@ -355,6 +357,46 @@ func (s resultsCache) isAtModifierCachable(r Request, maxCacheTime int64) bool {
 	})
 
 	return atModCachable
+}
+
+// isOffsetCachable returns true if the offset is positive, result is safe to cache.
+// and false when offset is negative, result is not cached.
+func (s resultsCache) isOffsetCachable(r Request) bool {
+	var errNegativeOffset = errors.New("negative offset")
+	query := r.GetQuery()
+	if !strings.Contains(query, "offset") {
+		return true
+	}
+	expr, err := parser.ParseExpr(query)
+	if err != nil {
+		level.Warn(s.logger).Log("msg", "failed to parse query, considering offset as not cachable", "query", query, "err", err)
+		return false
+	}
+
+	offsetCachable := true
+	parser.Inspect(expr, func(n parser.Node, _ []parser.Node) error {
+		switch e := n.(type) {
+		case *parser.VectorSelector:
+			if e.OriginalOffset < 0 {
+				offsetCachable = false
+				return errNegativeOffset
+			}
+		case *parser.MatrixSelector:
+			offset := e.VectorSelector.(*parser.VectorSelector).OriginalOffset
+			if offset < 0 {
+				offsetCachable = false
+				return errNegativeOffset
+			}
+		case *parser.SubqueryExpr:
+			if e.OriginalOffset < 0 {
+				offsetCachable = false
+				return errNegativeOffset
+			}
+		}
+		return nil
+	})
+
+	return offsetCachable
 }
 
 func getHeaderValuesWithName(r Response, headerName string) (headerValues []string) {

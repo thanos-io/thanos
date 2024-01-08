@@ -99,6 +99,7 @@ type QueryEngineFactory struct {
 
 	createThanosEngine sync.Once
 	thanosEngine       v1.QueryEngine
+	enableXFunctions   bool
 }
 
 func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
@@ -118,7 +119,7 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 			return
 		}
 		if f.remoteEngineEndpoints == nil {
-			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true})
+			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
 		} else {
 			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
 		}
@@ -127,13 +128,11 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 	return f.thanosEngine
 }
 
-func NewQueryEngineFactory(
-	engineOpts promql.EngineOpts,
-	remoteEngineEndpoints promqlapi.RemoteEndpoints,
-) *QueryEngineFactory {
+func NewQueryEngineFactory(engineOpts promql.EngineOpts, remoteEngineEndpoints promqlapi.RemoteEndpoints, enableExtendedFunctions bool) *QueryEngineFactory {
 	return &QueryEngineFactory{
 		engineOpts:            engineOpts,
 		remoteEngineEndpoints: remoteEngineEndpoints,
+		enableXFunctions:      enableExtendedFunctions,
 	}
 }
 
@@ -175,6 +174,8 @@ type QueryAPI struct {
 	tenantHeader    string
 	defaultTenant   string
 	tenantCertField string
+	enforceTenancy  bool
+	tenantLabel     string
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -208,6 +209,8 @@ func NewQueryAPI(
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
+	enforceTenancy bool,
+	tenantLabel string,
 ) *QueryAPI {
 	if statsAggregatorFactory == nil {
 		statsAggregatorFactory = &store.NoopSeriesStatsAggregatorFactory{}
@@ -241,6 +244,8 @@ func NewQueryAPI(
 		tenantHeader:                           tenantHeader,
 		defaultTenant:                          defaultTenant,
 		tenantCertField:                        tenantCertField,
+		enforceTenancy:                         enforceTenancy,
+		tenantLabel:                            tenantLabel,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -645,12 +650,10 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.FormValue("query"))
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
@@ -671,7 +674,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		r.FormValue("query"),
+		queryStr,
 		ts,
 	)
 
@@ -944,12 +947,10 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.FormValue("query"))
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
@@ -973,7 +974,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
 		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		r.FormValue("query"),
+		queryStr,
 		start,
 		end,
 		step,
@@ -1049,21 +1050,11 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, apiErr, func() {}
 	}
 
-	var matcherSets [][]*labels.Matcher
-	for _, s := range r.Form[MatcherParam] {
-		matchers, err := parser.ParseMetricSelector(s)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-		}
-		matcherSets = append(matcherSets, matchers)
-	}
-
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
 	if err != nil {
 		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		return nil, nil, apiErr, func() {}
 	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
 	q, err := qapi.queryableCreate(
 		true,
@@ -1132,13 +1123,10 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	var matcherSets [][]*labels.Matcher
-	for _, s := range r.Form[MatcherParam] {
-		matchers, err := parser.ParseMetricSelector(s)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-		}
-		matcherSets = append(matcherSets, matchers)
+	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(r.Context(), r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
+	if err != nil {
+		apiErr := &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, apiErr, func() {}
 	}
 
 	enableDedup, apiErr := qapi.parseEnableDedupParam(r)
@@ -1160,13 +1148,6 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
-
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, "")
-	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
-	}
-	ctx := context.WithValue(r.Context(), tenancy.TenantKey, tenant)
 
 	q, err := qapi.queryableCreate(
 		enableDedup,
@@ -1219,21 +1200,11 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	var matcherSets [][]*labels.Matcher
-	for _, s := range r.Form[MatcherParam] {
-		matchers, err := parser.ParseMetricSelector(s)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-		}
-		matcherSets = append(matcherSets, matchers)
-	}
-
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, "")
+	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(r.Context(), r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		apiErr := &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		return nil, nil, apiErr, func() {}
 	}
-	ctx := context.WithValue(r.Context(), tenancy.TenantKey, tenant)
 
 	q, err := qapi.queryableCreate(
 		true,
