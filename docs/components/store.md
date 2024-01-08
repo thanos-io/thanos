@@ -108,6 +108,12 @@ Flags:
                                  blocks before being deleted from bucket.
                                  Default is 24h, half of the default value for
                                  --delete-delay on compactor.
+      --ignore-deletion-marks-errors
+                                 If true, Store Gateway will ignore errors while
+                                 trying to fetch and parse deletion-marks.
+                                 This is desirable if the storage provider
+                                 intermittently time out or returning errors for
+                                 non-existent files. Default is false.
       --index-cache-size=250MB   Maximum size of items held in the in-memory
                                  index cache. Ignored if --index-cache.config or
                                  --index-cache.config-file option is specified.

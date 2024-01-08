@@ -81,6 +81,7 @@ type storeConfig struct {
 	advertiseCompatibilityLabel bool
 	consistencyDelay            commonmodel.Duration
 	ignoreDeletionMarksDelay    commonmodel.Duration
+	ignoreDeletionMarksErrors   bool
 	disableWeb                  bool
 	webConfig                   webConfig
 	label                       string
@@ -179,6 +180,10 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. "+
 		"Default is 24h, half of the default value for --delete-delay on compactor.").
 		Default("24h").SetValue(&sc.ignoreDeletionMarksDelay)
+
+	cmd.Flag("ignore-deletion-marks-errors", "If true, Store Gateway will ignore errors while trying to fetch and parse deletion-marks. This is desirable if the storage provider intermittently time out or returning errors for non-existent files. "+
+		"Default is false.").
+		Default("false").BoolVar(&sc.ignoreDeletionMarksErrors)
 
 	cmd.Flag("store.enable-index-header-lazy-reader", "If true, Store Gateway will lazy memory map index-header only once the block is required by a query.").
 		Default("false").BoolVar(&sc.lazyIndexReaderEnabled)
@@ -345,7 +350,7 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.ignoreDeletionMarksErrors, conf.blockMetaFetchConcurrency)
 	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
 	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, baseBlockIDsFetcher, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{

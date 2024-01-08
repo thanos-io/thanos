@@ -878,22 +878,24 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 // Delay is not considered when computing DeletionMarkBlocks map.
 // Not go-routine safe.
 type IgnoreDeletionMarkFilter struct {
-	logger      log.Logger
-	delay       time.Duration
-	concurrency int
-	bkt         objstore.InstrumentedBucketReader
+	logger       log.Logger
+	delay        time.Duration
+	ignoreErrors bool
+	concurrency  int
+	bkt          objstore.InstrumentedBucketReader
 
 	mtx             sync.Mutex
 	deletionMarkMap map[ulid.ULID]*metadata.DeletionMark
 }
 
 // NewIgnoreDeletionMarkFilter creates IgnoreDeletionMarkFilter.
-func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, delay time.Duration, concurrency int) *IgnoreDeletionMarkFilter {
+func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, delay time.Duration, ignoreErrors bool, concurrency int) *IgnoreDeletionMarkFilter {
 	return &IgnoreDeletionMarkFilter{
-		logger:      logger,
-		bkt:         bkt,
-		delay:       delay,
-		concurrency: concurrency,
+		logger:       logger,
+		bkt:          bkt,
+		delay:        delay,
+		ignoreErrors: ignoreErrors,
+		concurrency:  concurrency,
 	}
 }
 
@@ -939,6 +941,10 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 					}
 					if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
 						level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
+						continue
+					}
+					level.Warn(f.logger).Log("msg", "failed to fetch deletion-mark.json; if you see it happening often for the same block, consider manually deleting the whole block from the object storage", "block", id, "err", err)
+					if f.ignoreErrors {
 						continue
 					}
 					// Remember the last error and continue to drain the channel.
