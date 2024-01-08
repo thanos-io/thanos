@@ -268,7 +268,7 @@ Tenant information is captured in relevant Thanos exported metrics in the Querie
 
 ### Tenant Enforcement
 
-Enforcement of tenancy can be enabled using `--query.enforce-tenancy`. If enabled, queries will only return results which contains a matching label, where the label name is `--query.tenant-label-name` and the label value matches the tenant as sent to the querier in the HTTP header configured with `--query-tenant-header`. This functionality requires that metrics are injected with a tenant label when ingested into Thanos. This can be done for example by enabling tenancy in the Thanos Receive component.
+Enforcement of tenancy can be enabled using `--query.enforce-tenancy`. If enabled, queries will only fetch series containing a specific matcher, while evaluating PromQL expressions. The matcher label name is `--query.tenant-label-name` and the matcher value matches the tenant, as sent to the querier in the HTTP header configured with `--query-tenant-header`. This functionality requires that metrics are injected with a tenant label when ingested into Thanos. This can be done for example by enabling tenancy in the Thanos Receive component.
 
 In case of nested Thanos Query components, it's important to note that tenancy enforcement will only occur in the querier which the initial request is sent to, the layered queriers will not perform any enforcement.
 
