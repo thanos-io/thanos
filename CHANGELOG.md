@@ -18,7 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#6756](https://github.com/thanos-io/thanos/pull/6756) Query: Add the following options to allow enforcement of tenancy on the query path: `query.enable-tenancy`, `query.tenant-label-name`.
+- [#6756](https://github.com/thanos-io/thanos/pull/6756) Query: Add `query.enable-tenancy` & `query.tenant-label-name` options to allow enforcement of tenancy on the query path, by injecting labels into queries (uses prom-label-proxy internally).
 - [#6944](https://github.com/thanos-io/thanos/pull/6944) Receive: Added a new flag for maximum retention bytes.
 - [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
 - [#6453](https://github.com/thanos-io/thanos/pull/6453) Sidecar: Added `--reloader.method` to support configuration reloads via SIHUP signal.
@@ -27,7 +27,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6943](https://github.com/thanos-io/thanos/pull/6943) Ruler: Added `keep_firing_for` field in alerting rule.
 - [#6972](https://github.com/thanos-io/thanos/pull/6972) Store Gateway: Apply series limit when streaming series for series actually matched if lazy postings is enabled.
 - [#6984](https://github.com/thanos-io/thanos/pull/6984) Store Gateway: Added `--store.index-header-lazy-download-strategy` to specify how to lazily download index headers when lazy mmap is enabled.
-
 - [#6887](https://github.com/thanos-io/thanos/pull/6887) Query Frontend: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing custom dashboard queries to be incorrect due to the added label.
 - [#7028](https://github.com/thanos-io/thanos/pull/7028) Query|Query Frontend: Add new `--query-frontend.enable-x-functions` flag to enable experimental extended functions.
 

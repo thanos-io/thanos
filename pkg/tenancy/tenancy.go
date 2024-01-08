@@ -199,7 +199,7 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 
 // This function will:
 // - Get tenant from HTTP header and add it to context.
-// - if tenancy is enforce, add a tenant matcher.
+// - if tenancy is enforced, add a tenant matcher to the promQL expression.
 func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, queryStr string) (string, string, context.Context, error) {
 	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField)
 	if err != nil {

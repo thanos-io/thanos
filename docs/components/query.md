@@ -367,10 +367,10 @@ Flags:
                                  Whether to enable extended rate functions
                                  (xrate, xincrease and xdelta). Only has effect
                                  when used with Thanos engine.
-      --query.enforce-tenancy    Enforce tenancy on Query APIs. Only
-                                 responses where the value of the configured
-                                 tenant-label-name and value of the tenant
-                                 header matches are returned.
+      --query.enforce-tenancy    Enforce tenancy on Query APIs. Responses
+                                 are returned only if the label value of the
+                                 configured tenant-label-name and the value of
+                                 the tenant header matches.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
@@ -424,8 +424,8 @@ Flags:
       --query.tenant-header="THANOS-TENANT"
                                  HTTP header to determine tenant.
       --query.tenant-label-name="tenant_id"
-                                 Label name to use when enforce tenancy when
-                                 -querier.tenancy is enabled
+                                 Label name to use when enforcing tenancy (if
+                                 --query.enforce-tenancy is enabled).
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
