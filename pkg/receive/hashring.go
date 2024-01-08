@@ -55,6 +55,9 @@ type Hashring interface {
 	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
 	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (string, error)
+	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
+	// if, for example, the same address is used for multiple tenants in the multi-hashring.
+	Nodes() []string
 }
 
 // SingleNodeHashring always returns the same node.
@@ -63,6 +66,10 @@ type SingleNodeHashring string
 // Get implements the Hashring interface.
 func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
 	return s.GetN(tenant, ts, 0)
+}
+
+func (s SingleNodeHashring) Nodes() []string {
+	return []string{string(s)}
 }
 
 // GetN implements the Hashring interface.
@@ -84,7 +91,13 @@ func newSimpleHashring(endpoints []Endpoint) (Hashring, error) {
 		}
 		addresses[i] = endpoints[i].Address
 	}
+	sort.Strings(addresses)
+
 	return simpleHashring(addresses), nil
+}
+
+func (s simpleHashring) Nodes() []string {
+	return s
 }
 
 // Get returns a target to handle the given tenant and time series.
@@ -120,6 +133,7 @@ type ketamaHashring struct {
 	endpoints    []Endpoint
 	sections     sections
 	numEndpoints uint64
+	nodes        []string
 }
 
 func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFactor uint64) (*ketamaHashring, error) {
@@ -132,8 +146,11 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 	hash := xxhash.New()
 	availabilityZones := make(map[string]struct{})
 	ringSections := make(sections, 0, numSections)
+
+	nodes := []string{}
 	for endpointIndex, endpoint := range endpoints {
 		availabilityZones[endpoint.AZ] = struct{}{}
+		nodes = append(nodes, endpoint.Address)
 		for i := 1; i <= sectionsPerNode; i++ {
 			_, _ = hash.Write([]byte(endpoint.Address + ":" + strconv.Itoa(i)))
 			n := &section{
@@ -148,13 +165,19 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 		}
 	}
 	sort.Sort(ringSections)
+	sort.Strings(nodes)
 	calculateSectionReplicas(ringSections, replicationFactor, availabilityZones)
 
 	return &ketamaHashring{
 		endpoints:    endpoints,
 		sections:     ringSections,
 		numEndpoints: uint64(len(endpoints)),
+		nodes:        nodes,
 	}, nil
+}
+
+func (k *ketamaHashring) Nodes() []string {
+	return k.nodes
 }
 
 func sizeOfLeastOccupiedAZ(azSpread map[string]int64) int64 {
@@ -232,6 +255,8 @@ type multiHashring struct {
 	// to the cache map, as this is both written to
 	// and read from.
 	mu sync.RWMutex
+
+	nodes []string
 }
 
 // Get returns a target to handle the given tenant and time series.
@@ -269,6 +294,10 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 	return "", errors.New("no matching hashring to handle tenant")
 }
 
+func (m *multiHashring) Nodes() []string {
+	return m.nodes
+}
+
 // newMultiHashring creates a multi-tenant hashring for a given slice of
 // groups.
 // Which hashring to use for a tenant is determined
@@ -289,6 +318,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		if err != nil {
 			return nil, err
 		}
+		m.nodes = append(m.nodes, hashring.Nodes()...)
 		m.hashrings = append(m.hashrings, hashring)
 		var t map[string]struct{}
 		if len(h.Tenants) != 0 {
@@ -299,6 +329,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		}
 		m.tenantSets = append(m.tenantSets, t)
 	}
+	sort.Strings(m.nodes)
 	return m, nil
 }
 
