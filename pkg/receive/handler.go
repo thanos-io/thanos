@@ -1206,6 +1206,10 @@ func newPeerGroup(backoff backoff.Backoff, dialOpts ...grpc.DialOption) peersCon
 type peersContainer interface {
 	close(string) error
 	get(context.Context, string) (storepb.WriteableStoreClient, error)
+	markPeerDown(string)
+	markPeerUp(string)
+	isPeerUp(string) bool
+	resetBackoff()
 }
 
 type peerGroup struct {
