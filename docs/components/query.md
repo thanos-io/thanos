@@ -182,7 +182,7 @@ Available options:
 
 ### Partial Response Strategy
 
-// TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto)
+ <!-- TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto) -->
 
 | HTTP URL/FORM parameter | Type      | Default                                       | Example                                |
 |-------------------------|-----------|-----------------------------------------------|----------------------------------------|
