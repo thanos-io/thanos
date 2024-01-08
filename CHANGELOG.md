@@ -32,6 +32,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#6539](https://github.com/thanos-io/thanos/pull/6539) Store: *breaking :warning:* Changed `--sync-block-duration` default 3m to 15m.
+
 ### Removed
 
 ## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - 18.12.2023
@@ -189,7 +191,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6519](https://github.com/thanos-io/thanos/pull/6519) Reloader: Use timeout for initial apply.
 - [#6509](https://github.com/thanos-io/thanos/pull/6509) Store Gateway: Remove `memWriter` from `fileWriter` to reduce memory usage when sync index headers.
 - [#6556](https://github.com/thanos-io/thanos/pull/6556) Thanos compact: respect block-files-concurrency setting when downsampling
-- [#6539](https://github.com/thanos-io/thanos/pull/6539) Store : Changed `--sync-block-duration` default 3m to 15m.
 - [#6592](https://github.com/thanos-io/thanos/pull/6592) Query Frontend: fix bugs in vertical sharding `without` and `union` function to allow more queries to be shardable.
 - [#6317](https://github.com/thanos-io/thanos/pull/6317) *: Fix internal label deduplication bug, by resorting store response set.
 - [#6189](https://github.com/thanos-io/thanos/pull/6189) Rule: Fix panic when calling API `/api/v1/rules?type=alert`.
