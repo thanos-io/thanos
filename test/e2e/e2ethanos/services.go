@@ -265,6 +265,8 @@ type QuerierBuilder struct {
 	telemetrySamplesQuantiles  []float64
 	telemetrySeriesQuantiles   []float64
 
+	enforceTenancy bool
+
 	e2e.Linkable
 	f e2e.FutureRunnable
 }
@@ -391,6 +393,11 @@ func (q *QuerierBuilder) WithTelemetryQuantiles(duration []float64, samples []fl
 	return q
 }
 
+func (q *QuerierBuilder) WithTenancy(enforceTenancy bool) *QuerierBuilder {
+	q.enforceTenancy = enforceTenancy
+	return q
+}
+
 func (q *QuerierBuilder) Init() *e2eobs.Observable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -490,6 +497,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	for _, bucket := range q.telemetrySeriesQuantiles {
 		args = append(args, "--query.telemetry.request-series-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
+	}
+	if q.enforceTenancy {
+		args = append(args, "--query.enforce-tenancy")
 	}
 	if q.enableXFunctions {
 		args = append(args, "--query.enable-x-functions")
