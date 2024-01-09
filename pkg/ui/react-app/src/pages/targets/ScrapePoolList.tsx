@@ -114,11 +114,11 @@ let scrapePoolListWarnings: string[] = [];
 
 const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
   const { response, error } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
-  const { status: responseStatus, warnings } = response;
+  const { status: responseStatus, warnings: responseWarnings } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
 
-  if (warnings?.length > 0) {
-    scrapePoolListWarnings = warnings;
+  if (responseWarnings?.length > 0) {
+    scrapePoolListWarnings = responseWarnings;
   }
 
   return (
