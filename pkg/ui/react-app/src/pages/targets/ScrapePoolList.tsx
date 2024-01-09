@@ -113,7 +113,7 @@ const ScrapePoolListWithStatusIndicator = withStatusIndicator(ScrapePoolListCont
 let scrapePoolListWarnings: string[] = [];
 
 const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
-  const { response, error } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
+  const { response, error, isLoading } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
   const { status: responseStatus, warnings: responseWarnings } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
 
@@ -125,6 +125,7 @@ const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
     <ScrapePoolListWithStatusIndicator
       activeTargets={response.data?.activeTargets || []}
       error={badResponse ? new Error(responseStatus) : error}
+      isLoading={isLoading}
       componentTitle="Targets information"
     />
   );
