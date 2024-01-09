@@ -4,14 +4,27 @@ import Filter from './Filter';
 import ScrapePoolList from './ScrapePoolList';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { UncontrolledAlert } from 'reactstrap';
+import { scrapePoolListWarnings } from './ScrapePoolList';
 
 const Targets: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix }) => {
-  const scrapePoolListProps = { pathPrefix };
-
   return (
     <>
-      <h2>Targets</h2>
-      <ScrapePoolList {...scrapePoolListProps} />
+      {
+        <>
+          {
+            <div>
+              {scrapePoolListWarnings.map((warning, index) => (
+                <UncontrolledAlert key={index} color="warning">
+                  {warning}
+                </UncontrolledAlert>
+              ))}
+            </div>
+          }
+          <h2>Targets</h2>
+          <ScrapePoolList pathPrefix={pathPrefix} />
+        </>
+      }
     </>
   );
 };
