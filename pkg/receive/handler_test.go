@@ -173,6 +173,19 @@ type fakePeersGroup struct {
 	closeCalled map[string]bool
 }
 
+func (g *fakePeersGroup) markPeerDown(s string) {
+}
+
+func (g *fakePeersGroup) markPeerUp(s string) {
+}
+
+func (g *fakePeersGroup) isPeerUp(s string) bool {
+	return true
+}
+
+func (g *fakePeersGroup) resetBackoff() {
+}
+
 func (g *fakePeersGroup) close(addr string) error {
 	if g.closeCalled == nil {
 		g.closeCalled = map[string]bool{}
