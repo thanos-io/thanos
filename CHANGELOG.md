@@ -32,6 +32,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#6539](https://github.com/thanos-io/thanos/pull/6539) Store: *breaking :warning:* Changed `--sync-block-duration` default 3m to 15m.
+
 ### Removed
 
 ## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - 18.12.2023
