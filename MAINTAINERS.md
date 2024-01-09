@@ -2,7 +2,7 @@
 
 | Name                  | Email                     | Slack                    | GitHub                                             | Company             |
 |-----------------------|---------------------------|--------------------------|----------------------------------------------------|---------------------|
-| Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Red Hat             |
+| Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
 | Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
 | Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
 | Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)           | Polar Signals       |

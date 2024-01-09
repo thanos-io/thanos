@@ -142,6 +142,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 				Timeout:        config.Memcached.Timeout,
 				MaxIdleConns:   config.Memcached.MaxIdleConnections,
 				Addresses:      strings.Join(config.Memcached.Addresses, ","),
+				AutoDiscovery:  config.Memcached.AutoDiscovery,
 				UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
 				MaxItemSize:    int(config.Memcached.MaxItemSize),
 			},
@@ -208,6 +209,7 @@ type Config struct {
 	TenantHeader           string
 	DefaultTenant          string
 	TenantCertField        string
+	EnableXFunctions       bool
 }
 
 // QueryRangeConfig holds the config for query range tripperware.

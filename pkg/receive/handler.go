@@ -106,7 +106,7 @@ type Handler struct {
 
 	mtx          sync.RWMutex
 	hashring     Hashring
-	peers        *peerGroup
+	peers        peersContainer
 	expBackoff   backoff.Backoff
 	peerStates   map[string]*retryState
 	receiverMode ReceiverMode
@@ -196,11 +196,21 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
+		var buckets = []float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5}
+
+		const bucketIncrement = 2.0
+		for curMax := 5.0 + bucketIncrement; curMax < o.ForwardTimeout.Seconds(); curMax += bucketIncrement {
+			buckets = append(buckets, curMax)
+		}
+		if buckets[len(buckets)-1] < o.ForwardTimeout.Seconds() {
+			buckets = append(buckets, o.ForwardTimeout.Seconds())
+		}
+
 		ins = extpromhttp.NewTenantInstrumentationMiddleware(
 			o.TenantHeader,
 			o.DefaultTenantID,
 			o.Registry,
-			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
+			buckets,
 		)
 	}
 
@@ -243,9 +253,47 @@ func (h *Handler) Hashring(hashring Hashring) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
 
+	if h.hashring != nil {
+		previousNodes := h.hashring.Nodes()
+		newNodes := hashring.Nodes()
+
+		disappearedNodes := getSortedStringSliceDiff(previousNodes, newNodes)
+		for _, node := range disappearedNodes {
+			if err := h.peers.close(node); err != nil {
+				level.Error(h.logger).Log("msg", "closing gRPC connection failed, we might have leaked a file descriptor", "addr", node, "err", err.Error())
+			}
+		}
+	}
+
 	h.hashring = hashring
 	h.expBackoff.Reset()
 	h.peerStates = make(map[string]*retryState)
+}
+
+// getSortedStringSliceDiff returns items which are in slice1 but not in slice2.
+// The returned slice also only contains unique items i.e. it is a set.
+func getSortedStringSliceDiff(slice1, slice2 []string) []string {
+	slice1Items := make(map[string]struct{}, len(slice1))
+	slice2Items := make(map[string]struct{}, len(slice2))
+
+	for _, s1 := range slice1 {
+		slice1Items[s1] = struct{}{}
+	}
+	for _, s2 := range slice2 {
+		slice2Items[s2] = struct{}{}
+	}
+
+	var difference = make([]string, 0)
+	for s1 := range slice1Items {
+		_, s2Contains := slice2Items[s1]
+		if s2Contains {
+			continue
+		}
+		difference = append(difference, s1)
+	}
+	sort.Strings(difference)
+
+	return difference
 }
 
 // Verifies whether the server is ready or not.
@@ -1113,22 +1161,46 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
+func newPeerGroup(dialOpts ...grpc.DialOption) peersContainer {
 	return &peerGroup{
 		dialOpts: dialOpts,
-		cache:    map[string]storepb.WriteableStoreClient{},
+		cache:    map[string]*grpc.ClientConn{},
 		m:        sync.RWMutex{},
 		dialer:   grpc.DialContext,
 	}
 }
 
+type peersContainer interface {
+	close(string) error
+	get(context.Context, string) (storepb.WriteableStoreClient, error)
+}
+
 type peerGroup struct {
 	dialOpts []grpc.DialOption
-	cache    map[string]storepb.WriteableStoreClient
+	cache    map[string]*grpc.ClientConn
 	m        sync.RWMutex
 
 	// dialer is used for testing.
 	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
+}
+
+func (p *peerGroup) close(addr string) error {
+	p.m.Lock()
+	defer p.m.Unlock()
+
+	c, ok := p.cache[addr]
+	if !ok {
+		// NOTE(GiedriusS): this could be valid case when the connection
+		// was never established.
+		return nil
+	}
+
+	delete(p.cache, addr)
+	if err := c.Close(); err != nil {
+		return fmt.Errorf("closing connection for %s", addr)
+	}
+
+	return nil
 }
 
 func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStoreClient, error) {
@@ -1137,7 +1209,7 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	c, ok := p.cache[addr]
 	p.m.RUnlock()
 	if ok {
-		return c, nil
+		return storepb.NewWriteableStoreClient(c), nil
 	}
 
 	p.m.Lock()
@@ -1145,14 +1217,13 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	// Make sure that another caller hasn't created the connection since obtaining the write lock.
 	c, ok = p.cache[addr]
 	if ok {
-		return c, nil
+		return storepb.NewWriteableStoreClient(c), nil
 	}
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to dial peer")
 	}
 
-	client := storepb.NewWriteableStoreClient(conn)
-	p.cache[addr] = client
-	return client, nil
+	p.cache[addr] = conn
+	return storepb.NewWriteableStoreClient(conn), nil
 }

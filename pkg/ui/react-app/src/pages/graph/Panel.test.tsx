@@ -26,6 +26,9 @@ const defaultProps: PanelProps = {
     analyze: false,
     disableAnalyzeCheckbox: false,
   },
+  onUsePartialResponseChange: (): void => {
+    // Do nothing.
+  },
   onOptionsChanged: (): void => {
     // Do nothing.
   },
@@ -47,6 +50,7 @@ const defaultProps: PanelProps = {
   enableHighlighting: true,
   enableLinter: true,
   defaultEngine: 'prometheus',
+  usePartialResponse: true,
 };
 
 describe('Panel', () => {
