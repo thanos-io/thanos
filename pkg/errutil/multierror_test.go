@@ -5,9 +5,10 @@ package errutil
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestMultiSyncErrorAdd(t *testing.T) {
