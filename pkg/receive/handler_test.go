@@ -183,7 +183,7 @@ func (g *fakePeersGroup) isPeerUp(s string) bool {
 	return true
 }
 
-func (g *fakePeersGroup) resetBackoff() {
+func (g *fakePeersGroup) reset() {
 }
 
 func (g *fakePeersGroup) close(addr string) error {

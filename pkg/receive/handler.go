@@ -265,7 +265,7 @@ func (h *Handler) Hashring(hashring Hashring) {
 	}
 
 	h.hashring = hashring
-	h.peers.resetBackoff()
+	h.peers.reset()
 }
 
 // getSortedStringSliceDiff returns items which are in slice1 but not in slice2.
@@ -1209,7 +1209,7 @@ type peersContainer interface {
 	markPeerDown(string)
 	markPeerUp(string)
 	isPeerUp(string) bool
-	resetBackoff()
+	reset()
 }
 
 type peerGroup struct {
@@ -1297,6 +1297,7 @@ func (p *peerGroup) isPeerUp(addr string) bool {
 	return time.Now().After(state.nextAllowed)
 }
 
-func (p *peerGroup) resetBackoff() {
+func (p *peerGroup) reset() {
 	p.expBackoff.Reset()
+	p.peerStates = make(map[string]*retryState)
 }
