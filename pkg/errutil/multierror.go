@@ -80,7 +80,7 @@ func (es NonNilMultiError) getCause() NonNilMultiRootError {
 			causes = append(causes, errors.Cause(err))
 		}
 	}
-	return NonNilMultiRootError(causes)
+	return causes
 }
 
 type NonNilMultiRootError MultiError
