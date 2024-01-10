@@ -681,12 +681,9 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	// asynchronously and with this capacity we will never block on writing to the channel.
 	maxBufferedResponses := len(localWrites) + len(remoteWrites)
 	responses := make(chan writeResponse, maxBufferedResponses)
-	wg := &sync.WaitGroup{}
+	wg := sync.WaitGroup{}
 
-	h.sendWrites(ctx, wg, requestLogger, params, localWrites, remoteWrites, responses)
-	if err != nil {
-		return err
-	}
+	h.sendWrites(ctx, &wg, requestLogger, params, localWrites, remoteWrites, responses)
 
 	go func() {
 		wg.Wait()
