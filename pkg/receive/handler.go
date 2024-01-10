@@ -859,6 +859,8 @@ func (h *Handler) sendRemoteWrite(
 	}
 
 	span, spanCtx := tracing.StartSpan(ctx, "receive_forward")
+	span.SetTag("endpoint", endpointReplica.endpoint)
+	span.SetTag("replica", endpointReplica.replica+1)
 	// Actually make the request against the endpoint we determined should handle these time series.
 	_, err = cl.RemoteWrite(spanCtx, &storepb.WriteRequest{
 		Timeseries: trackedSeries.timeSeries,
@@ -867,8 +869,9 @@ func (h *Handler) sendRemoteWrite(
 		Replica: int64(endpointReplica.replica + 1),
 	})
 	level.Debug(h.logger).Log("msg", "wrote to remote tsdb", "origin", h.options.Endpoint, "endpoint", fmt.Sprintf("%v", endpointReplica), "err", err)
-	span.Finish()
 	if err != nil {
+		span.SetTag("error", true)
+		span.SetTag("error.msg", err.Error())
 		// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 		if st, ok := status.FromError(err); ok {
 			if st.Code() == codes.Unavailable {
@@ -882,6 +885,7 @@ func (h *Handler) sendRemoteWrite(
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
 		return
 	}
+	span.Finish()
 	h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 	if !alreadyReplicated {
 		h.replications.WithLabelValues(labelSuccess).Inc()
