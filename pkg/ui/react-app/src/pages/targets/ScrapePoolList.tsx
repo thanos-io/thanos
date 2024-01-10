@@ -110,20 +110,24 @@ export const ScrapePoolListContent: FC<ScrapePoolListProps> = ({ activeTargets }
 ScrapePoolListContent.displayName = 'ScrapePoolListContent';
 
 const ScrapePoolListWithStatusIndicator = withStatusIndicator(ScrapePoolListContent);
-let scrapePoolListWarnings: string[] = [];
 
-const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
+const ScrapePoolList: FC<PathPrefixProps & { setWarnings: (warnings: string[]) => void }> = ({
+  pathPrefix,
+  setWarnings,
+}) => {
   const { response, error, isLoading } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
   const { status: responseStatus, warnings: responseWarnings } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
 
-  if (responseWarnings?.length > 0) {
-    scrapePoolListWarnings = responseWarnings;
-  }
+  useEffect(() => {
+    if (responseWarnings?.length > 0) {
+      setWarnings(responseWarnings);
+    }
+  }, [responseWarnings, setWarnings]);
 
   return (
     <ScrapePoolListWithStatusIndicator
-      activeTargets={response.data?.activeTargets || []}
+      {...response.data}
       error={badResponse ? new Error(responseStatus) : error}
       isLoading={isLoading}
       componentTitle="Targets information"
@@ -131,5 +135,4 @@ const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
   );
 };
 
-export { scrapePoolListWarnings };
 export default ScrapePoolList;

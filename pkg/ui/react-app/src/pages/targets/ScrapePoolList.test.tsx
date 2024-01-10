@@ -8,8 +8,10 @@ import { Target } from './target';
 import { FetchMock } from 'jest-fetch-mock/types';
 
 describe('ScrapePoolList', () => {
+  const setWarningsMock = jest.fn();
   const defaultProps = {
     pathPrefix: '..',
+    setWarnings: setWarningsMock,
   };
 
   beforeEach(() => {
