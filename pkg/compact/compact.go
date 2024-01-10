@@ -941,7 +941,7 @@ func (e HaltError) Error() string {
 	return e.err.Error()
 }
 
-func (e HaltError) Cause() error {
+func (e HaltError) Unwrap() error {
 	return errors.Cause(e.err)
 }
 
@@ -978,7 +978,7 @@ func (e RetryError) Error() string {
 	return e.err.Error()
 }
 
-func (e RetryError) Cause() error {
+func (e RetryError) Unwrap() error {
 	return errors.Cause(e.err)
 }
 
