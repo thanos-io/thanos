@@ -653,7 +653,7 @@ type remoteWriteParams struct {
 }
 
 func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) error {
-	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
+	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
 	defer func() {
@@ -801,7 +801,7 @@ func (h *Handler) sendWrites(
 		wg.Add(1)
 		go func(writeDestination endpointReplica) {
 			defer wg.Done()
-			h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses)
+			h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, requestLogger, responses)
 		}(writeDestination)
 	}
 }
@@ -843,6 +843,7 @@ func (h *Handler) sendRemoteWrite(
 	endpointReplica endpointReplica,
 	trackedSeries trackedSeries,
 	alreadyReplicated bool,
+	requestLogger log.Logger,
 	responses chan<- writeResponse,
 ) {
 	endpoint := endpointReplica.endpoint
@@ -868,7 +869,7 @@ func (h *Handler) sendRemoteWrite(
 		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
 		Replica: int64(endpointReplica.replica + 1),
 	})
-	level.Debug(h.logger).Log("msg", "wrote to remote tsdb", "origin", h.options.Endpoint, "endpoint", fmt.Sprintf("%v", endpointReplica), "err", err)
+	level.Debug(requestLogger).Log("msg", "wrote to remote tsdb", "origin", h.options.Endpoint, "endpoint", fmt.Sprintf("%v", endpointReplica), "err", err)
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
