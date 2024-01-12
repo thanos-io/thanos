@@ -66,4 +66,48 @@ describe('ScrapePoolList', () => {
       expect(alert.text()).toContain('Error fetching targets');
     });
   });
+  describe('when a warning is returned', () => {
+    it('displays warnings in the UI', async () => {
+      const mock = fetchMock.mockResponseOnce(JSON.stringify({ status: 'error', warnings: ['Warning 1', 'Warning 2'] }));
+
+      let scrapePoolList: any;
+      await act(async () => {
+        scrapePoolList = mount(<ScrapePoolList {...defaultProps} />);
+      });
+
+      scrapePoolList.update();
+
+      expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+
+      const warning1 = scrapePoolList.findWhere((node: { text: () => string }) => node.text() === 'Warning 1');
+      const warning2 = scrapePoolList.findWhere((node: { text: () => string }) => node.text() === 'Warning 2');
+
+      expect(warning1).toHaveLength(1);
+      expect(warning2).toHaveLength(1);
+    });
+
+    it('does not display warnings when there are no warnings', async () => {
+      const mock = fetchMock.mockResponseOnce(JSON.stringify({ status: 'success', warnings: [] }));
+
+      let scrapePoolList: any;
+      await act(async () => {
+        scrapePoolList = mount(<ScrapePoolList {...defaultProps} />);
+      });
+
+      scrapePoolList.update();
+
+      expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+
+      const warnings = scrapePoolList.findWhere((node: { text: () => string | string[] }) =>
+        node.text().includes('Warning')
+      );
+      expect(warnings).toHaveLength(0);
+    });
+  });
 });
