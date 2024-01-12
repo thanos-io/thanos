@@ -60,9 +60,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
+
+const testQueryA = "{a=\"1\"}"
 
 func defaultWebConfig() string {
 	// username: test, secret: test(bcrypt hash)
@@ -2417,12 +2420,12 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 func TestTenantHTTPMetrics(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("tenant-metrics")
+	e, err := e2e.NewDockerEnvironment("q-tenant-metrics")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// scrape the local prometheus, and our querier metrics
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "q-tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -2496,4 +2499,266 @@ func TestTenantHTTPMetrics(t *testing.T) {
 		),
 		e2emon.WaitMissingMetrics(),
 	))
+}
+
+func TestQueryTenancyEnforcement(t *testing.T) {
+	t.Parallel()
+
+	// Build up.
+	e, err := e2e.New(e2e.WithName("tenancyEnforce"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	bucket := "store-gw-test"
+	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+	testutil.Ok(t, err)
+
+	// Add series from different tenants
+	now := time.Now()
+	tenantLabel01 := labels.FromStrings(tenancy.DefaultTenantLabel, "tenant-01")
+	tenantLabel02 := labels.FromStrings(tenancy.DefaultTenantLabel, "tenant-02")
+	tenantLabel03 := labels.FromStrings(tenancy.DefaultTenantLabel, "default-tenant")
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
+
+	series1 := []labels.Labels{labels.FromStrings("a", "1")}
+	series2 := []labels.Labels{labels.FromStrings("b", "2")}
+	series3 := []labels.Labels{labels.FromStrings("c", "3")}
+
+	blockID1, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+		dir,
+		series1,
+		10,
+		timestamp.FromTime(now),
+		timestamp.FromTime(now.Add(2*time.Hour)),
+		30*time.Minute,
+		tenantLabel01,
+		0,
+		metadata.NoneFunc,
+	)
+	testutil.Ok(t, err)
+
+	blockID2, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+		dir,
+		series2,
+		10,
+		timestamp.FromTime(now),
+		timestamp.FromTime(now.Add(2*time.Hour)),
+		30*time.Minute,
+		tenantLabel02,
+		0,
+		metadata.NoneFunc,
+	)
+	testutil.Ok(t, err)
+
+	blockID3, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+		dir,
+		series3,
+		10,
+		timestamp.FromTime(now),
+		timestamp.FromTime(now.Add(2*time.Hour)),
+		30*time.Minute,
+		tenantLabel03,
+		0,
+		metadata.NoneFunc,
+	)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID1.String()), blockID1.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID2.String()), blockID2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID3.String()), blockID3.String()))
+
+	storeGW := e2ethanos.NewStoreGW(
+		e,
+		"s1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+		},
+		"",
+		"",
+		nil,
+	)
+
+	querierEnforce := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).WithTenancy(true).Init()
+	querierNoEnforce := e2ethanos.NewQuerierBuilder(e, "2", storeGW.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querierEnforce, querierNoEnforce))
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(3), "thanos_blocks_meta_synced"))
+
+	tenant1Header := make(http.Header)
+	tenant1Header.Add("thanos-tenant", "tenant-01")
+
+	tenant2Header := make(http.Header)
+	tenant2Header.Add("thanos-tenant", "tenant-02")
+
+	// default-tenant should only see part of the results
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{c=\"3\"}" },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		[]model.Metric{
+			{
+				"c":         "3",
+				"tenant_id": "default-tenant",
+			},
+		},
+	)
+
+	// tenant-01 should only see part of the results
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+			HTTPHeaders: tenant1Header,
+		},
+		[]model.Metric{
+			{
+				"a":         "1",
+				"tenant_id": "tenant-01",
+			},
+		},
+	)
+
+	// With no enforcement enabled, default tenant can see everything
+	queryAndAssertSeries(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		[]model.Metric{
+			{
+				"a":         "1",
+				"tenant_id": "tenant-01",
+			},
+		},
+	)
+
+	// Default tenant don't see "a" when tenancy is enforced
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		nil,
+	)
+
+	// tenant-2 don't see "a" when tenancy is enforced
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+			HTTPHeaders: tenant2Header,
+		},
+		nil,
+	)
+
+	// default-tenant cannot attempt to view other tenants data, by setting the tenant id
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{tenant_id=\"tenant-01\"}" },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		nil,
+	)
+
+	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		}, func(res model.Matrix) error {
+			if res.Len() == 0 {
+				return nil
+			} else {
+				return errors.New("default-tenant shouldn't be able to see results with label a")
+			}
+		})
+
+	rangeQuery(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		}, func(res model.Matrix) error {
+			if res[0].Metric["a"] == "1" {
+				return nil
+			} else {
+				return errors.New("default-tenant should be able to see results with label a when enforcement is off")
+			}
+		})
+
+	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{c=\"3\"}" }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		}, func(res model.Matrix) error {
+			if res[0].Metric["c"] == "3" {
+				return nil
+			} else {
+				return errors.New("default-tenant should be able to see its own data when enforcement is enabled")
+			}
+		})
+
+	// default-tenant should only see two labels when enforcing is on (c,tenant_id)
+	labelNames(t, ctx, querierEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		return len(res) == 2
+	})
+
+	// default-tenant should only see all labels when enforcing is not on (a,b,c,tenant_id)
+	labelNames(t, ctx, querierNoEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		return len(res) == 4
+	})
+
+	// default tenant can just the value of the C label
+	labelValues(t, ctx, querierEnforce.Endpoint("http"), "c", nil,
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 1
+		},
+	)
+	labelValues(t, ctx, querierEnforce.Endpoint("http"), "a", nil,
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 0
+		},
+	)
+
+	// Series endpoint tests
+	var matcherSetC []*labels.Matcher
+	labelMatcherC := &labels.Matcher{
+		Name:  "c",
+		Type:  labels.MatchEqual,
+		Value: "3",
+	}
+	matcherSetC = append(matcherSetC, labelMatcherC)
+
+	var matcherSetB []*labels.Matcher
+	labelMatcher := &labels.Matcher{
+		Name:  "b",
+		Type:  labels.MatchEqual,
+		Value: "2",
+	}
+	matcherSetB = append(matcherSetB, labelMatcher)
+
+	// default-tenant can see series with matcher C
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetC, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+		var expected = []map[string]string{
+			{
+				"c":         "3",
+				"tenant_id": "default-tenant",
+			},
+		}
+		return reflect.DeepEqual(res, expected)
+	})
+
+	// default-tenant cannot see series with matcher B when tenancy is enabled
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+		return len(res) == 0
+	})
+
+	// default-tenant can see series with matcher B when tenancy is not enabled
+	series(t, ctx, querierNoEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+		var expected = []map[string]string{
+			{
+				"b":         "2",
+				"tenant_id": "tenant-02",
+			},
+		}
+		return reflect.DeepEqual(res, expected)
+	})
 }

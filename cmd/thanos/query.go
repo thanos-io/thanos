@@ -220,6 +220,8 @@ func registerQuery(app *extkingpin.App) {
 	tenantHeader := cmd.Flag("query.tenant-header", "HTTP header to determine tenant.").Default(tenancy.DefaultTenantHeader).String()
 	defaultTenant := cmd.Flag("query.default-tenant-id", "Default tenant ID to use if tenant header is not present").Default(tenancy.DefaultTenant).String()
 	tenantCertField := cmd.Flag("query.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query.tenant-header flag value to be ignored.").Default("").Enum("", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
+	enforceTenancy := cmd.Flag("query.enforce-tenancy", "Enforce tenancy on Query APIs. Responses are returned only if the label value of the configured tenant-label-name and the value of the tenant header matches.").Default("false").Bool()
+	tenantLabel := cmd.Flag("query.tenant-label-name", "Label name to use when enforcing tenancy (if --query.enforce-tenancy is enabled).").Default(tenancy.DefaultTenantLabel).String()
 
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
@@ -347,6 +349,8 @@ func registerQuery(app *extkingpin.App) {
 			*tenantHeader,
 			*defaultTenant,
 			*tenantCertField,
+			*enforceTenancy,
+			*tenantLabel,
 		)
 	})
 }
@@ -427,6 +431,8 @@ func runQuery(
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
+	enforceTenancy bool,
+	tenantLabel string,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -724,6 +730,8 @@ func runQuery(
 			tenantHeader,
 			defaultTenant,
 			tenantCertField,
+			enforceTenancy,
+			tenantLabel,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
