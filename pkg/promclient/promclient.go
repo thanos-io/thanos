@@ -161,6 +161,22 @@ func IsWALDirAccessible(dir string) error {
 	return nil
 }
 
+// IsDirAccessible returns no error if dir can be found.
+func IsDirAccessible(dir string) error {
+	const errMsg = "Dir is not accessible."
+
+	f, err := os.Stat(dir)
+	if err != nil {
+		return errors.Wrap(err, errMsg)
+	}
+
+	if !f.IsDir() {
+		return errors.New(errMsg)
+	}
+
+	return nil
+}
+
 // ExternalLabels returns sorted external labels from /api/v1/status/config Prometheus endpoint.
 // Note that configuration can be hot reloadable on Prometheus, so this config might change in runtime.
 func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
