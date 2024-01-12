@@ -229,6 +229,7 @@ type QueryRangeConfig struct {
 	HorizontalShards       int64
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits
+	Timeout                time.Duration `yaml:"timeout"`
 }
 
 // LabelsConfig holds the config for labels tripperware.
@@ -244,7 +245,8 @@ type LabelsConfig struct {
 	SplitQueriesByInterval time.Duration
 	MaxRetries             int
 
-	Limits *cortexvalidation.Limits
+	Limits  *cortexvalidation.Limits
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 // Validate a fully initialized config.

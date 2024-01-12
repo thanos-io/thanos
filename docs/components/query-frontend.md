@@ -340,6 +340,9 @@ Flags:
                                  execute in parallel, it should be greater than
                                  0 when query-range.response-cache-config is
                                  configured.
+      --query-range.timeout=5m   Global timeout for range queries in the query
+                                 frontend. Queries exceeding this duration will
+                                 be aborted.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content

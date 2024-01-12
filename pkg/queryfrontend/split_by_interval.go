@@ -17,7 +17,7 @@ import (
 )
 
 // SplitByIntervalMiddleware creates a new Middleware that splits requests by a given interval.
-func SplitByIntervalMiddleware(interval queryrange.IntervalFn, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
+func SplitByIntervalMiddleware(interval queryrange.IntervalFn, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer, timeout time.Duration) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		return splitByInterval{
 			next:     next,
@@ -29,6 +29,7 @@ func SplitByIntervalMiddleware(interval queryrange.IntervalFn, limits queryrange
 				Name:      "frontend_split_queries_total",
 				Help:      "Total number of underlying query requests after the split by interval is applied",
 			}),
+			timeout: timeout,
 		}
 	})
 }
@@ -41,6 +42,7 @@ type splitByInterval struct {
 
 	// Metrics.
 	splitByCounter prometheus.Counter
+	timeout        time.Duration
 }
 
 func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
@@ -51,6 +53,9 @@ func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryran
 		return nil, err
 	}
 	s.splitByCounter.Add(float64(len(reqs)))
+
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
 
 	reqResps, err := queryrange.DoRequests(ctx, s.next, reqs, s.limits)
 	if err != nil {

@@ -70,6 +70,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&cfg.webDisableCORS)
 
+	cmd.Flag("query-range.timeout", "Global timeout for range queries in the query frontend. Queries exceeding this duration will be aborted.").
+		Default("5m").DurationVar(&cfg.QueryRangeConfig.Timeout)
+
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
