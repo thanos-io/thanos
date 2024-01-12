@@ -343,7 +343,6 @@ func TestWriter(t *testing.T) {
 				"tenant_id",
 				nil,
 				false,
-				false,
 				metadata.NoneFunc,
 			)
 			t.Cleanup(func() { testutil.Ok(t, m.Close()) })
@@ -435,7 +434,6 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
 		nil,
-		false,
 		false,
 		metadata.NoneFunc,
 	)
