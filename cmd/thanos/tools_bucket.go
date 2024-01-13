@@ -46,7 +46,6 @@ import (
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/compactv2"
@@ -162,8 +161,8 @@ type bucketMarkBlockConfig struct {
 }
 
 type bucketUploadBlocksConfig struct {
-	path       string
-	prometheus prometheusConfig
+	path   string
+	labels []string
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -287,24 +286,7 @@ func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.Fla
 
 func (tbc *bucketUploadBlocksConfig) registerBucketUploadBlocksFlag(cmd extkingpin.FlagClause) *bucketUploadBlocksConfig {
 	cmd.Flag("path", "Path to the directory containing blocks to upload.").Default("./data").StringVar(&tbc.path)
-
-	cmd.Flag("prometheus.url",
-		"URL at which to reach Prometheus's API. For better performance use local network.").
-		Default("http://localhost:9090").URLVar(&tbc.prometheus.url)
-	cmd.Flag("prometheus.ready_timeout",
-		"Maximum time to wait for the Prometheus instance to start up").
-		Default("10m").DurationVar(&tbc.prometheus.readyTimeout)
-	cmd.Flag("prometheus.get_config_interval",
-		"How often to get Prometheus config").
-		Default("30s").DurationVar(&tbc.prometheus.getConfigInterval)
-	cmd.Flag("prometheus.get_config_timeout",
-		"Timeout for getting Prometheus config").
-		Default("5s").DurationVar(&tbc.prometheus.getConfigTimeout)
-	tbc.prometheus.httpClient = extflag.RegisterPathOrContent(
-		cmd,
-		"prometheus.http-client",
-		"YAML file or string with http client configs. See Format details: https://thanos.io/tip/components/sidecar.md/#configuration.",
-	)
+	cmd.Flag("label", "External labels to add to the uploaded blocks (repeated).").PlaceHolder("key=\"value\"").StringsVar(&tbc.labels)
 
 	return tbc
 }
@@ -1461,82 +1443,45 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 	tbc.registerBucketUploadBlocksFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		ctx := context.Background()
-		httpConfContentYaml, err := tbc.prometheus.httpClient.Content()
+		if len(tbc.labels) == 0 {
+			return errors.New("no external labels configured, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+		}
+
+		lset, err := parseFlagLabels(tbc.labels)
 		if err != nil {
-			return errors.Wrap(err, "getting http client config")
+			return errors.Wrap(err, "unable to parse external labels")
 		}
-
-		httpClientConfig, err := clientconfig.NewHTTPClientConfigFromYAML(httpConfContentYaml)
-		if err != nil {
-			return errors.Wrap(err, "parsing http config YAML")
-		}
-
-		httpClient, err := clientconfig.NewHTTPClient(*httpClientConfig, "thanos-tool")
-		if err != nil {
-			return errors.Wrap(err, "Improper http client config")
-		}
-
-		m := &promMetadata{
-			promURL: tbc.prometheus.url,
-			client:  promclient.NewWithTracingClient(logger, httpClient, "thanos-tool"),
-		}
-
-		err = runutil.Retry(2*time.Second, ctx.Done(), func() error {
-			if err := m.UpdateLabels(ctx); err != nil {
-				level.Warn(logger).Log(
-					"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
-					"err", err,
-				)
-				return err
-			}
-
-			level.Info(logger).Log(
-				"msg", "successfully loaded prometheus external labels",
-				"external_labels", m.Labels().String(),
-			)
-			return nil
-		})
-
-		if err != nil {
-			return errors.Wrap(err, "initial external labels query")
-		}
-
-		if len(m.Labels()) == 0 {
-			return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+		if err := promclient.IsDirAccessible(tbc.path); err != nil {
+			return errors.Wrapf(err, "unable to access path '%s'", tbc.path)
 		}
 
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to parse objstore config")
 		}
 
 		bkt, err := client.NewBucket(logger, confContentYaml, component.Upload.String())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to create bucket")
 		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		// Ensure we close up everything properly.
-		defer func() {
-			if err != nil {
-				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			}
-		}()
-
-		if err := promclient.IsDirAccessible(tbc.path); err != nil {
-			level.Error(logger).Log("err", err)
-		}
-
-		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
-		s := shipper.New(logger, reg, tbc.path, bkt, m.Labels, metadata.BucketUploadSource,
+		s := shipper.New(logger, reg, tbc.path, bkt, func() labels.Labels { return lset }, metadata.BucketUploadSource,
 			nil, false, metadata.HashFunc(""), shipper.DefaultMetaFilename)
 
-		if _, err := s.Sync(ctx); err != nil {
-			level.Error(logger).Log("msg", "shipper sync", "err", err)
-		}
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			n, err := s.Sync(ctx)
+			if err != nil {
+				return errors.Wrap(err, "unable to sync blocks")
+			}
+			level.Info(logger).Log("msg", "synced blocks", "uploaded", n)
+			return nil
+		}, func(error) {
+			cancel()
+		})
 
 		return nil
 	})
