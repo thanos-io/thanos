@@ -79,7 +79,7 @@ Subcommands:
     no compactor is running on the same bucket at the same time.
 
   tools bucket upload-blocks [<flags>]
-    Upload blocks push blocks from the provided path to the object storeage.
+    Upload blocks push blocks from the provided path to the object storage.
 
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
@@ -191,7 +191,7 @@ Subcommands:
     no compactor is running on the same bucket at the same time.
 
   tools bucket upload-blocks [<flags>]
-    Upload blocks push blocks from the provided path to the object storeage.
+    Upload blocks push blocks from the provided path to the object storage.
 
 
 ```
@@ -854,7 +854,7 @@ Flags:
 ```$ mdox-exec="thanos tools bucket upload-blocks --help"
 usage: thanos tools bucket upload-blocks [<flags>]
 
-Upload blocks push blocks from the provided path to the object storeage.
+Upload blocks push blocks from the provided path to the object storage.
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
