@@ -227,7 +227,6 @@ type QueryRangeConfig struct {
 	MinQuerySplitInterval  time.Duration
 	MaxQuerySplitInterval  time.Duration
 	HorizontalShards       int64
-	Timeout                time.Duration
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits
 }
