@@ -857,49 +857,35 @@ usage: thanos tools bucket upload-blocks [<flags>]
 Upload blocks push blocks from the provided path to the object storage.
 
 Flags:
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
+  -h, --help                   Show context-sensitive help (also try --help-long
+                               and --help-man).
+      --label=key="value" ...  External labels to add to the uploaded blocks
+                               (repeated).
+      --log.format=logfmt      Log format to use. Possible options: logfmt or
+                               json.
+      --log.level=info         Log filtering level.
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains
-                           object store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
+                               Alternative to 'objstore.config-file'
+                               flag (mutually exclusive). Content of
+                               YAML file that contains object store
+                               configuration. See format details:
+                               https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object
-                           store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
-      --path="./data"      Path to the directory containing blocks to upload.
-      --prometheus.get_config_interval=30s
-                           How often to get Prometheus config
-      --prometheus.get_config_timeout=5s
-                           Timeout for getting Prometheus config
-      --prometheus.http-client=<content>
-                           Alternative to 'prometheus.http-client-file' flag
-                           (mutually exclusive). Content of YAML file or string
-                           with http client configs. See Format details:
-                           https://thanos.io/tip/components/sidecar.md/#configuration.
-      --prometheus.http-client-file=<file-path>
-                           Path to YAML file or string with http
-                           client configs. See Format details:
-                           https://thanos.io/tip/components/sidecar.md/#configuration.
-      --prometheus.ready_timeout=10m
-                           Maximum time to wait for the Prometheus instance to
-                           start up
-      --prometheus.url=http://localhost:9090
-                           URL at which to reach Prometheus's API. For better
-                           performance use local network.
+                               Path to YAML file that contains object
+                               store configuration. See format details:
+                               https://thanos.io/tip/thanos/storage.md/#configuration
+      --path="./data"          Path to the directory containing blocks to
+                               upload.
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                               Alternative to 'tracing.config-file' flag
+                               (mutually exclusive). Content of YAML file
+                               with tracing configuration. See format details:
+                               https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                               Path to YAML file with tracing
+                               configuration. See format details:
+                               https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                Show application version.
 
 ```
 
