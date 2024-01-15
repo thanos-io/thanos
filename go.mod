@@ -52,17 +52,17 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/alertmanager v0.27.0
-	github.com/prometheus/client_golang v1.19.1
-	github.com/prometheus/client_model v0.6.1
-	github.com/prometheus/common v0.54.1-0.20240615204547-04635d2962f9
+	github.com/prometheus/alertmanager v0.26.0
+	github.com/prometheus/client_golang v1.18.0
+	github.com/prometheus/client_model v0.5.0
+	github.com/prometheus/common v0.46.0
 	github.com/prometheus/exporter-toolkit v0.11.0
 	// Prometheus maps version 2.x.y to tags v0.x.y.
-	github.com/prometheus/prometheus v0.52.2-0.20240614130246-4c1e71fa0b3d
+	github.com/prometheus/prometheus v0.50.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
-	github.com/thanos-io/objstore v0.0.0-20240622095743-1afe5d4bc3cd
-	github.com/thanos-io/promql-engine v0.0.0-20240515161521-93aa311933cf
+	github.com/thanos-io/objstore v0.0.0-20231112185854-37752ee64d98
+	github.com/thanos-io/promql-engine v0.0.0-20240115075159-7de619aae856
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
