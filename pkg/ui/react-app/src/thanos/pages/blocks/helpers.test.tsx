@@ -659,35 +659,35 @@ describe('Filtered block pools', () => {
   });
 });
 
-const newBlockPools = blockPools;
-const poolArrayIndex: BlocksPool = newBlockPools['1'];
-const poolArray: Block[][] = poolArrayIndex[Object.keys(poolArrayIndex)[0]];
-const undefinedBlock: Block = {
-  compaction: {
-    level: null as unknown as number,
-    sources: [],
-    parents: [],
-  },
-  maxTime: null as unknown as number,
-  minTime: null as unknown as number,
-  stats: {
-    numChunks: null as unknown as number,
-    numSamples: null as unknown as number,
-    numSeries: null as unknown as number,
-  },
-  thanos: {
-    downsample: {
-      resolution: null as unknown as number,
-    },
-    labels: {},
-    source: null as unknown as string,
-  },
-  ulid: null as unknown as string,
-  version: null as unknown as number,
-};
-
-poolArray[0][0] = undefinedBlock;
 describe('handle null in blockPool', () => {
+  const newBlockPools = blockPools;
+  const poolArrayIndex: BlocksPool = newBlockPools['1'];
+  const poolArray: Block[][] = poolArrayIndex[Object.keys(poolArrayIndex)[0]];
+  const undefinedBlock: Block = {
+    compaction: {
+      level: null as unknown as number,
+      sources: [],
+      parents: [],
+    },
+    maxTime: null as unknown as number,
+    minTime: null as unknown as number,
+    stats: {
+      numChunks: null as unknown as number,
+      numSamples: null as unknown as number,
+      numSeries: null as unknown as number,
+    },
+    thanos: {
+      downsample: {
+        resolution: null as unknown as number,
+      },
+      labels: {},
+      source: null as unknown as string,
+    },
+    ulid: null as unknown as string,
+    version: null as unknown as number,
+  };
+
+  poolArray[0][0] = undefinedBlock;
   it('should not crash UI', () => {
     expect(Object.keys(newBlockPools)).toEqual(Object.keys(blockPools));
   });
