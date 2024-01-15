@@ -61,7 +61,6 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
-	uploadCompactedBlocks bool
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -75,7 +74,6 @@ func NewMultiTSDB(
 	tenantLabelName string,
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
-	allowCompactedUpload bool,
 	hashFunc metadata.HashFunc,
 ) *MultiTSDB {
 	if l == nil {
@@ -93,7 +91,6 @@ func NewMultiTSDB(
 		tenantLabelName:       tenantLabelName,
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
-		uploadCompactedBlocks: allowCompactedUpload,
 		hashFunc:              hashFunc,
 	}
 }
@@ -599,7 +596,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		return err
 	}
 	var ship *shipper.Shipper
-
 	if t.bucket != nil {
 		ship = shipper.New(
 			logger,
@@ -608,7 +604,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.bucket,
 			func() labels.Labels { return lset },
 			metadata.ReceiveSource,
-			func() bool { return t.uploadCompactedBlocks },
+			nil,
 			t.allowOutOfOrderUpload,
 			t.hashFunc,
 			shipper.DefaultMetaFilename,

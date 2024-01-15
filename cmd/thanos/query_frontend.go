@@ -16,6 +16,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/promql-engine/execution/parse"
 	"github.com/weaveworks/common/user"
 	"gopkg.in/yaml.v2"
 
@@ -91,6 +93,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
+
+	cmd.Flag("query-frontend.enable-x-functions", "Enable experimental x- functions in query-frontend. --no-query-frontend.enable-x-functions for disabling.").
+		Default("false").BoolVar(&cfg.EnableXFunctions)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
 		Default("0").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxQueryLength))
@@ -285,6 +290,12 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
+	if cfg.EnableXFunctions {
+		for fname, v := range parse.XFunctions {
+			parser.Functions[fname] = v
+		}
+	}
+
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {
 		return errors.Wrap(err, "setup tripperwares")
@@ -322,7 +333,7 @@ func runQueryFrontend(
 
 	// Configure Request Logging for HTTP calls.
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+	ins := extpromhttp.NewTenantInstrumentationMiddleware(cfg.TenantHeader, cfg.DefaultTenant, reg, nil)
 
 	// Start metrics HTTP server.
 	{

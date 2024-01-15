@@ -40,3 +40,5 @@ validators:
     type: 'ignore'
   - regex: 'krisztianfekete\.org'
     type: 'ignore'
+  - regex: 'twitter\.com'
+    type: 'ignore'

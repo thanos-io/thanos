@@ -1,0 +1,31 @@
+{{ define "main" }}
+ <div class="container">
+     <div class="row py-5">
+         <div class="col col-12">
+             {{ range .Paginator.Pages }}
+                 <div class="mb-5 container">
+                     <h2><a href="{{ .Permalink }}">Support and Training</a></h2>
+                     <p class ="text-muted" style="margin-bottom: 5rem;">Firms that offer consultancy and enterprise support.</p>
+                     <div class="d-flex justify-content-around">
+                         <a href="https://www.cloudraft.io">
+                             <img src="{{ "/cloudraft.png" | relURL }}"  alt="" style="width: auto; height: auto; border-color: #ccc; margin-top: 2rem">
+                         </a>
+                         <a href="https://o11y.eu">
+                             <img src="{{ "/o11y.svg" | relURL }}"  alt="" style="width: auto; height: auto; border-color: #ccc;">
+                         </a>
+                         <a href="https://tasrieit.com">
+                             <img src="{{ "/tasrie-it-services.png" | relURL }}"  alt="" style="width: auto; height: auto; border-color: #ccc;">
+                         </a>
+                     </div>
+                     <hr>
+                     {{ .Summary }}
+                 </div>
+                 <div class="d-flex align-items-center justify-content-center mb-5">
+                     <a href="https://github.com/thanos-io/thanos" target="_blank" class="btn btn-primary btn-lg">Add your company</a>
+                 </div>
+             {{ end}}
+             {{ template "_internal/pagination.html" . }}
+         </div>
+     </div>
+ </div>
+ {{ end }} 

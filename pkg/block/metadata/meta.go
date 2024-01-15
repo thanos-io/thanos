@@ -41,6 +41,7 @@ const (
 	RulerSource           SourceType = "ruler"
 	BucketRepairSource    SourceType = "bucket.repair"
 	BucketRewriteSource   SourceType = "bucket.rewrite"
+	BucketUploadSource    SourceType = "bucket.upload"
 	TestSource            SourceType = "test"
 )
 

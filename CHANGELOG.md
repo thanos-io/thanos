@@ -12,9 +12,23 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.34.0](https://github.com/thanos-io/thanos/tree/release-0.34) - release in progress
+
+### Fixed
+
+- [#7011](https://github.com/thanos-io/thanos/pull/7011) Query Frontend: queries with negative offset should check whether it is cacheable or not.
 - [#6874](https://github.com/thanos-io/thanos/pull/6874) Sidecar: fix labels returned by 'api/v1/series' in presence of conflicting external and inner labels.
+- [#7009](https://github.com/thanos-io/thanos/pull/7009) Rule: Fix spacing error in URL.
 
 ### Added
+
+- [#6756](https://github.com/thanos-io/thanos/pull/6756) Query: Add `query.enable-tenancy` & `query.tenant-label-name` options to allow enforcement of tenancy on the query path, by injecting labels into queries (uses prom-label-proxy internally).
 - [#6944](https://github.com/thanos-io/thanos/pull/6944) Receive: Added a new flag for maximum retention bytes.
 - [#6891](https://github.com/thanos-io/thanos/pull/6891) Objstore: Bump `objstore` which adds support for Azure Workload Identity.
 - [#6867](https://github.com/thanos-io/thanos/pull/6867) Query UI: Tenant input box added to the Query UI, in order to be able to specify which tenant the query should use.
@@ -23,8 +37,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6954](https://github.com/thanos-io/thanos/pull/6954) Index Cache: Support tracing for fetch APIs.
 - [#6943](https://github.com/thanos-io/thanos/pull/6943) Ruler: Added `keep_firing_for` field in alerting rule.
 - [#6972](https://github.com/thanos-io/thanos/pull/6972) Store Gateway: Apply series limit when streaming series for series actually matched if lazy postings is enabled.
+- [#6984](https://github.com/thanos-io/thanos/pull/6984) Store Gateway: Added `--store.index-header-lazy-download-strategy` to specify how to lazily download index headers when lazy mmap is enabled.
+- [#6887](https://github.com/thanos-io/thanos/pull/6887) Query Frontend: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing custom dashboard queries to be incorrect due to the added label.
+- [#7028](https://github.com/thanos-io/thanos/pull/7028) Query|Query Frontend: Add new `--query-frontend.enable-x-functions` flag to enable experimental extended functions.
+- [#6884](https://github.com/thanos-io/thanos/pull/6884) Tools: Add upload-block command to upload blocks to object storage.
 
 ### Changed
+
+- [#6539](https://github.com/thanos-io/thanos/pull/6539) Store: *breaking :warning:* Changed `--sync-block-duration` default 3m to 15m.
 
 ### Removed
 
@@ -39,6 +59,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6605](https://github.com/thanos-io/thanos/pull/6605) Query Frontend: Support vertical sharding binary expression with metric name when no matching labels specified.
 - [#6308](https://github.com/thanos-io/thanos/pull/6308) Ruler: Support configuration flag that allows customizing template for alert message.
 - [#6760](https://github.com/thanos-io/thanos/pull/6760) Query Frontend: Added TLS support in `--query-frontend.downstream-tripper-config` and `--query-frontend.downstream-tripper-config-file`
+- [#7004](https://github.com/thanos-io/thanos/pull/7004) Query Frontend: Support documented auto discovery for memcached
 - [#6749](https://github.com/thanos-io/thanos/pull/6749) Store Gateway: Added `thanos_store_index_cache_fetch_duration_seconds` histogram for tracking latency of fetching data from index cache.
 - [#6690](https://github.com/thanos-io/thanos/pull/6690) Store: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing dashboard queries to be incorrect due to the added label.
 - [#6530](https://github.com/thanos-io/thanos/pull/6530) / [#6690](https://github.com/thanos-io/thanos/pull/6690) Query: Add command line arguments for configuring tenants and forward tenant information to Store Gateway.
