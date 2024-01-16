@@ -822,9 +822,7 @@ func (h *Handler) sendLocalWrite(
 	err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
 		Timeseries: trackedSeries.timeSeries,
 	})
-	level.Debug(requestLogger).Log("msg", "wrote to local tsdb", "endpoint", fmt.Sprintf("%v", writeDestination), "err", err)
 	if err != nil {
-		level.Debug(requestLogger).Log("msg", "local tsdb write failed", "err", err.Error())
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
@@ -848,12 +846,9 @@ func (h *Handler) sendRemoteWrite(
 	endpoint := endpointReplica.endpoint
 	cl, err := h.peers.getConnection(ctx, endpoint)
 	if err != nil {
-		h.peers.markPeerDown(endpoint)
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
-		return
-	}
-	if !h.peers.isPeerUp(endpoint) {
-		err := errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+		if errors.Is(err, errUnavailable) {
+			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+		}
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
 		return
 	}
@@ -1197,12 +1192,12 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 
 func newPeerGroup(backoff backoff.Backoff, dialOpts ...grpc.DialOption) peersContainer {
 	return &peerGroup{
-		dialOpts:   dialOpts,
-		cache:      map[string]*grpc.ClientConn{},
-		m:          sync.RWMutex{},
-		dialer:     grpc.DialContext,
-		peerStates: make(map[string]*retryState),
-		expBackoff: backoff,
+		dialOpts:    dialOpts,
+		connections: map[string]*grpc.ClientConn{},
+		m:           sync.RWMutex{},
+		dialer:      grpc.DialContext,
+		peerStates:  make(map[string]*retryState),
+		expBackoff:  backoff,
 	}
 }
 
@@ -1215,10 +1210,10 @@ type peersContainer interface {
 }
 
 type peerGroup struct {
-	dialOpts   []grpc.DialOption
-	cache      map[string]*grpc.ClientConn
-	peerStates map[string]*retryState
-	expBackoff backoff.Backoff
+	dialOpts    []grpc.DialOption
+	connections map[string]*grpc.ClientConn
+	peerStates  map[string]*retryState
+	expBackoff  backoff.Backoff
 
 	m sync.RWMutex
 
@@ -1230,14 +1225,14 @@ func (p *peerGroup) close(addr string) error {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	c, ok := p.cache[addr]
+	c, ok := p.connections[addr]
 	if !ok {
 		// NOTE(GiedriusS): this could be valid case when the connection
 		// was never established.
 		return nil
 	}
 
-	delete(p.cache, addr)
+	delete(p.connections, addr)
 	if err := c.Close(); err != nil {
 		return fmt.Errorf("closing connection for %s", addr)
 	}
@@ -1245,11 +1240,14 @@ func (p *peerGroup) close(addr string) error {
 	return nil
 }
 
-func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStoreClient, error) {
 func (p *peerGroup) getConnection(ctx context.Context, addr string) (storepb.WriteableStoreClient, error) {
+	if !p.isPeerUp(addr) {
+		return nil, errUnavailable
+	}
+
 	// use a RLock first to prevent blocking if we don't need to.
 	p.m.RLock()
-	c, ok := p.cache[addr]
+	c, ok := p.connections[addr]
 	p.m.RUnlock()
 	if ok {
 		return storepb.NewWriteableStoreClient(c), nil
@@ -1258,16 +1256,18 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (storepb.Wri
 	p.m.Lock()
 	defer p.m.Unlock()
 	// Make sure that another caller hasn't created the connection since obtaining the write lock.
-	c, ok = p.cache[addr]
+	c, ok = p.connections[addr]
 	if ok {
 		return storepb.NewWriteableStoreClient(c), nil
 	}
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to dial peer")
+		p.markPeerUnavailable(addr)
+		dialError := errors.Wrap(err, "failed to dial peer")
+		return nil, errors.Wrap(dialError, errUnavailable.Error())
 	}
 
-	p.cache[addr] = conn
+	p.connections[addr] = conn
 	return storepb.NewWriteableStoreClient(conn), nil
 }
 
