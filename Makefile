@@ -121,6 +121,10 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 .PHONY: react-app
 react-app: $(REACT_APP_OUTPUT_DIR)
 
+.PHONY: check-react-app
+check-react-app: react-app
+	$(call require_clean_work_tree,'all generated files should be committed, run make react-app and commit changes.')
+
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
