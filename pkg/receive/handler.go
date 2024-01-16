@@ -865,7 +865,6 @@ func (h *Handler) sendRemoteWrite(
 		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
 		Replica: realReplicationIndex,
 	})
-	level.Debug(requestLogger).Log("msg", "wrote to remote tsdb", "origin", h.options.Endpoint, "endpoint", fmt.Sprintf("%v", endpointReplica), "err", err)
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
