@@ -173,14 +173,10 @@ type fakePeersGroup struct {
 	closeCalled map[string]bool
 }
 
-func (g *fakePeersGroup) markPeerDown(s string) {
+func (g *fakePeersGroup) markPeerUnavailable(s string) {
 }
 
-func (g *fakePeersGroup) markPeerUp(s string) {
-}
-
-func (g *fakePeersGroup) isPeerUp(s string) bool {
-	return true
+func (g *fakePeersGroup) markPeerAvailable(s string) {
 }
 
 func (g *fakePeersGroup) reset() {
@@ -194,7 +190,7 @@ func (g *fakePeersGroup) close(addr string) error {
 	return nil
 }
 
-func (g *fakePeersGroup) get(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
+func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
 	c, ok := g.clients[addr]
 	if !ok {
 		return nil, fmt.Errorf("client %s not found", addr)

@@ -846,7 +846,7 @@ func (h *Handler) sendRemoteWrite(
 	responses chan<- writeResponse,
 ) {
 	endpoint := endpointReplica.endpoint
-	cl, err := h.peers.get(ctx, endpoint)
+	cl, err := h.peers.getConnection(ctx, endpoint)
 	if err != nil {
 		h.peers.markPeerDown(endpoint)
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err)
@@ -877,7 +877,7 @@ func (h *Handler) sendRemoteWrite(
 		// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 		if st, ok := status.FromError(err); ok {
 			if st.Code() == codes.Unavailable {
-				h.peers.markPeerDown(endpoint)
+				h.peers.markPeerUnavailable(endpoint)
 			}
 		}
 		h.forwardRequests.WithLabelValues(labelError).Inc()
@@ -893,7 +893,7 @@ func (h *Handler) sendRemoteWrite(
 		h.replications.WithLabelValues(labelSuccess).Inc()
 	}
 	responses <- newWriteResponse(trackedSeries.seriesIDs, nil)
-	h.peers.markPeerUp(endpoint)
+	h.peers.markPeerAvailable(endpoint)
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
@@ -1208,10 +1208,9 @@ func newPeerGroup(backoff backoff.Backoff, dialOpts ...grpc.DialOption) peersCon
 
 type peersContainer interface {
 	close(string) error
-	get(context.Context, string) (storepb.WriteableStoreClient, error)
-	markPeerDown(string)
-	markPeerUp(string)
-	isPeerUp(string) bool
+	getConnection(context.Context, string) (storepb.WriteableStoreClient, error)
+	markPeerUnavailable(string)
+	markPeerAvailable(string)
 	reset()
 }
 
@@ -1247,6 +1246,7 @@ func (p *peerGroup) close(addr string) error {
 }
 
 func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStoreClient, error) {
+func (p *peerGroup) getConnection(ctx context.Context, addr string) (storepb.WriteableStoreClient, error) {
 	// use a RLock first to prevent blocking if we don't need to.
 	p.m.RLock()
 	c, ok := p.cache[addr]
@@ -1271,7 +1271,7 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	return storepb.NewWriteableStoreClient(conn), nil
 }
 
-func (p *peerGroup) markPeerDown(addr string) {
+func (p *peerGroup) markPeerUnavailable(addr string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -1284,7 +1284,7 @@ func (p *peerGroup) markPeerDown(addr string) {
 	p.peerStates[addr] = state
 }
 
-func (p *peerGroup) markPeerUp(addr string) {
+func (p *peerGroup) markPeerAvailable(addr string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 	delete(p.peerStates, addr)
