@@ -314,11 +314,12 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		ch  = make(chan ulid.ULID, f.concurrency)
 		mtx sync.Mutex
 	)
-	level.Debug(f.logger).Log("msg", "fetching meta data", "concurrency", f.concurrency)
+	level.Debug(f.logger).Log("msg", "fetching meta data", "concurrency", f.concurrency, "cache_dir", f.cacheDir)
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
 			for id := range ch {
 				meta, err := f.loadMeta(ctx, id)
+				level.Debug(f.logger).Log("msg", "loaded meta data", "block", id)
 				if err == nil {
 					mtx.Lock()
 					resp.metas[id] = meta
@@ -368,7 +369,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 				return nil
 			}
 			partialBlocks[id] = false
-
+			level.Debug(f.logger).Log("msg", "found a new block", "block", id)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -382,6 +383,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	if err := eg.Wait(); err != nil {
 		return nil, errors.Wrap(err, "BaseFetcher: iter bucket")
 	}
+	level.Debug(f.logger).Log("msg", "fetched meta data of all blocks", "num_blocks", len(resp.metas))
 
 	mtx.Lock()
 	for blockULID, isPartial := range partialBlocks {
