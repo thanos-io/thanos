@@ -683,7 +683,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := sync.WaitGroup{}
 
-	h.sendWrites(ctx, &wg, requestLogger, params, localWrites, remoteWrites, responses)
+	h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
 
 	go func() {
 		wg.Wait()
@@ -782,7 +782,6 @@ func (h *Handler) distributeTimeseriesToReplicas(
 func (h *Handler) sendWrites(
 	ctx context.Context,
 	wg *sync.WaitGroup,
-	requestLogger log.Logger,
 	params remoteWriteParams,
 	localWrites map[endpointReplica]trackedSeries,
 	remoteWrites map[endpointReplica]trackedSeries,
@@ -791,7 +790,7 @@ func (h *Handler) sendWrites(
 	// Do the writes to the local node first. This should be easy and fast.
 	for writeDestination := range localWrites {
 		func(writeDestination endpointReplica) {
-			h.sendLocalWrite(ctx, writeDestination, params.tenant, localWrites[writeDestination], requestLogger, responses)
+			h.sendLocalWrite(ctx, writeDestination, params.tenant, localWrites[writeDestination], responses)
 		}(writeDestination)
 	}
 
@@ -800,7 +799,7 @@ func (h *Handler) sendWrites(
 		wg.Add(1)
 		go func(writeDestination endpointReplica) {
 			defer wg.Done()
-			h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, requestLogger, responses)
+			h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses)
 		}(writeDestination)
 	}
 }
@@ -812,7 +811,6 @@ func (h *Handler) sendLocalWrite(
 	writeDestination endpointReplica,
 	tenant string,
 	trackedSeries trackedSeries,
-	requestLogger log.Logger,
 	responses chan<- writeResponse,
 ) {
 	span, tracingCtx := tracing.StartSpan(ctx, "receive_local_tsdb_write")
@@ -840,7 +838,6 @@ func (h *Handler) sendRemoteWrite(
 	endpointReplica endpointReplica,
 	trackedSeries trackedSeries,
 	alreadyReplicated bool,
-	requestLogger log.Logger,
 	responses chan<- writeResponse,
 ) {
 	endpoint := endpointReplica.endpoint
