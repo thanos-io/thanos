@@ -317,9 +317,18 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	level.Debug(f.logger).Log("msg", "fetching meta data", "concurrency", f.concurrency, "cache_dir", f.cacheDir)
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
+			numBlocks := 0
 			for id := range ch {
 				meta, err := f.loadMeta(ctx, id)
-				level.Debug(f.logger).Log("msg", "loaded meta data", "block", id)
+				numBlocks += 1
+				if (numBlocks%10) == 0 {
+					level.Debug(f.logger).Log("msg", "loaded the metadata of a block from one goroutine",
+						"block", id,
+						"n_th_block", numBlocks,
+						"min_time", meta.MinTime,
+						"duration_hours", 1.0 * (meta.MaxTime - meta.MinTime) / 1000 / 3600,
+					)
+				}
 				if err == nil {
 					mtx.Lock()
 					resp.metas[id] = meta
@@ -369,7 +378,6 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 				return nil
 			}
 			partialBlocks[id] = false
-			level.Debug(f.logger).Log("msg", "found a new block", "block", id)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -471,13 +479,14 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	metrics.Synced.WithLabelValues(FailedMeta).Set(float64(len(resp.metaErrs)))
 	metrics.Synced.WithLabelValues(NoMeta).Set(resp.noMetas)
 	metrics.Synced.WithLabelValues(CorruptedMeta).Set(resp.corruptedMetas)
-
+	blockMetaBeforeFilters := len(metas)
 	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
 		if err := filter.Filter(ctx, metas, metrics.Synced, metrics.Modified); err != nil {
 			return nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
+	level.Debug(f.logger).Log("msg", "filtered out block meta data", "before", blockMetaBeforeFilters, "after", len(metas))
 
 	metrics.Synced.WithLabelValues(LoadedMeta).Set(float64(len(metas)))
 	metrics.Submit()

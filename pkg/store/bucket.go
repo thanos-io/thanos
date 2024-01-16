@@ -617,7 +617,6 @@ func (s *BucketStore) Close() (err error) {
 // SyncBlocks synchronizes the stores state with the Bucket bucket.
 // It will reuse disk space as persistent cache based on s.dir param.
 func (s *BucketStore) SyncBlocks(ctx context.Context) error {
-	level.Info(s.logger).Log("msg", "started to sync blocks")
 	metas, _, metaFetchErr := s.fetcher.Fetch(ctx)
 	// For partial view allow adding new blocks at least.
 	if metaFetchErr != nil && metas == nil {
@@ -639,6 +638,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}()
 	}
 
+	level.Info(s.logger).Log("msg", "started to sync blocks", "num_blocks", len(metas))
 	for id, meta := range metas {
 		if b := s.getBlock(id); b != nil {
 			continue
@@ -734,7 +734,16 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	}
 	start := time.Now()
 
-	level.Debug(s.logger).Log("msg", "loading new block", "id", meta.ULID)
+	level.Debug(s.logger).Log("msg", "loading new block",
+		"id", meta.ULID,
+		"min_time", meta.MinTime,
+		"duration_hours", 1.0 * (meta.MaxTime - meta.MinTime)/(3600*1000),
+		"num_series", meta.Stats.NumSeries,
+		"num_samples", meta.Stats.NumSamples,
+		"num_chunks", meta.Stats.NumChunks,
+		"resolution", meta.Thanos.Downsample.Resolution,
+		"compaction_level", meta.Compaction.Level,
+	)
 	defer func() {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
