@@ -739,8 +739,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 }
 
 // distributeTimeseriesToReplicas distributes the given timeseries from the tenant to different endpoints in a manner
-// that achieves the replication factor indicated by replicas. It is possible to offset the hashing algorithm by using
-// the hashOffset parameter, which can be used to distribute the same series differently.
+// that achieves the replication factor indicated by replicas.
 // The first return value are the series that should be written to the local node. The second return value are the
 // series that should be written to remote nodes.
 func (h *Handler) distributeTimeseriesToReplicas(
