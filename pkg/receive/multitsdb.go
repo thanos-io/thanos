@@ -582,6 +582,12 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
+
+	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL
+	// which gets later converted into a block. Without setting this flag to false, the block would get compacted
+	// into other ones. This presents a race between compaction and the shipper (if it is configured to upload compacted blocks).
+	// Hence, avoid this situation by disabling overlapping compaction. Vertical compaction must be enabled on the compactor.
+	opts.EnableOverlappingCompaction = false
 	s, err := tsdb.Open(
 		dataDir,
 		logger,
