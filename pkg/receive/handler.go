@@ -859,14 +859,16 @@ func (h *Handler) sendRemoteWrite(
 	}
 
 	span, spanCtx := tracing.StartSpan(ctx, "receive_forward")
+	// This is called "real" because it's 1-indexed.
+	realReplicationIndex := int64(endpointReplica.replica + 1)
 	span.SetTag("endpoint", endpointReplica.endpoint)
-	span.SetTag("replica", endpointReplica.replica+1)
+	span.SetTag("replica", realReplicationIndex)
 	// Actually make the request against the endpoint we determined should handle these time series.
 	_, err = cl.RemoteWrite(spanCtx, &storepb.WriteRequest{
 		Timeseries: trackedSeries.timeSeries,
 		Tenant:     tenant,
 		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-		Replica: int64(endpointReplica.replica + 1),
+		Replica: realReplicationIndex,
 	})
 	level.Debug(requestLogger).Log("msg", "wrote to remote tsdb", "origin", h.options.Endpoint, "endpoint", fmt.Sprintf("%v", endpointReplica), "err", err)
 	if err != nil {
