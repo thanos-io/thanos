@@ -60,8 +60,9 @@ class TimeInput extends Component<TimeInputProps> {
   };
 
   componentDidMount(): void {
-    this.$time = $(this.timeInputRef.current!);
-
+    if (this.timeInputRef.current) {
+      this.$time = $(this.timeInputRef.current);
+    }
     this.$time.datetimepicker({
       icons: {
         today: 'fas fa-calendar-check',

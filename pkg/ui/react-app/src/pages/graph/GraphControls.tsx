@@ -63,7 +63,9 @@ class GraphControls extends Component<GraphControlsProps> {
   };
 
   changeRangeInput = (range: number): void => {
-    this.rangeRef.current!.value = formatDuration(range);
+    if (this.rangeRef.current) {
+      this.rangeRef.current.value = formatDuration(this.props.range);
+    }
   };
 
   increaseRange = (): void => {
@@ -91,7 +93,9 @@ class GraphControls extends Component<GraphControlsProps> {
       this.changeRangeInput(this.props.range);
     }
     if (prevProps.resolution !== this.props.resolution) {
-      this.resolutionRef.current!.value = this.props.resolution !== null ? this.props.resolution.toString() : '';
+      if (this.resolutionRef.current) {
+        this.resolutionRef.current.value = this.props.resolution !== null ? this.props.resolution.toString() : '';
+      }
     }
   }
 
@@ -112,7 +116,11 @@ class GraphControls extends Component<GraphControlsProps> {
           <Input
             defaultValue={formatDuration(this.props.range)}
             innerRef={this.rangeRef}
-            onBlur={() => this.onChangeRangeInput(this.rangeRef.current!.value)}
+            onBlur={() => {
+              if (this.rangeRef.current) {
+                this.onChangeRangeInput(this.rangeRef.current.value);
+              }
+            }}
           />
 
           <InputGroupAddon addonType="append">
@@ -136,8 +144,10 @@ class GraphControls extends Component<GraphControlsProps> {
           defaultValue={this.props.resolution !== null ? this.props.resolution.toString() : ''}
           innerRef={this.resolutionRef}
           onBlur={() => {
-            const res = parseInt(this.resolutionRef.current!.value);
-            this.props.onChangeResolution(res ? res : null);
+            if (this.resolutionRef.current) {
+              const res = parseInt(this.resolutionRef.current.value);
+              this.props.onChangeResolution(res ? res : null);
+            }
           }}
           bsSize="sm"
         />
