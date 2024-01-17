@@ -295,10 +295,9 @@ export const mapObjEntries = <T, key extends keyof T, Z>(
   cb: ([k, v]: [string, T[key]], i: number, arr: [string, T[key]][]) => Z
 ) => Object.entries(o).map(cb);
 
-type FunctionWithArgs<T extends any[]> = (...args: T) => void;
-
 export const callAll =
-  <T extends any[]>(...fns: Array<FunctionWithArgs<T> | undefined | null>) =>
-  (...args: T) => {
-    fns.filter(Boolean).forEach((fn) => fn && fn(...args));
+  (...fns: Array<(...args: any) => void>) =>
+  (...args: any) => {
+    // eslint-disable-next-line prefer-spread
+    fns.filter(Boolean).forEach((fn) => fn.apply(null, args));
   };
