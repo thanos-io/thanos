@@ -299,18 +299,11 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 	go func() {
 		defer close(promise)
 
-		var err error
-		tracing.DoInSpan(ctx, "querier_select_gate_ismyturn", func(ctx context.Context) {
-			err = q.selectGate.Start(ctx)
-		})
-		if err != nil {
+		if err := q.selectGate.Start(ctx); err != nil {
 			promise <- storage.ErrSeriesSet(errors.Wrap(err, "failed to wait for turn"))
 			return
 		}
 		defer q.selectGate.Done()
-
-		span, ctx := tracing.StartSpan(ctx, "querier_select_select_fn")
-		defer span.Finish()
 
 		set, stats, err := q.selectFn(ctx, hints, ms...)
 		if err != nil {

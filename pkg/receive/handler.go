@@ -481,15 +481,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	writeGate := h.Limiter.WriteGate()
-	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = writeGate.Start(r.Context())
-	})
-	defer writeGate.Done()
-	if err != nil {
+	if err := writeGate.Start(r.Context()); err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer writeGate.Done()
 
 	under, err := h.Limiter.HeadSeriesLimiter().isUnderLimit(tenant)
 	if err != nil {
@@ -730,12 +727,9 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		// can be ignored if the replication factor is met.
 		var err error
 
-		tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
-			err = h.writer.Write(fctx, tenant, &prompb.WriteRequest{
-				Timeseries: wreqs[writeTarget].timeSeries,
-			})
-		})
-		if err != nil {
+		if err = h.writer.Write(fctx, tenant, &prompb.WriteRequest{
+			Timeseries: wreqs[writeTarget].timeSeries,
+		}); err != nil {
 			level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
 			responses <- newWriteResponse(wreqs[writeTarget].seriesIDs, errors.Wrapf(err, "store locally for endpoint %v", writeTarget.endpoint))
 			continue
@@ -788,17 +782,13 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			}
 			h.mtx.RUnlock()
 
-			// Create a span to track the request made to another receive node.
-			tracing.DoInSpan(fctx, "receive_forward", func(ctx context.Context) {
-				// Actually make the request against the endpoint we determined should handle these time series.
-				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
-					Timeseries: wreqs[writeTarget].timeSeries,
-					Tenant:     tenant,
-					// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-					Replica: int64(writeTarget.replica + 1),
-				})
-			})
-			if err != nil {
+			// Actually make the request against the endpoint we determined should handle these time series.
+			if _, err = cl.RemoteWrite(fctx, &storepb.WriteRequest{
+				Timeseries: wreqs[writeTarget].timeSeries,
+				Tenant:     tenant,
+				// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
+				Replica: int64(writeTarget.replica + 1),
+			}); err != nil {
 				// Check if peer connection is unavailable, don't attempt to send requests constantly.
 				if st, ok := status.FromError(err); ok {
 					if st.Code() == codes.Unavailable {

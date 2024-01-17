@@ -42,7 +42,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
@@ -233,12 +232,9 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 		q.Matchers = append(q.Matchers, pm)
 	}
 
-	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
-	queryPrometheusSpan.SetTag("query.request", q.String())
-
+	ctx := s.Context()
 	httpResp, err := p.startPromRemoteRead(ctx, q)
 	if err != nil {
-		queryPrometheusSpan.Finish()
 		return errors.Wrap(err, "query Prometheus")
 	}
 
@@ -246,13 +242,13 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 	// remote read.
 	contentType := httpResp.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/x-protobuf") {
-		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
+		return p.handleSampledPrometheusResponse(s, httpResp, extLset, enableChunkHashCalculation, extLsetToRemove)
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, extLset, enableChunkHashCalculation, extLsetToRemove)
 }
 
 func (p *PrometheusStore) queryPrometheus(
@@ -328,22 +324,16 @@ func (p *PrometheusStore) queryPrometheus(
 func (p *PrometheusStore) handleSampledPrometheusResponse(
 	s flushableServer,
 	httpResp *http.Response,
-	querySpan tracing.Span,
 	extLset labels.Labels,
 	calculateChecksums bool,
 	extLsetToRemove map[string]struct{},
 ) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_SAMPLED response type.")
 
-	resp, err := p.fetchSampledResponse(s.Context(), httpResp)
-	querySpan.Finish()
+	resp, err := p.fetchSampledResponse(httpResp)
 	if err != nil {
 		return err
 	}
-
-	span, _ := tracing.StartSpan(s.Context(), "transform_and_respond")
-	defer span.Finish()
-	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
 		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166
@@ -383,7 +373,6 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	s flushableServer,
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
-	querySpan tracing.Span,
 	extLset labels.Labels,
 	calculateChecksums bool,
 	extLsetToRemove map[string]struct{},
@@ -394,8 +383,6 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 	defer func() {
 		p.framesRead.Observe(float64(framesNum))
-		querySpan.SetTag("frames", framesNum)
-		querySpan.Finish()
 	}()
 	defer runutil.CloseWithLogOnErr(p.logger, httpResp.Body, "prom series request body")
 
@@ -466,13 +453,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 		}
 	}
-
-	querySpan.SetTag("processed.series", seriesStats.Series)
-	querySpan.SetTag("processed.chunks", seriesStats.Chunks)
-	querySpan.SetTag("processed.samples", seriesStats.Samples)
-	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
-
 	return s.Flush()
 }
 
@@ -495,7 +476,7 @@ func (s *BytesCounter) BytesCount() int {
 	return s.bytesCount
 }
 
-func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.Response) (_ *prompb.ReadResponse, err error) {
+func (p *PrometheusStore) fetchSampledResponse(resp *http.Response) (_ *prompb.ReadResponse, err error) {
 	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "prom series request body")
 
 	b := p.getBuffer()
@@ -506,20 +487,14 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	}
 
 	sb := p.getBuffer()
-	var decomp []byte
-	tracing.DoInSpan(ctx, "decompress_response", func(ctx context.Context) {
-		decomp, err = snappy.Decode(*sb, buf.Bytes())
-	})
+	decomp, err := snappy.Decode(*sb, buf.Bytes())
 	defer p.putBuffer(sb)
 	if err != nil {
 		return nil, errors.Wrap(err, "decompress response")
 	}
 
 	var data prompb.ReadResponse
-	tracing.DoInSpan(ctx, "unmarshal_response", func(ctx context.Context) {
-		err = proto.Unmarshal(decomp, &data)
-	})
-	if err != nil {
+	if err := proto.Unmarshal(decomp, &data); err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
 	}
 	if len(data.Results) != 1 {

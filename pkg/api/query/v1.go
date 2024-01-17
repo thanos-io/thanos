@@ -687,10 +687,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
-	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = qapi.gate.Start(ctx)
-	})
-	if err != nil {
+	if err := qapi.gate.Start(ctx); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
@@ -990,10 +987,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = qapi.gate.Start(ctx)
-	})
-	if err != nil {
+	if err := qapi.gate.Start(ctx); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
@@ -1327,9 +1321,7 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 			Type:                    rulespb.RulesRequest_ALERT,
 			PartialResponseStrategy: ps,
 		}
-		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
-			groups, warnings, err = client.Rules(ctx, req)
-		})
+		groups, warnings, err = client.Rules(ctx, req)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}, func() {}
 		}
@@ -1387,9 +1379,7 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			PartialResponseStrategy: ps,
 			MatcherString:           r.Form[MatcherParam],
 		}
-		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
-			groups, warnings, err = client.Rules(ctx, req)
-		})
+		groups, warnings, err = client.Rules(ctx, req)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}, func() {}
 		}
@@ -1431,10 +1421,7 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			PartialResponseStrategy: ps,
 		}
 
-		tracing.DoInSpan(ctx, "retrieve_exemplars", func(ctx context.Context) {
-			data, warnings, err = client.Exemplars(ctx, req)
-		})
-
+		data, warnings, err = client.Exemplars(ctx, req)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving exemplars")}, func() {}
 		}
@@ -1549,9 +1536,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 			req.Limit = int32(limit)
 		}
 
-		tracing.DoInSpan(ctx, "retrieve_metadata", func(ctx context.Context) {
-			t, warnings, err = client.MetricMetadata(ctx, req)
-		})
+		t, warnings, err = client.MetricMetadata(ctx, req)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}, func() {}
 		}
