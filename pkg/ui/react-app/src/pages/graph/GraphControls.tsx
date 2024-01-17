@@ -144,10 +144,11 @@ class GraphControls extends Component<GraphControlsProps> {
           defaultValue={this.props.resolution !== null ? this.props.resolution.toString() : ''}
           innerRef={this.resolutionRef}
           onBlur={() => {
-            if (this.resolutionRef.current) {
-              const res = parseInt(this.resolutionRef.current.value);
-              this.props.onChangeResolution(res ? res : null);
+            if (!this.resolutionRef.current) {
+              return;
             }
+            const res = parseInt(this.resolutionRef.current.value);
+            this.props.onChangeResolution(res ? res : null);
           }}
           bsSize="sm"
         />
