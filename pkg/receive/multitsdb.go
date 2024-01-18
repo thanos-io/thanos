@@ -61,7 +61,6 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
-	uploadCompactedBlocks bool
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -75,7 +74,6 @@ func NewMultiTSDB(
 	tenantLabelName string,
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
-	allowCompactedUpload bool,
 	hashFunc metadata.HashFunc,
 ) *MultiTSDB {
 	if l == nil {
@@ -93,7 +91,6 @@ func NewMultiTSDB(
 		tenantLabelName:       tenantLabelName,
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
-		uploadCompactedBlocks: allowCompactedUpload,
 		hashFunc:              hashFunc,
 	}
 }
@@ -585,6 +582,12 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
+
+	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL
+	// which gets later converted into a block. Without setting this flag to false, the block would get compacted
+	// into other ones. This presents a race between compaction and the shipper (if it is configured to upload compacted blocks).
+	// Hence, avoid this situation by disabling overlapping compaction. Vertical compaction must be enabled on the compactor.
+	opts.EnableOverlappingCompaction = false
 	s, err := tsdb.Open(
 		dataDir,
 		logger,
@@ -599,7 +602,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		return err
 	}
 	var ship *shipper.Shipper
-
 	if t.bucket != nil {
 		ship = shipper.New(
 			logger,
@@ -608,7 +610,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.bucket,
 			func() labels.Labels { return lset },
 			metadata.ReceiveSource,
-			func() bool { return t.uploadCompactedBlocks },
+			nil,
 			t.allowOutOfOrderUpload,
 			t.hashFunc,
 			shipper.DefaultMetaFilename,
