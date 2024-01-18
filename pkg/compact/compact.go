@@ -941,10 +941,14 @@ func (e HaltError) Error() string {
 	return e.err.Error()
 }
 
+func (e HaltError) Unwrap() error {
+	return errors.Cause(e.err)
+}
+
 // IsHaltError returns true if the base error is a HaltError.
 // If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
-	if multiErr, ok := errors.Cause(err).(errutil.NonNilMultiError); ok {
+	if multiErr, ok := errors.Cause(err).(errutil.NonNilMultiRootError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(HaltError); ok {
 				return true
@@ -974,10 +978,14 @@ func (e RetryError) Error() string {
 	return e.err.Error()
 }
 
+func (e RetryError) Unwrap() error {
+	return errors.Cause(e.err)
+}
+
 // IsRetryError returns true if the base error is a RetryError.
 // If a multierror is passed, all errors must be retriable.
 func IsRetryError(err error) bool {
-	if multiErr, ok := errors.Cause(err).(errutil.NonNilMultiError); ok {
+	if multiErr, ok := errors.Cause(err).(errutil.NonNilMultiRootError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(RetryError); !ok {
 				return false

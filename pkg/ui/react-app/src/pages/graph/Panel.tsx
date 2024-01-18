@@ -240,7 +240,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'X-Thanos-Force-Tracing': 'true',
         // Conditionally add the header if the checkbox is enabled
         ...(this.props.options.forceTracing ? { 'X-Thanos-Force-Tracing': 'true' } : {}),
       },

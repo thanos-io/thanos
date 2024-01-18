@@ -33,8 +33,8 @@ func RequestID(h http.Handler) http.HandlerFunc {
 		reqID := r.Header.Get("X-Request-ID")
 		if reqID == "" {
 			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
-			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-			r.Header.Set("X-Request-ID", reqID.String())
+			reqID = ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
+			r.Header.Set("X-Request-ID", reqID)
 		}
 		ctx := newContextWithRequestID(r.Context(), reqID)
 		h.ServeHTTP(w, r.WithContext(ctx))
