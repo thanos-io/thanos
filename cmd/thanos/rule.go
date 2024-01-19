@@ -95,17 +95,17 @@ type ruleConfig struct {
 
 	rwConfig *extflag.PathOrContent
 
-	resendDelay       time.Duration
-	evalInterval      time.Duration
-	outageTolerance   time.Duration
-	forGracePeriod    time.Duration
-	ruleFiles         []string
+	resendDelay         time.Duration
+	evalInterval        time.Duration
+	outageTolerance     time.Duration
+	forGracePeriod      time.Duration
+	ruleFiles           []string
 	maxSourceResolution string
-	objStoreConfig    *extflag.PathOrContent
-	dataDir           string
-	lset              labels.Labels
-	ignoredLabelNames []string
-	storeRateLimits   store.SeriesSelectLimits
+	objStoreConfig      *extflag.PathOrContent
+	dataDir             string
+	lset                labels.Labels
+	ignoredLabelNames   []string
+	storeRateLimits     store.SeriesSelectLimits
 }
 
 type Expression struct {
@@ -922,7 +922,7 @@ func queryFuncCreator(
 						PartialResponseStrategy: partialResponseStrategy,
 						Method:                  httpMethod,
 						DoNotAddThanosParams:    doNotAddThanosParams,
-						MaxSourceResolution: 	 maxSourceResolution,
+						MaxSourceResolution:     maxSourceResolution,
 					})
 					span.Finish()
 
