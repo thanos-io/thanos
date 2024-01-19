@@ -365,6 +365,8 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
+      --max-source-resolution=MAX-SOURCE-RESOLUTION
+                                 Max resolution wanted for the data queried.
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
