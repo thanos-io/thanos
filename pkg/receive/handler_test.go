@@ -44,6 +44,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -172,6 +173,15 @@ type fakePeersGroup struct {
 	closeCalled map[string]bool
 }
 
+func (g *fakePeersGroup) markPeerUnavailable(s string) {
+}
+
+func (g *fakePeersGroup) markPeerAvailable(s string) {
+}
+
+func (g *fakePeersGroup) reset() {
+}
+
 func (g *fakePeersGroup) close(addr string) error {
 	if g.closeCalled == nil {
 		g.closeCalled = map[string]bool{}
@@ -180,7 +190,7 @@ func (g *fakePeersGroup) close(addr string) error {
 	return nil
 }
 
-func (g *fakePeersGroup) get(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
+func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
 	c, ok := g.clients[addr]
 	if !ok {
 		return nil, fmt.Errorf("client %s not found", addr)
@@ -202,8 +212,9 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 
 	ag := addrGen{}
 	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	logger := logging.NewLogger("debug", "logfmt", "receive_test")
 	for i := range appendables {
-		h := NewHandler(nil, &Options{
+		h := NewHandler(logger, &Options{
 			TenantHeader:      tenancy.DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
@@ -248,6 +259,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		replicationFactor uint64
 		wreq              *prompb.WriteRequest
 		appendables       []*fakeAppendable
+		randomNode        bool
 	}{
 		{
 			name:              "size 1 success",
@@ -605,17 +617,29 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				t.Fatalf("unable to create test handler: %v", err)
 			}
 			tenant := "test"
-			// Test from the point of view of every node
-			// so that we know status code does not depend
-			// on which node is erroring and which node is receiving.
-			for i, handler := range handlers {
-				// Test that the correct status is returned.
+
+			if tc.randomNode {
+				handler := handlers[0]
 				rec, err := makeRequest(handler, tenant, tc.wreq)
 				if err != nil {
-					t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					t.Fatalf("handler: unexpectedly failed making HTTP request: %v", err)
 				}
 				if rec.Code != tc.status {
-					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
+				}
+			} else {
+				// Test from the point of view of every node
+				// so that we know status code does not depend
+				// on which node is erroring and which node is receiving.
+				for i, handler := range handlers {
+					// Test that the correct status is returned.
+					rec, err := makeRequest(handler, tenant, tc.wreq)
+					if err != nil {
+						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					}
+					if rec.Code != tc.status {
+						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					}
 				}
 			}
 
@@ -654,6 +678,9 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							// We have len(handlers) copies of each sample because the test case
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
+							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
 						}
 						if uint64(expectedMin) > got {
 							t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
