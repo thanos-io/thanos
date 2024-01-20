@@ -108,6 +108,11 @@ func NewPrometheusStore(
 	return p, nil
 }
 
+func (p *PrometheusStore) labelCallsSupportMatchers() bool {
+	version, parseErr := semver.Parse(p.promVersion())
+	return parseErr == nil && version.GTE(baseVer)
+}
+
 // Info returns store information about the Prometheus instance.
 // NOTE(bwplotka): MaxTime & MinTime are not accurate nor adjusted dynamically.
 // This is fine for now, but might be needed in future.
@@ -656,8 +661,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	}
 
 	var lbls []string
-	version, parseErr := semver.Parse(p.promVersion())
-	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
 		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
@@ -707,23 +711,27 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		return &storepb.LabelValuesResponse{}, nil
 	}
 
-	// First check for matching external label which has priority.
-	if l := extLset.Get(r.Label); l != "" {
-		for _, m := range matchers {
-			if !m.Matches(l) {
-				return &storepb.LabelValuesResponse{}, nil
-			}
-		}
-		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
-	}
-
 	var (
 		sers []map[string]string
 		vals []string
 	)
 
-	version, parseErr := semver.Parse(p.promVersion())
-	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+	// If we request label values for an external label while selecting an additional matcher for other label values
+	if val := extLset.Get(r.Label); val != "" {
+		if len(matchers) == 0 {
+			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		}
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		if err != nil {
+			return nil, err
+		}
+		if len(sers) > 0 {
+			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		}
+		return &storepb.LabelValuesResponse{}, nil
+	}
+
+	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
 		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
