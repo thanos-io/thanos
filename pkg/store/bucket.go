@@ -1947,8 +1947,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			continue
 		}
 
-		// If we have series matchers, add <labelName> != "" matcher, to only select series that have given label name.
-		if len(reqSeriesMatchersNoExtLabels) > 0 {
+		// If we have series matchers and the Label is not an external one, add <labelName> != "" matcher
+		// to only select series that have given label name.
+		if len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
 			m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
 			if err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
