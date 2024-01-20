@@ -184,6 +184,9 @@ func fetchLazyExpandedPostings(
 	if err != nil {
 		return nil, err
 	}
+	if len(ps) == 0 {
+		return emptyLazyPostings, nil
+	}
 	return &lazyExpandedPostings{postings: ps, matchers: matchers}, nil
 }
 
