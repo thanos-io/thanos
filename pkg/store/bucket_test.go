@@ -1282,6 +1282,41 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	testutil.Equals(t, 1, indexr.stats.cachedPostingsCompressions)
 }
 
+func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	id := uploadTestBlock(t, tmpDir, bkt, 100)
+
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling, indexheader.NewBinaryReaderMetrics(nil))
+	testutil.Ok(t, err)
+	b := &bucketBlock{
+		logger:                 log.NewNopLogger(),
+		metrics:                newBucketStoreMetrics(nil),
+		indexHeaderReader:      r,
+		indexCache:             noopCache{},
+		bkt:                    bkt,
+		meta:                   &metadata.Meta{BlockMeta: tsdb.BlockMeta{ULID: id}},
+		partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
+		estimatedMaxSeriesSize: 20,
+	}
+
+	indexr := newBucketIndexReader(b)
+	// matcher1 and matcher2 will match nothing after intersection.
+	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
+	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "n", "1_.*")
+	matcher3 := labels.MustNewMatcher(labels.MatchRegexp, "i", ".+")
+	ctx := context.Background()
+	dummyCounter := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2, matcher3}), NewBytesLimiterFactory(0)(nil), true, dummyCounter, tenancy.DefaultTenant)
+	testutil.Ok(t, err)
+	// We expect emptyLazyPostings rather than lazy postings with 0 length but with matchers.
+	testutil.Equals(t, ps, emptyLazyPostings)
+}
+
 func TestBucketSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
