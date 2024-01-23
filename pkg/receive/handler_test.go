@@ -1645,3 +1645,12 @@ func TestHashringChangeCallsClose(t *testing.T) {
 	pg := allHandlers[0].peers.(*fakePeersGroup)
 	testutil.Assert(t, len(pg.closeCalled) > 0)
 }
+
+func TestHandlerEarlyStop(t *testing.T) {
+	h := NewHandler(nil, &Options{})
+	h.Close()
+
+	err := h.Run()
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "http: Server closed", err.Error())
+}
