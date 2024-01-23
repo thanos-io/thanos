@@ -256,6 +256,29 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			},
 		},
 		{
+			desc: "series matcher on other labels when requesting external labels",
+			appendFn: func(app storage.Appender) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar", "job", "C"), 0, 0)
+				testutil.Ok(t, err)
+				_, err = app.Append(0, labels.FromStrings("__name__", "up", "foo", "baz", "job", "C"), 0, 0)
+				testutil.Ok(t, err)
+
+				testutil.Ok(t, app.Commit())
+			},
+			labelValuesCalls: []labelValuesCallCase{
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					label: "region",
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
+						{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "C"},
+					},
+					expectedValues: []string{"eu-west"},
+				},
+			},
+		},
+		{
 			// Testcases taken from https://github.com/prometheus/prometheus/blob/95e705612c1d557f1681bd081a841b78f93ee158/tsdb/querier_test.go#L1898
 			desc: "matching behavior",
 			appendFn: func(app storage.Appender) {
