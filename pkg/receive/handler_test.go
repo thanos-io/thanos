@@ -168,7 +168,7 @@ func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels
 }
 
 type fakePeersGroup struct {
-	clients map[string]storepb.WriteableStoreClient
+	clients map[string]WriteableStoreAsyncClient
 
 	closeCalled map[string]bool
 }
@@ -190,7 +190,7 @@ func (g *fakePeersGroup) close(addr string) error {
 	return nil
 }
 
-func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
+func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (WriteableStoreAsyncClient, error) {
 	c, ok := g.clients[addr]
 	if !ok {
 		return nil, fmt.Errorf("client %s not found", addr)
@@ -207,7 +207,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		wOpts    = &WriterOptions{}
 	)
 	fakePeers := &fakePeersGroup{
-		clients: map[string]storepb.WriteableStoreClient{},
+		clients: map[string]WriteableStoreAsyncClient{},
 	}
 
 	ag := addrGen{}
@@ -880,6 +880,16 @@ type fakeRemoteWriteGRPCServer struct {
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
+}
+
+func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+	_, err := f.h.RemoteWrite(ctx, in)
+	responses <- writeResponse{
+		er:        er,
+		err:       err,
+		seriesIDs: seriesIDs,
+	}
+	cb(err)
 }
 
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {

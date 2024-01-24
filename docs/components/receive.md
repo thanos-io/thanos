@@ -248,6 +248,14 @@ NOTE:
 - Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similarly to when one receiver cannot be scraped.
 - Support for different limit configuration for different tenants is planned for the future.
 
+## Asynchronous workers
+
+Instead of spawning a new goroutine each time the Receiver forwards a request to another node, it spawns a fixed number of goroutines (workers) that perform the work. This allows avoiding spawning potentially tens or even hundred thousand goroutines if someone starts sending a lot of small requests.
+
+This number of workers is controlled by `--receive.forward.async-workers=`.
+
+Please see the metric `thanos_receive_forward_delay_seconds` to see if you need to increase the number of forwarding workers.
+
 ## Flags
 
 ```$ mdox-exec="thanos receive --help"
@@ -308,6 +316,9 @@ Flags:
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
+      --receive.forward.async-workers=5
+                                 Number of concurrent workers processing
+                                 forwarding of remote-write requests.
       --receive.grpc-compression=snappy
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
