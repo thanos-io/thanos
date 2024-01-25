@@ -153,16 +153,6 @@ type MemcachedClientConfig struct {
 	AutoDiscovery bool `yaml:"auto_discovery"`
 
 	// SetAsyncCircuitBreakerEnabled enables circuite breaker for SetAsync operations.
-	//
-	// The circuit breaker consists of three states: closed, half-open, and open.
-	// It begins in the closed state. When the total requests exceed SetAsyncCircuitBreakerMinRequests,
-	// and either consecutive failures occur or the failure percentage is excessively high according
-	// to the configured values, the circuit breaker transitions to the open state.
-	// This results in the rejection of all SetAsync requests. After SetAsyncCircuitBreakerOpenDuration,
-	// the circuit breaker transitions to the half-open state, where it allows SetAsyncCircuitBreakerHalfOpenMaxRequests
-	// SetAsync requests to be processed in order to test if the conditions have improved. If they have not,
-	// the state transitions back to open; if they have, it transitions to the closed state. Following each 10 seconds
-	// interval in the closed state, the circuit breaker resets its metrics and repeats this cycle.
 	SetAsyncCircuitBreakerEnabled bool `yaml:"set_async_circuit_breaker_enabled"`
 	// SetAsyncCircuitBreakerHalfOpenMaxRequests is the maximum number of requests allowed to pass through
 	// when the circuit breaker is half-open.

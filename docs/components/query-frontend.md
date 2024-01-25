@@ -77,6 +77,12 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
+  set_async_circuit_breaker_enabled: false
+  set_async_circuit_breaker_half_open_max_requests: 0
+  set_async_circuit_breaker_open_duration: 0s
+  set_async_circuit_breaker_min_requests: 0
+  set_async_circuit_breaker_consecutive_failures: 0
+  set_async_circuit_breaker_failure_percent: 0
   expiration: 0s
 ```
 
@@ -132,6 +138,12 @@ config:
   master_name: ""
   max_async_buffer_size: 10000
   max_async_concurrency: 20
+  set_async_circuit_breaker_enabled: false
+  set_async_circuit_breaker_half_open_max_requests: 10
+  set_async_circuit_breaker_open_duration: 5s
+  set_async_circuit_breaker_min_requests: 50
+  set_async_circuit_breaker_consecutive_failures: 5
+  set_async_circuit_breaker_failure_percent: 0.05
   expiration: 24h0m0s
 ```
 
