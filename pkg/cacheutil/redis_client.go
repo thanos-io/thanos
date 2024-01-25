@@ -125,6 +125,18 @@ type RedisClientConfig struct {
 	// MaxAsyncConcurrency specifies the maximum number of SetAsync goroutines.
 	MaxAsyncConcurrency int `yaml:"max_async_concurrency"`
 
+	// SetAsyncCircuitBreakerEnabled enables circuite breaker for SetAsync operations.
+	//
+	// The circuit breaker consists of three states: closed, half-open, and open.
+	// It begins in the closed state. When the total requests exceed SetAsyncCircuitBreakerMinRequests,
+	// and either consecutive failures occur or the failure percentage is excessively high according
+	// to the configured values, the circuit breaker transitions to the open state.
+	// This results in the rejection of all SetAsync requests. After SetAsyncCircuitBreakerOpenDuration,
+	// the circuit breaker transitions to the half-open state, where it allows SetAsyncCircuitBreakerHalfOpenMaxRequests
+	// SetAsync requests to be processed in order to test if the conditions have improved. If they have not,
+	// the state transitions back to open; if they have, it transitions to the closed state. Following each 10 seconds
+	// interval in the closed state, the circuit breaker resets its metrics and repeats this cycle.
+	SetAsyncCircuitBreakerEnabled bool `yaml:"set_async_circuit_breaker_enabled"`
 	// SetAsyncCircuitBreakerHalfOpenMaxRequests is the maximum number of requests allowed to pass through
 	// when the circuit breaker is half-open.
 	// If set to 0, the circuit breaker allows only 1 request.
@@ -177,7 +189,7 @@ type RedisClient struct {
 
 	p *AsyncOperationProcessor
 
-	setAsyncCircuitBreaker *gobreaker.CircuitBreaker
+	setAsyncCircuitBreaker CircuitBreaker
 }
 
 // NewRedisClient makes a new RedisClient.
@@ -260,7 +272,10 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 			config.MaxSetMultiConcurrency,
 			gate.Sets,
 		),
-		setAsyncCircuitBreaker: gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		setAsyncCircuitBreaker: noopCircuitBreaker{},
+	}
+	if config.SetAsyncCircuitBreakerEnabled {
+		c.setAsyncCircuitBreaker = gobreakerCircuitBreaker{gobreaker.NewCircuitBreaker(gobreaker.Settings{
 			Name:        "redis-set-async",
 			MaxRequests: config.SetAsyncCircuitBreakerHalfOpenMaxRequests,
 			Interval:    10 * time.Second,
@@ -270,8 +285,9 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 					(counts.ConsecutiveFailures >= uint32(config.SetAsyncCircuitBreakerConsecutiveFailures) ||
 						float64(counts.TotalFailures)/float64(counts.Requests) >= config.SetAsyncCircuitBreakerFailurePercent)
 			},
-		}),
+		})}
 	}
+
 	duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_redis_operation_duration_seconds",
 		Help:    "Duration of operations against redis.",
@@ -288,8 +304,8 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) error {
 	return c.p.EnqueueAsync(func() {
 		start := time.Now()
-		_, err := c.setAsyncCircuitBreaker.Execute(func() (any, error) {
-			return nil, c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error()
+		err := c.setAsyncCircuitBreaker.Execute(func() error {
+			return c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error()
 		})
 		if err != nil {
 			level.Warn(c.logger).Log("msg", "failed to set item into redis", "err", err, "key", key, "value_size", len(value))

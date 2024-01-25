@@ -724,6 +724,7 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 		t.Run(testdata.name, func(t *testing.T) {
 			config := defaultMemcachedClientConfig
 			config.Addresses = []string{"127.0.0.1:11211"}
+			config.SetAsyncCircuitBreakerEnabled = true
 			config.SetAsyncCircuitBreakerOpenDuration = 1 * time.Millisecond
 			config.SetAsyncCircuitBreakerHalfOpenMaxRequests = 100
 			config.SetAsyncCircuitBreakerMinRequests = testdata.minRequests
@@ -743,15 +744,16 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 			}
 
 			testutil.Ok(t, backendMock.waitSetCount(testdata.setErrors))
+			cbimpl := client.setAsyncCircuitBreaker.(gobreakerCircuitBreaker).CircuitBreaker
 			if testdata.expectCircuitBreakerOpen {
-				testutil.Equals(t, gobreaker.StateOpen, client.setAsyncCircuitBreaker.State())
+				testutil.Equals(t, gobreaker.StateOpen, cbimpl.State())
 				time.Sleep(config.SetAsyncCircuitBreakerOpenDuration)
 				for i := testdata.setErrors; i < testdata.setErrors+10; i++ {
 					testutil.Ok(t, client.SetAsync(strconv.Itoa(i), []byte("value"), time.Second))
 				}
 				testutil.Ok(t, backendMock.waitItems(10))
 			} else {
-				testutil.Equals(t, gobreaker.StateClosed, client.setAsyncCircuitBreaker.State())
+				testutil.Equals(t, gobreaker.StateClosed, cbimpl.State())
 			}
 		})
 	}

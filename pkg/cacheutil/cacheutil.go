@@ -8,6 +8,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/sony/gobreaker"
+
 	"github.com/thanos-io/thanos/pkg/gate"
 )
 
@@ -39,4 +41,24 @@ func doWithBatch(ctx context.Context, totalSize int, batchSize int, ga gate.Gate
 		})
 	}
 	return g.Wait()
+}
+
+// CircuitBreaker implements the circuit breaker pattern https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern.
+type CircuitBreaker interface {
+	Execute(func() error) error
+}
+
+type noopCircuitBreaker struct{}
+
+func (noopCircuitBreaker) Execute(f func() error) error { return f() }
+
+type gobreakerCircuitBreaker struct {
+	*gobreaker.CircuitBreaker
+}
+
+func (cb gobreakerCircuitBreaker) Execute(f func() error) error {
+	_, err := cb.CircuitBreaker.Execute(func() (any, error) {
+		return nil, f()
+	})
+	return err
 }

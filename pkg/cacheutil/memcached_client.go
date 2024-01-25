@@ -57,6 +57,8 @@ var (
 		MaxGetMultiBatchSize:      0,
 		DNSProviderUpdateInterval: 10 * time.Second,
 		AutoDiscovery:             false,
+
+		SetAsyncCircuitBreakerEnabled:             false,
 		SetAsyncCircuitBreakerHalfOpenMaxRequests: 10,
 		SetAsyncCircuitBreakerOpenDuration:        5 * time.Second,
 		SetAsyncCircuitBreakerMinRequests:         50,
@@ -150,6 +152,18 @@ type MemcachedClientConfig struct {
 	// AutoDiscovery configures memached client to perform auto-discovery instead of DNS resolution
 	AutoDiscovery bool `yaml:"auto_discovery"`
 
+	// SetAsyncCircuitBreakerEnabled enables circuite breaker for SetAsync operations.
+	//
+	// The circuit breaker consists of three states: closed, half-open, and open.
+	// It begins in the closed state. When the total requests exceed SetAsyncCircuitBreakerMinRequests,
+	// and either consecutive failures occur or the failure percentage is excessively high according
+	// to the configured values, the circuit breaker transitions to the open state.
+	// This results in the rejection of all SetAsync requests. After SetAsyncCircuitBreakerOpenDuration,
+	// the circuit breaker transitions to the half-open state, where it allows SetAsyncCircuitBreakerHalfOpenMaxRequests
+	// SetAsync requests to be processed in order to test if the conditions have improved. If they have not,
+	// the state transitions back to open; if they have, it transitions to the closed state. Following each 10 seconds
+	// interval in the closed state, the circuit breaker resets its metrics and repeats this cycle.
+	SetAsyncCircuitBreakerEnabled bool `yaml:"set_async_circuit_breaker_enabled"`
 	// SetAsyncCircuitBreakerHalfOpenMaxRequests is the maximum number of requests allowed to pass through
 	// when the circuit breaker is half-open.
 	// If set to 0, the circuit breaker allows only 1 request.
@@ -224,7 +238,7 @@ type memcachedClient struct {
 
 	p *AsyncOperationProcessor
 
-	setAsyncCircuitBreaker *gobreaker.CircuitBreaker
+	setAsyncCircuitBreaker CircuitBreaker
 }
 
 // AddressProvider performs node address resolution given a list of clusters.
@@ -307,8 +321,11 @@ func newMemcachedClient(
 			config.MaxGetMultiConcurrency,
 			gate.Gets,
 		),
-		p: NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
-		setAsyncCircuitBreaker: gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		p:                      NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
+		setAsyncCircuitBreaker: noopCircuitBreaker{},
+	}
+	if config.SetAsyncCircuitBreakerEnabled {
+		c.setAsyncCircuitBreaker = gobreakerCircuitBreaker{gobreaker.NewCircuitBreaker(gobreaker.Settings{
 			Name:        "memcached-set-async",
 			MaxRequests: config.SetAsyncCircuitBreakerHalfOpenMaxRequests,
 			Interval:    10 * time.Second,
@@ -318,7 +335,7 @@ func newMemcachedClient(
 					(counts.ConsecutiveFailures >= uint32(config.SetAsyncCircuitBreakerConsecutiveFailures) ||
 						float64(counts.TotalFailures)/float64(counts.Requests) >= config.SetAsyncCircuitBreakerFailurePercent)
 			},
-		}),
+		})}
 	}
 
 	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
@@ -416,8 +433,8 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
-		_, err := c.setAsyncCircuitBreaker.Execute(func() (any, error) {
-			return nil, c.client.Set(&memcache.Item{
+		err := c.setAsyncCircuitBreaker.Execute(func() error {
+			return c.client.Set(&memcache.Item{
 				Key:        key,
 				Value:      value,
 				Expiration: int32(time.Now().Add(ttl).Unix()),
