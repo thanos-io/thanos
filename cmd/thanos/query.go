@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
@@ -261,7 +262,7 @@ func registerQuery(app *extkingpin.App) {
 				RefreshInterval: *fileSDInterval,
 			}
 			var err error
-			if fileSD, err = file.NewDiscovery(conf, logger, reg); err != nil {
+			if fileSD, err = file.NewDiscovery(conf, logger, conf.NewDiscovererMetrics(reg, discovery.NewRefreshMetrics(reg))); err != nil {
 				return err
 			}
 		}

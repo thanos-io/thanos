@@ -189,13 +189,17 @@ type errSeriesIterator struct {
 	err error
 }
 
-func (errSeriesIterator) Seek(int64) chunkenc.ValueType                        { return chunkenc.ValNone }
-func (errSeriesIterator) Next() chunkenc.ValueType                             { return chunkenc.ValNone }
-func (errSeriesIterator) At() (int64, float64)                                 { return 0, 0 }
-func (errSeriesIterator) AtHistogram() (int64, *histogram.Histogram)           { return 0, nil }
-func (errSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) { return 0, nil }
-func (errSeriesIterator) AtT() int64                                           { return 0 }
-func (it errSeriesIterator) Err() error                                        { return it.err }
+func (errSeriesIterator) Seek(int64) chunkenc.ValueType { return chunkenc.ValNone }
+func (errSeriesIterator) Next() chunkenc.ValueType      { return chunkenc.ValNone }
+func (errSeriesIterator) At() (int64, float64)          { return 0, 0 }
+func (errSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
+	return 0, nil
+}
+func (errSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return 0, nil
+}
+func (errSeriesIterator) AtT() int64    { return 0 }
+func (it errSeriesIterator) Err() error { return it.err }
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
@@ -233,12 +237,12 @@ func (it *chunkSeriesIterator) At() (t int64, v float64) {
 	return it.chunks[it.i].At()
 }
 
-func (it *chunkSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	return it.chunks[it.i].AtHistogram()
+func (it *chunkSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.chunks[it.i].AtHistogram(h)
 }
 
-func (it *chunkSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	return it.chunks[it.i].AtFloatHistogram()
+func (it *chunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return it.chunks[it.i].AtFloatHistogram(fh)
 }
 
 func (it *chunkSeriesIterator) AtT() int64 {

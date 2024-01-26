@@ -91,8 +91,10 @@ func (e errChunkIterator) Seek(int64) chunkenc.ValueType { return chunkenc.ValNo
 func (e errChunkIterator) At() (int64, float64)          { return 0, 0 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (e errChunkIterator) AtHistogram() (int64, *histogram.Histogram) { panic("not implemented") }
-func (e errChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (e errChunkIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+func (e errChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 func (e errChunkIterator) AtT() int64               { return 0 }

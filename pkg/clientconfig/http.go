@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
 	"github.com/go-kit/log"
@@ -347,7 +345,7 @@ func NewClient(logger log.Logger, cfg HTTPEndpointsConfig, client *http.Client, 
 			return nil, err
 		}
 		// We provide an empty registry and ignore metrics for now.
-		discovery, err := file.NewDiscovery(&fileSDCfg, logger, prometheus.NewRegistry())
+		discovery, err := file.NewDiscovery(&fileSDCfg, logger, nil)
 		if err != nil {
 			return nil, err
 		}
