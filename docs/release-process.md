@@ -23,6 +23,7 @@ Release shepherd responsibilities:
 
 | Release | Time of first RC | Shepherd (GitHub handle)      |
 |---------|------------------|-------------------------------|
+| v0.34.0 | 2024.01.14       | `@MichaHoffmann`              |
 | v0.33.0 | 2023.10.24       | `@MichaHoffmann`              |
 | v0.32.0 | 2023.08.23       | `@saswatamcode`               |
 | v0.31.0 | 2023.03.23       | `@fpetkovski`                 |
