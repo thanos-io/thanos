@@ -1011,7 +1011,7 @@ func TestProxyStore_Acceptance(t *testing.T) {
 			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2, 0)},
 		}
 
-		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, nil, 0*time.Second, RetrievalStrategy(EagerRetrieval))
+		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
 	}
 
 	testStoreAPIsAcceptance(t, startStore)
