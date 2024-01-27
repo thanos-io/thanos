@@ -67,7 +67,7 @@ func TestProxyStore_Info(t *testing.T) {
 		nil,
 		func() []Client { return nil },
 		component.Query,
-		nil, 0*time.Second, RetrievalStrategy(EagerRetrieval),
+		labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval),
 	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
@@ -96,7 +96,7 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 	}
 	q := NewProxyStore(nil, nil,
 		func() []Client { return stores },
-		component.Query, nil, 0*time.Second, EagerRetrieval,
+		component.Query, labels.EmptyLabels(), 0*time.Second, EagerRetrieval,
 	)
 
 	expected := []infopb.TSDBInfo{
@@ -1227,7 +1227,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		nil,
 		func() []Client { return cls },
 		component.Query,
-		nil,
+		labels.EmptyLabels(),
 		1*time.Second, EagerRetrieval,
 	)
 
@@ -1335,7 +1335,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		nil,
 		func() []Client { return cls },
 		component.Query,
-		nil,
+		labels.EmptyLabels(),
 		0*time.Second, EagerRetrieval,
 	)
 
@@ -1535,7 +1535,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
-				nil,
+				labels.EmptyLabels(),
 				5*time.Second, EagerRetrieval,
 			)
 
