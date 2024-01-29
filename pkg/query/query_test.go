@@ -62,7 +62,6 @@ func TestQuerier_Proxy(t *testing.T) {
 				0,
 				false,
 				false,
-				false,
 				nil,
 				NoopSeriesStatsReporter,
 			)
