@@ -1163,13 +1163,16 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 	if len(postingsBatch) == 0 {
 		b.hasMorePostings = false
 		if b.lazyPostings.lazyExpanded() {
-			v, err := b.indexr.IndexVersion()
-			if err != nil {
-				return errors.Wrap(err, "get index version")
-			}
-			if v >= 2 {
-				for i := range b.expandedPostings {
-					b.expandedPostings[i] = b.expandedPostings[i] / 16
+			// No need to fetch index version again if lazy posting has 0 length.
+			if len(b.lazyPostings.postings) > 0 {
+				v, err := b.indexr.IndexVersion()
+				if err != nil {
+					return errors.Wrap(err, "get index version")
+				}
+				if v >= 2 {
+					for i := range b.expandedPostings {
+						b.expandedPostings[i] = b.expandedPostings[i] / 16
+					}
 				}
 			}
 			b.indexr.storeExpandedPostingsToCache(b.blockMatchers, index.NewListPostings(b.expandedPostings), len(b.expandedPostings), tenant)

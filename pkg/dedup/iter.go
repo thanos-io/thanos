@@ -20,17 +20,12 @@ type dedupSeriesSet struct {
 	isCounter bool
 
 	replicas []storage.Series
-	// Pushed down series. Currently, they are being handled in a specific way.
-	// In the future, we might want to relax this and handle these depending
-	// on what function has been passed.
-	pushedDown []storage.Series
 
 	lset labels.Labels
 	peek storage.Series
 	ok   bool
 
-	f               string
-	pushdownEnabled bool
+	f string
 }
 
 // isCounter deduces whether a counter metric has been passed. There must be
@@ -107,9 +102,9 @@ func (o *overlapSplitSet) Err() error {
 
 // NewSeriesSet returns seriesSet that deduplicates the same series.
 // The series in series set are expected be sorted by all labels.
-func NewSeriesSet(set storage.SeriesSet, f string, pushdownEnabled bool) storage.SeriesSet {
+func NewSeriesSet(set storage.SeriesSet, f string) storage.SeriesSet {
 	// TODO: remove dependency on knowing whether it is a counter.
-	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, isCounter: isCounter(f), f: f}
+	s := &dedupSeriesSet{set: set, isCounter: isCounter(f), f: f}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -117,34 +112,16 @@ func NewSeriesSet(set storage.SeriesSet, f string, pushdownEnabled bool) storage
 	return s
 }
 
-// trimPushdownMarker trims the pushdown marker from the given labels.
-// Returns true if there was a pushdown marker.
-func trimPushdownMarker(lbls labels.Labels) (labels.Labels, bool) {
-	return labels.NewBuilder(lbls).Del(PushdownMarker.Name).Labels(), lbls.Has(PushdownMarker.Name)
-}
-
 func (s *dedupSeriesSet) Next() bool {
 	if !s.ok {
 		return false
-	}
-	// Reset both because they might have some leftovers.
-	if s.pushdownEnabled {
-		s.pushedDown = s.pushedDown[:0]
 	}
 	s.replicas = s.replicas[:0]
 
 	// Set the label set we are currently gathering to the peek element.
 	s.lset = s.peek.Labels()
+	s.replicas = append(s.replicas[:0], s.peek)
 
-	pushedDown := false
-	if s.pushdownEnabled {
-		s.lset, pushedDown = trimPushdownMarker(s.lset)
-	}
-	if pushedDown {
-		s.pushedDown = append(s.pushedDown[:0], s.peek)
-	} else {
-		s.replicas = append(s.replicas[:0], s.peek)
-	}
 	return s.next()
 }
 
@@ -153,15 +130,10 @@ func (s *dedupSeriesSet) next() bool {
 	s.ok = s.set.Next()
 	if !s.ok {
 		// There's no next series, the current replicas are the last element.
-		return len(s.replicas) > 0 || len(s.pushedDown) > 0
+		return len(s.replicas) > 0
 	}
 	s.peek = s.set.At()
 	nextLset := s.peek.Labels()
-
-	var pushedDown bool
-	if s.pushdownEnabled {
-		nextLset, pushedDown = trimPushdownMarker(nextLset)
-	}
 
 	// If the label set modulo the replica label is equal to the current label set
 	// look for more replicas, otherwise a series is complete.
@@ -169,33 +141,20 @@ func (s *dedupSeriesSet) next() bool {
 		return true
 	}
 
-	if pushedDown {
-		s.pushedDown = append(s.pushedDown, s.peek)
-	} else {
-		s.replicas = append(s.replicas, s.peek)
-	}
+	s.replicas = append(s.replicas, s.peek)
 
 	return s.next()
 }
 
 func (s *dedupSeriesSet) At() storage.Series {
-	if len(s.replicas) == 1 && len(s.pushedDown) == 0 {
+	if len(s.replicas) == 1 {
 		return seriesWithLabels{Series: s.replicas[0], lset: s.lset}
-	}
-	if len(s.replicas) == 0 && len(s.pushedDown) == 1 {
-		return seriesWithLabels{Series: s.pushedDown[0], lset: s.lset}
 	}
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
 
-	var pushedDown []storage.Series
-	if s.pushdownEnabled {
-		pushedDown = make([]storage.Series, len(s.pushedDown))
-		copy(pushedDown, s.pushedDown)
-	}
-
-	return newDedupSeries(s.lset, repl, pushedDown, s.f)
+	return newDedupSeries(s.lset, repl, s.f)
 }
 
 func (s *dedupSeriesSet) Err() error {
@@ -214,111 +173,22 @@ type seriesWithLabels struct {
 func (s seriesWithLabels) Labels() labels.Labels { return s.lset }
 
 type dedupSeries struct {
-	lset       labels.Labels
-	replicas   []storage.Series
-	pushedDown []storage.Series
+	lset     labels.Labels
+	replicas []storage.Series
 
 	isCounter bool
 	f         string
 }
 
-func newDedupSeries(lset labels.Labels, replicas []storage.Series, pushedDown []storage.Series, f string) *dedupSeries {
-	return &dedupSeries{lset: lset, isCounter: isCounter(f), replicas: replicas, pushedDown: pushedDown, f: f}
+func newDedupSeries(lset labels.Labels, replicas []storage.Series, f string) *dedupSeries {
+	return &dedupSeries{lset: lset, isCounter: isCounter(f), replicas: replicas, f: f}
 }
 
 func (s *dedupSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-// pushdownIterator creates an iterator that handles
-// all pushed down series.
-func (s *dedupSeries) pushdownIterator(_ chunkenc.Iterator) chunkenc.Iterator {
-	var pushedDownIterator adjustableSeriesIterator
-	if s.isCounter {
-		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
-	} else {
-		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
-	}
-
-	for _, o := range s.pushedDown[1:] {
-		var replicaIterator adjustableSeriesIterator
-
-		if s.isCounter {
-			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
-		} else {
-			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
-		}
-
-		pushedDownIterator = noopAdjustableSeriesIterator{newPushdownSeriesIterator(pushedDownIterator, replicaIterator, s.f)}
-	}
-
-	return pushedDownIterator
-}
-
-// allSeriesIterator creates an iterator over all series - pushed down
-// and regular replicas.
-func (s *dedupSeries) allSeriesIterator(_ chunkenc.Iterator) chunkenc.Iterator {
-	var replicasIterator, pushedDownIterator adjustableSeriesIterator
-	if len(s.replicas) != 0 {
-		if s.isCounter {
-			replicasIterator = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
-		} else {
-			replicasIterator = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
-		}
-
-		for _, o := range s.replicas[1:] {
-			var replicaIter adjustableSeriesIterator
-			if s.isCounter {
-				replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
-			} else {
-				replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
-			}
-			replicasIterator = newDedupSeriesIterator(replicasIterator, replicaIter)
-		}
-	}
-
-	if len(s.pushedDown) != 0 {
-		if s.isCounter {
-			pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
-		} else {
-			pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
-		}
-
-		for _, o := range s.pushedDown[1:] {
-			var replicaIter adjustableSeriesIterator
-			if s.isCounter {
-				replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
-			} else {
-				replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
-			}
-			pushedDownIterator = newDedupSeriesIterator(pushedDownIterator, replicaIter)
-		}
-	}
-
-	if replicasIterator == nil {
-		return pushedDownIterator
-	}
-	if pushedDownIterator == nil {
-		return replicasIterator
-	}
-	return newDedupSeriesIterator(pushedDownIterator, replicasIterator)
-}
-
 func (s *dedupSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
-	// This function needs a regular iterator over all series. Behavior is identical
-	// whether it was pushed down or not.
-	if s.f == "group" {
-		return s.allSeriesIterator(nil)
-	}
-	// If there are no replicas then jump straight to constructing an iterator
-	// for pushed down series.
-	if len(s.replicas) == 0 {
-		return s.pushdownIterator(nil)
-	}
-
-	// Finally, if we have both then construct a tree out of them.
-	// Pushed down series have their own special iterator.
-	// We deduplicate everything in the end.
 	var it adjustableSeriesIterator
 	if s.isCounter {
 		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
@@ -336,31 +206,7 @@ func (s *dedupSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 		it = newDedupSeriesIterator(it, replicaIter)
 	}
 
-	if len(s.pushedDown) == 0 {
-		return it
-	}
-
-	// Join all of the pushed down iterators into one.
-	var pushedDownIterator adjustableSeriesIterator
-	if s.isCounter {
-		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
-	} else {
-		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
-	}
-
-	for _, o := range s.pushedDown[1:] {
-		var replicaIterator adjustableSeriesIterator
-
-		if s.isCounter {
-			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
-		} else {
-			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
-		}
-
-		pushedDownIterator = noopAdjustableSeriesIterator{newPushdownSeriesIterator(pushedDownIterator, replicaIterator, s.f)}
-	}
-
-	return newDedupSeriesIterator(it, pushedDownIterator)
+	return it
 }
 
 // adjustableSeriesIterator iterates over the data of a time series and allows to adjust current value based on

@@ -89,7 +89,7 @@ func (s *testStore) close(t testing.TB) {
 }
 
 // NewTest returns an initialized empty Test.
-// It's compatible with promql.Test, allowing additionally multi StoreAPIs for query pushdown testing.
+// It's compatible with promql.Test, allowing additionally multi StoreAPIs.
 // TODO(bwplotka): Move to unittest and add add support for multi-store upstream. See: https://github.com/prometheus/prometheus/pull/8300
 func newTest(t testing.TB, input string) (*test, error) {
 	cmds, err := parse(input)

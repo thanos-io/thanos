@@ -540,6 +540,9 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx        = errgroup.WithContext(ctx)
 		storeDebugMsgs []string
 	)
+	if r.Label == "" {
+		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
 
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
