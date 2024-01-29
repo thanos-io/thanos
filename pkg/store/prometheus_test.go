@@ -154,38 +154,6 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.Equals(t, []string(nil), srv.Warnings)
 		testutil.Equals(t, "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)", err.Error())
 	}
-	// Querying with pushdown.
-	{
-		srv := newStoreSeriesServer(ctx)
-		testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
-			MinTime: baseT + 101,
-			MaxTime: baseT + 300,
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
-			},
-			QueryHints: &storepb.QueryHints{Func: &storepb.Func{Name: "min_over_time"}, Range: &storepb.Range{Millis: 300}},
-		}, srv))
-
-		testutil.Equals(t, 1, len(srv.SeriesSet))
-
-		testutil.Equals(t, []labelpb.ZLabel{
-			{Name: "__thanos_pushed_down", Value: "true"},
-			{Name: "a", Value: "b"},
-			{Name: "region", Value: "eu-west"},
-		}, srv.SeriesSet[0].Labels)
-		testutil.Equals(t, []string(nil), srv.Warnings)
-		testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
-
-		c := srv.SeriesSet[0].Chunks[0]
-		testutil.Equals(t, storepb.Chunk_XOR, c.Raw.Type)
-
-		chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
-		testutil.Ok(t, err)
-
-		samples := expandChunk(chk.Iterator(nil))
-		testutil.Equals(t, []sample{{baseT + 300, 1}}, samples)
-
-	}
 }
 
 type sample struct {

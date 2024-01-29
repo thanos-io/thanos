@@ -16,9 +16,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/timestamp"
-
 	"github.com/blang/semver/v4"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -35,7 +32,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -167,8 +163,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 	// Don't ask for more than available time. This includes potential `minTime` flag limit.
 	availableMinTime, _ := p.timestamps()
 	if r.MinTime < availableMinTime {
-		// If pushdown is enabled then align min time with the step to avoid missing data
-		// when it gets retrieved by the upper layer's PromQL engine.
+		// Align min time with the step to avoid missing data when it gets retrieved by the upper layer's PromQL engine.
 		// This also is necessary when Sidecar uploads a block and then availableMinTime
 		// becomes a fixed timestamp.
 		if r.QueryHints != nil && r.QueryHints.StepMillis != 0 {
@@ -215,10 +210,6 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 	shardMatcher := r.ShardInfo.Matcher(&p.buffers)
 	defer shardMatcher.Close()
 
-	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
-		return p.queryPrometheus(s, r, extLsetToRemove)
-	}
-
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
 	for _, m := range matchers {
 		pm := &prompb.LabelMatcher{Name: m.Name, Value: m.Value}
@@ -258,76 +249,6 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
 	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
-}
-
-func (p *PrometheusStore) queryPrometheus(
-	s flushableServer,
-	r *storepb.SeriesRequest,
-	extLsetToRemove map[string]struct{},
-) error {
-	var matrix model.Matrix
-
-	opts := promclient.QueryOptions{}
-	step := r.QueryHints.StepMillis / 1000
-	if step != 0 {
-		result, _, _, err := p.client.QueryRange(s.Context(), p.base, r.ToPromQL(), r.MinTime, r.MaxTime, step, opts)
-		if err != nil {
-			return err
-		}
-		matrix = result
-	} else {
-		vector, _, _, err := p.client.QueryInstant(s.Context(), p.base, r.ToPromQL(), timestamp.Time(r.MaxTime), opts)
-		if err != nil {
-			return err
-		}
-
-		matrix = make(model.Matrix, 0, len(vector))
-		for _, sample := range vector {
-			matrix = append(matrix, &model.SampleStream{
-				Metric: sample.Metric,
-				Values: []model.SamplePair{
-					{
-						Timestamp: sample.Timestamp,
-						Value:     sample.Value,
-					},
-				},
-			})
-		}
-	}
-
-	externalLbls := rmLabels(p.externalLabelsFn().Copy(), extLsetToRemove)
-	b := labels.NewScratchBuilder(16)
-	for _, vector := range matrix {
-		b.Reset()
-
-		// Attach labels from samples.
-		for k, v := range vector.Metric {
-			b.Add(string(k), string(v))
-		}
-		b.Add(dedup.PushdownMarker.Name, dedup.PushdownMarker.Value)
-		b.Sort()
-
-		finalLbls := labelpb.ExtendSortedLabels(b.Labels(), externalLbls)
-
-		series := &prompb.TimeSeries{
-			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
-			Samples: prompb.SamplesFromSamplePairs(vector.Values),
-		}
-
-		chks, err := p.chunkSamples(series, MaxSamplesPerChunk, enableChunkHashCalculation)
-		if err != nil {
-			return err
-		}
-
-		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: series.Labels,
-			Chunks: chks,
-		})); err != nil {
-			return err
-		}
-	}
-
-	return s.Flush()
 }
 
 func (p *PrometheusStore) handleSampledPrometheusResponse(

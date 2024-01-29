@@ -63,6 +63,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
+- [#7014](https://github.com/thanos-io/thanos/pull/7014) *: *breaking :warning:* Removed experimental query pushdown feature to simplify query path. This feature has had high complexity for too little benefits. The responsibility for query pushdown will be moved to the distributed mode of the new 'thanos' promql engine.
+
 ## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - 18.12.2023
 
 ### Fixed

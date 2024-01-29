@@ -94,7 +94,6 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		0,
 		false,
 		false,
-		false,
 		gate.NewNoop(),
 		10*time.Second,
 		nil,
