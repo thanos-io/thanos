@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
 	"github.com/go-kit/log"
@@ -21,6 +23,7 @@ import (
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"golang.org/x/net/http2"
@@ -345,11 +348,12 @@ func NewClient(logger log.Logger, cfg HTTPEndpointsConfig, client *http.Client, 
 			return nil, err
 		}
 		// We provide an empty registry and ignore metrics for now.
-		discovery, err := file.NewDiscovery(&fileSDCfg, logger, nil)
+		sdReg := prometheus.NewRegistry()
+		fileSD, err := file.NewDiscovery(&fileSDCfg, logger, fileSDCfg.NewDiscovererMetrics(sdReg, discovery.NewRefreshMetrics(sdReg)))
 		if err != nil {
 			return nil, err
 		}
-		discoverers = append(discoverers, discovery)
+		discoverers = append(discoverers, fileSD)
 	}
 	return &HTTPClient{
 		logger:          logger,
