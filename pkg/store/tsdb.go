@@ -309,9 +309,9 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	}
 
 	if len(res) > 0 {
-		for _, lbl := range s.getExtLset() {
-			res = append(res, lbl.Name)
-		}
+		s.getExtLset().Range(func(l labels.Label) {
+			res = append(res, l.Name)
+		})
 		sort.Strings(res)
 	}
 
