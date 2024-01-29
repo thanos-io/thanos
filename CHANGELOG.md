@@ -19,6 +19,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#6699](https://github.com/thanos-io/thanos/pull/6699) Receive: Use new file reloading logic for hashring configuration.
+
 ### Removed
 
 ## [v0.34.0](https://github.com/thanos-io/thanos/tree/release-0.34) - 26.01.24

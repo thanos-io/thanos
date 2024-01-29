@@ -4,28 +4,24 @@
 package receive
 
 import (
-	"context"
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/common/model"
 )
 
 var (
-	// An errParseConfigurationFile is returned by the ConfigWatcher when parsing failed.
+	// An errParseConfigurationFile is returned by the HashringConfigLoader when parsing failed.
 	errParseConfigurationFile = errors.New("configuration file is not parsable")
-	// An errEmptyConfigurationFile is returned by the ConfigWatcher when attempting to load an empty configuration file.
+	// An errEmptyConfigurationFile is returned by the HashringConfigLoader when attempting to load an empty configuration file.
 	errEmptyConfigurationFile = errors.New("configuration file is empty")
 )
 
@@ -61,7 +57,7 @@ func (e *Endpoint) UnmarshalJSON(data []byte) error {
 }
 
 // HashringConfig represents the configuration for a hashring
-// a receive node knows about.
+// a Receive node knows about.
 type HashringConfig struct {
 	Hashring       string            `json:"hashring,omitempty"`
 	Tenants        []string          `json:"tenants,omitempty"`
@@ -70,14 +66,11 @@ type HashringConfig struct {
 	ExternalLabels map[string]string `json:"external_labels,omitempty"`
 }
 
-// ConfigWatcher is able to watch a file containing a hashring configuration
-// for updates.
-type ConfigWatcher struct {
-	ch       chan []HashringConfig
-	path     string
-	interval time.Duration
-	logger   log.Logger
-	watcher  *fsnotify.Watcher
+// HashringConfigLoader is responsible for loading the hashring configuration. It also does runs validations on the
+// configuration and exports metrics about it.
+type HashringConfigLoader struct {
+	path   string
+	logger log.Logger
 
 	hashGauge            prometheus.Gauge
 	successGauge         prometheus.Gauge
@@ -92,26 +85,15 @@ type ConfigWatcher struct {
 	lastLoadedConfigHash float64
 }
 
-// NewConfigWatcher creates a new ConfigWatcher.
-func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string, interval model.Duration) (*ConfigWatcher, error) {
+// NewHashringConfigLoader creates a new HashringConfigLoader.
+func NewHashringConfigLoader(logger log.Logger, reg prometheus.Registerer, path string) *HashringConfigLoader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, errors.Wrap(err, "creating file watcher")
-	}
-	if err := watcher.Add(path); err != nil {
-		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
-	}
-
-	c := &ConfigWatcher{
-		ch:       make(chan []HashringConfig),
-		path:     path,
-		interval: time.Duration(interval),
-		logger:   logger,
-		watcher:  watcher,
+	c := &HashringConfigLoader{
+		path:   path,
+		logger: logger,
 		hashGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_config_hash",
@@ -155,152 +137,40 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 			},
 			[]string{"name"}),
 	}
-	return c, nil
+	return c
 }
 
-// Run starts the ConfigWatcher until the given context is canceled.
-func (cw *ConfigWatcher) Run(ctx context.Context) {
-	defer cw.Stop()
+// ParseConfig reads the configured file and return the hashring configuration.
+func (hr *HashringConfigLoader) ParseConfig() ([]HashringConfig, error) {
+	hr.refreshCounter.Inc()
 
-	cw.refresh(ctx)
-
-	ticker := time.NewTicker(cw.interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case event := <-cw.watcher.Events:
-			// fsnotify sometimes sends a bunch of events without name or operation.
-			// It's unclear what they are and why they are sent - filter them out.
-			if event.Name == "" {
-				break
-			}
-			// Everything but a CHMOD requires rereading.
-			// If the file was removed, we can't read it, so skip.
-			if event.Op^(fsnotify.Chmod|fsnotify.Remove) == 0 {
-				break
-			}
-			// Changes to a file can spawn various sequences of events with
-			// different combinations of operations. For all practical purposes
-			// this is inaccurate.
-			// The most reliable solution is to reload everything if anything happens.
-			cw.refresh(ctx)
-
-		case <-ticker.C:
-			// Setting a new watch after an update might fail. Make sure we don't lose
-			// those files forever.
-			cw.refresh(ctx)
-
-		case err := <-cw.watcher.Errors:
-			if err != nil {
-				cw.errorCounter.Inc()
-				level.Error(cw.logger).Log("msg", "error watching file", "err", err)
-			}
-		}
-	}
-}
-
-// C returns a chan that gets hashring configuration updates.
-func (cw *ConfigWatcher) C() <-chan []HashringConfig {
-	return cw.ch
-}
-
-// ValidateConfig returns an error if the configuration that's being watched is not valid.
-func (cw *ConfigWatcher) ValidateConfig() error {
-	_, _, err := loadConfig(cw.logger, cw.path)
-	return err
-}
-
-// Stop shuts down the config watcher.
-func (cw *ConfigWatcher) Stop() {
-	level.Debug(cw.logger).Log("msg", "stopping hashring configuration watcher...", "path", cw.path)
-
-	done := make(chan struct{})
-	defer close(done)
-
-	// Closing the watcher will deadlock unless all events and errors are drained.
-	go func() {
-		for {
-			select {
-			case <-cw.watcher.Errors:
-			case <-cw.watcher.Events:
-			// Drain all events and errors.
-			case <-done:
-				return
-			}
-		}
-	}()
-	if err := cw.watcher.Close(); err != nil {
-		level.Error(cw.logger).Log("msg", "error closing file watcher", "path", cw.path, "err", err)
-	}
-
-	close(cw.ch)
-	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
-}
-
-// refresh reads the configured file and sends the hashring configuration on the channel.
-func (cw *ConfigWatcher) refresh(ctx context.Context) {
-	cw.refreshCounter.Inc()
-
-	config, cfgHash, err := loadConfig(cw.logger, cw.path)
+	hashrings, cfgHash, err := loadConfig(hr.logger, hr.path)
 	if err != nil {
-		cw.errorCounter.Inc()
-		level.Error(cw.logger).Log("msg", "failed to load configuration file", "err", err, "path", cw.path)
-		return
+		hr.errorCounter.Inc()
+		level.Error(hr.logger).Log("msg", "failed to load configuration file", "err", err, "path", hr.path)
+		return nil, err
 	}
 
 	// If there was no change to the configuration, return early.
-	if cw.lastLoadedConfigHash == cfgHash {
-		return
+	if hr.lastLoadedConfigHash == cfgHash {
+		return nil, errors.New("configuration not changed")
 	}
 
-	cw.changesCounter.Inc()
+	hr.changesCounter.Inc()
 
 	// Save the last known configuration.
-	cw.lastLoadedConfigHash = cfgHash
-	cw.hashGauge.Set(cfgHash)
-	cw.successGauge.Set(1)
-	cw.lastSuccessTimeGauge.SetToCurrentTime()
+	hr.lastLoadedConfigHash = cfgHash
+	hr.hashGauge.Set(cfgHash)
+	hr.successGauge.Set(1)
+	hr.lastSuccessTimeGauge.SetToCurrentTime()
 
-	for _, c := range config {
-		cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Endpoints)))
-		cw.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
+	for _, c := range hashrings {
+		hr.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Endpoints)))
+		hr.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
 	}
 
-	level.Debug(cw.logger).Log("msg", "refreshed hashring config")
-	select {
-	case <-ctx.Done():
-		return
-	case cw.ch <- config:
-		return
-	}
-}
-
-func ConfigFromWatcher(ctx context.Context, updates chan<- []HashringConfig, cw *ConfigWatcher) error {
-	defer close(updates)
-	go cw.Run(ctx)
-
-	for {
-		select {
-		case cfg, ok := <-cw.C():
-			if !ok {
-				return errors.New("hashring config watcher stopped unexpectedly")
-			}
-			updates <- cfg
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-// ParseConfig parses the raw configuration content and returns a HashringConfig.
-func ParseConfig(content []byte) ([]HashringConfig, error) {
-	var config []HashringConfig
-	err := json.Unmarshal(content, &config)
-	return config, err
+	level.Debug(hr.logger).Log("msg", "refreshed hashring config")
+	return hashrings, nil
 }
 
 // loadConfig loads raw configuration content and returns a configuration.
@@ -310,7 +180,8 @@ func loadConfig(logger log.Logger, path string) ([]HashringConfig, float64, erro
 		return nil, 0, errors.Wrap(err, "failed to read configuration file")
 	}
 
-	config, err := ParseConfig(cfgContent)
+	var config []HashringConfig
+	err = json.Unmarshal(cfgContent, &config)
 	if err != nil {
 		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
 	}
