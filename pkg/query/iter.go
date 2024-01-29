@@ -468,8 +468,8 @@ func (it *histogramResetDetector) Next() chunkenc.ValueType {
 	return it.lastValType
 }
 
-func (it *histogramResetDetector) AtHistogram() (int64, *histogram.Histogram) {
-	t, h := it.Iterator.AtHistogram()
+func (it *histogramResetDetector) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	t, h := it.Iterator.AtHistogram(h)
 	if !it.histogramRead && it.i != 0 {
 		h.CounterResetHint = histogram.UnknownCounterReset
 	}
@@ -477,8 +477,8 @@ func (it *histogramResetDetector) AtHistogram() (int64, *histogram.Histogram) {
 	return t, h
 }
 
-func (it *histogramResetDetector) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	t, fh := it.Iterator.AtFloatHistogram()
+func (it *histogramResetDetector) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	t, fh := it.Iterator.AtFloatHistogram(fh)
 	if !it.histogramRead && it.i != 0 {
 		fh.CounterResetHint = histogram.UnknownCounterReset
 	}
