@@ -155,11 +155,13 @@ func (c *RedisClientConfig) validate() error {
 		}
 	}
 
-	if c.SetAsyncCircuitBreakerConsecutiveFailures == 0 {
-		return errCircuitBreakerConsecutiveFailuresNotPositive
-	}
-	if c.SetAsyncCircuitBreakerFailurePercent <= 0 || c.SetAsyncCircuitBreakerFailurePercent > 1 {
-		return errCircuitBreakerFailurePercentInvalid
+	if c.SetAsyncCircuitBreakerEnabled {
+		if c.SetAsyncCircuitBreakerConsecutiveFailures == 0 {
+			return errCircuitBreakerConsecutiveFailuresNotPositive
+		}
+		if c.SetAsyncCircuitBreakerFailurePercent <= 0 || c.SetAsyncCircuitBreakerFailurePercent > 1 {
+			return errCircuitBreakerFailurePercentInvalid
+		}
 	}
 	return nil
 }

@@ -198,9 +198,22 @@ func TestValidateRedisConfig(t *testing.T) {
 			expect_err: true,
 		},
 		{
+			name: "SetAsyncCircuitBreakerDisabled",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = "127.0.0.1:6789"
+				cfg.SetAsyncCircuitBreakerEnabled = false
+				cfg.SetAsyncCircuitBreakerConsecutiveFailures = 0
+				return cfg
+			},
+			expect_err: false,
+		},
+		{
 			name: "invalidCircuitBreakerFailurePercent",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
+				cfg.Addr = "127.0.0.1:6789"
+				cfg.SetAsyncCircuitBreakerEnabled = true
 				cfg.SetAsyncCircuitBreakerConsecutiveFailures = 0
 				return cfg
 			},
@@ -210,6 +223,8 @@ func TestValidateRedisConfig(t *testing.T) {
 			name: "invalidCircuitBreakerFailurePercent",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
+				cfg.Addr = "127.0.0.1:6789"
+				cfg.SetAsyncCircuitBreakerEnabled = true
 				cfg.SetAsyncCircuitBreakerFailurePercent = 0
 				return cfg
 			},

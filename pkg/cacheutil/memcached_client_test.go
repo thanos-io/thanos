@@ -36,8 +36,6 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 				Addresses:                 []string{"127.0.0.1:11211"},
 				MaxAsyncConcurrency:       1,
 				DNSProviderUpdateInterval: time.Second,
-				SetAsyncCircuitBreakerConsecutiveFailures: 1,
-				SetAsyncCircuitBreakerFailurePercent:      0.5,
 			},
 			expected: nil,
 		},
@@ -46,8 +44,6 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 				Addresses:                 []string{},
 				MaxAsyncConcurrency:       1,
 				DNSProviderUpdateInterval: time.Second,
-				SetAsyncCircuitBreakerConsecutiveFailures: 1,
-				SetAsyncCircuitBreakerFailurePercent:      0.5,
 			},
 			expected: errMemcachedConfigNoAddrs,
 		},
@@ -56,8 +52,6 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 				Addresses:                 []string{"127.0.0.1:11211"},
 				MaxAsyncConcurrency:       0,
 				DNSProviderUpdateInterval: time.Second,
-				SetAsyncCircuitBreakerConsecutiveFailures: 1,
-				SetAsyncCircuitBreakerFailurePercent:      0.5,
 			},
 			expected: errMemcachedMaxAsyncConcurrencyNotPositive,
 		},
@@ -65,25 +59,25 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 			config: MemcachedClientConfig{
 				Addresses:           []string{"127.0.0.1:11211"},
 				MaxAsyncConcurrency: 1,
-				SetAsyncCircuitBreakerConsecutiveFailures: 1,
-				SetAsyncCircuitBreakerFailurePercent:      0.5,
 			},
 			expected: errMemcachedDNSUpdateIntervalNotPositive,
 		},
 		"should fail on circuit_breaker_consecutive_failures = 0": {
 			config: MemcachedClientConfig{
-				Addresses:                 []string{"127.0.0.1:11211"},
-				MaxAsyncConcurrency:       1,
-				DNSProviderUpdateInterval: time.Second,
+				Addresses:                                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:                       1,
+				DNSProviderUpdateInterval:                 time.Second,
+				SetAsyncCircuitBreakerEnabled:             true,
 				SetAsyncCircuitBreakerConsecutiveFailures: 0,
 			},
 			expected: errCircuitBreakerConsecutiveFailuresNotPositive,
 		},
 		"should fail on circuit_breaker_failure_percent <= 0": {
 			config: MemcachedClientConfig{
-				Addresses:                 []string{"127.0.0.1:11211"},
-				MaxAsyncConcurrency:       1,
-				DNSProviderUpdateInterval: time.Second,
+				Addresses:                                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:                       1,
+				DNSProviderUpdateInterval:                 time.Second,
+				SetAsyncCircuitBreakerEnabled:             true,
 				SetAsyncCircuitBreakerConsecutiveFailures: 1,
 				SetAsyncCircuitBreakerFailurePercent:      0,
 			},
@@ -91,9 +85,10 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 		},
 		"should fail on circuit_breaker_failure_percent >= 1": {
 			config: MemcachedClientConfig{
-				Addresses:                 []string{"127.0.0.1:11211"},
-				MaxAsyncConcurrency:       1,
-				DNSProviderUpdateInterval: time.Second,
+				Addresses:                                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:                       1,
+				DNSProviderUpdateInterval:                 time.Second,
+				SetAsyncCircuitBreakerEnabled:             true,
 				SetAsyncCircuitBreakerConsecutiveFailures: 1,
 				SetAsyncCircuitBreakerFailurePercent:      1.1,
 			},
@@ -725,7 +720,7 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 			config := defaultMemcachedClientConfig
 			config.Addresses = []string{"127.0.0.1:11211"}
 			config.SetAsyncCircuitBreakerEnabled = true
-			config.SetAsyncCircuitBreakerOpenDuration = 1 * time.Millisecond
+			config.SetAsyncCircuitBreakerOpenDuration = 2 * time.Millisecond
 			config.SetAsyncCircuitBreakerHalfOpenMaxRequests = 100
 			config.SetAsyncCircuitBreakerMinRequests = testdata.minRequests
 			config.SetAsyncCircuitBreakerConsecutiveFailures = testdata.consecutiveFailures
@@ -746,7 +741,11 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 			testutil.Ok(t, backendMock.waitSetCount(testdata.setErrors))
 			cbimpl := client.setAsyncCircuitBreaker.(gobreakerCircuitBreaker).CircuitBreaker
 			if testdata.expectCircuitBreakerOpen {
-				testutil.Equals(t, gobreaker.StateOpen, cbimpl.State())
+				// Trigger the state transaction.
+				time.Sleep(time.Millisecond)
+				testutil.Ok(t, client.SetAsync(strconv.Itoa(testdata.setErrors), []byte("value"), time.Second))
+				testutil.Equals(t, gobreaker.StateOpen, cbimpl.State(), "state should be open")
+
 				time.Sleep(config.SetAsyncCircuitBreakerOpenDuration)
 				for i := testdata.setErrors; i < testdata.setErrors+10; i++ {
 					testutil.Ok(t, client.SetAsync(strconv.Itoa(i), []byte("value"), time.Second))
