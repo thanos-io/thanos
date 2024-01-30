@@ -60,6 +60,45 @@ type Hashring interface {
 	Nodes() []string
 }
 
+type NodesIter struct {
+	nodes        map[int]string
+	currentNode  string
+	currentIndex int
+}
+
+func NewNodesIter(nodes []string, self string) *NodesIter {
+	nl := &NodesIter{
+		nodes: make(map[int]string, len(nodes)),
+	}
+	for i, node := range nodes {
+		if node == self {
+			continue
+		}
+		nl.nodes[i] = node
+	}
+	return nl
+}
+
+func (nl *NodesIter) StartFrom(node string) bool {
+	for i, n := range nl.nodes {
+		if n == node {
+			nl.currentNode = node
+			nl.currentIndex = i
+			return true
+		}
+	}
+	return false
+}
+
+func (nl *NodesIter) Next() string {
+	nl.currentIndex++
+	if nl.currentIndex >= len(nl.nodes) {
+		nl.currentIndex = 0
+	}
+	nl.currentNode = nl.nodes[nl.currentIndex]
+	return nl.currentNode
+}
+
 // SingleNodeHashring always returns the same node.
 type SingleNodeHashring string
 

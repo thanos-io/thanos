@@ -78,7 +78,7 @@ var (
 
 type WriteableStoreAsyncClient interface {
 	storepb.WriteableStoreClient
-	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error))
+	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, int, chan writeResponse, func(error))
 }
 
 // Options for the web Handler.
@@ -93,6 +93,8 @@ type Options struct {
 	Endpoint                string
 	ReplicationFactor       uint64
 	ReceiverMode            ReceiverMode
+	SloppyQuorum            bool
+	SloppyRetriesLimit      int
 	Tracer                  opentracing.Tracer
 	TLSConfig               *tls.Config
 	DialOpts                []grpc.DialOption
@@ -116,6 +118,9 @@ type Handler struct {
 	hashring     Hashring
 	peers        peersContainer
 	receiverMode ReceiverMode
+
+	sloppyQuorum       bool
+	sloppyRetriesLimit int
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -143,10 +148,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:  logger,
-		writer:  o.Writer,
-		router:  route.New(),
-		options: o,
+		logger:             logger,
+		writer:             o.Writer,
+		router:             route.New(),
+		options:            o,
+		sloppyQuorum:       o.SloppyQuorum,
+		sloppyRetriesLimit: o.SloppyRetriesLimit,
 		peers: newPeerGroup(
 			backoff.Backoff{
 				Factor: 2,
@@ -434,21 +441,24 @@ type endpointReplica struct {
 }
 
 type trackedSeries struct {
-	seriesIDs  []int
-	timeSeries []prompb.TimeSeries
+	seriesIDs   []int
+	timeSeries  []prompb.TimeSeries
+	retryNumber int
 }
 
 type writeResponse struct {
-	seriesIDs []int
-	err       error
-	er        endpointReplica
+	seriesIDs   []int
+	err         error
+	er          endpointReplica
+	retryNumber int
 }
 
-func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeResponse {
+func newWriteResponse(seriesIDs []int, retryNumber int, err error, er endpointReplica) writeResponse {
 	return writeResponse{
-		seriesIDs: seriesIDs,
-		err:       err,
-		er:        er,
+		seriesIDs:   seriesIDs,
+		retryNumber: retryNumber,
+		err:         err,
+		er:          er,
 	}
 }
 
@@ -702,9 +712,9 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	maxBufferedResponses := len(localWrites) + len(remoteWrites)
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := sync.WaitGroup{}
-	wg.Add(len(remoteWrites))
+	wg.Add(len(remoteWrites) + len(localWrites))
 
-	h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
+	h.sendWrites(ctx, params, localWrites, remoteWrites, responses)
 
 	go func() {
 		wg.Wait()
@@ -716,6 +726,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	defer func() {
 		go func() {
 			for resp := range responses {
+				wg.Done()
 				if resp.err != nil {
 					level.Debug(requestLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", resp.err)
 				}
@@ -742,13 +753,26 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 			}
 
 			if resp.err != nil {
+				if h.sloppyQuorum && h.sloppyRetriesLimit > 0 && resp.retryNumber < h.sloppyRetriesLimit {
+					nodeIter := NewNodesIter(h.hashring.Nodes(), h.options.Endpoint)
+					nodeIter.StartFrom(resp.er.endpoint)
+					newEndpoint := nodeIter.Next()
+					newEndpointReplica := endpointReplica{endpoint: newEndpoint, replica: resp.er.replica}
+					h.sendRemoteWrite(ctx, params.tenant, newEndpointReplica, trackedSeries{
+						seriesIDs:   resp.seriesIDs,
+						retryNumber: resp.retryNumber + 1,
+						timeSeries:  remoteWrites[resp.er].timeSeries,
+					}, params.alreadyReplicated, responses)
+					continue
+				}
 				// Track errors and successes on a per-series basis.
 				for _, seriesID := range resp.seriesIDs {
 					seriesErrs[seriesID].Add(resp.err)
 				}
-
+				wg.Done()
 				continue
 			}
+			wg.Done()
 			// At the end, aggregate all errors if there are any and return them.
 			for _, seriesID := range resp.seriesIDs {
 				successes[seriesID]++
@@ -803,7 +827,6 @@ func (h *Handler) distributeTimeseriesToReplicas(
 // The responses from the writes are sent to the responses channel.
 func (h *Handler) sendWrites(
 	ctx context.Context,
-	wg *sync.WaitGroup,
 	params remoteWriteParams,
 	localWrites map[endpointReplica]trackedSeries,
 	remoteWrites map[endpointReplica]trackedSeries,
@@ -818,7 +841,7 @@ func (h *Handler) sendWrites(
 
 	// Do the writes to remote nodes. Run them all in parallel.
 	for writeDestination := range remoteWrites {
-		h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses, wg)
+		h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses)
 	}
 }
 
@@ -841,10 +864,10 @@ func (h *Handler) sendLocalWrite(
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, 0, err, writeDestination)
 		return
 	}
-	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, writeDestination)
+	responses <- newWriteResponse(trackedSeries.seriesIDs, 0, nil, writeDestination)
 }
 
 // sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not
@@ -857,16 +880,35 @@ func (h *Handler) sendRemoteWrite(
 	trackedSeries trackedSeries,
 	alreadyReplicated bool,
 	responses chan writeResponse,
-	wg *sync.WaitGroup,
 ) {
 	endpoint := endpointReplica.endpoint
-	cl, err := h.peers.getConnection(ctx, endpoint)
+	nodesIter := NewNodesIter(h.hashring.Nodes(), h.options.Endpoint)
+	nodesIter.StartFrom(endpoint)
+
+	var (
+		cl            WriteableStoreAsyncClient
+		err           error
+		peerConnRetry int
+	)
+
+	if h.sloppyQuorum {
+		peerConnRetry = h.sloppyRetriesLimit
+	} else {
+		peerConnRetry = 0
+	}
+	cl, err = runutil.RetryWithReturn(nil, peerConnRetry, 0, ctx.Done(), func() (WriteableStoreAsyncClient, error) {
+		conn, err := h.peers.getConnection(ctx, endpoint)
+		if err != nil {
+			endpoint = nodesIter.Next()
+			return nil, err
+		}
+		return conn, nil
+	})
 	if err != nil {
 		if errors.Is(err, errUnavailable) {
 			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
 		}
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, endpointReplica)
-		wg.Done()
+		responses <- newWriteResponse(trackedSeries.seriesIDs, 0, err, endpointReplica)
 		return
 	}
 
@@ -878,7 +920,7 @@ func (h *Handler) sendRemoteWrite(
 		Tenant:     tenant,
 		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
 		Replica: realReplicationIndex,
-	}, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+	}, endpointReplica, trackedSeries.seriesIDs, trackedSeries.retryNumber, responses, func(err error) {
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -893,7 +935,6 @@ func (h *Handler) sendRemoteWrite(
 				}
 			}
 		}
-		wg.Done()
 	})
 }
 
@@ -1308,7 +1349,7 @@ type peerWorkResponse struct {
 	err error
 }
 
-func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, retryNumber int, responseWriter chan writeResponse, cb func(error)) {
 	p.initWorkers()
 
 	w := peerWorkItem{
@@ -1324,7 +1365,7 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 	p.work <- w
 	res := <-w.workResult
 
-	responseWriter <- newWriteResponse(seriesIDs, res.err, er)
+	responseWriter <- newWriteResponse(seriesIDs, retryNumber, res.err, er)
 	cb(res.err)
 }
 

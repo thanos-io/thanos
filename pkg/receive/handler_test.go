@@ -692,6 +692,520 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 	}
 }
 
+func testReceiveSloppyQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsistencyDelay bool) {
+	appenderErrFn := func() error { return errors.New("failed to get appender") }
+	conflictErrFn := func() error { return storage.ErrOutOfBounds }
+	tooOldSampleErrFn := func() error { return storage.ErrTooOldSample }
+	commitErrFn := func() error { return errors.New("failed to commit") }
+	wreq := &prompb.WriteRequest{
+		Timeseries: makeSeriesWithValues(50),
+	}
+	for _, tc := range []struct {
+		name              string
+		status            int
+		replicationFactor uint64
+		wreq              *prompb.WriteRequest
+		appendables       []*fakeAppendable
+		randomNode        bool
+	}{
+		{
+			name:              "size 1 success",
+			status:            http.StatusOK,
+			replicationFactor: 1,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 1 commit error",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 1,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			name:              "size 1 conflict",
+			status:            http.StatusConflict,
+			replicationFactor: 1,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 2 success",
+			status:            http.StatusOK,
+			replicationFactor: 1,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 success",
+			status:            http.StatusOK,
+			replicationFactor: 1,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 success with replication",
+			status:            http.StatusOK,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 commit error",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 1,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 commit error with replication",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 appender error with replication",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender:    newFakeAppender(nil, nil, nil),
+					appenderErr: appenderErrFn,
+				},
+				{
+					appender:    newFakeAppender(nil, nil, nil),
+					appenderErr: appenderErrFn,
+				},
+				{
+					appender:    newFakeAppender(nil, nil, nil),
+					appenderErr: appenderErrFn,
+				},
+			},
+		},
+		{
+			name:              "size 3 conflict with replication",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 conflict and commit error with replication",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 conflict with replication and error is ErrTooOldSample",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication and one faulty",
+			status:            http.StatusOK,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication and one commit error",
+			status:            http.StatusOK,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication and two conflicts",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication one conflict and one commit error",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication two commit errors",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 6 with replication 3",
+			status:            http.StatusOK,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 6 with replication 3 one commit and two conflict error",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, conflictErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, conflictErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 6 with replication 5 two commit errors",
+			status:            http.StatusOK,
+			replicationFactor: 5,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication 3, 1 commit errors",
+			status:            http.StatusOK,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 4 with replication 3, 3 commit errors",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 6 with replication 3, 4 commit errors",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo)
+			if err != nil {
+				t.Fatalf("unable to create test handler: %v", err)
+			}
+			for _, h := range handlers {
+				h.options.SloppyQuorum = true
+				h.options.SloppyRetriesLimit = 3
+			}
+			tenant := "test"
+
+			if tc.randomNode {
+				handler := handlers[0]
+				rec, err := makeRequest(handler, tenant, tc.wreq)
+				if err != nil {
+					t.Fatalf("handler: unexpectedly failed making HTTP request: %v", err)
+				}
+				if rec.Code != tc.status {
+					t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
+				}
+			} else {
+				// Test from the point of view of every node
+				// so that we know status code does not depend
+				// on which node is erroring and which node is receiving.
+				for i, handler := range handlers {
+					// Test that the correct status is returned.
+					rec, err := makeRequest(handler, tenant, tc.wreq)
+					if err != nil {
+						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					}
+					if rec.Code != tc.status {
+						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					}
+				}
+			}
+
+			if withConsistencyDelay {
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			// Test that each time series is stored
+			// the correct amount of times in each fake DB.
+			for _, ts := range tc.wreq.Timeseries {
+				lset := make(labels.Labels, len(ts.Labels))
+				for j := range ts.Labels {
+					lset[j] = labels.Label{
+						Name:  ts.Labels[j].Name,
+						Value: ts.Labels[j].Value,
+					}
+				}
+				for j, a := range tc.appendables {
+					if withConsistencyDelay {
+						var expected int
+						n := a.appender.(*fakeAppender).Get(lset)
+						got := uint64(len(n))
+						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+							// We have len(handlers) copies of each sample because the test case
+							// is run once for each handler and they all use the same appender.
+							expected = len(handlers) * len(ts.Samples)
+						}
+						if uint64(expected) != got {
+							t.Errorf("handler: %d, labels %q: expected %d samples, got %d", j, lset.String(), expected, got)
+						}
+					} else {
+						var expectedMin int
+						n := a.appender.(*fakeAppender).Get(lset)
+						got := uint64(len(n))
+						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+							// We have len(handlers) copies of each sample because the test case
+							// is run once for each handler and they all use the same appender.
+							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
+							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
+						}
+						if uint64(expectedMin) > got {
+							t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestReceiveQuorumHashmod(t *testing.T) {
 	testReceiveQuorum(t, AlgorithmHashmod, false)
 }
@@ -817,6 +1331,11 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 	}
 }
 
+func TestReceiveSloppyQuorum(t *testing.T) {
+	testReceiveSloppyQuorum(t, AlgorithmHashmod, false)
+	testReceiveSloppyQuorum(t, AlgorithmKetama, false)
+}
+
 // endpointHit is a helper to determine if a given endpoint in a hashring would be selected
 // for a given time series, tenant, and replication factor.
 func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, timeSeries *prompb.TimeSeries) bool {
@@ -882,7 +1401,7 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb
 	return f.h.RemoteWrite(ctx, in)
 }
 
-func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, i int, responses chan writeResponse, cb func(error)) {
 	_, err := f.h.RemoteWrite(ctx, in)
 	responses <- writeResponse{
 		er:        er,

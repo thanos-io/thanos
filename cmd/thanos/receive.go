@@ -237,24 +237,26 @@ func runReceive(
 	}
 
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		TenantField:       conf.tenantField,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		RelabelConfigs:    relabelConfig,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		MaxBackoff:        time.Duration(*conf.maxBackoff),
-		TSDBStats:         dbs,
-		Limiter:           limiter,
+		Writer:             writer,
+		ListenAddress:      conf.rwAddress,
+		Registry:           reg,
+		Endpoint:           conf.endpoint,
+		TenantHeader:       conf.tenantHeader,
+		TenantField:        conf.tenantField,
+		DefaultTenantID:    conf.defaultTenantID,
+		ReplicaHeader:      conf.replicaHeader,
+		ReplicationFactor:  conf.replicationFactor,
+		RelabelConfigs:     relabelConfig,
+		ReceiverMode:       receiveMode,
+		SloppyQuorum:       conf.sloppyQuorum,
+		SloppyRetriesLimit: conf.sloppyRetriesLimit,
+		Tracer:             tracer,
+		TLSConfig:          rwTLSConfig,
+		DialOpts:           dialOpts,
+		ForwardTimeout:     time.Duration(*conf.forwardTimeout),
+		MaxBackoff:         time.Duration(*conf.maxBackoff),
+		TSDBStats:          dbs,
+		Limiter:            limiter,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -791,6 +793,8 @@ type receiveConfig struct {
 	hashringsFilePath    string
 	hashringsFileContent string
 	hashringsAlgorithm   string
+	sloppyQuorum         bool
+	sloppyRetriesLimit   int
 
 	refreshInterval   *model.Duration
 	endpoint          string
@@ -895,6 +899,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
+
+	cmd.Flag("receive.sloppy-quorum", "Whether to use sloppy quorum for writes.").Default("false").BoolVar(&rc.sloppyQuorum)
+	cmd.Flag("receive.sloppy-retries-limit", "How many times to retry sloppy writes.").Default("3").IntVar(&rc.sloppyRetriesLimit)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
