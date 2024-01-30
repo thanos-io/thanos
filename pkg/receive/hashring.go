@@ -60,14 +60,17 @@ type Hashring interface {
 	Nodes() []string
 }
 
-type NodesIter struct {
+// sloppyQuorumIterator is an iterator over the nodes in a hashring.
+// It excludes the node that is passed in to the constructor.
+type sloppyQuorumIterator struct {
 	nodes        map[int]string
 	currentNode  string
 	currentIndex int
 }
 
-func NewNodesIter(nodes []string, self string) *NodesIter {
-	nl := &NodesIter{
+// newSloppyQuorumIterator returns a new sloppyQuorumIterator.
+func newSloppyQuorumIterator(nodes []string, self string) *sloppyQuorumIterator {
+	nl := &sloppyQuorumIterator{
 		nodes: make(map[int]string, len(nodes)),
 	}
 	for i, node := range nodes {
@@ -79,7 +82,8 @@ func NewNodesIter(nodes []string, self string) *NodesIter {
 	return nl
 }
 
-func (nl *NodesIter) StartFrom(node string) bool {
+// seek sets the current node in the iterator to the given node.
+func (nl *sloppyQuorumIterator) seek(node string) bool {
 	for i, n := range nl.nodes {
 		if n == node {
 			nl.currentNode = node
@@ -90,7 +94,8 @@ func (nl *NodesIter) StartFrom(node string) bool {
 	return false
 }
 
-func (nl *NodesIter) Next() string {
+// next returns the next node in the iterator.
+func (nl *sloppyQuorumIterator) next() string {
 	nl.currentIndex++
 	if nl.currentIndex >= len(nl.nodes) {
 		nl.currentIndex = 0

@@ -754,9 +754,9 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 
 			if resp.err != nil {
 				if h.sloppyQuorum && h.sloppyRetriesLimit > 0 && resp.retryNumber < h.sloppyRetriesLimit {
-					nodeIter := NewNodesIter(h.hashring.Nodes(), h.options.Endpoint)
-					nodeIter.StartFrom(resp.er.endpoint)
-					newEndpoint := nodeIter.Next()
+					nodeIter := newSloppyQuorumIterator(h.hashring.Nodes(), h.options.Endpoint)
+					nodeIter.seek(resp.er.endpoint)
+					newEndpoint := nodeIter.next()
 					newEndpointReplica := endpointReplica{endpoint: newEndpoint, replica: resp.er.replica}
 					h.sendRemoteWrite(ctx, params.tenant, newEndpointReplica, trackedSeries{
 						seriesIDs:   resp.seriesIDs,
@@ -882,8 +882,8 @@ func (h *Handler) sendRemoteWrite(
 	responses chan writeResponse,
 ) {
 	endpoint := endpointReplica.endpoint
-	nodesIter := NewNodesIter(h.hashring.Nodes(), h.options.Endpoint)
-	nodesIter.StartFrom(endpoint)
+	nodesIter := newSloppyQuorumIterator(h.hashring.Nodes(), h.options.Endpoint)
+	nodesIter.seek(endpoint)
 
 	var (
 		cl            WriteableStoreAsyncClient
@@ -899,7 +899,7 @@ func (h *Handler) sendRemoteWrite(
 	cl, err = runutil.RetryWithReturn(nil, peerConnRetry, 0, ctx.Done(), func() (WriteableStoreAsyncClient, error) {
 		conn, err := h.peers.getConnection(ctx, endpoint)
 		if err != nil {
-			endpoint = nodesIter.Next()
+			endpoint = nodesIter.next()
 			return nil, err
 		}
 		return conn, nil
