@@ -547,6 +547,7 @@ type ReceiveBuilder struct {
 	image               string
 	nativeHistograms    bool
 	labels              []string
+	tenantSplitLabel    string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -585,6 +586,11 @@ func (r *ReceiveBuilder) WithLabel(name, value string) *ReceiveBuilder {
 func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive.HashringConfig) *ReceiveBuilder {
 	r.hashringConfigs = hashringConfigs
 	r.replication = replication
+	return r
+}
+
+func (r *ReceiveBuilder) WithTenantSplitLabel(splitLabel string) *ReceiveBuilder {
+	r.tenantSplitLabel = splitLabel
 	return r
 }
 
@@ -627,6 +633,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
 		"--log.level":            infoLogLevel,
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
+	}
+
+	if r.tenantSplitLabel != "" {
+		args["--receive.split-tenant-label-name"] = r.tenantSplitLabel
 	}
 
 	if len(r.labels) > 0 {
