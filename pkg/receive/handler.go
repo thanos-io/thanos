@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -65,8 +64,6 @@ const (
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
-
-	metaLabelTenantID = model.MetaLabelPrefix + "tenant_id"
 )
 
 var (
@@ -830,7 +827,7 @@ func (h *Handler) sendWrites(
 func (h *Handler) sendLocalWrite(
 	ctx context.Context,
 	writeDestination endpointReplica,
-	tenantHTTP string,
+	tenant string,
 	trackedSeries trackedSeries,
 	responses chan<- writeResponse,
 ) {
@@ -838,32 +835,16 @@ func (h *Handler) sendLocalWrite(
 	defer span.Finish()
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
-
-	tenantSeriesMapping := map[string][]prompb.TimeSeries{}
-	for _, ts := range trackedSeries.timeSeries {
-		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
-		if tenant := lbls.Get(metaLabelTenantID); tenant != "" {
-			tenantSeriesMapping[tenant] = append(tenantSeriesMapping[tenant], ts)
-			continue
-		} else {
-			tenantSeriesMapping[tenantHTTP] = append(tenantSeriesMapping[tenantHTTP], ts)
-			continue
-		}
-	}
-
-	for tenant, series := range tenantSeriesMapping {
-		err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
-			Timeseries: series,
-		})
-		if err != nil {
-			span.SetTag("error", true)
-			span.SetTag("error.msg", err.Error())
-			responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination)
-			return
-		}
+	err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
+		Timeseries: trackedSeries.timeSeries,
+	})
+	if err != nil {
+		span.SetTag("error", true)
+		span.SetTag("error.msg", err.Error())
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination)
+		return
 	}
 	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, writeDestination)
-
 }
 
 // sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not
