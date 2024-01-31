@@ -396,15 +396,19 @@ func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationF
 	}
 }
 
-func hashringGetRemoteN(h Hashring, tenant string, ts *prompb.TimeSeries, n uint64, local string) (string, error) {
+func hashringGetRemoteN(h Hashring, tenant string, ts *prompb.TimeSeries, n uint64, forbiddenEndpoints map[endpointReplica]struct{}) (string, error) {
 	for {
 		target, err := h.GetN(tenant, ts, n)
 		if err != nil {
 			return "", err
 		}
-		if target != local {
+		if _, forbidden := forbiddenEndpoints[endpointReplica{endpoint: target, replica: n}]; !forbidden {
 			return target, nil
 		}
 		n++
 	}
+}
+
+func findNewSlipDest(h Hashring, tenant string, ts *prompb.TimeSeries, replicaIndex uint64, forbiddenEndpoints map[endpointReplica]struct{}) (string, error) {
+	return hashringGetRemoteN(h, tenant, ts, replicaIndex, forbiddenEndpoints)
 }

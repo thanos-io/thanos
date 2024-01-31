@@ -743,6 +743,10 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	}
 	successes := make([]int, len(params.writeRequest.Timeseries))
 	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
+	usedEndpoints := make(map[endpointReplica]struct{}, len(h.hashring.Nodes()))
+	for i := 0; i < int(h.options.ReplicationFactor); i++ {
+		usedEndpoints[endpointReplica{endpoint: h.options.Endpoint, replica: uint64(i)}] = struct{}{}
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -767,7 +771,8 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 					if !ok {
 						panic("couldn't find the remote write that failed")
 					}
-					newEndpoint, err := hashringGetRemoteN(h.hashring, params.tenant, &chosenWrite.timeSeries[0], resp.er.replica+uint64(resp.retryNumber)+1, h.options.Endpoint)
+
+					newEndpoint, err := findNewSlipDest(h.hashring, params.tenant, &chosenWrite.timeSeries[0], resp.er.replica+uint64(resp.retryNumber)+1, usedEndpoints)
 					if err != nil {
 						level.Error(requestLogger).Log("msg", "failed to get next endpoint", "err", err)
 						for _, seriesID := range resp.seriesIDs {
@@ -793,6 +798,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 				wg.Done()
 				continue
 			}
+			usedEndpoints[resp.er] = struct{}{}
 			wg.Done()
 			// At the end, aggregate all errors if there are any and return them.
 			for _, seriesID := range resp.seriesIDs {
