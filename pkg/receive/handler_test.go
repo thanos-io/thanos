@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -1663,4 +1664,48 @@ func TestHandlerEarlyStop(t *testing.T) {
 	err := h.Run()
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "http: Server closed", err.Error())
+}
+
+type hashringSeenTenants struct {
+	Hashring
+
+	seenTenants map[string]struct{}
+}
+
+func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+	if h.seenTenants == nil {
+		h.seenTenants = map[string]struct{}{}
+	}
+	h.seenTenants[tenant] = struct{}{}
+	return h.Hashring.GetN(tenant, ts, n)
+}
+
+func TestDistributeSeries(t *testing.T) {
+	h := NewHandler(nil, &Options{})
+
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9090",
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	_, remote, err := h.distributeTimeseriesToReplicas(
+		"foo",
+		[]uint64{0},
+		[]prompb.TimeSeries{
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", metaLabelTenantID, "bar")),
+			},
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", metaLabelTenantID, "boo")),
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}].timeSeries[0].Labels).Len())
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}].timeSeries[1].Labels).Len())
+	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
 }
