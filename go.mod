@@ -116,6 +116,7 @@ require (
 )
 
 require (
+	github.com/RoaringBitmap/roaring v1.9.0
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.27.10
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
@@ -126,12 +127,14 @@ require (
 
 require (
 	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
+	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/go-openapi/runtime v0.27.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a // indirect
+	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/sercand/kuberesolver/v4 v4.0.0 // indirect
@@ -267,6 +270,8 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
+
+	github.com/prometheus/prometheus => github.com/yeya24/prometheus v1.8.2-0.20240212194858-9b851e143ae3
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 

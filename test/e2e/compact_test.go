@@ -922,5 +922,78 @@ func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
 	}, nil)
 	testutil.Ok(t, e2e.StartAndWaitReady(c))
 	testutil.NotOk(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_downsample_total"}, e2emon.WaitMissingMetrics()))
+}
 
+func TestRoaringBitmapCompactor(t *testing.T) {
+	t.Run("roaring bitmap compactor works", func(t *testing.T) {
+		now, err := time.Parse(time.RFC3339, "2020-03-24T08:00:00Z")
+		testutil.Ok(t, err)
+
+		logger := log.NewLogfmtLogger(os.Stderr)
+		e, err := e2e.NewDockerEnvironment("rb-smoke")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		dir := filepath.Join(e.SharedDir(), "tmp")
+		testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+		const bucket = "compact-test"
+		m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS())
+		testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+		bktCfg := e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir())
+		bkt, err := s3.NewBucketWithConfig(logger, bktCfg, "test")
+		testutil.Ok(t, err)
+
+		blocks := []blockDesc{
+			{
+				series:   []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+				extLset:  labels.FromStrings("case", "compaction-ready", "replica", "1"),
+				mint:     timestamp.FromTime(now),
+				maxt:     timestamp.FromTime(now.Add(2 * time.Hour)),
+				hashFunc: metadata.SHA256Func,
+			},
+			{
+				series:  []labels.Labels{labels.FromStrings("a", "1", "b", "3")},
+				extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+				mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+				maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			},
+			{
+				series:  []labels.Labels{labels.FromStrings("a", "1", "b", "4")},
+				extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+				mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+				maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+			},
+			{
+				series:  []labels.Labels{labels.FromStrings("a", "1", "b", "5")},
+				extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+				mint:    timestamp.FromTime(now.Add(6 * time.Hour)),
+				maxt:    timestamp.FromTime(now.Add(8 * time.Hour)),
+			},
+			{
+				series:  []labels.Labels{labels.FromStrings("a", "1", "b", "6")},
+				extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+				mint:    timestamp.FromTime(now.Add(8 * time.Hour)),
+				maxt:    timestamp.FromTime(now.Add(10 * time.Hour)),
+			},
+		}
+		// New block that will be compacted.
+		justAfterConsistencyDelay := 30 * time.Minute
+
+		for _, bl := range blocks {
+			blID, err := bl.Create(context.Background(), dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
+			testutil.Ok(t, err)
+			testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, blID.String()), blID.String()))
+		}
+
+		c := e2ethanos.NewCompactorBuilder(e, "working").Init(client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
+		}, nil, "--compact.postings-format=roaringbitmap")
+		testutil.Ok(t, e2e.StartAndWaitReady(c))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Greater(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Greater(0), "thanos_compact_group_compactions_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_halted"))
+	})
 }

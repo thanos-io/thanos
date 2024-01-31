@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/postings"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -214,16 +215,30 @@ func (n *minMaxSumInt64) Avg() int64 {
 // It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
 // See HealthStats.Issue347OutsideChunks for details.
 func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, minTime, maxTime int64) (stats HealthStats, err error) {
-	r, err := index.NewFileReader(fn)
+	r, err := index.NewFileReader(fn, postings.DecodePostingsRoaring)
 	if err != nil {
-		return stats, errors.Wrap(err, "open index file")
+		return stats, fmt.Errorf("open index: %w", err)
 	}
+
 	defer runutil.CloseWithErrCapture(&err, r, "gather index issue file reader")
 
 	key, value := index.AllPostingsKey()
 	p, err := r.Postings(ctx, key, value)
 	if err != nil {
-		return stats, errors.Wrap(err, "get all postings")
+		rd, err := index.NewFileReader(fn, nil)
+		if err != nil {
+			return stats, fmt.Errorf("open index: %w", err)
+		}
+
+		defer runutil.CloseWithErrCapture(&err, rd, "gather index issue file reader")
+
+		r = rd
+
+		ps, err := r.Postings(ctx, key, value)
+		if err != nil {
+			return stats, fmt.Errorf("postings: %w", err)
+		}
+		p = ps
 	}
 	var (
 		lset     labels.Labels
@@ -427,7 +442,7 @@ func Repair(ctx context.Context, logger log.Logger, dir string, id ulid.ULID, so
 		return resid, errors.New("cannot repair downsampled block")
 	}
 
-	b, err := tsdb.OpenBlock(logger, bdir, nil)
+	b, err := tsdb.OpenBlock(logger, bdir, nil, nil)
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}

@@ -668,7 +668,7 @@ func createBlock(
 }
 
 func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
-	r, err := index.NewFileReader(fn)
+	r, err := index.NewFileReader(fn, nil)
 	if err != nil {
 		return 0, errors.Wrap(err, "open index file")
 	}

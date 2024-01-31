@@ -1429,7 +1429,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 		// Histogram chunks are represented differently in memory and on disk. In order to
 		// have a precise comparison, we need to use the on-disk representation as the expected value
 		// instead of the in-memory one.
-		diskBlock, err := tsdb.OpenBlock(logger, blockIDDir, nil)
+		diskBlock, err := tsdb.OpenBlock(logger, blockIDDir, nil, nil)
 		testutil.Ok(t, err)
 		series = append(series, storetestutil.ReadSeriesFromBlock(t, diskBlock, extLset, skipChunk)...)
 

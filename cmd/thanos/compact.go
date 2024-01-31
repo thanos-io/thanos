@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -42,6 +43,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/postings"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -328,9 +330,26 @@ func runCompact(
 		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
 	}
 
+	var pe index.PostingsEncoder = index.EncodePostingsRaw
+	if conf.postingsFormat == postings.RoaringEncoder {
+		pe = postings.EncodePostingsRoaring
+	}
+
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
+
+	comp, err := tsdb.NewLeveledCompactorWithOptions(ctx, reg, logger, levels, downsample.NewPool(), tsdb.LeveledCompactorOptions{
+		MergeFunc: mergeFunc,
+		PE:        pe,
+		PD: func(meta *tsdb.BlockMeta) index.PostingsDecoder {
+			for _, h := range meta.Compaction.Hints {
+				if h == "roaring" {
+					return postings.DecodePostingsRoaring
+				}
+			}
+			return index.DecodePostingsRaw
+		},
+	})
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -715,6 +734,7 @@ type compactConfig struct {
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
 	disableAdminOperations                         bool
+	postingsFormat                                 string
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -767,6 +787,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("compact.progress-interval", "Frequency of calculating the compaction progress in the background when --wait has been enabled. Setting it to \"0s\" disables it. Now compaction, downsampling and retention progress are supported.").
 		Default("5m").DurationVar(&cc.progressCalculateInterval)
 
+	cmd.Flag("compact.postings-format", "Format to use in resulting blocks.").Default(postings.RawEncoder).EnumVar(&cc.postingsFormat, postings.RoaringEncoder, postings.RawEncoder)
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
 	cmd.Flag("compact.blocks-fetch-concurrency", "Number of goroutines to use when download block during compaction.").
