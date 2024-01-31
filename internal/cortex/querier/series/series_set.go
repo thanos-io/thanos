@@ -124,11 +124,11 @@ func (c *concreteSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (c *concreteSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (c *concreteSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (c *concreteSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (c *concreteSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
@@ -173,11 +173,11 @@ func (errIterator) At() (t int64, v float64) {
 	return 0, 0
 }
 
-func (errIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (errIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	return 0, nil
 }
 
-func (errIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (errIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return 0, nil
 }
 
@@ -251,11 +251,11 @@ func (d DeletedSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (d DeletedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (d DeletedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (d DeletedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (d DeletedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
