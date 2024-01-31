@@ -1032,11 +1032,11 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (s *mockedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (s *mockedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 

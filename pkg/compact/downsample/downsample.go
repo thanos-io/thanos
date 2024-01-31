@@ -690,12 +690,12 @@ func (it *ApplyCounterResetsSeriesIterator) At() (t int64, v float64) {
 	return it.lastT, it.totalV
 }
 
-func (it *ApplyCounterResetsSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	return it.chks[it.i].AtHistogram()
+func (it *ApplyCounterResetsSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.chks[it.i].AtHistogram(h)
 }
 
-func (it *ApplyCounterResetsSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	return it.chks[it.i].AtFloatHistogram()
+func (it *ApplyCounterResetsSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return it.chks[it.i].AtFloatHistogram(fh)
 }
 
 func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
@@ -767,11 +767,11 @@ func (it *AverageChunkIterator) At() (int64, float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (it *AverageChunkIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (it *AverageChunkIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (it *AverageChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (it *AverageChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
