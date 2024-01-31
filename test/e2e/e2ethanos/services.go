@@ -538,6 +538,7 @@ type ReceiveBuilder struct {
 	image               string
 	nativeHistograms    bool
 	labels              []string
+	sloppyQuorum        bool
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -565,6 +566,11 @@ func (r *ReceiveBuilder) WithExemplarsInMemStorage(maxExemplars int) *ReceiveBui
 
 func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
 	r.ingestion = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithSloppyQuorum() *ReceiveBuilder {
+	r.sloppyQuorum = true
 	return r
 }
 
@@ -616,7 +622,7 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 		"--remote-write.address": ":8081",
 		"--label":                fmt.Sprintf(`receive="%s"`, r.Name()),
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
-		"--log.level":            infoLogLevel,
+		"--log.level":            "debug",
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
 	}
 
@@ -627,6 +633,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 	hashring := r.hashringConfigs
 	if len(hashring) > 0 && r.ingestion {
 		args["--receive.local-endpoint"] = r.InternalEndpoint("grpc")
+	}
+
+	if r.sloppyQuorum {
+		args["--receive.sloppy-quorum"] = ""
 	}
 
 	if r.limit != 0 && r.metaMonitoring != "" {

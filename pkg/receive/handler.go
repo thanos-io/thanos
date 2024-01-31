@@ -36,6 +36,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -683,7 +684,9 @@ type remoteWriteParams struct {
 }
 
 func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) error {
+	sloppyQuorum, _ := ctx.Value(sloppyQuorumContextKey{}).(bool)
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
+	ctx = context.WithValue(ctx, sloppyQuorumContextKey{}, sloppyQuorum)
 
 	var writeErrors writeErrors
 	defer func() {
@@ -701,7 +704,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	}
 	requestLogger := log.With(h.logger, logTags...)
 
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(ctx, params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return err
@@ -753,11 +756,29 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 			}
 
 			if resp.err != nil {
-				if h.sloppyQuorum && h.sloppyRetriesLimit > 0 && resp.retryNumber < h.sloppyRetriesLimit {
-					nodeIter := newSloppyQuorumIterator(h.hashring.Nodes(), h.options.Endpoint)
-					nodeIter.seek(resp.er.endpoint)
-					newEndpoint := nodeIter.next()
+				if h.sloppyQuorum && h.sloppyRetriesLimit > 0 && resp.retryNumber < int(h.options.ReplicationFactor) {
+					_, ok := localWrites[resp.er]
+					if ok {
+						level.Debug(requestLogger).Log("msg", "skipping failed local write")
+						continue
+					}
+
+					chosenWrite, ok := remoteWrites[resp.er]
+					if !ok {
+						panic("couldn't find the remote write that failed")
+					}
+					newEndpoint, err := hashringGetRemoteN(h.hashring, params.tenant, &chosenWrite.timeSeries[0], resp.er.replica+uint64(resp.retryNumber)+1, h.options.Endpoint)
+					if err != nil {
+						level.Error(requestLogger).Log("msg", "failed to get next endpoint", "err", err)
+						for _, seriesID := range resp.seriesIDs {
+							seriesErrs[seriesID].Add(resp.err)
+						}
+						wg.Done()
+						continue
+					}
+					level.Debug(requestLogger).Log("msg", "failed request slipping", "retryNumber", resp.retryNumber, "replica", resp.er.replica, "self", h.options.Endpoint, "orig", resp.er.endpoint, "next", newEndpoint, "err", resp.err)
 					newEndpointReplica := endpointReplica{endpoint: newEndpoint, replica: resp.er.replica}
+					ctx = context.WithValue(ctx, sloppyQuorumContextKey{}, true)
 					h.sendRemoteWrite(ctx, params.tenant, newEndpointReplica, trackedSeries{
 						seriesIDs:   resp.seriesIDs,
 						retryNumber: resp.retryNumber + 1,
@@ -789,14 +810,33 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 // The first return value are the series that should be written to the local node. The second return value are the
 // series that should be written to remote nodes.
 func (h *Handler) distributeTimeseriesToReplicas(
+	ctx context.Context,
 	tenant string,
 	replicas []uint64,
 	timeseries []prompb.TimeSeries,
 ) (map[endpointReplica]trackedSeries, map[endpointReplica]trackedSeries, error) {
+	sloppyQuorum, _ := ctx.Value(sloppyQuorumContextKey{}).(bool)
+	level.Debug(h.logger).Log("msg", "distributing timeseries to replicas", "sloppy_quorum", sloppyQuorum, "replicas", fmt.Sprintf("%v", replicas))
+
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
 	remoteWrites := make(map[endpointReplica]trackedSeries)
 	localWrites := make(map[endpointReplica]trackedSeries)
+
+	// If we are handling a sloppy quorum remote write request, we only need to write to the local node.
+	if sloppyQuorum {
+		endpointReplica := endpointReplica{endpoint: h.options.Endpoint, replica: replicas[0]}
+		seriesIDs := make([]int, 0, len(timeseries))
+		for i := range timeseries {
+			seriesIDs = append(seriesIDs, i)
+		}
+		localWrites[endpointReplica] = trackedSeries{
+			seriesIDs:  seriesIDs,
+			timeSeries: timeseries,
+		}
+		return localWrites, remoteWrites, nil
+	}
+
 	for tsIndex, ts := range timeseries {
 		for _, rn := range replicas {
 			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
@@ -881,34 +921,17 @@ func (h *Handler) sendRemoteWrite(
 	alreadyReplicated bool,
 	responses chan writeResponse,
 ) {
-	endpoint := endpointReplica.endpoint
-	nodesIter := newSloppyQuorumIterator(h.hashring.Nodes(), h.options.Endpoint)
-	nodesIter.seek(endpoint)
-
 	var (
-		cl            WriteableStoreAsyncClient
-		err           error
-		peerConnRetry int
+		cl  WriteableStoreAsyncClient
+		err error
 	)
 
-	if h.sloppyQuorum {
-		peerConnRetry = h.sloppyRetriesLimit
-	} else {
-		peerConnRetry = 0
-	}
-	cl, err = runutil.RetryWithReturn(nil, peerConnRetry, 0, ctx.Done(), func() (WriteableStoreAsyncClient, error) {
-		conn, err := h.peers.getConnection(ctx, endpoint)
-		if err != nil {
-			endpoint = nodesIter.next()
-			return nil, err
-		}
-		return conn, nil
-	})
+	cl, err = h.peers.getConnection(ctx, endpointReplica.endpoint)
 	if err != nil {
 		if errors.Is(err, errUnavailable) {
 			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
 		}
-		responses <- newWriteResponse(trackedSeries.seriesIDs, 0, err, endpointReplica)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, trackedSeries.retryNumber, err, endpointReplica)
 		return
 	}
 
@@ -926,7 +949,7 @@ func (h *Handler) sendRemoteWrite(
 			if !alreadyReplicated {
 				h.replications.WithLabelValues(labelSuccess).Inc()
 			}
-			h.peers.markPeerAvailable(endpoint)
+			h.peers.markPeerAvailable(endpointReplica.endpoint)
 		} else {
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
@@ -957,6 +980,16 @@ func quorumReached(successes []int, successThreshold int) bool {
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	ctx = context.WithValue(ctx, sloppyQuorumContextKey{}, false)
+	if ok {
+		values := md.Get("sloppyQuorum")
+		if len(values) > 0 && values[0] != "" {
+			level.Debug(h.logger).Log("msg", "sloppy quorum request detected", "sloppyQuorum", values[0])
+			ctx = context.WithValue(ctx, sloppyQuorumContextKey{}, true)
+		}
+	}
 
 	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
@@ -1237,6 +1270,8 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
+type sloppyQuorumContextKey struct{}
+
 func (pw *peerWorker) initWorkers() {
 	pw.initWorkersOnce.Do(func() {
 		work := make(chan peerWorkItem)
@@ -1255,6 +1290,10 @@ func (pw *peerWorker) initWorkers() {
 						pw.forwardDelay.Observe(time.Since(w.sendTime).Seconds())
 
 						tracing.DoInSpan(w.workItemCtx, "receive_forward", func(ctx context.Context) {
+							if w.workItemCtx.Value(sloppyQuorumContextKey{}) != nil {
+								md := metadata.Pairs("sloppyQuorum", "true")
+								ctx = metadata.NewOutgoingContext(ctx, md)
+							}
 							_, err := storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, w.req)
 							w.workResult <- peerWorkResponse{
 								er:  w.er,

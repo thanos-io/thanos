@@ -66,42 +66,46 @@ type sloppyQuorumIterator struct {
 	nodes        map[int]string
 	currentNode  string
 	currentIndex int
+	self         string
 }
 
 // newSloppyQuorumIterator returns a new sloppyQuorumIterator.
 func newSloppyQuorumIterator(nodes []string, self string) *sloppyQuorumIterator {
+	if len(nodes) <= 1 {
+		panic("newSloppyQuorumIterator called with less than two nodes")
+	}
 	nl := &sloppyQuorumIterator{
 		nodes: make(map[int]string, len(nodes)),
 	}
+	foundSelf := false
 	for i, node := range nodes {
 		if node == self {
-			continue
+			nl.currentIndex = i
+			nl.currentNode = node
+			foundSelf = true
 		}
 		nl.nodes[i] = node
+	}
+	if !foundSelf {
+		panic("self not found in nodes")
 	}
 	return nl
 }
 
-// seek sets the current node in the iterator to the given node.
-func (nl *sloppyQuorumIterator) seek(node string) bool {
-	for i, n := range nl.nodes {
-		if n == node {
-			nl.currentNode = node
-			nl.currentIndex = i
-			return true
-		}
-	}
-	return false
+func (nl *sloppyQuorumIterator) current() string {
+	return nl.currentNode
 }
 
 // next returns the next node in the iterator.
-func (nl *sloppyQuorumIterator) next() string {
-	nl.currentIndex++
-	if nl.currentIndex >= len(nl.nodes) {
-		nl.currentIndex = 0
+func (nl *sloppyQuorumIterator) next() {
+	// find the next element that is not self
+	for {
+		nl.currentIndex = (nl.currentIndex + 1) % len(nl.nodes)
+		nl.currentNode = nl.nodes[nl.currentIndex]
+		if nl.currentNode != nl.self {
+			return
+		}
 	}
-	nl.currentNode = nl.nodes[nl.currentIndex]
-	return nl.currentNode
 }
 
 // SingleNodeHashring always returns the same node.
@@ -389,5 +393,18 @@ func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationF
 			"hashring", hashring,
 			"tenants", tenants)
 		return newSimpleHashring(endpoints)
+	}
+}
+
+func hashringGetRemoteN(h Hashring, tenant string, ts *prompb.TimeSeries, n uint64, local string) (string, error) {
+	for {
+		target, err := h.GetN(tenant, ts, n)
+		if err != nil {
+			return "", err
+		}
+		if target != local {
+			return target, nil
+		}
+		n++
 	}
 }

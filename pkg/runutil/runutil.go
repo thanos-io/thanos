@@ -215,36 +215,3 @@ func DeleteAll(dir string, ignoreDirs ...string) error {
 	}
 	return nil
 }
-
-// RetryFunc is the type for the function to retry.
-// It returns a value of generic type T and an error.
-type RetryFunc[T any] func() (T, error)
-
-// RetryWithReturn executes the given function up to maxRetries times until it succeeds.
-// It returns the result of the function and any error encountered.
-func RetryWithReturn[T any](logger log.Logger, maxRetries int, interval time.Duration, stopc <-chan struct{}, fn RetryFunc[T]) (T, error) {
-	var result T
-
-	if interval <= 0 {
-		interval = 1 * time.Millisecond
-	}
-	if maxRetries <= 0 {
-		maxRetries = 1
-	}
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
-	var err error
-	for i := 0; i < maxRetries; i++ {
-		if result, err = fn(); err == nil {
-			return result, nil
-		}
-		level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
-		select {
-		case <-stopc:
-			return *new(T), err
-		case <-tick.C:
-		}
-	}
-	return *new(T), err
-}

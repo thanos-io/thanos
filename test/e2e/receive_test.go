@@ -401,7 +401,7 @@ test_metric{a="2", b="2"} 1`)
 		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
-		//Setup Querier
+		// Setup Querier
 		q := e2ethanos.NewQuerierBuilder(e, "1", i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -614,30 +614,33 @@ test_metric{a="2", b="2"} 1`)
 		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
 		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled()
 		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
+		r4 := e2ethanos.NewReceiveBuilder(e, "4").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
 			Endpoints: []receive.Endpoint{
 				{Address: r1.InternalEndpoint("grpc")},
 				{Address: r2.InternalEndpoint("grpc")},
 				{Address: r3.InternalEndpoint("grpc")},
+				{Address: r4.InternalEndpoint("grpc")},
 			},
 		}
 
 		// Create with hashring config.
-		r1Runnable := r1.WithRouting(3, h).Init()
-		r2Runnable := r2.WithRouting(3, h).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable))
+		r1Runnable := r1.WithRouting(4, h).Init()
+		r2Runnable := r2.WithRouting(4, h).Init()
+		r4Runnable := r4.WithRouting(4, h).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r4Runnable))
 
 		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).Init()
+		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r4.InternalEndpoint("grpc")).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
@@ -653,6 +656,91 @@ test_metric{a="2", b="2"} 1`)
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "receive-2",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+		})
+	})
+
+	t.Run("sloppy_replication_with_outage", func(t *testing.T) {
+		t.Parallel()
+
+		e, err := e2e.New(e2e.WithName("slop-rep-out"))
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// The replication suite creates a three-node hashring but one of the
+		// receivers is dead. In this case, replication should still
+		// succeed and the time series should be replicated to the other nodes.
+
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().WithSloppyQuorum()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().WithSloppyQuorum()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().WithSloppyQuorum()
+		r4 := e2ethanos.NewReceiveBuilder(e, "4").WithIngestionEnabled().WithSloppyQuorum()
+
+		h := receive.HashringConfig{
+			Endpoints: []receive.Endpoint{
+				{Address: r1.InternalEndpoint("grpc")},
+				{Address: r2.InternalEndpoint("grpc")},
+				{Address: r3.InternalEndpoint("grpc")},
+				{Address: r4.InternalEndpoint("grpc")},
+			},
+		}
+
+		// Create with hashring config.
+		r1Runnable := r1.WithRouting(3, h).Init()
+		r2Runnable := r2.WithRouting(3, h).Init()
+		r4Runnable := r4.WithRouting(3, h).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r4Runnable))
+
+		prom1 := e2ethanos.NewPrometheus(
+			e,
+			"prom1",
+			e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r4.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget),
+			"",
+			e2ethanos.DefaultPrometheusImage(),
+		)
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
+
+		q := e2ethanos.NewQuerierBuilder(
+			e,
+			"querier1",
+			r1Runnable.InternalEndpoint("grpc"),
+			r2Runnable.InternalEndpoint("grpc"),
+			r4Runnable.InternalEndpoint("grpc"),
+		).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2emon.Equals(3),
+			[]string{"thanos_store_nodes_grpc_connections"},
+			e2emon.WaitMissingMetrics(),
+		))
+
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-1",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-2",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-4",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
