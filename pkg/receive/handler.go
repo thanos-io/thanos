@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -67,7 +66,7 @@ const (
 	labelSuccess = "success"
 	labelError   = "error"
 
-	metaLabelTenantID = model.MetaLabelPrefix + "tenant_id"
+	metaLabelTenantID = "thanos_tenant_id"
 )
 
 var (
