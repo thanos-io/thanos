@@ -531,7 +531,7 @@ func setupHashring(g *run.Group,
 					webHandler.Hashring(receive.SingleNodeHashring(conf.endpoint))
 					level.Info(logger).Log("msg", "Empty hashring config. Set up single node hashring.")
 				} else {
-					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c)
+					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c, conf.sloppyRetriesLimit)
 					if err != nil {
 						return errors.Wrap(err, "unable to create new hashring from config")
 					}

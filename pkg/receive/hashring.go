@@ -58,54 +58,10 @@ type Hashring interface {
 	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
 	// if, for example, the same address is used for multiple tenants in the multi-hashring.
 	Nodes() []string
-}
-
-// sloppyQuorumIterator is an iterator over the nodes in a hashring.
-// It excludes the node that is passed in to the constructor.
-type sloppyQuorumIterator struct {
-	nodes        map[int]string
-	currentNode  string
-	currentIndex int
-	self         string
-}
-
-// newSloppyQuorumIterator returns a new sloppyQuorumIterator.
-func newSloppyQuorumIterator(nodes []string, self string) *sloppyQuorumIterator {
-	if len(nodes) <= 1 {
-		panic("newSloppyQuorumIterator called with less than two nodes")
-	}
-	nl := &sloppyQuorumIterator{
-		nodes: make(map[int]string, len(nodes)),
-	}
-	foundSelf := false
-	for i, node := range nodes {
-		if node == self {
-			nl.currentIndex = i
-			nl.currentNode = node
-			foundSelf = true
-		}
-		nl.nodes[i] = node
-	}
-	if !foundSelf {
-		panic("self not found in nodes")
-	}
-	return nl
-}
-
-func (nl *sloppyQuorumIterator) current() string {
-	return nl.currentNode
-}
-
-// next returns the next node in the iterator.
-func (nl *sloppyQuorumIterator) next() {
-	// find the next element that is not self
-	for {
-		nl.currentIndex = (nl.currentIndex + 1) % len(nl.nodes)
-		nl.currentNode = nl.nodes[nl.currentIndex]
-		if nl.currentNode != nl.self {
-			return
-		}
-	}
+	// TODO: implement this for all types of hashrings. Then use it to implement sloppy quorum like so:
+	// Create a slice of the hashring removing all the nodes that already received the data. Send the series there.
+	// SliceWithout returns a new hashring without the given node.
+	SliceWithout(nodes []string) (Hashring, error)
 }
 
 // SingleNodeHashring always returns the same node.
@@ -128,8 +84,14 @@ func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (stri
 	return string(s), nil
 }
 
+func (s SingleNodeHashring) SliceWithout(nodes []string) (Hashring, error) {
+	return s, nil
+}
+
 // simpleHashring represents a group of nodes handling write requests by hashmoding individual series.
-type simpleHashring []string
+type simpleHashring struct {
+	nodes []string
+}
 
 func newSimpleHashring(endpoints []Endpoint) (Hashring, error) {
 	addresses := make([]string, len(endpoints))
@@ -141,11 +103,11 @@ func newSimpleHashring(endpoints []Endpoint) (Hashring, error) {
 	}
 	sort.Strings(addresses)
 
-	return simpleHashring(addresses), nil
+	return simpleHashring{nodes: addresses}, nil
 }
 
 func (s simpleHashring) Nodes() []string {
-	return s
+	return s.nodes
 }
 
 // Get returns a target to handle the given tenant and time series.
@@ -155,11 +117,28 @@ func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error
 
 // GetN returns the nth target to handle the given tenant and time series.
 func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
-	if n >= uint64(len(s)) {
-		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
+	if n >= uint64(len(s.nodes)) {
+		return "", &insufficientNodesError{have: uint64(len(s.nodes)), want: n + 1}
 	}
 
-	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
+	return s.nodes[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s.nodes))], nil
+}
+
+func (s simpleHashring) SliceWithout(deniedNodes []string) (Hashring, error) {
+	deniedNodeSet := make(map[string]struct{}, len(deniedNodes))
+	for _, n := range deniedNodes {
+		deniedNodeSet[n] = struct{}{}
+	}
+
+	newNodes := make([]string, 0, len(s.nodes)-len(deniedNodes))
+	for _, oldNode := range s.nodes {
+		if _, ok := deniedNodeSet[oldNode]; ok {
+			continue
+		}
+		newNodes = append(newNodes, oldNode)
+	}
+
+	return simpleHashring{nodes: newNodes}, nil
 }
 
 type section struct {
@@ -222,6 +201,34 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 		numEndpoints: uint64(len(endpoints)),
 		nodes:        nodes,
 	}, nil
+}
+
+func (k *ketamaHashring) SliceWithout(nodes []string) (Hashring, error) {
+	nodeSet := make(map[string]struct{}, len(nodes))
+	for _, n := range nodes {
+		nodeSet[n] = struct{}{}
+	}
+
+	newNodes := make([]string, len(k.nodes)-1)
+	for i, n := range k.nodes {
+		if _, ok := nodeSet[n]; ok {
+			continue
+		}
+		newNodes[i] = n
+	}
+
+	newEndpoints := make([]Endpoint, len(k.endpoints)-1)
+	for i, e := range k.endpoints {
+		if _, ok := nodeSet[e.Address]; ok {
+			continue
+		}
+		newEndpoints[i] = e
+	}
+
+	oldSectionsPerNode := len(k.sections) / len(k.endpoints)
+	replicationFactor := uint64(len(k.sections[0].replicas))
+
+	return newKetamaHashring(newEndpoints, oldSectionsPerNode, replicationFactor)
 }
 
 func (k *ketamaHashring) Nodes() []string {
@@ -342,6 +349,29 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 	return "", errors.New("no matching hashring to handle tenant")
 }
 
+// TODO: review this code one more time. Not sure about it.
+func (m *multiHashring) SliceWithout(nodes []string) (Hashring, error) {
+	var newHashrings []Hashring
+	var newTenantSets []map[string]struct{}
+	var newNodes []string
+	for i, h := range m.hashrings {
+		newHashring, err := h.SliceWithout(nodes)
+		if err != nil {
+			return nil, err
+		}
+		newHashrings = append(newHashrings, newHashring)
+		newTenantSets = append(newTenantSets, m.tenantSets[i])
+		newNodes = append(newNodes, newHashring.Nodes()...)
+	}
+	sort.Strings(newNodes)
+	return &multiHashring{
+		cache:      make(map[string]Hashring),
+		hashrings:  newHashrings,
+		tenantSets: newTenantSets,
+		nodes:      newNodes,
+	}, nil
+}
+
 func (m *multiHashring) Nodes() []string {
 	return m.nodes
 }
@@ -350,7 +380,7 @@ func (m *multiHashring) Nodes() []string {
 // groups.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
-func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig) (Hashring, error) {
+func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig, sloppyRetriesLimit int) (Hashring, error) {
 	m := &multiHashring{
 		cache: make(map[string]Hashring),
 	}
@@ -362,7 +392,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		if h.Algorithm != "" {
 			activeAlgorithm = h.Algorithm
 		}
-		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
+		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants, sloppyRetriesLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -381,7 +411,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 	return m, nil
 }
 
-func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string) (Hashring, error) {
+func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string, sloppyRetriesLimit int) (Hashring, error) {
 	switch algorithm {
 	case AlgorithmHashmod:
 		return newSimpleHashring(endpoints)

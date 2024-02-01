@@ -139,7 +139,7 @@ func TestHashringGet(t *testing.T) {
 			},
 		},
 	} {
-		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
+		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg, 0)
 		require.NoError(t, err)
 
 		h, err := hs.Get(tc.tenant, ts)
@@ -231,7 +231,7 @@ func TestKetamaHashringGet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			hashRing, err := newKetamaHashring(test.endpoints, 10, test.n+1)
+			hashRing, err := newKetamaHashring(test.endpoints, 10, test.n+1, 0)
 			require.NoError(t, err)
 
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
@@ -242,7 +242,7 @@ func TestKetamaHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringBadConfigIsRejected(t *testing.T) {
-	_, err := newKetamaHashring([]Endpoint{{Address: "node-1"}}, 1, 2)
+	_, err := newKetamaHashring([]Endpoint{{Address: "node-1"}}, 1, 2, 0)
 	require.Error(t, err)
 }
 
@@ -445,7 +445,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas)
+			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas, 0)
 			testutil.Ok(t, err)
 
 			availableAzs := make(map[string]int64)
@@ -548,7 +548,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas)
+			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas, 0)
 			testutil.Ok(t, err)
 			optimalSpread := int(tt.numSeries*tt.replicas) / len(tt.nodes)
 			nodeSpread := make(map[string]int)
@@ -586,7 +586,7 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
+			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg, 0)
 			require.EqualError(t, err, tt.expectedError)
 		})
 	}
@@ -625,7 +625,7 @@ func assignSeries(series []prompb.TimeSeries, nodes []Endpoint) (map[string][]pr
 }
 
 func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]prompb.TimeSeries, error) {
-	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas)
+	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas, 0)
 	if err != nil {
 		return nil, err
 	}

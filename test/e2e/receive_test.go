@@ -669,14 +669,15 @@ test_metric{a="2", b="2"} 1`)
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-		// The replication suite creates a three-node hashring but one of the
+		// The replication suite creates a four node hashring but one of the
 		// receivers is dead. In this case, replication should still
-		// succeed and the time series should be replicated to the other nodes.
+		// succeed to 100% and the time series should be replicated to the other nodes.
 
 		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().WithSloppyQuorum()
 		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().WithSloppyQuorum()
 		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().WithSloppyQuorum()
 		r4 := e2ethanos.NewReceiveBuilder(e, "4").WithIngestionEnabled().WithSloppyQuorum()
+		r5 := e2ethanos.NewReceiveBuilder(e, "5").WithIngestionEnabled().WithSloppyQuorum()
 
 		h := receive.HashringConfig{
 			Endpoints: []receive.Endpoint{
@@ -684,6 +685,7 @@ test_metric{a="2", b="2"} 1`)
 				{Address: r2.InternalEndpoint("grpc")},
 				{Address: r3.InternalEndpoint("grpc")},
 				{Address: r4.InternalEndpoint("grpc")},
+				{Address: r5.InternalEndpoint("grpc")},
 			},
 		}
 
@@ -691,12 +693,18 @@ test_metric{a="2", b="2"} 1`)
 		r1Runnable := r1.WithRouting(3, h).Init()
 		r2Runnable := r2.WithRouting(3, h).Init()
 		r4Runnable := r4.WithRouting(3, h).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r4Runnable))
+		r5Runnable := r5.WithRouting(3, h).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(
+			r1Runnable,
+			r2Runnable,
+			r4Runnable,
+			r5Runnable,
+		))
 
 		prom1 := e2ethanos.NewPrometheus(
 			e,
 			"prom1",
-			e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r4.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget),
+			e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget),
 			"",
 			e2ethanos.DefaultPrometheusImage(),
 		)
@@ -708,6 +716,7 @@ test_metric{a="2", b="2"} 1`)
 			r1Runnable.InternalEndpoint("grpc"),
 			r2Runnable.InternalEndpoint("grpc"),
 			r4Runnable.InternalEndpoint("grpc"),
+			r5Runnable.InternalEndpoint("grpc"),
 		).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -715,7 +724,7 @@ test_metric{a="2", b="2"} 1`)
 		t.Cleanup(cancel)
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2emon.Equals(3),
+			e2emon.Equals(4),
 			[]string{"thanos_store_nodes_grpc_connections"},
 			e2emon.WaitMissingMetrics(),
 		))

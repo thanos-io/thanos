@@ -13,6 +13,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -704,7 +705,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	}
 	requestLogger := log.With(h.logger, logTags...)
 
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(ctx, params.tenant, params.replicas, params.writeRequest.Timeseries)
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(ctx, params.tenant, params.replicas, params.writeRequest.Timeseries, nil)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return err
@@ -743,10 +744,8 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	}
 	successes := make([]int, len(params.writeRequest.Timeseries))
 	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
-	usedEndpoints := make(map[endpointReplica]struct{}, len(h.hashring.Nodes()))
-	for i := 0; i < int(h.options.ReplicationFactor); i++ {
-		usedEndpoints[endpointReplica{endpoint: h.options.Endpoint, replica: uint64(i)}] = struct{}{}
-	}
+	usedEndpoints := make([]string, 0, len(h.hashring.Nodes()))
+	usedEndpoints = append(usedEndpoints, h.options.Endpoint)
 	for {
 		select {
 		case <-ctx.Done():
@@ -758,37 +757,45 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 				}
 				return writeErrors.ErrOrNil()
 			}
+			if !slices.Contains(usedEndpoints, resp.er.endpoint) {
+				usedEndpoints = append(usedEndpoints, resp.er.endpoint)
+			}
 
 			if resp.err != nil {
-				if h.sloppyQuorum && h.sloppyRetriesLimit > 0 && resp.retryNumber < int(h.options.ReplicationFactor) {
-					_, ok := localWrites[resp.er]
-					if ok {
-						level.Debug(requestLogger).Log("msg", "skipping failed local write")
-						continue
-					}
-
-					chosenWrite, ok := remoteWrites[resp.er]
-					if !ok {
-						panic("couldn't find the remote write that failed")
-					}
-
-					newEndpoint, err := findNewSlipDest(h.hashring, params.tenant, &chosenWrite.timeSeries[0], resp.er.replica+uint64(resp.retryNumber)+1, usedEndpoints)
+				if h.sloppyQuorum && h.sloppyRetriesLimit > 0 && resp.retryNumber < h.options.SloppyRetriesLimit {
+					level.Debug(requestLogger).Log(
+						"msg", "failed request slipping",
+						"retryNumber", resp.retryNumber,
+						"replica", resp.er.replica,
+						"usedEndpoints", fmt.Sprintf("%v", usedEndpoints),
+						"self", h.options.Endpoint,
+					)
+					subHashring, err := h.hashring.SliceWithout(usedEndpoints)
 					if err != nil {
-						level.Error(requestLogger).Log("msg", "failed to get next endpoint", "err", err)
-						for _, seriesID := range resp.seriesIDs {
-							seriesErrs[seriesID].Add(resp.err)
-						}
-						wg.Done()
+						level.Error(requestLogger).Log("msg", "failed to create sub hashring", "err", err)
 						continue
 					}
-					level.Debug(requestLogger).Log("msg", "failed request slipping", "retryNumber", resp.retryNumber, "replica", resp.er.replica, "self", h.options.Endpoint, "orig", resp.er.endpoint, "next", newEndpoint, "err", resp.err)
-					newEndpointReplica := endpointReplica{endpoint: newEndpoint, replica: resp.er.replica}
+					// TODO: what should we do in this case?
+					if len(subHashring.Nodes()) == 0 {
+						level.Error(requestLogger).Log("msg", "sub hashring is empty, can't slip")
+						continue
+					}
+					localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(ctx, params.tenant, []uint64{resp.er.replica}, params.writeRequest.Timeseries, subHashring)
+					// TODO: what should we do in this case?
+					if err != nil {
+						level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
+						continue
+					}
+					// This should never happen!
+					if len(localWrites) > 0 {
+						level.Warn(requestLogger).Log("msg", "got a few local writes, but shouldn't... investigate!", "localWriteCount", len(localWrites))
+					}
+					for i, write := range remoteWrites {
+						write.retryNumber += 1
+						remoteWrites[i] = write
+					}
 					ctx = context.WithValue(ctx, sloppyQuorumContextKey{}, true)
-					h.sendRemoteWrite(ctx, params.tenant, newEndpointReplica, trackedSeries{
-						seriesIDs:   resp.seriesIDs,
-						retryNumber: resp.retryNumber + 1,
-						timeSeries:  remoteWrites[resp.er].timeSeries,
-					}, params.alreadyReplicated, responses)
+					h.sendWrites(ctx, params, localWrites, remoteWrites, responses)
 					continue
 				}
 				// Track errors and successes on a per-series basis.
@@ -798,8 +805,8 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 				wg.Done()
 				continue
 			}
-			usedEndpoints[resp.er] = struct{}{}
 			wg.Done()
+			level.Debug(requestLogger).Log("msg", "request succeeded", "endpoint", resp.er.endpoint, "replica", resp.er.replica)
 			// At the end, aggregate all errors if there are any and return them.
 			for _, seriesID := range resp.seriesIDs {
 				successes[seriesID]++
@@ -820,7 +827,12 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	tenant string,
 	replicas []uint64,
 	timeseries []prompb.TimeSeries,
+	overrideHashring Hashring,
 ) (map[endpointReplica]trackedSeries, map[endpointReplica]trackedSeries, error) {
+	hashring := h.hashring
+	if overrideHashring != nil {
+		hashring = overrideHashring
+	}
 	sloppyQuorum, _ := ctx.Value(sloppyQuorumContextKey{}).(bool)
 	level.Debug(h.logger).Log("msg", "distributing timeseries to replicas", "sloppy_quorum", sloppyQuorum, "replicas", fmt.Sprintf("%v", replicas))
 
@@ -829,8 +841,9 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	remoteWrites := make(map[endpointReplica]trackedSeries)
 	localWrites := make(map[endpointReplica]trackedSeries)
 
-	// If we are handling a sloppy quorum remote write request, we only need to write to the local node.
-	if sloppyQuorum {
+	// If we only have 1 replica, the original request has been already replicated.
+	// This means we are the final write destination.
+	if len(replicas) == 1 {
 		endpointReplica := endpointReplica{endpoint: h.options.Endpoint, replica: replicas[0]}
 		seriesIDs := make([]int, 0, len(timeseries))
 		for i := range timeseries {
@@ -845,7 +858,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 
 	for tsIndex, ts := range timeseries {
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := hashring.GetN(tenant, &ts, rn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -910,10 +923,10 @@ func (h *Handler) sendLocalWrite(
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
-		responses <- newWriteResponse(trackedSeries.seriesIDs, 0, err, writeDestination)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, trackedSeries.retryNumber, err, writeDestination)
 		return
 	}
-	responses <- newWriteResponse(trackedSeries.seriesIDs, 0, nil, writeDestination)
+	responses <- newWriteResponse(trackedSeries.seriesIDs, trackedSeries.retryNumber, nil, writeDestination)
 }
 
 // sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not

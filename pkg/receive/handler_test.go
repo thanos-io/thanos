@@ -234,7 +234,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		hashringAlgo = AlgorithmHashmod
 	}
 
-	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg)
+	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg, 0)
 	if err != nil {
 		return nil, nil, err
 	}
