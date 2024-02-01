@@ -641,14 +641,6 @@ func (h *Handler) forward(ctx context.Context, tenantHTTP string, r replica, wre
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
-	// It is possible that hashring is ready in testReady() but unready now,
-	// so need to lock here.
-	h.mtx.RLock()
-	if h.hashring == nil {
-		h.mtx.RUnlock()
-		return errors.New("hashring is not ready")
-	}
-
 	var replicas []uint64
 	if r.replicated {
 		replicas = []uint64{r.n}
