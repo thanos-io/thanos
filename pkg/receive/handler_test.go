@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -1663,4 +1664,80 @@ func TestHandlerEarlyStop(t *testing.T) {
 	err := h.Run()
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "http: Server closed", err.Error())
+}
+
+func TestHandlerFlippingHashrings(t *testing.T) {
+	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
+	t.Cleanup(h.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	h1, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9090",
+		},
+	})
+	require.NoError(t, err)
+	h2, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9091",
+		},
+	})
+	require.NoError(t, err)
+
+	h.Hashring(h1)
+
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-time.After(50 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+
+			err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+						Samples: []prompb.Sample{
+							{
+								Timestamp: time.Now().Unix(),
+								Value:     123,
+							},
+						},
+					},
+				},
+			})
+			require.Error(t, err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var flipper bool
+
+		for {
+			select {
+			case <-time.After(200 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+
+			if flipper {
+				h.Hashring(h2)
+			} else {
+				h.Hashring(h1)
+			}
+			flipper = !flipper
+		}
+	}()
+
+	<-time.After(1 * time.Second)
+	cancel()
+	wg.Wait()
 }
