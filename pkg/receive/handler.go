@@ -697,7 +697,6 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 	maxBufferedResponses := len(localWrites) + len(remoteWrites)
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := sync.WaitGroup{}
-	wg.Add(len(remoteWrites))
 
 	h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
 
@@ -763,11 +762,11 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	tenantHTTP string,
 	replicas []uint64,
 	timeseries []prompb.TimeSeries,
-) (map[endpointReplica]trackedSeries, map[endpointReplica]trackedSeries, error) {
+) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
-	remoteWrites := make(map[endpointReplica]trackedSeries)
-	localWrites := make(map[endpointReplica]trackedSeries)
+	remoteWrites := make(map[endpointReplica]map[string]trackedSeries)
+	localWrites := make(map[endpointReplica]map[string]trackedSeries)
 	for tsIndex, ts := range timeseries {
 		var tenant = tenantHTTP
 
@@ -796,14 +795,19 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			}
 			writeableSeries, ok := writeDestination[endpointReplica]
 			if !ok {
-				writeableSeries = trackedSeries{
-					seriesIDs:  make([]int, 0),
-					timeSeries: make([]prompb.TimeSeries, 0),
+				writeDestination[endpointReplica] = map[string]trackedSeries{
+					tenant: {
+						seriesIDs:  make([]int, 0),
+						timeSeries: make([]prompb.TimeSeries, 0),
+					},
 				}
 			}
-			writeableSeries.timeSeries = append(writeDestination[endpointReplica].timeSeries, ts)
-			writeableSeries.seriesIDs = append(writeDestination[endpointReplica].seriesIDs, tsIndex)
-			writeDestination[endpointReplica] = writeableSeries
+			tenantSeries := writeableSeries[tenant]
+
+			tenantSeries.timeSeries = append(tenantSeries.timeSeries, ts)
+			tenantSeries.seriesIDs = append(tenantSeries.seriesIDs, tsIndex)
+
+			writeDestination[endpointReplica][tenant] = tenantSeries
 		}
 	}
 	return localWrites, remoteWrites, nil
@@ -815,20 +819,26 @@ func (h *Handler) sendWrites(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	params remoteWriteParams,
-	localWrites map[endpointReplica]trackedSeries,
-	remoteWrites map[endpointReplica]trackedSeries,
+	localWrites map[endpointReplica]map[string]trackedSeries,
+	remoteWrites map[endpointReplica]map[string]trackedSeries,
 	responses chan writeResponse,
 ) {
 	// Do the writes to the local node first. This should be easy and fast.
 	for writeDestination := range localWrites {
 		func(writeDestination endpointReplica) {
-			h.sendLocalWrite(ctx, writeDestination, params.tenantHTTP, localWrites[writeDestination], responses)
+			for tenant, trackedSeries := range localWrites[writeDestination] {
+				h.sendLocalWrite(ctx, writeDestination, tenant, trackedSeries, responses)
+			}
 		}(writeDestination)
 	}
 
 	// Do the writes to remote nodes. Run them all in parallel.
 	for writeDestination := range remoteWrites {
-		h.sendRemoteWrite(ctx, params.tenantHTTP, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses, wg)
+		for tenant, trackedSeries := range remoteWrites[writeDestination] {
+			wg.Add(1)
+
+			h.sendRemoteWrite(ctx, tenant, writeDestination, trackedSeries, params.alreadyReplicated, responses, wg)
+		}
 	}
 }
 
