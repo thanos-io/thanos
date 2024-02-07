@@ -19,6 +19,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#7123](https://github.com/thanos-io/thanos/pull/7123) Rule: Change default Alertmanager API version to v2.
+
 ### Removed
 
 ## [v0.34.0](https://github.com/thanos-io/thanos/tree/release-0.34) - 26.01.24
