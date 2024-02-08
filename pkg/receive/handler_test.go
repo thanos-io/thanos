@@ -1745,7 +1745,7 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 				return
 			}
 
-			err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
+			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
 				Timeseries: []prompb.TimeSeries{
 					{
 						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
