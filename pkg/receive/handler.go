@@ -1454,7 +1454,7 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	}
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
-		p.markPeerUnavailable(addr)
+		p.markPeerUnavailableUnlocked(addr)
 		dialError := errors.Wrap(err, "failed to dial peer")
 		return nil, errors.Wrap(dialError, errUnavailable.Error())
 	}
@@ -1467,6 +1467,10 @@ func (p *peerGroup) markPeerUnavailable(addr string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
+	p.markPeerUnavailableUnlocked(addr)
+}
+
+func (p *peerGroup) markPeerUnavailableUnlocked(addr string) {
 	state, ok := p.peerStates[addr]
 	if !ok {
 		state = &retryState{attempt: -1}
