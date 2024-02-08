@@ -14,7 +14,6 @@ import (
 	"math"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -737,7 +736,7 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err error) {
 	var dir string
 	if s.dir != "" {
-		dir = filepath.Join(s.dir, meta.ULID.String())
+		dir = path.Join(s.dir, meta.ULID.String())
 	}
 	start := time.Now()
 
