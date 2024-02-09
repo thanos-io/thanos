@@ -67,7 +67,7 @@ func DefaultAlertmanagerConfig() AlertmanagerConfig {
 			FileSDConfigs:   []clientconfig.HTTPFileSDConfig{},
 		},
 		Timeout:    model.Duration(time.Second * 10),
-		APIVersion: APIv1,
+		APIVersion: APIv2,
 	}
 }
 
@@ -136,7 +136,7 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 			StaticAddresses: []string{host},
 		},
 		Timeout:    model.Duration(timeout),
-		APIVersion: APIv1,
+		APIVersion: APIv2,
 	}, nil
 }
 
