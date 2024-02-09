@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 var (
@@ -67,7 +68,7 @@ type HashringConfig struct {
 	Tenants        []string          `json:"tenants,omitempty"`
 	Endpoints      []Endpoint        `json:"endpoints"`
 	Algorithm      HashringAlgorithm `json:"algorithm,omitempty"`
-	ExternalLabels map[string]string `json:"external_labels,omitempty"`
+	ExternalLabels labels.Labels     `json:"external_labels,omitempty"`
 }
 
 // ConfigWatcher is able to watch a file containing a hashring configuration
