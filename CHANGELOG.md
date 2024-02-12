@@ -17,6 +17,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#7118](https://github.com/thanos-io/thanos/pull/7118) Store Gateway: Added `--store.index-header-lazy-reader-idle-delete-timeout` to periodically delete idle index header files, when lazy reader is enabled and idle timeout for unloading is set > 0.
+
 ### Changed
 
 - [#7123](https://github.com/thanos-io/thanos/pull/7123) Rule: Change default Alertmanager API version to v2.
