@@ -344,7 +344,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	level.Debug(r.logger).Log("Executed query", "query", r.qs, "time", time.Since(start))
+	level.Debug(r.logger).Log("msg", "Executed query", "query", r.qs, "time", time.Since(start))
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }
