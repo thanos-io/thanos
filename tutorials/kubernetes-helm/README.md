@@ -5,7 +5,7 @@ helm upgrade --version="25.11.0" --install --namespace="my-lovely-namespace" --v
 ```
 
 Please note that you need to replace the two placeholders in the values: `BUCKET_REPLACE_ME` and `CLUSTER_NAME`.
-It's also mandatory to create a secret for the sidecar to access the object storage bucket. 
+It's also mandatory to create a secret for the sidecar to access the object storage bucket.
 In the example below, `GCS` is used and for that a secret with name `thanos-storage-secret` got manually created and used in here.
 
 A more detailed documentation about the different values can be found on the [helm chart repository](https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus).
