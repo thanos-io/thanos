@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
-
+	"github.com/pkg/errors"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/objstore/providers/filesystem"
@@ -317,6 +317,185 @@ func TestLazyBinaryReader_LoadUnloadRaceCondition(t *testing.T) {
 			}()
 
 			// Wait until both goroutines have done.
+			wg.Wait()
+		})
+	}
+}
+
+func TestLazyBinaryReader_delete_ShouldReturnErrorIfNotIdle(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	// Create block.
+	blockID, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+		labels.FromStrings("a", "1"),
+		labels.FromStrings("a", "2"),
+	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+
+	for _, lazyDownload := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lazyDownload=%v", lazyDownload), func(t *testing.T) {
+			m := NewLazyBinaryReaderMetrics(nil)
+			bm := NewBinaryReaderMetrics(nil)
+			r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, lazyDownload)
+			testutil.Ok(t, err)
+			testutil.Assert(t, r.reader == nil)
+
+			indexHeaderFile := filepath.Join(r.dir, r.id.String(), block.IndexHeaderFilename)
+
+			// Should lazy load the index upon first usage.
+			labelNames, err := r.LabelNames()
+			testutil.Ok(t, err)
+			testutil.Equals(t, []string{"a"}, labelNames)
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteFailedCount))
+			// Index header file is present
+			f, err := os.Stat(indexHeaderFile)
+			testutil.Ok(t, err)
+			testutil.Assert(t, f != nil)
+
+			// Try to unload (not enough time) and delete (not enough time).
+			testutil.Equals(t, errNotIdle, r.unloadIfIdleSince(time.Now().Add(-time.Minute).UnixNano()))
+			testutil.Equals(t, errLoadedForDelete, r.deleteIfIdleSince(time.Now().Add(-time.Minute).UnixNano()))
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteFailedCount))
+			// Index header file is present
+			f, err = os.Stat(indexHeaderFile)
+			testutil.Ok(t, err)
+			testutil.Assert(t, f != nil)
+
+			// Try to unload (enough time) and delete (not enough time).
+			testutil.Ok(t, r.unloadIfIdleSince(time.Now().UnixNano()))
+			testutil.Equals(t, errNotIdleForDelete, r.deleteIfIdleSince(time.Now().Add(-time.Minute).UnixNano()))
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.unloadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteFailedCount))
+			// Index header file is present
+			f, err = os.Stat(indexHeaderFile)
+			testutil.Ok(t, err)
+			testutil.Assert(t, f != nil)
+
+			// Try to delete (enough time).
+			testutil.Ok(t, r.deleteIfIdleSince(time.Now().UnixNano()))
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.unloadCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
+			testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.deleteCount))
+			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.deleteFailedCount))
+			// Index header file is present
+			f, err = os.Stat(indexHeaderFile)
+			testutil.NotOk(t, err)
+			testutil.Assert(t, f == nil)
+		})
+	}
+}
+
+func TestLazyBinaryReader_LoadUnloadDeleteRaceCondition(t *testing.T) {
+	// Run the test for a fixed amount of time.
+	const runDuration = 5 * time.Second
+
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	// Create block.
+	blockID, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+		labels.FromStrings("a", "1"),
+		labels.FromStrings("a", "2"),
+	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+
+	for _, lazyDownload := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lazyDownload=%v", lazyDownload), func(t *testing.T) {
+			m := NewLazyBinaryReaderMetrics(nil)
+			bm := NewBinaryReaderMetrics(nil)
+			r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, bm, nil, lazyDownload)
+			testutil.Ok(t, err)
+			testutil.Assert(t, r.reader == nil)
+			t.Cleanup(func() {
+				testutil.Ok(t, r.Close())
+			})
+
+			done := make(chan struct{})
+			time.AfterFunc(runDuration, func() { close(done) })
+			wg := sync.WaitGroup{}
+			if lazyDownload {
+				wg.Add(3)
+			} else {
+				wg.Add(2)
+			}
+
+			// Start a goroutine which continuously try to unload the reader.
+			go func() {
+				defer wg.Done()
+
+				for {
+					select {
+					case <-done:
+						return
+					default:
+						testutil.Ok(t, r.unloadIfIdleSince(0))
+					}
+				}
+			}()
+
+			if lazyDownload {
+				// Start a goroutine which continuously try to delete the index header.
+				go func() {
+					defer wg.Done()
+
+					for {
+						select {
+						case <-done:
+							return
+						default:
+							err := r.deleteIfIdleSince(0)
+							testutil.Ok(t, r.unloadIfIdleSince(0))
+							testutil.Assert(t, err == nil || err == errLoadedForDelete || errors.Is(err, os.ErrNotExist))
+						}
+					}
+				}()
+			}
+
+			// Try to read multiple times, while the other goroutines continuously try to unload and delete it.
+			go func() {
+				defer wg.Done()
+
+				for {
+					select {
+					case <-done:
+						return
+					default:
+						_, err := r.PostingsOffset("a", "1")
+						testutil.Assert(t, err == nil || err == errUnloadedWhileLoading)
+					}
+				}
+			}()
+
+			// Wait until all goroutines have done.
 			wg.Wait()
 		})
 	}
