@@ -65,6 +65,7 @@ func (e *Endpoint) UnmarshalJSON(data []byte) error {
 type HashringConfig struct {
 	Hashring       string            `json:"hashring,omitempty"`
 	Tenants        []string          `json:"tenants,omitempty"`
+	Glob           bool              `json:"glob,omitempty"`
 	Endpoints      []Endpoint        `json:"endpoints"`
 	Algorithm      HashringAlgorithm `json:"algorithm,omitempty"`
 	ExternalLabels map[string]string `json:"external_labels,omitempty"`
