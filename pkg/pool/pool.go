@@ -17,6 +17,12 @@ type Bytes interface {
 	Put(b *[]byte)
 }
 
+type UsageAwareBytes interface {
+	Bytes
+	// UsedBytes returns the number of bytes currently in use.
+	UsedBytes() uint64
+}
+
 // NoopBytes is pool that always allocated required slice on heap and ignore puts.
 type NoopBytes struct{}
 
@@ -38,6 +44,12 @@ type BucketedBytes struct {
 	mtx       sync.Mutex
 
 	new func(s int) *[]byte
+}
+
+func (p *BucketedBytes) UsedBytes() uint64 {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	return p.usedTotal
 }
 
 // MustNewBucketedBytes is like NewBucketedBytes but panics if construction fails.
