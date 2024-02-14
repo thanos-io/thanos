@@ -6,6 +6,7 @@ package receive
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -249,7 +250,7 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 type multiHashring struct {
 	cache      map[string]Hashring
 	hashrings  []Hashring
-	tenantSets []map[string]struct{}
+	tenantSets []map[string]bool
 
 	// We need a mutex to guard concurrent access
 	// to the cache map, as this is both written to
@@ -280,8 +281,23 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		// considered a default hashring and matches everything.
 		if t == nil {
 			found = true
-		} else if _, ok := t[tenant]; ok {
-			found = true
+		} else {
+			// Fast path for the common case of direct match.
+			if glob, ok := t[tenant]; ok && !glob {
+				found = true
+			} else {
+				for tenantPattern, glob := range t {
+					if !glob {
+						continue
+					}
+					matches, err := filepath.Match(tenantPattern, tenant)
+					if err != nil {
+						return "", fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
+					}
+					found = matches
+				}
+			}
+
 		}
 		if found {
 			m.mu.Lock()
@@ -320,12 +336,12 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		}
 		m.nodes = append(m.nodes, hashring.Nodes()...)
 		m.hashrings = append(m.hashrings, hashring)
-		var t map[string]struct{}
+		var t map[string]bool
 		if len(h.Tenants) != 0 {
-			t = make(map[string]struct{})
+			t = make(map[string]bool)
 		}
 		for _, tenant := range h.Tenants {
-			t[tenant] = struct{}{}
+			t[tenant] = h.Glob
 		}
 		m.tenantSets = append(m.tenantSets, t)
 	}
