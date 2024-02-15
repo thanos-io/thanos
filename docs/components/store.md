@@ -30,7 +30,7 @@ Azure, Swift, Tencent COS and Aliyun OSS.
 
 Flags:
       --block-discovery-strategy="concurrent"
-                                 One ofconcurrent, recursive. When set to
+                                 One of concurrent, recursive. When set to
                                  concurrent, stores will concurrently issue
                                  one call per directory to discover active
                                  blocks in the bucket. The recursive strategy

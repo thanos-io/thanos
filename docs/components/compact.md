@@ -280,7 +280,7 @@ Continuously compacts blocks in an object store bucket.
 
 Flags:
       --block-discovery-strategy="concurrent"
-                                One ofconcurrent, recursive. When set to
+                                One of concurrent, recursive. When set to
                                 concurrent, stores will concurrently issue
                                 one call per directory to discover active
                                 blocks in the bucket. The recursive strategy
