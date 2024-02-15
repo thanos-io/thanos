@@ -47,18 +47,22 @@ type FetcherMetrics struct {
 
 	Synced   *extprom.TxGaugeVec
 	Modified *extprom.TxGaugeVec
+
+	SyncedByTenant *extprom.TxGaugeVec
 }
 
 // Submit applies new values for metrics tracked by transaction GaugeVec.
 func (s *FetcherMetrics) Submit() {
 	s.Synced.Submit()
 	s.Modified.Submit()
+	s.SyncedByTenant.Submit()
 }
 
 // ResetTx starts new transaction for metrics tracked by transaction GaugeVec.
 func (s *FetcherMetrics) ResetTx() {
 	s.Synced.ResetTx()
 	s.Modified.ResetTx()
+	s.SyncedByTenant.ResetTx()
 }
 
 const (
@@ -86,6 +90,9 @@ const (
 
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
+
+	tenantLabel = "__tenant__"
+	defautTenant = "__unkown__"
 )
 
 func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExtraLabels [][]string) *FetcherMetrics {
@@ -139,6 +146,16 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 		append([][]string{
 			{replicaRemovedMeta},
 		}, modifiedExtraLabels...)...,
+	)
+	m.SyncedByTenant = extprom.NewTxGaugeVec(
+		reg,
+		prometheus.GaugeOpts{
+			Subsystem: fetcherSubSys,
+			Name:      "synced_by_tenant",
+			Help:      "Number of metadata blocks synced broken down by tenant",
+		},
+		[]string{"tenant"},
+		// No init label values is fine. The only downside is those guages won't be reset to 0, but it's fine for the use case.
 	)
 	return &m
 }
@@ -470,10 +487,20 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	}
 	resp := v.(response)
 
+	numBlocksByTenant := map[string]int{}
 	// Copy as same response might be reused by different goroutines.
 	metas := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
 	for id, m := range resp.metas {
 		metas[id] = m
+		if tenant, ok := m.Thanos.Labels[tenantLabel]; ok {
+			numBlocksByTenant[tenant]++
+		} else {
+			numBlocksByTenant[defautTenant]++
+		}
+	}
+
+	for tenant, numBlocks := range numBlocksByTenant {
+		metrics.SyncedByTenant.WithLabelValues(tenant).Set(float64(numBlocks))
 	}
 
 	metrics.Synced.WithLabelValues(FailedMeta).Set(float64(len(resp.metaErrs)))
