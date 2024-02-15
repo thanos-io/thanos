@@ -902,7 +902,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			testutil.Ok(tt, err)
 
 			insBkt := objstore.WithNoopInstr(bkt)
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 			metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 			})

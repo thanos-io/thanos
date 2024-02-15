@@ -74,7 +74,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		r := prometheus.NewRegistry()
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := NewBaseBlockIDsFetcher(noopLogger, insBkt)
+		baseBlockIDsFetcher := NewConcurrentLister(noopLogger, insBkt)
 		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
 		testutil.Ok(t, err)
 

@@ -246,7 +246,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 				uploadMockBlock(t, bkt, b.id, b.minTime, b.maxTime, int64(b.resolution))
 			}
 
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
 			metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, baseBlockIDsFetcher, "", nil, nil)
 			testutil.Ok(t, err)
 
