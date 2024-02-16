@@ -22,7 +22,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
-	e2emon "github.com/efficientgo/e2e/monitoring"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"gopkg.in/yaml.v2"
 )
 
@@ -44,7 +44,7 @@ func TestJaegerTracing(t *testing.T) {
 			Image:     "jaegertracing/all-in-one:1.33",
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
-	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	newJaeger := e2eobs.AsObservable(newJaegerRunnable, "http.admin")
 	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
 
 	jaegerConfig, err := yaml.Marshal(client.TracingConfig{

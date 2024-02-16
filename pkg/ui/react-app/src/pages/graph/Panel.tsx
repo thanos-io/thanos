@@ -17,9 +17,9 @@ import {
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
-
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
+import { ExplainTree } from './ExpressionInput';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -43,9 +43,11 @@ export interface PanelProps {
   stores: Store[];
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
+  usePartialResponse: boolean;
   enableLinter: boolean;
   defaultStep: string;
   defaultEngine: string;
+  onUsePartialResponseChange: (value: boolean) => void;
 }
 
 interface PanelState {
@@ -56,7 +58,9 @@ interface PanelState {
   warnings: string[] | null;
   stats: QueryStats | null;
   exprInputValue: string;
-  explanation: QueryTree | null;
+  analysis: QueryTree | null;
+  explainOutput: ExplainTree | null;
+  isHovered: boolean;
 }
 
 export interface PanelOptions {
@@ -72,8 +76,8 @@ export interface PanelOptions {
   usePartialResponse: boolean;
   storeMatches: Store[];
   engine: string;
-  explain: boolean;
-  disableExplainCheckbox: boolean;
+  analyze: boolean;
+  disableAnalyzeCheckbox: boolean;
 }
 
 export enum PanelType {
@@ -91,11 +95,11 @@ export const PanelDefaultOptions: PanelOptions = {
   maxSourceResolution: '0s',
   useDeduplication: true,
   forceTracing: false,
-  usePartialResponse: false,
+  usePartialResponse: true,
   storeMatches: [],
   engine: '',
-  explain: false,
-  disableExplainCheckbox: false,
+  analyze: false,
+  disableAnalyzeCheckbox: false,
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -112,7 +116,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       error: null,
       stats: null,
       exprInputValue: props.options.expr,
-      explanation: null,
+      explainOutput: null,
+      analysis: null,
+      isHovered: false,
     };
 
     if (this.props.options.engine === '') {
@@ -125,9 +131,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
-    this.handleChangeExplain = this.handleChangeExplain.bind(this);
+    this.handleChangeAnalyze = this.handleChangeAnalyze.bind(this);
+    this.handleMouseEnter = this.handleMouseEnter.bind(this);
+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
   }
-
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
     const {
       endTime,
@@ -139,7 +146,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       forceTracing,
       usePartialResponse,
       engine,
-      explain,
+      analyze,
       // TODO: Add support for Store Matches
     } = this.props.options;
     if (
@@ -152,7 +159,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.usePartialResponse !== usePartialResponse ||
       prevOpts.forceTracing !== forceTracing ||
       prevOpts.engine !== engine ||
-      prevOpts.explain !== explain
+      prevOpts.analyze !== analyze
       // Check store matches
     ) {
       this.executeQuery();
@@ -161,6 +168,13 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   componentDidMount(): void {
     this.executeQuery();
+    const storedValue = localStorage.getItem('usePartialResponse');
+    if (storedValue !== null) {
+      // Set the default value in state and local storage
+      this.setOptions({ usePartialResponse: true });
+      this.props.onUsePartialResponseChange(true);
+      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+    }
   }
 
   executeQuery = (): void => {
@@ -209,14 +223,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('step', resolution.toString());
         params.append('max_source_resolution', this.props.options.maxSourceResolution);
         params.append('engine', this.props.options.engine);
-        params.append('explain', this.props.options.explain.toString());
+        params.append('analyze', this.props.options.analyze.toString());
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
         path = '/api/v1/query';
         params.append('time', endTime.toString());
         params.append('engine', this.props.options.engine);
-        params.append('explain', this.props.options.explain.toString());
+        params.append('analyze', this.props.options.analyze.toString());
         break;
       default:
         throw new Error('Invalid panel type "' + this.props.options.type + '"');
@@ -226,6 +240,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'X-Thanos-Force-Tracing': 'true',
         // Conditionally add the header if the checkbox is enabled
         ...(this.props.options.forceTracing ? { 'X-Thanos-Force-Tracing': 'true' } : {}),
       },
@@ -233,14 +248,20 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then((resp) => resp.json())
-      .then((json) => {
+      .then((resp) => {
+        return resp.json().then((json) => {
+          return {
+            json,
+            headers: resp.headers,
+          };
+        });
+      })
+      .then(({ json, headers }) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
-
         let resultSeries = 0;
-        let explanation = null;
+        let analysis = null;
         if (json.data) {
           const { resultType, result } = json.data;
           if (resultType === 'scalar') {
@@ -248,9 +269,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           } else if (result && result.length > 0) {
             resultSeries = result.length;
           }
-          explanation = json.data.explanation;
+          analysis = json.data.analysis;
         }
-
+        const traceID = headers.get('X-Thanos-Trace-ID');
         this.setState({
           error: null,
           data: json.data,
@@ -258,15 +279,18 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             startTime,
             endTime,
             resolution,
+            traceID: traceID ? traceID : '',
           },
           warnings: json.warnings,
           stats: {
             loadTime: Date.now() - queryStart,
             resolution,
             resultSeries,
+            traceID,
           },
           loading: false,
-          explanation: explanation,
+          analysis: analysis,
+          explainOutput: null,
         });
         this.abortInFlightFetch = null;
       })
@@ -331,7 +355,17 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ usePartialResponse: event.target.checked });
+    let newValue = event.target.checked;
+
+    const storedValue = localStorage.getItem('usePartialResponse');
+
+    if (storedValue === 'true') {
+      newValue = true;
+    }
+    this.setOptions({ usePartialResponse: newValue });
+    this.props.onUsePartialResponseChange(newValue);
+
+    localStorage.setItem('usePartialResponse', JSON.stringify(event.target.checked));
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
@@ -350,20 +384,99 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleEngine(event.target.value);
   };
 
-  handleChangeExplain = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ explain: event.target.checked });
+  handleChangeAnalyze = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ analyze: event.target.checked });
+  };
+
+  handleMouseEnter = () => {
+    this.setState({ isHovered: true });
+  };
+
+  handleMouseLeave = () => {
+    this.setState({ isHovered: false });
   };
 
   handleEngine = (engine: string): void => {
     if (engine === 'prometheus') {
-      this.setOptions({ engine: engine, explain: false, disableExplainCheckbox: true });
+      this.setOptions({ engine: engine, analyze: false, disableAnalyzeCheckbox: true });
     } else {
-      this.setOptions({ engine: engine, disableExplainCheckbox: false });
+      this.setOptions({ engine: engine, disableAnalyzeCheckbox: false });
     }
+  };
+
+  getExplainOutput = (): void => {
+    //We need to pass the same parameters as query endpoints, to the explain endpoints.
+    const endTime = this.getEndTime().valueOf() / 1000;
+    const startTime = endTime - this.props.options.range / 1000;
+    const resolution =
+      this.props.options.resolution ||
+      Math.max(Math.floor(this.props.options.range / 250000), (parseDuration(this.props.defaultStep) || 0) / 1000);
+    const abortController = new AbortController();
+    const params: URLSearchParams = new URLSearchParams({
+      query: this.state.exprInputValue,
+      dedup: this.props.options.useDeduplication.toString(),
+      partial_response: this.props.options.usePartialResponse.toString(),
+    });
+
+    // Add storeMatches to query params.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    this.props.options.storeMatches?.forEach((store: Store) =>
+      params.append('storeMatch[]', `{__address__="${store.name}"}`)
+    );
+
+    let path: string;
+    switch (this.props.options.type) {
+      case 'graph':
+        path = '/api/v1/query_range_explain';
+        params.append('start', startTime.toString());
+        params.append('end', endTime.toString());
+        params.append('step', resolution.toString());
+        params.append('max_source_resolution', this.props.options.maxSourceResolution);
+        params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        // TODO path prefix here and elsewhere.
+        break;
+      case 'table':
+        path = '/api/v1/query_explain';
+        params.append('time', endTime.toString());
+        params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        break;
+      default:
+        throw new Error('Invalid panel type "' + this.props.options.type + '"');
+    }
+
+    fetch(`${this.props.pathPrefix}${path}?${params}`, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: abortController.signal,
+    })
+      .then((resp) => resp.json())
+      .then((json) => {
+        if (json.status !== 'success') {
+          throw new Error(json.error || 'invalid response JSON');
+        }
+        let result = null;
+        if (json.data) {
+          result = json.data;
+        }
+        this.setState({ explainOutput: result });
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') {
+          // Aborts are expected, don't show an error for them.
+          return;
+        }
+        this.setState({
+          error: 'Error getting query explaination: ' + error.message,
+          loading: false,
+        });
+      });
   };
 
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
+
     return (
       <div className="panel">
         <Row>
@@ -379,6 +492,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               enableLinter={this.props.enableLinter}
               queryHistory={pastQueries}
               metricNames={metricNames}
+              executeExplain={this.getExplainOutput}
+              disableExplain={this.props.options.engine === 'prometheus'}
             />
           </Col>
         </Row>
@@ -424,7 +539,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`force-tracing-checkbox-${id}`}
                 onChange={this.handleChangeForceTracing}
-                defaultchecked={options.forceTracing}
+                defaultChecked={options.forceTracing}
               >
                 Force Tracing
               </Checkbox>
@@ -451,24 +566,53 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 <option value="thanos">Thanos</option>
               </Input>
             </div>
-            <div className="float-right">
+            <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
               <Checkbox
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
-                id={`explain-${id}`}
-                onChange={this.handleChangeExplain}
-                checked={options.explain}
-                disabled={options.disableExplainCheckbox}
-                isExplainCheckbox={true}
+                id={`analyze-${id}`}
+                onChange={this.handleChangeAnalyze}
+                checked={options.analyze}
+                disabled={options.disableAnalyzeCheckbox}
+                className="analyze-checkbox"
               >
-                Explain
+                Analyze
               </Checkbox>
+              <div
+                style={{
+                  position: 'relative',
+                }}
+              >
+                <div
+                  style={{
+                    display: this.state.isHovered && options.disableAnalyzeCheckbox ? 'block' : 'none',
+                    position: 'absolute',
+                    top: '-20px',
+                    left: '-5px',
+                    backgroundColor: '#333',
+                    color: '#fff',
+                    padding: '2px',
+                    borderRadius: '3px',
+                    fontSize: '15px',
+                    zIndex: 1,
+                  }}
+                >
+                  Change engine to 'thanos'
+                </div>
+              </div>
             </div>
           </Col>
         </Row>
-        <Row hidden={!(options.explain && this.state.explanation)}>
+        <Row hidden={!(options.analyze && this.state.analysis)}>
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
-              <ListTree id={`explain-tree-${id}`} node={this.state.explanation} />
+              <ListTree id={`analyze-tree-${id}`} node={this.state.analysis} />
+            </Alert>
+          </Col>
+        </Row>
+        <Row hidden={!(this.props.options.engine === 'thanos' && this.state.explainOutput)}>
+          <Col>
+            <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
+              <ListTree id={`explain-tree-${id}`} node={this.state.explainOutput} />
             </Alert>
           </Col>
         </Row>

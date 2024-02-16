@@ -226,10 +226,11 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 		return stats, errors.Wrap(err, "get all postings")
 	}
 	var (
-		lastLset labels.Labels
 		lset     labels.Labels
+		prevLset labels.Labels
 		builder  labels.ScratchBuilder
-		chks     []chunks.Meta
+
+		chks []chunks.Meta
 
 		seriesLifeDuration                          = newMinMaxSumInt64()
 		seriesLifeDurationWithoutSingleSampleSeries = newMinMaxSumInt64()
@@ -262,7 +263,7 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 	// Per series.
 	var prevId storage.SeriesRef
 	for p.Next() {
-		lastLset = append(lastLset[:0], lset...)
+		prevLset.CopyFrom(lset)
 
 		id := p.At()
 		if prevId != 0 {
@@ -276,24 +277,27 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 			return stats, errors.Wrap(err, "read series")
 		}
 		lset = builder.Labels()
-		if len(lset) == 0 {
+		if lset.IsEmpty() {
 			return stats, errors.Errorf("empty label set detected for series %d", id)
 		}
-		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
-			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
+		if !prevLset.IsEmpty() && labels.Compare(prevLset, lset) >= 0 {
+			return stats, errors.Errorf("series %v out of order; previous %v", lset, prevLset)
 		}
-		l0 := lset[0]
-		for _, l := range lset[1:] {
-			if l.Name < l0.Name {
-				stats.OutOfOrderLabels++
-				level.Warn(logger).Log("msg",
-					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
-					"labelset", lset.String(),
-					"series", fmt.Sprintf("%d", id),
-				)
+		var l0 *labels.Label
+		lset.Range(func(l labels.Label) {
+			if l0 != nil {
+				if l.Name < l0.Name {
+					stats.OutOfOrderLabels++
+					level.Warn(logger).Log("msg",
+						"out-of-order label set: known bug in Prometheus 2.8.0 and below",
+						"labelset", lset.String(),
+						"series", fmt.Sprintf("%d", id),
+					)
+				}
 			}
-			l0 = l
-		}
+			l0 = &l
+		})
+
 		if len(chks) == 0 {
 			return stats, errors.Errorf("empty chunks for series %d", id)
 		}
@@ -612,7 +616,8 @@ func rewrite(
 		builder.Sort()
 
 		for i, c := range chks {
-			chks[i].Chunk, err = chunkr.Chunk(c)
+			// Ignore iterable as it should be nil.
+			chks[i].Chunk, _, err = chunkr.ChunkOrIterable(c)
 			if err != nil {
 				return errors.Wrap(err, "chunk read")
 			}
@@ -673,14 +678,14 @@ func rewrite(
 			meta.Stats.NumSamples += uint64(chk.Chunk.NumSamples())
 		}
 
-		for _, l := range s.lset {
+		s.lset.Range(func(l labels.Label) {
 			valset, ok := values[l.Name]
 			if !ok {
 				valset = stringset{}
 				values[l.Name] = valset
 			}
 			valset.set(l.Value)
-		}
+		})
 		postings.Add(i, s.lset)
 		i++
 		lastSet = s.lset

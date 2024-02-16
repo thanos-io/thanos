@@ -17,6 +17,8 @@ kube/.minikube
 /data/
 test/e2e/e2e_*
 scripts/data/
+examples/interactive/data/
+examples/interactive/e2e_*
 
 # Ignore benchmarks dir.
 benchmarks/
@@ -32,9 +34,6 @@ benchmarks/
 website/public/
 website/docs-pre-processed/
 !website/data
-
-# React build assets
-pkg/ui/static/react
 
 tmp/bin
 examples/tmp/

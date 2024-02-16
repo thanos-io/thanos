@@ -14,6 +14,8 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	e2einteractive "github.com/efficientgo/e2e/interactive"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	e2eprof "github.com/efficientgo/e2e/profiling"
+
 	"github.com/efficientgo/e2e/monitoring/promconfig"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -120,6 +122,9 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	e, err := e2e.NewDockerEnvironment("interactive")
 	testutil.Ok(t, err)
 	t.Cleanup(e.Close)
+
+	p, err := e2eprof.Start(e)
+	testutil.Ok(t, err)
 
 	m, err := e2emon.Start(e)
 	testutil.Ok(t, err)
@@ -349,6 +354,8 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 
 	// Tracing endpoint.
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+j.Endpoint("http-front")))
+	// Profiling Endpoint.
+	testutil.Ok(t, p.OpenUserInterfaceInBrowser())
 	// Monitoring Endpoint.
 	testutil.Ok(t, m.OpenUserInterfaceInBrowser())
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())

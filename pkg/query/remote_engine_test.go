@@ -23,7 +23,7 @@ import (
 
 func TestRemoteEngine_Warnings(t *testing.T) {
 	client := NewClient(&queryWarnClient{}, "", nil)
-	engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
 	})
 	var (
@@ -87,7 +87,7 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := NewClient(nil, "", testCase.tsdbInfos)
-			engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 				ReplicaLabels: testCase.replicaLabels,
 			})
 
@@ -174,7 +174,7 @@ func TestRemoteEngine_MinT(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := NewClient(nil, "", testCase.tsdbInfos)
-			engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 				ReplicaLabels: testCase.replicaLabels,
 			})
 

@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -28,11 +30,11 @@ import (
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -62,18 +64,44 @@ func registerSidecar(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
+		httpConfContentYaml, err := conf.prometheus.httpClient.Content()
+		if err != nil {
+			return errors.Wrap(err, "getting http client config")
+		}
+		httpClientConfig, err := clientconfig.NewHTTPClientConfigFromYAML(httpConfContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "parsing http config YAML")
+		}
+
+		httpClient, err := clientconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+		if err != nil {
+			return errors.Wrap(err, "Improper http client config")
+		}
+
+		opts := reloader.Options{
+			HTTPClient:    *httpClient,
+			CfgFile:       conf.reloader.confFile,
+			CfgOutputFile: conf.reloader.envVarConfFile,
+			WatchedDirs:   conf.reloader.ruleDirectories,
+			WatchInterval: conf.reloader.watchInterval,
+			RetryInterval: conf.reloader.retryInterval,
+		}
+
+		switch conf.reloader.method {
+		case HTTPReloadMethod:
+			opts.ReloadURL = reloader.ReloadURLFromBase(conf.prometheus.url)
+		case SignalReloadMethod:
+			opts.ProcessName = conf.reloader.processName
+			opts.RuntimeInfoURL = reloader.RuntimeInfoURLFromBase(conf.prometheus.url)
+		default:
+			return fmt.Errorf("invalid reload method: %s", conf.reloader.method)
+		}
+
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
-			&reloader.Options{
-				ReloadURL:     reloader.ReloadURLFromBase(conf.prometheus.url),
-				CfgFile:       conf.reloader.confFile,
-				CfgOutputFile: conf.reloader.envVarConfFile,
-				WatchedDirs:   conf.reloader.ruleDirectories,
-				WatchInterval: conf.reloader.watchInterval,
-				RetryInterval: conf.reloader.retryInterval,
-			})
+			&opts)
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, grpcLogOpts, tagOpts)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, httpClient, grpcLogOpts, tagOpts)
 	})
 }
 
@@ -85,28 +113,13 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	comp component.Component,
 	conf sidecarConfig,
+	httpClient *http.Client,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 ) error {
-	httpConfContentYaml, err := conf.prometheus.httpClient.Content()
-	if err != nil {
-		return errors.Wrap(err, "getting http client config")
-	}
-	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
-	if err != nil {
-		return errors.Wrap(err, "parsing http config YAML")
-	}
-
-	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
-	if err != nil {
-		return errors.Wrap(err, "Improper http client config")
-	}
-
-	reloader.SetHttpClient(*httpClient)
 
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
-
 		// Start out with the full time range. The shipper will constrain it later.
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
 		mint: conf.limitMinTime.PrometheusTimestamp(),
@@ -247,7 +260,7 @@ func runSidecar(
 		})
 	}
 	{
-		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
+		c := promclient.NewWithTracingClient(logger, httpClient, clientconfig.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
@@ -347,7 +360,7 @@ func runSidecar(
 
 			uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
 			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
-				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc))
+				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {

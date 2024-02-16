@@ -13,9 +13,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
+	texttemplate "text/template"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -50,18 +49,20 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -75,14 +76,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const dnsSDResolver = "miekgdns"
+
 type ruleConfig struct {
 	http    httpConfig
 	grpc    grpcConfig
 	web     webConfig
 	shipper shipperConfig
 
-	query           queryConfig
-	queryConfigYAML []byte
+	query              queryConfig
+	queryConfigYAML    []byte
+	grpcQueryEndpoints []string
 
 	alertmgr               alertMgrConfig
 	alertmgrsConfigYAML    []byte
@@ -148,6 +152,9 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
 
+	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
+		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
+
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
@@ -193,11 +200,12 @@ func registerRule(app *extkingpin.App) {
 		if err != nil {
 			return err
 		}
-		if len(conf.query.sdFiles) == 0 && len(conf.query.addrs) == 0 && len(conf.queryConfigYAML) == 0 {
-			return errors.New("no --query parameter was given")
+
+		if len(conf.query.sdFiles) == 0 && len(conf.query.addrs) == 0 && len(conf.queryConfigYAML) == 0 && len(conf.grpcQueryEndpoints) == 0 {
+			return errors.New("no query configuration parameter was given")
 		}
-		if (len(conf.query.sdFiles) != 0 || len(conf.query.addrs) != 0) && len(conf.queryConfigYAML) != 0 {
-			return errors.New("--query/--query.sd-files and --query.config* parameters cannot be defined at the same time")
+		if (len(conf.query.sdFiles) != 0 || len(conf.query.addrs) != 0 || len(conf.grpcQueryEndpoints) != 0) && len(conf.queryConfigYAML) != 0 {
+			return errors.New("--query/--query.sd-files/--grpc-query-endpoint and --query.config* parameters cannot be defined at the same time")
 		}
 
 		// Parse and check alerting configuration.
@@ -224,7 +232,8 @@ func registerRule(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		return runRule(g,
+		return runRule(
+			g,
 			logger,
 			reg,
 			tracer,
@@ -304,35 +313,43 @@ func runRule(
 ) error {
 	metrics := newRuleMetrics(reg)
 
-	var queryCfg []httpconfig.Config
+	var queryCfg []clientconfig.Config
 	var err error
 	if len(conf.queryConfigYAML) > 0 {
-		queryCfg, err = httpconfig.LoadConfigs(conf.queryConfigYAML)
+		queryCfg, err = clientconfig.LoadConfigs(conf.queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		queryCfg, err = httpconfig.BuildConfig(conf.query.addrs)
+		queryCfg, err = clientconfig.BuildConfigFromHTTPAddresses(conf.query.addrs)
 		if err != nil {
 			return errors.Wrap(err, "query configuration")
 		}
 
 		// Build the query configuration from the legacy query flags.
-		var fileSDConfigs []httpconfig.FileSDConfig
+		var fileSDConfigs []clientconfig.HTTPFileSDConfig
 		if len(conf.query.sdFiles) > 0 {
-			fileSDConfigs = append(fileSDConfigs, httpconfig.FileSDConfig{
+			fileSDConfigs = append(fileSDConfigs, clientconfig.HTTPFileSDConfig{
 				Files:           conf.query.sdFiles,
 				RefreshInterval: model.Duration(conf.query.sdInterval),
 			})
 			queryCfg = append(queryCfg,
-				httpconfig.Config{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						Scheme:        "http",
-						FileSDConfigs: fileSDConfigs,
+				clientconfig.Config{
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+							Scheme:        "http",
+							FileSDConfigs: fileSDConfigs,
+						},
 					},
 				},
 			)
 		}
+
+		grpcQueryCfg, err := clientconfig.BuildConfigFromGRPCAddresses(conf.grpcQueryEndpoints)
+		if err != nil {
+			return errors.Wrap(err, "query configuration")
+		}
+		queryCfg = append(queryCfg, grpcQueryCfg...)
 	}
 
 	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate); err != nil {
@@ -345,26 +362,97 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var (
-		queryClients []*httpconfig.Client
-		promClients  []*promclient.Client
+		queryClients    []*clientconfig.HTTPClient
+		promClients     []*promclient.Client
+		grpcEndpointSet *query.EndpointSet
+		grpcEndpoints   []string
 	)
+
 	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
+
 	for _, cfg := range queryCfg {
-		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
-		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "query")
-		if err != nil {
-			return err
+		if cfg.HTTPConfig.NotEmpty() {
+			cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
+			c, err := clientconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
+			if err != nil {
+				return err
+			}
+			c.Transport = tracing.HTTPTripperware(logger, c.Transport)
+			queryClient, err := clientconfig.NewClient(logger, cfg.HTTPConfig.EndpointsConfig, c, queryProvider.Clone())
+			if err != nil {
+				return err
+			}
+			queryClients = append(queryClients, queryClient)
+			promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
+			// Discover and resolve query addresses.
+			addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 		}
-		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-		queryClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
-		if err != nil {
-			return err
+
+		if cfg.GRPCConfig != nil {
+			grpcEndpoints = append(grpcEndpoints, cfg.GRPCConfig.EndpointAddrs...)
 		}
-		queryClients = append(queryClients, queryClient)
-		promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
-		// Discover and resolve query addresses.
-		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 	}
+
+	if len(grpcEndpoints) > 0 {
+		duplicatedGRPCEndpoints := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_rule_grpc_endpoints_duplicated_total",
+			Help: "The number of times a duplicated grpc endpoint is detected from the different configs in rule",
+		})
+
+		dnsEndpointProvider := dns.NewProvider(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_rule_grpc_endpoints_", reg),
+			dnsSDResolver,
+		)
+
+		dialOpts, err := extgrpc.StoreClientGRPCOpts(
+			logger,
+			reg,
+			tracer,
+			false,
+			false,
+			"",
+			"",
+			"",
+			"",
+		)
+		if err != nil {
+			return err
+		}
+
+		grpcEndpointSet = prepareEndpointSet(
+			g,
+			logger,
+			reg,
+			[]*dns.Provider{dnsEndpointProvider},
+			duplicatedGRPCEndpoints,
+			nil,
+			nil,
+			nil,
+			nil,
+			dialOpts,
+			5*time.Minute,
+			5*time.Second,
+		)
+
+		// Periodically update the GRPC addresses from query config by resolving them using DNS SD if necessary.
+		{
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+					resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
+					defer resolveCancel()
+					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints); err != nil {
+						level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
+					}
+					return nil
+				})
+			}, func(error) {
+				cancel()
+			})
+		}
+	}
+
 	var (
 		appendable storage.Appendable
 		queryable  storage.Queryable
@@ -473,13 +561,13 @@ func runRule(
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
 		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
-		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := clientconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
-		amClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
+		amClient, err := clientconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -538,7 +626,7 @@ func runRule(
 				OutageTolerance: conf.outageTolerance,
 				ForGracePeriod:  conf.forGracePeriod,
 			},
-			queryFuncCreator(logger, queryClients, promClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
+			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -745,7 +833,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, conf.dataDir, bkt, func() labels.Labels { return conf.lset }, metadata.RulerSource, nil, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc))
+		s := shipper.New(logger, reg, conf.dataDir, bkt, func() labels.Labels { return conf.lset }, metadata.RulerSource, nil, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -784,26 +872,6 @@ func removeLockfileIfAny(logger log.Logger, dataDir string) error {
 	return nil
 }
 
-func parseFlagLabels(s []string) (labels.Labels, error) {
-	var lset labels.Labels
-	for _, l := range s {
-		parts := strings.SplitN(l, "=", 2)
-		if len(parts) != 2 {
-			return nil, errors.Errorf("unrecognized label %q", l)
-		}
-		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
-			return nil, errors.Errorf("unsupported format for label %s", l)
-		}
-		val, err := strconv.Unquote(parts[1])
-		if err != nil {
-			return nil, errors.Wrap(err, "unquote label value")
-		}
-		lset = append(lset, labels.Label{Name: parts[0], Value: val})
-	}
-	sort.Sort(lset)
-	return lset, nil
-}
-
 func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 	for _, l := range lset {
 		res = append(res, labels.Label{
@@ -816,8 +884,9 @@ func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 
 func queryFuncCreator(
 	logger log.Logger,
-	queriers []*httpconfig.Client,
+	queriers []*clientconfig.HTTPClient,
 	promClients []*promclient.Client,
+	grpcEndpointSet *query.EndpointSet,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
@@ -839,13 +908,13 @@ func queryFuncCreator(
 			panic(errors.Errorf("unknown partial response strategy %v", partialResponseStrategy).Error())
 		}
 
-		return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+		return func(ctx context.Context, qs string, t time.Time) (promql.Vector, error) {
 			for _, i := range rand.Perm(len(queriers)) {
 				promClient := promClients[i]
 				endpoints := thanosrules.RemoveDuplicateQueryEndpoints(logger, duplicatedQuery, queriers[i].Endpoints())
 				for _, i := range rand.Perm(len(endpoints)) {
 					span, ctx := tracing.StartSpan(ctx, spanID)
-					v, warns, err := promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
+					v, warns, err := promClient.PromqlQueryInstant(ctx, endpoints[i], qs, t, promclient.QueryOptions{
 						Deduplicate:             true,
 						PartialResponseStrategy: partialResponseStrategy,
 						Method:                  httpMethod,
@@ -854,14 +923,44 @@ func queryFuncCreator(
 					span.Finish()
 
 					if err != nil {
-						level.Error(logger).Log("err", err, "query", q)
+						level.Error(logger).Log("err", err, "query", qs)
 						continue
 					}
 					if len(warns) > 0 {
 						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
 						// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
+						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", qs)
 					}
+					return v, nil
+				}
+			}
+
+			if grpcEndpointSet != nil {
+				queryAPIClients := grpcEndpointSet.GetQueryAPIClients()
+				for _, i := range rand.Perm(len(queryAPIClients)) {
+					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{})
+					q, err := e.NewInstantQuery(ctx, nil, qs, t)
+					if err != nil {
+						level.Error(logger).Log("err", err, "query", qs)
+						continue
+					}
+
+					result := q.Exec(ctx)
+					v, err := result.Vector()
+					if err != nil {
+						level.Error(logger).Log("err", err, "query", qs)
+						continue
+					}
+
+					if len(result.Warnings) > 0 {
+						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+						warnings := make([]string, 0, len(result.Warnings))
+						for _, w := range result.Warnings {
+							warnings = append(warnings, w.Error())
+						}
+						level.Warn(logger).Log("warnings", strings.Join(warnings, ", "), "query", qs)
+					}
+
 					return v, nil
 				}
 			}
@@ -870,7 +969,7 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)
@@ -939,7 +1038,7 @@ func tableLinkForExpression(tmpl string, expr string) (string, error) {
 	escapedExpression := url.QueryEscape(expr)
 
 	escapedExpr := Expression{Expr: escapedExpression}
-	t, err := template.New("url").Parse(tmpl)
+	t, err := texttemplate.New("url").Parse(tmpl)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse template")
 	}
