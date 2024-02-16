@@ -78,6 +78,9 @@ Subcommands:
     Retention applies retention policies on the given bucket. Please make sure
     no compactor is running on the same bucket at the same time.
 
+  tools bucket upload-blocks [<flags>]
+    Upload blocks push blocks from the provided path to the object storage.
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -186,6 +189,9 @@ Subcommands:
   tools bucket retention [<flags>]
     Retention applies retention policies on the given bucket. Please make sure
     no compactor is running on the same bucket at the same time.
+
+  tools bucket upload-blocks [<flags>]
+    Upload blocks push blocks from the provided path to the object storage.
 
 
 ```
@@ -826,7 +832,7 @@ Flags:
       --rewrite.to-relabel-config-file=<file-path>
                                 Path to YAML file that contains relabel configs
                                 that will be applied to blocks
-      --tmp.dir="/tmp/thanos-rewrite"
+      --tmp.dir="/var/folders/7w/bk4g23r116j_srlrlf8_ys7r0000gp/T/thanos-rewrite"
                                 Working directory for temporary files
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
@@ -838,6 +844,48 @@ Flags:
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                 Show application version.
+
+```
+
+### Bucket Upload Blocks
+
+`tools bucket upload-blocks` uploads a blocks created on the given bucket.
+
+```$ mdox-exec="thanos tools bucket upload-blocks --help"
+usage: thanos tools bucket upload-blocks [<flags>]
+
+Upload blocks push blocks from the provided path to the object storage.
+
+Flags:
+  -h, --help                   Show context-sensitive help (also try --help-long
+                               and --help-man).
+      --label=key="value" ...  External labels to add to the uploaded blocks
+                               (repeated).
+      --log.format=logfmt      Log format to use. Possible options: logfmt or
+                               json.
+      --log.level=info         Log filtering level.
+      --objstore.config=<content>
+                               Alternative to 'objstore.config-file'
+                               flag (mutually exclusive). Content of
+                               YAML file that contains object store
+                               configuration. See format details:
+                               https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config-file=<file-path>
+                               Path to YAML file that contains object
+                               store configuration. See format details:
+                               https://thanos.io/tip/thanos/storage.md/#configuration
+      --path="./data"          Path to the directory containing blocks to
+                               upload.
+      --tracing.config=<content>
+                               Alternative to 'tracing.config-file' flag
+                               (mutually exclusive). Content of YAML file
+                               with tracing configuration. See format details:
+                               https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tracing.config-file=<file-path>
+                               Path to YAML file with tracing
+                               configuration. See format details:
+                               https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                Show application version.
 
 ```
 

@@ -72,6 +72,10 @@ transformations:
     backMatter: *docBackMatter
 
   # Non-versioned element: Blog.
+
+  - glob: "support/*"
+    path: /../support/*
+
   - glob: "blog/*"
     path: /../blog/*
 

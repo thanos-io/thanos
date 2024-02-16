@@ -56,9 +56,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/replicate"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"github.com/thanos-io/thanos/pkg/verifier"
@@ -156,6 +158,11 @@ type bucketMarkBlockConfig struct {
 	marker       string
 	blockIDs     []string
 	removeMarker bool
+}
+
+type bucketUploadBlocksConfig struct {
+	path   string
+	labels []string
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -277,6 +284,13 @@ func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.Fla
 	return tbc
 }
 
+func (tbc *bucketUploadBlocksConfig) registerBucketUploadBlocksFlag(cmd extkingpin.FlagClause) *bucketUploadBlocksConfig {
+	cmd.Flag("path", "Path to the directory containing blocks to upload.").Default("./data").StringVar(&tbc.path)
+	cmd.Flag("label", "External labels to add to the uploaded blocks (repeated).").PlaceHolder("key=\"value\"").StringsVar(&tbc.labels)
+
+	return tbc
+}
+
 func registerBucket(app extkingpin.AppClause) {
 	cmd := app.Command("bucket", "Bucket utility commands")
 
@@ -291,6 +305,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketMarkBlock(cmd, objStoreConfig)
 	registerBucketRewrite(cmd, objStoreConfig)
 	registerBucketRetention(cmd, objStoreConfig)
+	registerBucketUploadBlocks(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -350,7 +365,8 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 
 		// We ignore any block that has the deletion marker file.
 		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)}
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
 		}
@@ -407,7 +423,8 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
 		}
@@ -508,7 +525,8 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -651,7 +669,8 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of block as well.
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg),
+		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg),
 			[]block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConfig),
@@ -829,7 +848,8 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		var sy *compact.Syncer
 		{
-			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
 			}
@@ -1371,7 +1391,8 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 		var sy *compact.Syncer
 		{
-			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
 			}
@@ -1411,6 +1432,57 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, insBkt, sy.Metas(), retentionByResolution, stubCounter); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
+		return nil
+	})
+}
+
+func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("upload-blocks", "Upload blocks push blocks from the provided path to the object storage.")
+
+	tbc := &bucketUploadBlocksConfig{}
+	tbc.registerBucketUploadBlocksFlag(cmd)
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		if len(tbc.labels) == 0 {
+			return errors.New("no external labels configured, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+		}
+
+		lset, err := parseFlagLabels(tbc.labels)
+		if err != nil {
+			return errors.Wrap(err, "unable to parse external labels")
+		}
+		if err := promclient.IsDirAccessible(tbc.path); err != nil {
+			return errors.Wrapf(err, "unable to access path '%s'", tbc.path)
+		}
+
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return errors.Wrap(err, "unable to parse objstore config")
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Upload.String())
+		if err != nil {
+			return errors.Wrap(err, "unable to create bucket")
+		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+
+		s := shipper.New(logger, reg, tbc.path, bkt, func() labels.Labels { return lset }, metadata.BucketUploadSource,
+			nil, false, metadata.HashFunc(""), shipper.DefaultMetaFilename)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			n, err := s.Sync(ctx)
+			if err != nil {
+				return errors.Wrap(err, "unable to sync blocks")
+			}
+			level.Info(logger).Log("msg", "synced blocks", "uploaded", n)
+			return nil
+		}, func(error) {
+			cancel()
+		})
+
 		return nil
 	})
 }

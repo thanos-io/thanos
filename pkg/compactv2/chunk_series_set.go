@@ -111,7 +111,8 @@ func (e errChunk) Compact()                                     {}
 func (l *lazyPopulatableChunk) populate() {
 	// TODO(bwplotka): In most cases we don't need to parse anything, just copy. Extend reader/writer for this.
 	var err error
-	l.populated, err = l.cr.Chunk(*l.m)
+	// Ignore iterable as it should be nil.
+	l.populated, _, err = l.cr.ChunkOrIterable(*l.m)
 	if err != nil {
 		l.m.Chunk = errChunk{err: errChunkIterator{err: errors.Wrapf(err, "cannot populate chunk %d", l.m.Ref)}}
 		return

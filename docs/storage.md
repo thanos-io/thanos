@@ -93,6 +93,7 @@ config:
     enable: false
   list_objects_version: ""
   bucket_lookup_type: auto
+  send_content_md5: true
   part_size: 67108864
   sse_config:
     type: ""
@@ -389,9 +390,17 @@ config:
 prefix: ""
 ```
 
-If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
+If `storage_account_key` is used, authentication is done via storage account key.
 
-If `user_assigned_id` is used, authentication is done via user-assigned managed identity. When using `user_assigned_id` the `msi_resource` defaults to `https://<storage_account>.<endpoint>`
+If `user_assigned_id` is used, authentication is done via user-assigned managed identity.
+
+If `user_assigned_id` or `storage_account_key` is not passed, authentication is attempted with each of these credential types, in the following order, stopping when one provides a token:
+- EnvironmentCredential
+- WorkloadIdentityCredential
+- ManagedIdentityCredential
+- AzureCLICredential
+
+For the first three authentication types, the correct environment variables must be set for authentication to be successful. More information about the required environment variables for each authentication type can be found in the [Azure Identity Client Module for Go documentation](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
 
 The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 

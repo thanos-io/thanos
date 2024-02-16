@@ -8,15 +8,16 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/go-kit/log"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
-	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
@@ -25,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -62,7 +62,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewLogfmtLogger(os.Stderr)))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -169,9 +169,9 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
 		testutil.Equals(t, []labelpb.ZLabel{
+			{Name: "__thanos_pushed_down", Value: "true"},
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
-			{Name: "__thanos_pushed_down", Value: "true"},
 		}, srv.SeriesSet[0].Labels)
 		testutil.Equals(t, []string(nil), srv.Warnings)
 		testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
@@ -224,7 +224,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -406,7 +406,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -469,7 +469,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
+	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -517,81 +517,4 @@ func TestPrometheusStore_Info(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_SIDECAR, resp.StoreType)
 	testutil.Equals(t, int64(123), resp.MinTime)
 	testutil.Equals(t, int64(456), resp.MaxTime)
-}
-
-func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender storage.Appender, newStore func() storepb.StoreServer) {
-	baseT := timestamp.FromTime(time.Now().AddDate(0, 0, -2)) / 1000 * 1000
-
-	offset := int64(2*math.MaxUint16 + 5)
-	for i := int64(0); i < offset; i++ {
-		_, err := appender.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+i, 1)
-		testutil.Ok(t, err)
-	}
-
-	testutil.Ok(t, appender.Commit())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	client := newStore()
-	srv := newStoreSeriesServer(ctx)
-
-	testutil.Ok(t, client.Series(&storepb.SeriesRequest{
-		MinTime: baseT,
-		MaxTime: baseT + offset,
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
-			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
-		},
-	}, srv))
-
-	testutil.Equals(t, 1, len(srv.SeriesSet))
-
-	firstSeries := srv.SeriesSet[0]
-
-	testutil.Equals(t, []labelpb.ZLabel{
-		{Name: "a", Value: "b"},
-		{Name: "region", Value: "eu-west"},
-	}, firstSeries.Labels)
-
-	testutil.Equals(t, 1093, len(firstSeries.Chunks))
-
-	chunk, err := chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[0].Raw.Data)
-	testutil.Ok(t, err)
-	testutil.Equals(t, 120, chunk.NumSamples())
-
-	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[1].Raw.Data)
-	testutil.Ok(t, err)
-	testutil.Equals(t, 120, chunk.NumSamples())
-
-	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[len(firstSeries.Chunks)-1].Raw.Data)
-	testutil.Ok(t, err)
-	testutil.Equals(t, 35, chunk.NumSamples())
-}
-
-// Regression test for https://github.com/thanos-io/thanos/issues/396.
-func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	p, err := e2eutil.NewPrometheus()
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, p.Stop()) }()
-
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, p.Appender(), func() storepb.StoreServer {
-		testutil.Ok(t, p.Start())
-
-		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
-		testutil.Ok(t, err)
-
-		proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
-			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-			func() (int64, int64) { return 0, math.MaxInt64 },
-			nil)
-		testutil.Ok(t, err)
-
-		// We build chunks only for SAMPLES method. Make sure we ask for SAMPLES only.
-		proxy.remoteReadAcceptableResponses = []prompb.ReadRequest_ResponseType{prompb.ReadRequest_SAMPLES}
-
-		return proxy
-	})
 }

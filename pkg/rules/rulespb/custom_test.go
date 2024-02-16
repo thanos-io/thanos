@@ -146,7 +146,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: alerting rule unmarshal: {\"state\":\"sdfsdf\",\"name\":\"alert1\",\"query\":\"\",\"duration\":0,\"labels\":{},\"annotations\":{},\"alerts\":null,\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"alerting\"}: unknown alertState: \"sdfsdf\""),
+			expectedErr: errors.New("rule: alerting rule unmarshal: {\"state\":\"sdfsdf\",\"name\":\"alert1\",\"query\":\"\",\"duration\":0,\"labels\":{},\"annotations\":{},\"alerts\":null,\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"keepFiringFor\":0,\"type\":\"alerting\"}: unknown alertState: \"sdfsdf\""),
 		},
 		{
 			name: "one group with WRONG partial response fields",
@@ -172,20 +172,15 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name: "group1",
 						Rules: []testpromcompatibility.Rule{
 							testpromcompatibility.AlertingRule{
-								Type:  RuleAlertingType,
-								Name:  "alert1",
-								Query: "up == 0",
-								Labels: labels.Labels{
-									{Name: "a2", Value: "b2"},
-									{Name: "c2", Value: "d2"},
-								},
-								Annotations: labels.Labels{
-									{Name: "ann1", Value: "ann44"},
-									{Name: "ann2", Value: "ann33"},
-								},
+								Type:           RuleAlertingType,
+								Name:           "alert1",
+								Query:          "up == 0",
+								Labels:         labels.FromStrings("a2", "b2", "c2", "d2"),
+								Annotations:    labels.FromStrings("ann1", "ann44", "ann2", "ann33"),
 								Health:         "health2",
 								LastError:      "1",
 								Duration:       60,
+								KeepFiringFor:  0,
 								State:          "pending",
 								EvaluationTime: 1.1,
 							},
@@ -218,6 +213,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 									},
 								},
 								DurationSeconds:           60,
+								KeepFiringForSeconds:      0,
 								State:                     AlertState_PENDING,
 								LastError:                 "1",
 								Health:                    "health2",
@@ -232,7 +228,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				},
 			},
 			// Different than input due to the alerts slice being initialized to a zero-length slice instead of nil.
-			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","limit":0,"partialResponseStrategy":"ABORT"}]}`,
+			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","keepFiringFor":0,"type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","limit":0,"partialResponseStrategy":"ABORT"}]}`,
 		},
 		{
 			name: "one valid group, with 1 rule and alert each and second empty group.",
@@ -245,11 +241,11 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								Type:  RuleRecordingType,
 								Query: "up",
 								Name:  "recording1",
-								Labels: labels.Labels{
-									{Name: "a", Value: "b"},
-									{Name: "c", Value: "d"},
-									{Name: "a", Value: "b"}, // Kind of invalid, but random one will be chosen.
-								},
+								Labels: labels.FromStrings(
+									"a", "b",
+									"c", "d",
+									"a", "b", // Kind of invalid, but random one will be chosen.
+								),
 								LastError:      "2",
 								Health:         "health",
 								LastEvaluation: now.Add(-2 * time.Minute),
@@ -259,31 +255,27 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								Type:  RuleAlertingType,
 								Name:  "alert1",
 								Query: "up == 0",
-								Labels: labels.Labels{
-									{Name: "a2", Value: "b2"},
-									{Name: "c2", Value: "d2"},
-								},
-								Annotations: labels.Labels{
-									{Name: "ann1", Value: "ann44"},
-									{Name: "ann2", Value: "ann33"},
-								},
+								Labels: labels.FromStrings(
+									"a2", "b2",
+									"c2", "d2",
+								),
+								Annotations: labels.FromStrings(
+									"ann1", "ann44",
+									"ann2", "ann33",
+								),
 								Health: "health2",
 								Alerts: []*testpromcompatibility.Alert{
 									{
-										Labels: labels.Labels{
-											{Name: "instance1", Value: "1"},
-										},
-										Annotations: labels.Labels{
-											{Name: "annotation1", Value: "2"},
-										},
+										Labels:                  labels.FromStrings("instance1", "1"),
+										Annotations:             labels.FromStrings("annotation1", "2"),
 										State:                   "inactive",
 										ActiveAt:                nil,
 										Value:                   "1",
 										PartialResponseStrategy: "WARN",
 									},
 									{
-										Labels:                  nil,
-										Annotations:             nil,
+										Labels:                  labels.EmptyLabels(),
+										Annotations:             labels.EmptyLabels(),
 										State:                   "firing",
 										ActiveAt:                &twoHoursAgo,
 										Value:                   "2143",

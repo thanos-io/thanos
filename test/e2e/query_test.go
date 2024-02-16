@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -26,6 +27,8 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/matchers"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -57,9 +60,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
+
+const testQueryA = "{a=\"1\"}"
 
 func defaultWebConfig() string {
 	// username: test, secret: test(bcrypt hash)
@@ -94,7 +100,7 @@ func TestQueryServiceAttribute(t *testing.T) {
 			Image:     "jaegertracing/all-in-one:1.33",
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
-	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
+	newJaeger := e2eobs.AsObservable(newJaegerRunnable, "http.admin")
 	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
 
 	otelcolConfig := fmt.Sprintf(`---
@@ -308,6 +314,49 @@ func TestQuery(t *testing.T) {
 		{
 			"job":        "myself",
 			"prometheus": "prom-ha",
+		},
+	})
+}
+
+func TestQueryWithExtendedFunctions(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("e2e-qry-xfunc"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// create prom + sidecar
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	// create querier
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnableXFunctions().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// send series to prom
+	samples := []seriesWithLabels{
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "1")},
+	}
+	testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom, samples))
+
+	// query
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return `xrate(my_fake_metric{a="1", b="1"}[1m])`
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"a":          "1",
+			"b":          "1",
+			"instance":   "1",
+			"prometheus": "prom",
+			"replica":    "0",
 		},
 	})
 }
@@ -799,13 +848,22 @@ func TestQueryStoreMetrics(t *testing.T) {
 			Deduplicate: true,
 		}, 10001)
 		testutil.Ok(t, err)
+
+		// query with a non-default tenant
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+			return "max_over_time(one_series{instance='foo_0'}[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+			HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+		}, 1)
+		testutil.Ok(t, err)
 	}
 
 	mon, err := e2emon.Start(e)
 	testutil.Ok(t, err)
 
 	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-		return "thanos_store_api_query_duration_seconds_count{samples_le='100000',series_le='10000'}"
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100000',series_le='10000',tenant='default-tenant'}"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, model.Vector{
@@ -816,13 +874,14 @@ func TestQueryStoreMetrics(t *testing.T) {
 				"job":        "querier-1",
 				"samples_le": "100000",
 				"series_le":  "10000",
+				"tenant":     "default-tenant",
 			},
 			Value: model.SampleValue(1),
 		},
 	})
 
 	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10'}"
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10',tenant='default-tenant'}"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, model.Vector{
@@ -833,13 +892,14 @@ func TestQueryStoreMetrics(t *testing.T) {
 				"job":        "querier-1",
 				"samples_le": "100",
 				"series_le":  "10",
+				"tenant":     "default-tenant",
 			},
 			Value: model.SampleValue(1),
 		},
 	})
 
 	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-		return "thanos_store_api_query_duration_seconds_count{samples_le='+Inf',series_le='+Inf'}"
+		return "thanos_store_api_query_duration_seconds_count{samples_le='+Inf',series_le='+Inf',tenant='default-tenant'}"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, model.Vector{
@@ -850,6 +910,25 @@ func TestQueryStoreMetrics(t *testing.T) {
 				"job":        "querier-1",
 				"samples_le": "+Inf",
 				"series_le":  "+Inf",
+				"tenant":     "default-tenant",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10',tenant='test-tenant-1'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "storemetrics01-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "100",
+				"series_le":  "10",
+				"tenant":     "test-tenant-1",
 			},
 			Value: model.SampleValue(1),
 		},
@@ -1500,7 +1579,7 @@ func urlParse(t testing.TB, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation) {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
 	var result model.Vector
@@ -1512,18 +1591,16 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 
-	var explanation *promclient.Explanation
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, rexplanation, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
+		res, _, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
 		}
 		result = res
-		explanation = rexplanation
 		return nil
 	}))
 	sortResults(result)
-	return result, explanation
+	return result
 }
 
 func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
@@ -1589,7 +1666,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
-	result, _ := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -1599,7 +1676,7 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() str
 	t.Helper()
 
 	sortResults(expected)
-	result, _ := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for _, r := range result {
 		r.Timestamp = 0 // Does not matter for us.
 	}
@@ -1690,6 +1767,39 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 	return retExplanation
 }
 
+// Performs a remote write at the receiver external endpoint.
+func remoteWrite(ctx context.Context, timeseries []prompb.TimeSeries, addr string) error {
+	// Create write request
+	data, err := proto.Marshal(&prompb.WriteRequest{Timeseries: timeseries})
+	if err != nil {
+		return err
+	}
+
+	// Create HTTP request
+	compressed := snappy.Encode(nil, data)
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/api/v1/receive", addr), bytes.NewReader(compressed))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Add("Content-Encoding", "snappy")
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
+
+	// Execute HTTP request
+	res, err := promclient.NewDefaultClient().HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer runutil.ExhaustCloseWithErrCapture(&err, res.Body, "%s: close body", req.URL.String())
+
+	if res.StatusCode/100 != 2 {
+		return errors.Errorf("request failed with code %s", res.Status)
+	}
+
+	return nil
+}
+
 func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) error) {
 	t.Helper()
 
@@ -1710,7 +1820,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2eobs.Observable, testSamples []fakeMetricSample) error {
 	samples := make([]model.Sample, len(testSamples))
 	for i, s := range testSamples {
 		samples[i] = newSample(s)
@@ -1719,7 +1829,7 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.Instrum
 	return synthesizeSamples(ctx, prometheus, samples)
 }
 
-func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, samples []model.Sample) error {
+func synthesizeSamples(ctx context.Context, prometheus *e2eobs.Observable, samples []model.Sample) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(samples))
@@ -1749,7 +1859,7 @@ func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunna
 	return storeWriteRequest(ctx, rawRemoteWriteURL, writeRequest)
 }
 
-func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, series []seriesWithLabels) error {
+func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2eobs.Observable, series []seriesWithLabels) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(series))
@@ -2246,7 +2356,7 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
 	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-	result, _ := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(up)"
 	}, time.Now, promclient.QueryOptions{}, 1)
 	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
@@ -2292,7 +2402,7 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 	}
 	testutil.Ok(t, synthesizeSamples(ctx, prom, []model.Sample{m}))
 
-	retv, _ := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
+	retv := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
 		return "sidecar_test_metric"
 	}, func() time.Time { return now.Add(time.Hour) }, promclient.QueryOptions{}, 1)
 
@@ -2305,4 +2415,350 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 		Value:     model.SampleValue(2),
 		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
 	}}, retv)
+}
+
+func TestTenantHTTPMetrics(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("q-tenant-metrics")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// scrape the local prometheus, and our querier metrics
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "q-tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+	// Query once with default-tenant to ensure everything is ready
+	// for the following requests
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "prometheus_api_remote_read_queries"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, 1)
+	testutil.Ok(t, err)
+
+	// Query a few times with tenant 1
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "prometheus_api_remote_read_queries"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 1)
+	testutil.Ok(t, err)
+
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "go_goroutines"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "go_memstats_frees_total"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	// query just once with tenant-2
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "go_memstats_heap_alloc_bytes"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-2"}},
+	}, 2)
+	testutil.Ok(t, err)
+
+	// tenant-1 made 3 requests
+	tenant1Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-1")
+	testutil.Ok(t, err)
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(
+		e2emon.GreaterOrEqual(3),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant1Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+
+	// tenant 2 just made one request
+	tenant2Matcher, err := matchers.NewMatcher(matchers.MatchEqual, "tenant", "test-tenant-2")
+	testutil.Ok(t, err)
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(
+		e2emon.Equals(1),
+		[]string{"http_requests_total"}, e2emon.WithLabelMatchers(
+			tenant2Matcher,
+		),
+		e2emon.WaitMissingMetrics(),
+	))
+}
+
+func TestQueryTenancyEnforcement(t *testing.T) {
+	t.Parallel()
+
+	// Build up.
+	e, err := e2e.New(e2e.WithName("tenancyEnforce"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	bucket := "store-gw-test"
+	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+	testutil.Ok(t, err)
+
+	// Add series from different tenants
+	now := time.Now()
+	tenantLabel01 := labels.FromStrings(tenancy.DefaultTenantLabel, "tenant-01")
+	tenantLabel02 := labels.FromStrings(tenancy.DefaultTenantLabel, "tenant-02")
+	tenantLabel03 := labels.FromStrings(tenancy.DefaultTenantLabel, "default-tenant")
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
+
+	series1 := []labels.Labels{labels.FromStrings("a", "1")}
+	series2 := []labels.Labels{labels.FromStrings("b", "2")}
+	series3 := []labels.Labels{labels.FromStrings("c", "3")}
+
+	blockID1, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+		dir,
+		series1,
+		10,
+		timestamp.FromTime(now),
+		timestamp.FromTime(now.Add(2*time.Hour)),
+		30*time.Minute,
+		tenantLabel01,
+		0,
+		metadata.NoneFunc,
+	)
+	testutil.Ok(t, err)
+
+	blockID2, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+		dir,
+		series2,
+		10,
+		timestamp.FromTime(now),
+		timestamp.FromTime(now.Add(2*time.Hour)),
+		30*time.Minute,
+		tenantLabel02,
+		0,
+		metadata.NoneFunc,
+	)
+	testutil.Ok(t, err)
+
+	blockID3, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+		dir,
+		series3,
+		10,
+		timestamp.FromTime(now),
+		timestamp.FromTime(now.Add(2*time.Hour)),
+		30*time.Minute,
+		tenantLabel03,
+		0,
+		metadata.NoneFunc,
+	)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID1.String()), blockID1.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID2.String()), blockID2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID3.String()), blockID3.String()))
+
+	storeGW := e2ethanos.NewStoreGW(
+		e,
+		"s1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+		},
+		"",
+		"",
+		nil,
+	)
+
+	querierEnforce := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).WithTenancy(true).Init()
+	querierNoEnforce := e2ethanos.NewQuerierBuilder(e, "2", storeGW.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querierEnforce, querierNoEnforce))
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(3), "thanos_blocks_meta_synced"))
+
+	tenant1Header := make(http.Header)
+	tenant1Header.Add("thanos-tenant", "tenant-01")
+
+	tenant2Header := make(http.Header)
+	tenant2Header.Add("thanos-tenant", "tenant-02")
+
+	// default-tenant should only see part of the results
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{c=\"3\"}" },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		[]model.Metric{
+			{
+				"c":         "3",
+				"tenant_id": "default-tenant",
+			},
+		},
+	)
+
+	// tenant-01 should only see part of the results
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+			HTTPHeaders: tenant1Header,
+		},
+		[]model.Metric{
+			{
+				"a":         "1",
+				"tenant_id": "tenant-01",
+			},
+		},
+	)
+
+	// With no enforcement enabled, default tenant can see everything
+	queryAndAssertSeries(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		[]model.Metric{
+			{
+				"a":         "1",
+				"tenant_id": "tenant-01",
+			},
+		},
+	)
+
+	// Default tenant don't see "a" when tenancy is enforced
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		nil,
+	)
+
+	// tenant-2 don't see "a" when tenancy is enforced
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+			HTTPHeaders: tenant2Header,
+		},
+		nil,
+	)
+
+	// default-tenant cannot attempt to view other tenants data, by setting the tenant id
+	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{tenant_id=\"tenant-01\"}" },
+		time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		nil,
+	)
+
+	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		}, func(res model.Matrix) error {
+			if res.Len() == 0 {
+				return nil
+			} else {
+				return errors.New("default-tenant shouldn't be able to see results with label a")
+			}
+		})
+
+	rangeQuery(t, ctx, querierNoEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		}, func(res model.Matrix) error {
+			if res[0].Metric["a"] == "1" {
+				return nil
+			} else {
+				return errors.New("default-tenant should be able to see results with label a when enforcement is off")
+			}
+		})
+
+	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{c=\"3\"}" }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		}, func(res model.Matrix) error {
+			if res[0].Metric["c"] == "3" {
+				return nil
+			} else {
+				return errors.New("default-tenant should be able to see its own data when enforcement is enabled")
+			}
+		})
+
+	// default-tenant should only see two labels when enforcing is on (c,tenant_id)
+	labelNames(t, ctx, querierEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		return len(res) == 2
+	})
+
+	// default-tenant should only see all labels when enforcing is not on (a,b,c,tenant_id)
+	labelNames(t, ctx, querierNoEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		return len(res) == 4
+	})
+
+	// default tenant can just the value of the C label
+	labelValues(t, ctx, querierEnforce.Endpoint("http"), "c", nil,
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 1
+		},
+	)
+	labelValues(t, ctx, querierEnforce.Endpoint("http"), "a", nil,
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 0
+		},
+	)
+
+	// Series endpoint tests
+	var matcherSetC []*labels.Matcher
+	labelMatcherC := &labels.Matcher{
+		Name:  "c",
+		Type:  labels.MatchEqual,
+		Value: "3",
+	}
+	matcherSetC = append(matcherSetC, labelMatcherC)
+
+	var matcherSetB []*labels.Matcher
+	labelMatcher := &labels.Matcher{
+		Name:  "b",
+		Type:  labels.MatchEqual,
+		Value: "2",
+	}
+	matcherSetB = append(matcherSetB, labelMatcher)
+
+	// default-tenant can see series with matcher C
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetC, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+		var expected = []map[string]string{
+			{
+				"c":         "3",
+				"tenant_id": "default-tenant",
+			},
+		}
+		return reflect.DeepEqual(res, expected)
+	})
+
+	// default-tenant cannot see series with matcher B when tenancy is enabled
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+		return len(res) == 0
+	})
+
+	// default-tenant can see series with matcher B when tenancy is not enabled
+	series(t, ctx, querierNoEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+		var expected = []map[string]string{
+			{
+				"b":         "2",
+				"tenant_id": "tenant-02",
+			},
+		}
+		return reflect.DeepEqual(res, expected)
+	})
 }

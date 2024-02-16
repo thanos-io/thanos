@@ -23,8 +23,11 @@ const defaultProps: PanelProps = {
     usePartialResponse: false,
     storeMatches: [],
     engine: 'prometheus',
-    explain: false,
-    disableExplainCheckbox: false,
+    analyze: false,
+    disableAnalyzeCheckbox: false,
+  },
+  onUsePartialResponseChange: (): void => {
+    // Do nothing.
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -47,6 +50,7 @@ const defaultProps: PanelProps = {
   enableHighlighting: true,
   enableLinter: true,
   defaultEngine: 'prometheus',
+  usePartialResponse: true,
 };
 
 describe('Panel', () => {
@@ -99,8 +103,8 @@ describe('Panel', () => {
       usePartialResponse: false,
       storeMatches: [],
       engine: 'prometheus',
-      explain: false,
-      disableExplainCheckbox: false,
+      analyze: false,
+      disableAnalyzeCheckbox: false,
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

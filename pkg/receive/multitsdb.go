@@ -257,8 +257,7 @@ func (t *MultiTSDB) Flush() error {
 		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
 		wg.Add(1)
 		go func() {
-			head := db.Head()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+			if err := t.flushHead(db); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -269,6 +268,20 @@ func (t *MultiTSDB) Flush() error {
 
 	wg.Wait()
 	return merr.Err()
+}
+
+func (t *MultiTSDB) flushHead(db *tsdb.DB) error {
+	head := db.Head()
+	if head.MinTime() == head.MaxTime() {
+		return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()))
+	}
+	blockAlignedMaxt := head.MaxTime() - (head.MaxTime() % t.tsdbOpts.MaxBlockDuration)
+	// Flush a well aligned TSDB block.
+	if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), blockAlignedMaxt-1)); err != nil {
+		return err
+	}
+	// Flush the remainder of the head.
+	return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1))
 }
 
 func (t *MultiTSDB) Close() error {
@@ -383,7 +396,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Compacting tenant")
-	if err := tdb.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+	if err := t.flushHead(tdb); err != nil {
 		return false, err
 	}
 
@@ -594,6 +607,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			nil,
 			t.allowOutOfOrderUpload,
 			t.hashFunc,
+			shipper.DefaultMetaFilename,
 		)
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))

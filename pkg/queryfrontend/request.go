@@ -55,7 +55,7 @@ type ThanosQueryRangeRequest struct {
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
 	LookbackDelta       int64
-	Explain             string
+	Analyze             string
 	Engine              string
 }
 
@@ -156,7 +156,7 @@ type ThanosQueryInstantRequest struct {
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
 	LookbackDelta       int64 // in milliseconds.
-	Explain             string
+	Analyze             string
 	Engine              string
 }
 

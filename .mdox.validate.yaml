@@ -38,3 +38,7 @@ validators:
   # Seems like improbable.io temporarily removed their blogs.
   - regex: 'improbable\.io'
     type: 'ignore'
+  - regex: 'krisztianfekete\.org'
+    type: 'ignore'
+  - regex: 'twitter\.com'
+    type: 'ignore'

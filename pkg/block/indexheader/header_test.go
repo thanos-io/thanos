@@ -100,7 +100,7 @@ func TestReaders(t *testing.T) {
 				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
-				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
+				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()
@@ -206,7 +206,7 @@ func TestReaders(t *testing.T) {
 				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
-				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), nil)
+				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil, false)
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()
@@ -399,7 +399,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		br, err := newFileBinaryReader(fn, 32)
+		br, err := newFileBinaryReader(fn, 32, NewBinaryReaderMetrics(nil))
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
 	}
@@ -437,7 +437,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
 	// Create an index reader.
-	reader, err := NewBinaryReader(ctx, logger, bkt, tmpDir, id1, postingOffsetsInMemSampling)
+	reader, err := NewBinaryReader(ctx, logger, bkt, tmpDir, id1, postingOffsetsInMemSampling, NewBinaryReaderMetrics(nil))
 	testutil.Ok(b, err)
 
 	// Get the offset of each label value symbol.

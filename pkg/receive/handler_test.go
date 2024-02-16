@@ -162,24 +162,42 @@ func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
 
+func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
+type fakePeersGroup struct {
+	clients map[string]storepb.WriteableStoreClient
+
+	closeCalled map[string]bool
+}
+
+func (g *fakePeersGroup) close(addr string) error {
+	if g.closeCalled == nil {
+		g.closeCalled = map[string]bool{}
+	}
+	g.closeCalled[addr] = true
+	return nil
+}
+
+func (g *fakePeersGroup) get(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
+	c, ok := g.clients[addr]
+	if !ok {
+		return nil, fmt.Errorf("client %s not found", addr)
+	}
+	return c, nil
+}
+
+var _ = (peersContainer)(&fakePeersGroup{})
+
 func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
 		wOpts    = &WriterOptions{}
 	)
-	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
-	// This removes the network from the tests and creates a more consistent testing harness.
-	peers := &peerGroup{
-		dialOpts: nil,
-		m:        sync.RWMutex{},
-		cache:    map[string]storepb.WriteableStoreClient{},
-		dialer: func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error) {
-			// dialer should never be called since we are creating fake clients with fake addresses
-			// this protects against some leaking test that may attempt to dial random IP addresses
-			// which may pose a security risk.
-			return nil, errors.New("unexpected dial called in testing")
-		},
+	fakePeers := &fakePeersGroup{
+		clients: map[string]storepb.WriteableStoreClient{},
 	}
 
 	ag := addrGen{}
@@ -194,11 +212,11 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
-		h.peers = peers
 		addr := ag.newAddr()
+		h.peers = fakePeers
+		fakePeers.clients[addr] = &fakeRemoteWriteGRPCServer{h: h}
 		h.options.Endpoint = addr
 		cfg[0].Endpoints = append(cfg[0].Endpoints, Endpoint{Address: h.options.Endpoint})
-		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
 	// Use hashmod as default.
 	if hashringAlgo == "" {
@@ -1567,4 +1585,36 @@ func TestGetStatsLimitParameter(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, limit, givenLimit)
 	})
+}
+
+func TestSortedSliceDiff(t *testing.T) {
+	testutil.Equals(t, []string{"a"}, getSortedStringSliceDiff([]string{"a", "a", "foo"}, []string{"b", "b", "foo"}))
+	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{"b", "b", "foo"}))
+	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{}))
+}
+
+func TestHashringChangeCallsClose(t *testing.T) {
+	appendables := []*fakeAppendable{
+		{
+			appender: newFakeAppender(nil, nil, nil),
+		},
+		{
+			appender: newFakeAppender(nil, nil, nil),
+		},
+		{
+			appender: newFakeAppender(nil, nil, nil),
+		},
+	}
+	allHandlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+	testutil.Ok(t, err)
+
+	appendables = appendables[1:]
+
+	_, smallHashring, err := newTestHandlerHashring(appendables, 2, AlgorithmHashmod)
+	testutil.Ok(t, err)
+
+	allHandlers[0].Hashring(smallHashring)
+
+	pg := allHandlers[0].peers.(*fakePeersGroup)
+	testutil.Assert(t, len(pg.closeCalled) > 0)
 }

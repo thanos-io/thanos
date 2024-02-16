@@ -8,13 +8,19 @@ package main
 
 import (
 	"net/url"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/pkg/errors"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/shipper"
 )
 
 type grpcConfig struct {
@@ -113,7 +119,17 @@ type reloaderConfig struct {
 	ruleDirectories []string
 	watchInterval   time.Duration
 	retryInterval   time.Duration
+	method          string
+	processName     string
 }
+
+const (
+	// HTTPReloadMethod reloads the configuration using the HTTP reload endpoint.
+	HTTPReloadMethod = "http"
+
+	// SignalReloadMethod reloads the configuration sending a SIGHUP signal to the process.
+	SignalReloadMethod = "signal"
+)
 
 func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfig {
 	cmd.Flag("reloader.config-file",
@@ -131,6 +147,12 @@ func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfi
 	cmd.Flag("reloader.retry-interval",
 		"Controls how often reloader retries config reload in case of error.").
 		Default("5s").DurationVar(&rc.retryInterval)
+	cmd.Flag("reloader.method",
+		"Method used to reload the configuration.").
+		Default(HTTPReloadMethod).EnumVar(&rc.method, HTTPReloadMethod, SignalReloadMethod)
+	cmd.Flag("reloader.process-name",
+		"Executable name used to match the process being reloaded when using the signal method.").
+		Default("prometheus").StringVar(&rc.processName)
 
 	return rc
 }
@@ -140,6 +162,7 @@ type shipperConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	hashFunc              string
+	metaFileName          string
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -156,6 +179,7 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
+	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)
 	return sc
 }
 
@@ -238,4 +262,24 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	ac.alertSourceTemplate = cmd.Flag("alert.query-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").String()
 
 	return ac
+}
+
+func parseFlagLabels(s []string) (labels.Labels, error) {
+	var lset labels.Labels
+	for _, l := range s {
+		parts := strings.SplitN(l, "=", 2)
+		if len(parts) != 2 {
+			return nil, errors.Errorf("unrecognized label %q", l)
+		}
+		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
+			return nil, errors.Errorf("unsupported format for label %s", l)
+		}
+		val, err := strconv.Unquote(parts[1])
+		if err != nil {
+			return nil, errors.Wrap(err, "unquote label value")
+		}
+		lset = append(lset, labels.Label{Name: parts[0], Value: val})
+	}
+	sort.Sort(lset)
+	return lset, nil
 }

@@ -20,6 +20,10 @@ describe('ExpressionInput', () => {
     enableAutocomplete: true,
     enableHighlighting: true,
     enableLinter: true,
+    executeExplain: (): void => {
+      // Do nothing.
+    },
+    disableExplain: false,
   };
 
   let expressionInput: ReactWrapper;

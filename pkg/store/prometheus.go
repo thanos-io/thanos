@@ -33,9 +33,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -108,6 +108,11 @@ func NewPrometheusStore(
 	return p, nil
 }
 
+func (p *PrometheusStore) labelCallsSupportMatchers() bool {
+	version, parseErr := semver.Parse(p.promVersion())
+	return parseErr == nil && version.GTE(baseVer)
+}
+
 // Info returns store information about the Prometheus instance.
 // NOTE(bwplotka): MaxTime & MinTime are not accurate nor adjusted dynamically.
 // This is fine for now, but might be needed in future.
@@ -116,12 +121,11 @@ func (p *PrometheusStore) Info(_ context.Context, _ *storepb.InfoRequest) (*stor
 	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
-		Labels:    make([]labelpb.ZLabel, 0, len(lset)),
+		Labels:    labelpb.ZLabelsFromPromLabels(lset),
 		StoreType: p.component.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
 	}
-	res.Labels = append(res.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
@@ -190,15 +194,17 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 		if err != nil {
 			return err
 		}
+		var b labels.Builder
 		for _, lbm := range labelMaps {
-			lset := make([]labelpb.ZLabel, 0, len(lbm)+len(finalExtLset))
+			b.Reset(labels.EmptyLabels())
 			for k, v := range lbm {
-				lset = append(lset, labelpb.ZLabel{Name: k, Value: v})
+				b.Set(k, v)
 			}
-			lset = append(lset, labelpb.ZLabelsFromPromLabels(finalExtLset)...)
-			sort.Slice(lset, func(i, j int) bool {
-				return lset[i].Name < lset[j].Name
+			// external labels should take precedence
+			finalExtLset.Range(func(l labels.Label) {
+				b.Set(l.Name, l.Value)
 			})
+			lset := labelpb.ZLabelsFromPromLabels(b.Labels())
 			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
@@ -290,19 +296,18 @@ func (p *PrometheusStore) queryPrometheus(
 	}
 
 	externalLbls := rmLabels(p.externalLabelsFn().Copy(), extLsetToRemove)
+	b := labels.NewScratchBuilder(16)
 	for _, vector := range matrix {
-		seriesLbls := labels.Labels(make([]labels.Label, 0, len(vector.Metric)))
+		b.Reset()
 
 		// Attach labels from samples.
 		for k, v := range vector.Metric {
-			seriesLbls = append(seriesLbls, labels.FromStrings(string(k), string(v))...)
+			b.Add(string(k), string(v))
 		}
-		sort.Slice(seriesLbls, func(i, j int) bool {
-			return seriesLbls.Less(i, j)
-		})
-		// Attach external labels for compatibility with remote read.
-		finalLbls := labelpb.ExtendSortedLabels(seriesLbls, externalLbls)
-		finalLbls = append(finalLbls, dedup.PushdownMarker)
+		b.Add(dedup.PushdownMarker.Name, dedup.PushdownMarker.Value)
+		b.Sort()
+
+		finalLbls := labelpb.ExtendSortedLabels(b.Labels(), externalLbls)
 
 		series := &prompb.TimeSeries{
 			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
@@ -578,7 +583,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
 
-	preq.Header.Set("User-Agent", httpconfig.ThanosUserAgent)
+	preq.Header.Set("User-Agent", clientconfig.ThanosUserAgent)
 	presp, err = p.client.Do(preq.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
@@ -604,7 +609,7 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 		return false, nil, err
 	}
 
-	if len(externalLabels) == 0 {
+	if externalLabels.IsEmpty() {
 		return true, tms, nil
 	}
 
@@ -656,8 +661,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	}
 
 	var lbls []string
-	version, parseErr := semver.Parse(p.promVersion())
-	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
 		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
@@ -682,9 +686,9 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	}
 
 	if len(lbls) > 0 {
-		for _, extLbl := range extLset {
-			lbls = append(lbls, extLbl.Name)
-		}
+		extLset.Range(func(l labels.Label) {
+			lbls = append(lbls, l.Name)
+		})
 		sort.Strings(lbls)
 	}
 
@@ -699,17 +703,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	extLset := p.externalLabelsFn()
 
-	// First check for matching external label which has priority.
-	if l := extLset.Get(r.Label); l != "" {
-		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
-	}
-
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !match {
-		return &storepb.LabelValuesResponse{Values: nil}, nil
+		return &storepb.LabelValuesResponse{}, nil
 	}
 
 	var (
@@ -717,8 +716,22 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		vals []string
 	)
 
-	version, parseErr := semver.Parse(p.promVersion())
-	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+	// If we request label values for an external label while selecting an additional matcher for other label values
+	if val := extLset.Get(r.Label); val != "" {
+		if len(matchers) == 0 {
+			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		}
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		if err != nil {
+			return nil, err
+		}
+		if len(sers) > 0 {
+			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		}
+		return &storepb.LabelValuesResponse{}, nil
+	}
+
+	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
 		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
@@ -746,10 +759,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 }
 
 func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
-	lset := p.externalLabelsFn()
-
-	labels := make([]labelpb.ZLabel, 0, len(lset))
-	labels = append(labels, labelpb.ZLabelsFromPromLabels(lset)...)
+	labels := labelpb.ZLabelsFromPromLabels(p.externalLabelsFn())
 
 	labelset := []labelpb.ZLabelSet{}
 	if len(labels) > 0 {

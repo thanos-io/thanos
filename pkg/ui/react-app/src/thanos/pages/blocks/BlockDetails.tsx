@@ -2,6 +2,7 @@ import React, { FC, useState } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
+import PathPrefixProps from '../../../types/PathPrefixProps';
 import { Button, Modal, ModalBody, Form, Input, ModalHeader, ModalFooter } from 'reactstrap';
 import { download } from './helpers';
 
@@ -11,7 +12,12 @@ export interface BlockDetailsProps {
   disableAdminOperations: boolean;
 }
 
-export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock, disableAdminOperations }) => {
+export const BlockDetails: FC<BlockDetailsProps & PathPrefixProps> = ({
+  pathPrefix = '',
+  block,
+  selectBlock,
+  disableAdminOperations,
+}) => {
   const [modalAction, setModalAction] = useState<string>('');
   const [detailValue, setDetailValue] = useState<string | null>(null);
 
@@ -28,7 +34,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock, disabl
             action,
           });
 
-      const response = await fetch('/api/v1/blocks/mark', {
+      const response = await fetch(`${pathPrefix}/api/v1/blocks/mark`, {
         method: 'POST',
         body,
       });
