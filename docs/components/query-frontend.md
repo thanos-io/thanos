@@ -260,6 +260,8 @@ Flags:
       --query-frontend.forward-header=<http-header-name> ...
                                  List of headers forwarded by the query-frontend
                                  to downstream queriers, default is empty
+      --query-frontend.log-failed-queries
+                                 Log failed queries due to any reason
       --query-frontend.log-queries-longer-than=0
                                  Log queries that are slower than the specified
                                  duration. Set to 0 to disable. Set to < 0 to

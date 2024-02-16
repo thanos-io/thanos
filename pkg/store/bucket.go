@@ -747,7 +747,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	level.Debug(s.logger).Log("msg", "loading new block",
 		"id", meta.ULID,
 		"min_time", meta.MinTime,
-		"duration_hours", 1.0 * (meta.MaxTime - meta.MinTime)/(3600*1000),
+		"duration_hours", 1.0*(meta.MaxTime-meta.MinTime)/(3600*1000),
 		"num_series", meta.Stats.NumSeries,
 		"num_samples", meta.Stats.NumSamples,
 		"num_chunks", meta.Stats.NumChunks,

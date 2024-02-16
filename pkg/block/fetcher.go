@@ -73,7 +73,7 @@ func (s *FetcherMetrics) ResetTx() {
 }
 
 const (
-	FetcherSubSys = "blocks_meta"
+	fetcherSubSys = "blocks_meta"
 
 	CorruptedMeta = "corrupted-meta-json"
 	NoMeta        = "no-meta-json"
@@ -98,15 +98,15 @@ const (
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 
-	tenantLabel = "__tenant__"
-	defautTenant = "__unkown__"
+	tenantLabel  = "__tenant__"
+	defautTenant = "__unknown__"
 )
 
 func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
 	var m BaseFetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: FetcherSubSys,
+		Subsystem: fetcherSubSys,
 		Name:      "base_syncs_total",
 		Help:      "Total blocks metadata synchronization attempts by base Fetcher",
 	})
@@ -118,17 +118,17 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	var m FetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: FetcherSubSys,
+		Subsystem: fetcherSubSys,
 		Name:      "syncs_total",
 		Help:      "Total blocks metadata synchronization attempts",
 	})
 	m.SyncFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: FetcherSubSys,
+		Subsystem: fetcherSubSys,
 		Name:      "sync_failures_total",
 		Help:      "Total blocks metadata synchronization failures",
 	})
 	m.SyncDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Subsystem: FetcherSubSys,
+		Subsystem: fetcherSubSys,
 		Name:      "sync_duration_seconds",
 		Help:      "Duration of the blocks metadata synchronization in seconds",
 		Buckets:   []float64{0.01, 1, 10, 100, 300, 600, 1000},
@@ -136,7 +136,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.Synced = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: FetcherSubSys,
+			Subsystem: fetcherSubSys,
 			Name:      "synced",
 			Help:      "Number of block metadata synced",
 		},
@@ -146,7 +146,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.Modified = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: FetcherSubSys,
+			Subsystem: fetcherSubSys,
 			Name:      "modified",
 			Help:      "Number of blocks whose metadata changed",
 		},
@@ -428,12 +428,12 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 			for id := range ch {
 				meta, err := f.loadMeta(ctx, id)
 				numBlocks += 1
-				if (numBlocks%10) == 0 {
+				if (numBlocks % 10) == 0 {
 					level.Debug(f.logger).Log("msg", "loaded the metadata of a block from one goroutine",
 						"block", id,
 						"n_th_block", numBlocks,
 						"min_time", meta.MinTime,
-						"duration_hours", 1.0 * (meta.MaxTime - meta.MinTime) / 1000 / 3600,
+						"duration_hours", 1.0*(meta.MaxTime-meta.MinTime)/1000/3600,
 					)
 				}
 				if err == nil {
