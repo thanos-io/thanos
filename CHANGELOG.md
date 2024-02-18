@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7083](https://github.com/thanos-io/thanos/pull/7083) Store Gateway: Fix lazy expanded postings with 0 length failed to be cached.
 - [#7080](https://github.com/thanos-io/thanos/pull/7080) Receive: race condition in handler Close() when stopped early
 - [#7132](https://github.com/thanos-io/thanos/pull/7132) Documentation: fix broken helm installation instruction
+- [#7148](https://github.com/thanos-io/thanos/pull/7148) Store Gateway: Fix windows compatibility in index-header sync.
 
 ### Added
 
