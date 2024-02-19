@@ -64,33 +64,39 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 		},
 		"should fail on circuit_breaker_consecutive_failures = 0": {
 			config: MemcachedClientConfig{
-				Addresses:                                 []string{"127.0.0.1:11211"},
-				MaxAsyncConcurrency:                       1,
-				DNSProviderUpdateInterval:                 time.Second,
-				SetAsyncCircuitBreakerEnabled:             true,
-				SetAsyncCircuitBreakerConsecutiveFailures: 0,
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				SetAsyncCircuitBreaker: CircuitBreakerConfig{
+					Enabled:             true,
+					ConsecutiveFailures: 0,
+				},
 			},
 			expected: errCircuitBreakerConsecutiveFailuresNotPositive,
 		},
 		"should fail on circuit_breaker_failure_percent <= 0": {
 			config: MemcachedClientConfig{
-				Addresses:                                 []string{"127.0.0.1:11211"},
-				MaxAsyncConcurrency:                       1,
-				DNSProviderUpdateInterval:                 time.Second,
-				SetAsyncCircuitBreakerEnabled:             true,
-				SetAsyncCircuitBreakerConsecutiveFailures: 1,
-				SetAsyncCircuitBreakerFailurePercent:      0,
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				SetAsyncCircuitBreaker: CircuitBreakerConfig{
+					Enabled:             true,
+					ConsecutiveFailures: 1,
+					FailurePercent:      0,
+				},
 			},
 			expected: errCircuitBreakerFailurePercentInvalid,
 		},
 		"should fail on circuit_breaker_failure_percent >= 1": {
 			config: MemcachedClientConfig{
-				Addresses:                                 []string{"127.0.0.1:11211"},
-				MaxAsyncConcurrency:                       1,
-				DNSProviderUpdateInterval:                 time.Second,
-				SetAsyncCircuitBreakerEnabled:             true,
-				SetAsyncCircuitBreakerConsecutiveFailures: 1,
-				SetAsyncCircuitBreakerFailurePercent:      1.1,
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				SetAsyncCircuitBreaker: CircuitBreakerConfig{
+					Enabled:             true,
+					ConsecutiveFailures: 1,
+					FailurePercent:      1.1,
+				},
 			},
 			expected: errCircuitBreakerFailurePercentInvalid,
 		},
@@ -719,12 +725,12 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 		t.Run(testdata.name, func(t *testing.T) {
 			config := defaultMemcachedClientConfig
 			config.Addresses = []string{"127.0.0.1:11211"}
-			config.SetAsyncCircuitBreakerEnabled = true
-			config.SetAsyncCircuitBreakerOpenDuration = 2 * time.Millisecond
-			config.SetAsyncCircuitBreakerHalfOpenMaxRequests = 100
-			config.SetAsyncCircuitBreakerMinRequests = testdata.minRequests
-			config.SetAsyncCircuitBreakerConsecutiveFailures = testdata.consecutiveFailures
-			config.SetAsyncCircuitBreakerFailurePercent = testdata.failurePercent
+			config.SetAsyncCircuitBreaker.Enabled = true
+			config.SetAsyncCircuitBreaker.OpenDuration = 2 * time.Millisecond
+			config.SetAsyncCircuitBreaker.HalfOpenMaxRequests = 100
+			config.SetAsyncCircuitBreaker.MinRequests = testdata.minRequests
+			config.SetAsyncCircuitBreaker.ConsecutiveFailures = testdata.consecutiveFailures
+			config.SetAsyncCircuitBreaker.FailurePercent = testdata.failurePercent
 
 			backendMock := newMemcachedClientBackendMock()
 			backendMock.setErrors = testdata.setErrors
@@ -746,7 +752,7 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 				testutil.Ok(t, client.SetAsync(strconv.Itoa(testdata.setErrors), []byte("value"), time.Second))
 				testutil.Equals(t, gobreaker.StateOpen, cbimpl.State(), "state should be open")
 
-				time.Sleep(config.SetAsyncCircuitBreakerOpenDuration)
+				time.Sleep(config.SetAsyncCircuitBreaker.OpenDuration)
 				for i := testdata.setErrors; i < testdata.setErrors+10; i++ {
 					testutil.Ok(t, client.SetAsync(strconv.Itoa(i), []byte("value"), time.Second))
 				}

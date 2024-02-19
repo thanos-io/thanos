@@ -325,12 +325,13 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
-  set_async_circuit_breaker_enabled: false
-  set_async_circuit_breaker_half_open_max_requests: 0
-  set_async_circuit_breaker_open_duration: 0s
-  set_async_circuit_breaker_min_requests: 0
-  set_async_circuit_breaker_consecutive_failures: 0
-  set_async_circuit_breaker_failure_percent: 0
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 0
+    open_duration: 0s
+    min_requests: 0
+    consecutive_failures: 0
+    failure_percent: 0
 enabled_items: []
 ttl: 0s
 ```
@@ -346,16 +347,17 @@ While the remaining settings are **optional**:
 - `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
 - `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
 - `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
-- `set_async_circuit_breaker_enabled`: `true` to enable circuite breaker for asynchronous operations. The circuit breaker consists of three states: closed, half-open, and open. It begins in the closed state. When the total requests exceed `set_async_circuit_breaker_min_requests`, and either consecutive failures occur or the failure percentage is excessively high according to the configured values, the circuit breaker transitions to the open state. This results in the rejection of all asynchronous operations. After `set_async_circuit_breaker_open_duration`, the circuit breaker transitions to the half-open state, where it allows `set_async_circuit_breaker_half_open_max_requests` asynchronous operations to be processed in order to test if the conditions have improved. If they have not, the state transitions back to open; if they have, it transitions to the closed state. Following each 10 seconds interval in the closed state, the circuit breaker resets its metrics and repeats this cycle.
-- `set_async_circuit_breaker_half_open_max_requests`: maximum number of requests allowed to pass through when the circuit breaker is half-open. If set to 0, the circuit breaker allows only 1 request.
-- `set_async_circuit_breaker_open_duration`: the period of the open state after which the state of the circuit breaker becomes half-open. If set to 0, the circuit breaker resets it to 60 seconds.
-- `set_async_circuit_breaker_min_requests`: minimal requests to trigger the circuit breaker, 0 signifies no requirements.
-- `set_async_circuit_breaker_consecutive_failures`: consecutive failures based on `set_async_circuit_breaker_min_requests` to determine if the circuit breaker should open.
-- `set_async_circuit_breaker_failure_percent`: the failure percentage, which is based on `set_async_circuit_breaker_min_requests`, to determine if the circuit breaker should open.
 - `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
+- `set_async_circuit_breaker_config`: the configuration for the circuit breaker for asynchronous set operations.
+  - `enabled`: `true` to enable circuite breaker for asynchronous operations. The circuit breaker consists of three states: closed, half-open, and open. It begins in the closed state. When the total requests exceed `min_requests`, and either consecutive failures occur or the failure percentage is excessively high according to the configured values, the circuit breaker transitions to the open state. This results in the rejection of all asynchronous operations. After `open_duration`, the circuit breaker transitions to the half-open state, where it allows `half_open_max_requests` asynchronous operations to be processed in order to test if the conditions have improved. If they have not, the state transitions back to open; if they have, it transitions to the closed state. Following each 10 seconds interval in the closed state, the circuit breaker resets its metrics and repeats this cycle.
+  - `half_open_max_requests`: maximum number of requests allowed to pass through when the circuit breaker is half-open. If set to 0, the circuit breaker allows only 1 request.
+  - `open_duration`: the period of the open state after which the state of the circuit breaker becomes half-open. If set to 0, the circuit breaker utilizes the default value of 60 seconds.
+  - `min_requests`: minimal requests to trigger the circuit breaker, 0 signifies no requirements.
+  - `consecutive_failures`: consecutive failures based on `min_requests` to determine if the circuit breaker should open.
+  - `failure_percent`: the failure percentage, which is based on `min_requests`, to determine if the circuit breaker should open.
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 - `ttl`: ttl to store index cache items in memcached.
 
@@ -388,12 +390,13 @@ config:
   master_name: ""
   max_async_buffer_size: 10000
   max_async_concurrency: 20
-  set_async_circuit_breaker_enabled: false
-  set_async_circuit_breaker_half_open_max_requests: 10
-  set_async_circuit_breaker_open_duration: 5s
-  set_async_circuit_breaker_min_requests: 50
-  set_async_circuit_breaker_consecutive_failures: 5
-  set_async_circuit_breaker_failure_percent: 0.05
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 10
+    open_duration: 5s
+    min_requests: 50
+    consecutive_failures: 5
+    failure_percent: 0.05
 enabled_items: []
 ttl: 0s
 ```

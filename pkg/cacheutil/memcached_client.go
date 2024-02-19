@@ -41,11 +41,9 @@ const (
 )
 
 var (
-	errMemcachedConfigNoAddrs                       = errors.New("no memcached addresses provided")
-	errMemcachedDNSUpdateIntervalNotPositive        = errors.New("DNS provider update interval must be positive")
-	errMemcachedMaxAsyncConcurrencyNotPositive      = errors.New("max async concurrency must be positive")
-	errCircuitBreakerConsecutiveFailuresNotPositive = errors.New("set async circuit breaker: consecutive failures must be greater than 0")
-	errCircuitBreakerFailurePercentInvalid          = errors.New("set async circuit breaker: failure percent must be in range (0,1]")
+	errMemcachedConfigNoAddrs                  = errors.New("no memcached addresses provided")
+	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("DNS provider update interval must be positive")
+	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max async concurrency must be positive")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
 		Timeout:                   500 * time.Millisecond,
@@ -58,12 +56,7 @@ var (
 		DNSProviderUpdateInterval: 10 * time.Second,
 		AutoDiscovery:             false,
 
-		SetAsyncCircuitBreakerEnabled:             false,
-		SetAsyncCircuitBreakerHalfOpenMaxRequests: 10,
-		SetAsyncCircuitBreakerOpenDuration:        5 * time.Second,
-		SetAsyncCircuitBreakerMinRequests:         50,
-		SetAsyncCircuitBreakerConsecutiveFailures: 5,
-		SetAsyncCircuitBreakerFailurePercent:      0.05,
+		SetAsyncCircuitBreaker: defaultCircuitBreakerConfig,
 	}
 )
 
@@ -152,21 +145,8 @@ type MemcachedClientConfig struct {
 	// AutoDiscovery configures memached client to perform auto-discovery instead of DNS resolution
 	AutoDiscovery bool `yaml:"auto_discovery"`
 
-	// SetAsyncCircuitBreakerEnabled enables circuite breaker for SetAsync operations.
-	SetAsyncCircuitBreakerEnabled bool `yaml:"set_async_circuit_breaker_enabled"`
-	// SetAsyncCircuitBreakerHalfOpenMaxRequests is the maximum number of requests allowed to pass through
-	// when the circuit breaker is half-open.
-	// If set to 0, the circuit breaker allows only 1 request.
-	SetAsyncCircuitBreakerHalfOpenMaxRequests uint32 `yaml:"set_async_circuit_breaker_half_open_max_requests"`
-	// SetAsyncCircuitBreakerOpenDuration is the period of the open state after which the state of the circuit breaker becomes half-open.
-	// If set to 0, the circuit breaker resets it to 60 seconds.
-	SetAsyncCircuitBreakerOpenDuration time.Duration `yaml:"set_async_circuit_breaker_open_duration"`
-	// SetAsyncCircuitBreakerMinRequests is minimal requests to trigger the circuit breaker.
-	SetAsyncCircuitBreakerMinRequests uint32 `yaml:"set_async_circuit_breaker_min_requests"`
-	// SetAsyncCircuitBreakerConsecutiveFailures represents consecutive failures based on CircuitBreakerMinRequests to determine if the circuit breaker should open.
-	SetAsyncCircuitBreakerConsecutiveFailures uint32 `yaml:"set_async_circuit_breaker_consecutive_failures"`
-	// SetAsyncCircuitBreakerFailurePercent represents the failure percentage, which is based on CircuitBreakerMinRequests, to determine if the circuit breaker should open.
-	SetAsyncCircuitBreakerFailurePercent float64 `yaml:"set_async_circuit_breaker_failure_percent"`
+	// SetAsyncCircuitBreaker configures the circuit breaker for SetAsync operations.
+	SetAsyncCircuitBreaker CircuitBreakerConfig `yaml:"set_async_circuit_breaker_config"`
 }
 
 func (c *MemcachedClientConfig) validate() error {
@@ -184,13 +164,8 @@ func (c *MemcachedClientConfig) validate() error {
 		return errMemcachedMaxAsyncConcurrencyNotPositive
 	}
 
-	if c.SetAsyncCircuitBreakerEnabled {
-		if c.SetAsyncCircuitBreakerConsecutiveFailures == 0 {
-			return errCircuitBreakerConsecutiveFailuresNotPositive
-		}
-		if c.SetAsyncCircuitBreakerFailurePercent <= 0 || c.SetAsyncCircuitBreakerFailurePercent > 1 {
-			return errCircuitBreakerFailurePercentInvalid
-		}
+	if err := c.SetAsyncCircuitBreaker.validate(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -314,20 +289,7 @@ func newMemcachedClient(
 			gate.Gets,
 		),
 		p:                      NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
-		setAsyncCircuitBreaker: noopCircuitBreaker{},
-	}
-	if config.SetAsyncCircuitBreakerEnabled {
-		c.setAsyncCircuitBreaker = gobreakerCircuitBreaker{gobreaker.NewCircuitBreaker(gobreaker.Settings{
-			Name:        "memcached-set-async",
-			MaxRequests: config.SetAsyncCircuitBreakerHalfOpenMaxRequests,
-			Interval:    10 * time.Second,
-			Timeout:     config.SetAsyncCircuitBreakerOpenDuration,
-			ReadyToTrip: func(counts gobreaker.Counts) bool {
-				return counts.Requests >= config.SetAsyncCircuitBreakerMinRequests &&
-					(counts.ConsecutiveFailures >= uint32(config.SetAsyncCircuitBreakerConsecutiveFailures) ||
-						float64(counts.TotalFailures)/float64(counts.Requests) >= config.SetAsyncCircuitBreakerFailurePercent)
-			},
-		})}
+		setAsyncCircuitBreaker: newCircuitBreaker("memcached-set-async", config.SetAsyncCircuitBreaker),
 	}
 
 	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{

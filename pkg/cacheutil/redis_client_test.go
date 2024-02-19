@@ -203,8 +203,8 @@ func TestValidateRedisConfig(t *testing.T) {
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
 				cfg.Addr = addr
-				cfg.SetAsyncCircuitBreakerEnabled = false
-				cfg.SetAsyncCircuitBreakerConsecutiveFailures = 0
+				cfg.SetAsyncCircuitBreaker.Enabled = false
+				cfg.SetAsyncCircuitBreaker.ConsecutiveFailures = 0
 				return cfg
 			},
 			expect_err: false,
@@ -214,8 +214,8 @@ func TestValidateRedisConfig(t *testing.T) {
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
 				cfg.Addr = addr
-				cfg.SetAsyncCircuitBreakerEnabled = true
-				cfg.SetAsyncCircuitBreakerConsecutiveFailures = 0
+				cfg.SetAsyncCircuitBreaker.Enabled = true
+				cfg.SetAsyncCircuitBreaker.ConsecutiveFailures = 0
 				return cfg
 			},
 			expect_err: true,
@@ -225,8 +225,8 @@ func TestValidateRedisConfig(t *testing.T) {
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
 				cfg.Addr = addr
-				cfg.SetAsyncCircuitBreakerEnabled = true
-				cfg.SetAsyncCircuitBreakerFailurePercent = 0
+				cfg.SetAsyncCircuitBreaker.Enabled = true
+				cfg.SetAsyncCircuitBreaker.FailurePercent = 0
 				return cfg
 			},
 			expect_err: true,
