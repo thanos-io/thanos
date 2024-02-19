@@ -133,7 +133,7 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 
 	cb.operationRequests.WithLabelValues(objstore.OpIter, cfgName).Inc()
 
-	iterVerb := cachekey.BucketCacheKey{Verb: cachekey.IterVerb, Name: dir}
+	iterVerb := cachekey.BucketCacheKey{Verb: cachekey.IterVerb, Name: dir, ObjectStorageConfigHash: cfg.ConfigHash}
 	opts := objstore.ApplyIterOptions(options...)
 	if opts.Recursive {
 		iterVerb.Verb = cachekey.IterRecursiveVerb
