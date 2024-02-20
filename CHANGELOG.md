@@ -60,6 +60,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6887](https://github.com/thanos-io/thanos/pull/6887) Query Frontend: *breaking :warning:* Add tenant label to relevant exported metrics. Note that this change may cause some pre-existing custom dashboard queries to be incorrect due to the added label.
 - [#7028](https://github.com/thanos-io/thanos/pull/7028) Query|Query Frontend: Add new `--query-frontend.enable-x-functions` flag to enable experimental extended functions.
 - [#6884](https://github.com/thanos-io/thanos/pull/6884) Tools: Add upload-block command to upload blocks to object storage.
+- [#7080](https://github.com/thanos-io/thanos/pull/7080) Rule: Added a new flag for max-source-resolution.
 
 ### Changed
 
