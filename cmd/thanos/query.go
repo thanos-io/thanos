@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
@@ -197,7 +198,7 @@ func registerQuery(app *extkingpin.App) {
 
 	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+queryPushdown+".").Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is empty.").Hidden().Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -232,16 +233,15 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		var enableQueryPushdown bool
 		for _, feature := range *featureList {
-			if feature == queryPushdown {
-				enableQueryPushdown = true
-			}
 			if feature == promqlAtModifier {
 				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlAtModifier)
 			}
 			if feature == promqlNegativeOffset {
 				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlNegativeOffset)
+			}
+			if feature == queryPushdown {
+				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently deprecated and therefore ignored.", "option", queryPushdown)
 			}
 		}
 
@@ -262,7 +262,7 @@ func registerQuery(app *extkingpin.App) {
 				RefreshInterval: *fileSDInterval,
 			}
 			var err error
-			if fileSD, err = file.NewDiscovery(conf, logger, reg); err != nil {
+			if fileSD, err = file.NewDiscovery(conf, logger, conf.NewDiscovererMetrics(reg, discovery.NewRefreshMetrics(reg))); err != nil {
 				return err
 			}
 		}
@@ -335,7 +335,6 @@ func registerQuery(app *extkingpin.App) {
 			*strictEndpoints,
 			*strictEndpointGroups,
 			*webDisableCORS,
-			enableQueryPushdown,
 			*alertQueryURL,
 			*grpcProxyStrategy,
 			component.Query,
@@ -417,7 +416,6 @@ func runQuery(
 	strictEndpoints []string,
 	strictEndpointGroups []string,
 	disableCORS bool,
-	enableQueryPushdown bool,
 	alertQueryURL string,
 	grpcProxyStrategy string,
 	comp component.Component,
@@ -708,7 +706,6 @@ func runQuery(
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
 			enableExemplarPartialResponse,
-			enableQueryPushdown,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,

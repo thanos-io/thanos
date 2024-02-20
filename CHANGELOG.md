@@ -12,9 +12,15 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#7083](https://github.com/thanos-io/thanos/pull/7083) Store Gateway: Fix lazy expanded postings with 0 length failed to be cached.
+- [#7080](https://github.com/thanos-io/thanos/pull/7080) Receive: race condition in handler Close() when stopped early
+- [#7132](https://github.com/thanos-io/thanos/pull/7132) Documentation: fix broken helm installation instruction
+
 ### Added
 
 ### Changed
+
+- [#7123](https://github.com/thanos-io/thanos/pull/7123) Rule: Change default Alertmanager API version to v2.
 
 ### Removed
 
@@ -38,6 +44,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6874](https://github.com/thanos-io/thanos/pull/6874) Sidecar: fix labels returned by 'api/v1/series' in presence of conflicting external and inner labels.
 - [#7009](https://github.com/thanos-io/thanos/pull/7009) Rule: Fix spacing error in URL.
 - [#7082](https://github.com/thanos-io/thanos/pull/7082) Stores: fix label values edge case when requesting external label values with matchers
+- [#7114](https://github.com/thanos-io/thanos/pull/7114) Stores: fix file path bug for minio v7.0.61
 
 ### Added
 
@@ -59,6 +66,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6539](https://github.com/thanos-io/thanos/pull/6539) Store: *breaking :warning:* Changed `--sync-block-duration` default 3m to 15m.
 
 ### Removed
+
+- [#7014](https://github.com/thanos-io/thanos/pull/7014) *: *breaking :warning:* Removed experimental query pushdown feature to simplify query path. This feature has had high complexity for too little benefits. The responsibility for query pushdown will be moved to the distributed mode of the new 'thanos' promql engine.
 
 ## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - 18.12.2023
 

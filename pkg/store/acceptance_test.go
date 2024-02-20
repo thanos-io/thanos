@@ -33,6 +33,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -987,4 +988,31 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 
 	testStoreAPIsAcceptance(t, startStore)
 	testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t, startStore)
+}
+
+func TestProxyStore_Acceptance(t *testing.T) {
+	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			db, err := e2eutil.NewTSDB()
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+			appendFn(db.Appender(context.Background()))
+
+			return NewTSDBStore(nil, db, component.Rule, extLset)
+		}
+
+		p1 := startNestedStore(tt, extLset, appendFn)
+		p2 := startNestedStore(tt, extLset, appendFn)
+
+		clients := []Client{
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1, 0)},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2, 0)},
+		}
+
+		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
+	}
+
+	testStoreAPIsAcceptance(t, startStore)
 }

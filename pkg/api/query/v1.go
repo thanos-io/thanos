@@ -157,7 +157,6 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
-	enableQueryPushdown                 bool
 	disableCORS                         bool
 
 	replicaLabels  []string
@@ -196,7 +195,6 @@ func NewQueryAPI(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
-	enableQueryPushdown bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -233,7 +231,6 @@ func NewQueryAPI(
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
-		enableQueryPushdown:                    enableQueryPushdown,
 		replicaLabels:                          replicaLabels,
 		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -565,7 +562,6 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -668,7 +664,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -835,7 +830,6 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -968,7 +962,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -1062,7 +1055,6 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		storeDebugMatchers,
 		0,
 		enablePartialResponse,
-		qapi.enableQueryPushdown,
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
@@ -1155,7 +1147,6 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		storeDebugMatchers,
 		math.MaxInt64,
 		enablePartialResponse,
-		qapi.enableQueryPushdown,
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
@@ -1212,7 +1203,6 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		storeDebugMatchers,
 		0,
 		enablePartialResponse,
-		qapi.enableQueryPushdown,
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
