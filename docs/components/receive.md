@@ -95,6 +95,39 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
+It is possible to only match certain `tenant`s inside of a hashring file. For example:
+
+```json
+[
+    {
+       "tenants": ["foobar"],
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+The specified endpoints will be used if the tenant is set to `foobar`. It is possible to use glob matching through the parameter `tenant_matcher_type`. It can have the value `glob`. In this case, the strings inside the array are taken as glob patterns and matched against the `tenant` inside of a remote-write request. For instance:
+
+```json
+[
+    {
+       "tenants": ["foo*"],
+       "tenant_matcher_type": "glob",
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+This will still match the tenant `foobar` and any other tenant which begins with the letters `foo`.
+
 ### AZ-aware Ketama hashring (experimental)
 
 In order to ensure even spread for replication over nodes in different availability-zones, you can choose to include az definition in your hashring config. If we for example have a 6 node cluster, spread over 3 different availability zones; A, B and C, we could use the following example `hashring.json`:
