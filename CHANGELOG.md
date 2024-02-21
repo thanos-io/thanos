@@ -24,6 +24,19 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
+## [v0.34.1](https://github.com/thanos-io/thanos/tree/release-0.34) - 11.02.24
+
+### Fixed
+
+- [#7078](https://github.com/thanos-io/thanos/pull/7078) *: Bump gRPC to 1.57.2
+
+### Added
+- [#7105](https://github.com/thanos-io/thanos/pull/7105) Rule: add flag `--query.enable-x-functions` to allow usage of extended promql functions (xrate, xincrease, xdelta) in loaded rules
+
+### Changed
+
+### Removed
+
 ## [v0.34.0](https://github.com/thanos-io/thanos/tree/release-0.34) - 26.01.24
 
 ### Fixed
