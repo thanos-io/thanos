@@ -43,6 +43,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7318](https://github.com/thanos-io/thanos/pull/7318) Compactor: Recover from panic to log block ID
 
 ### Added
+- [#7105](https://github.com/thanos-io/thanos/pull/7105) Rule: add flag `--query.enable-x-functions` to allow usage of extended promql functions (xrate, xincrease, xdelta) in loaded rules
 
 ### Changed
 
