@@ -17,6 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7132](https://github.com/thanos-io/thanos/pull/7132) Documentation: fix broken helm installation instruction
 
 ### Added
+- [#7105](https://github.com/thanos-io/thanos/pull/7105) Rule: add flag `--query.enable-x-functions` to allow usage of extended promql functions (xrate, xincrease, xdelta) in loaded rules
 
 ### Changed
 
@@ -31,7 +32,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7078](https://github.com/thanos-io/thanos/pull/7078) *: Bump gRPC to 1.57.2
 
 ### Added
-- [#7105](https://github.com/thanos-io/thanos/pull/7105) Rule: add flag `--query.enable-x-functions` to allow usage of extended promql functions (xrate, xincrease, xdelta) in loaded rules
 
 ### Changed
 
