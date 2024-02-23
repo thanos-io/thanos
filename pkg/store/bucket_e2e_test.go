@@ -176,6 +176,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		true,
 		time.Minute,
+		time.Minute,
 		WithLogger(s.logger),
 		WithIndexCache(s.cache),
 		WithFilterConfig(filterConf),

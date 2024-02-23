@@ -921,6 +921,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 				false,
 				false,
 				1*time.Minute,
+				1*time.Minute,
 				WithChunkPool(chunkPool),
 				WithFilterConfig(allowAllFilterConf),
 				WithLazyExpandedPostings(lazyExpandedPostings),
