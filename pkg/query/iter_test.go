@@ -46,11 +46,11 @@ func TestNativeHistogramDedup(t *testing.T) {
 			t.Run("read_first_sample", func(t *testing.T) {
 				it := newHistogramResetDetector(newMockedSeriesIterator(c.samples))
 				it.Next()
-				_, h := it.AtHistogram()
+				_, h := it.AtHistogram(nil)
 				testutil.Equals(t, c.samples[0].h.CounterResetHint, h.CounterResetHint)
 
 				it.Next()
-				_, h = it.AtHistogram()
+				_, h = it.AtHistogram(nil)
 				testutil.Equals(t, c.samples[1].h.CounterResetHint, h.CounterResetHint)
 			})
 
@@ -60,7 +60,7 @@ func TestNativeHistogramDedup(t *testing.T) {
 				it := newHistogramResetDetector(newMockedSeriesIterator(c.samples))
 				it.Next()
 				it.Next()
-				_, h := it.AtHistogram()
+				_, h := it.AtHistogram(nil)
 				testutil.Equals(t, h.CounterResetHint, histogram.UnknownCounterReset)
 			})
 		})
