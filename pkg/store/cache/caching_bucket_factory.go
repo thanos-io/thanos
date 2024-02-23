@@ -74,7 +74,7 @@ func (cfg *CachingWithBackendConfig) Defaults() {
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
-func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer, r *route.Router) (objstore.InstrumentedBucket, error) {
+func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer, r *route.Router, configPath string) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading caching bucket configuration")
 
 	config := &CachingWithBackendConfig{}
@@ -84,7 +84,11 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		return nil, errors.Wrap(err, "parsing config YAML file")
 	}
 
-	cfgHash := string(fmt.Sprintf("%d", xxhash.Sum64(yamlContent)))
+	// Append the config path to the YAML content. This allows
+	// using identical config with multiple instances.
+	// TODO(GiedriusS): in the long-term add some kind of "name"
+	// identifier for each instance.
+	cfgHash := string(fmt.Sprintf("%d", xxhash.Sum64(append(yamlContent, []byte(configPath)...))))
 
 	backendConfig, err := yaml.Marshal(config.BackendConfig)
 	if err != nil {
