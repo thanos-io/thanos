@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -112,6 +113,20 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 		tmpFilename = filename + ".tmp"
 	}
 
+	bw, err := writeAndClose(id, tmpFilename, indexVersion, ir)
+	if err != nil {
+		return nil, err
+	}
+
+	if tmpFilename != "" {
+		// Create index-header in atomic way, to avoid partial writes (e.g during restart or crash of store GW).
+		return nil, os.Rename(tmpFilename, filename)
+	}
+
+	return bw.Buffer(), nil
+}
+
+func writeAndClose(id ulid.ULID, tmpFilename string, indexVersion int, ir *chunkedIndexReader) (*binaryWriter, error) {
 	// Buffer for copying and encbuffers.
 	// This also will control the size of file writer buffer.
 	buf := make([]byte, 32*1024)
@@ -152,13 +167,7 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 	if err := bw.writer.Sync(); err != nil {
 		return nil, errors.Wrap(err, "sync")
 	}
-
-	if tmpFilename != "" {
-		// Create index-header in atomic way, to avoid partial writes (e.g during restart or crash of store GW).
-		return nil, os.Rename(tmpFilename, filename)
-	}
-
-	return bw.Buffer(), nil
+	return bw, nil
 }
 
 type chunkedIndexReader struct {
@@ -170,7 +179,7 @@ type chunkedIndexReader struct {
 }
 
 func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID) (*chunkedIndexReader, int, error) {
-	indexFilepath := filepath.Join(id.String(), block.IndexFilename)
+	indexFilepath := path.Join(id.String(), block.IndexFilename)
 	attrs, err := bkt.Attributes(ctx, indexFilepath)
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "get object attributes of %s", indexFilepath)
