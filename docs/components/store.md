@@ -29,6 +29,15 @@ Store node giving access to blocks in a bucket provider. Now supported GCS, S3,
 Azure, Swift, Tencent COS and Aliyun OSS.
 
 Flags:
+      --block-discovery-strategy="concurrent"
+                                 One of concurrent, recursive. When set to
+                                 concurrent, stores will concurrently issue
+                                 one call per directory to discover active
+                                 blocks in the bucket. The recursive strategy
+                                 iterates through all objects in the bucket,
+                                 recursively traversing into each directory.
+                                 This avoids N+1 calls at the expense of having
+                                 slower bucket iterations.
       --block-meta-fetch-concurrency=32
                                  Number of goroutines to use when fetching block
                                  metadata from object storage.
