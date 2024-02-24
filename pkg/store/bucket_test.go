@@ -883,7 +883,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 
 			rec := &recorder{Bucket: bkt}
 			insBkt := objstore.WithNoopInstr(bkt)
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 			metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, dir, nil, []block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConf),
@@ -1406,7 +1406,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 	}
 
 	ibkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, ibkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, ibkt)
 	f, err := block.NewRawMetaFetcher(logger, ibkt, baseBlockIDsFetcher)
 	testutil.Ok(t, err)
 
@@ -1856,7 +1856,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	)
 
 	// Instance a real bucket store we'll use to query the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -1948,7 +1948,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
 
 	// Instance a real bucket store we'll use to query the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -2107,7 +2107,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 			}
 
 			// Instance a real bucket store we'll use to query the series.
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 			fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 			testutil.Ok(tb, err)
 
@@ -2294,7 +2294,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	}
 
 	// Instance a real bucket store we'll use to query back the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -2511,7 +2511,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
 
 	// Instance a real bucket store we'll use to query the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -3487,7 +3487,7 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 	testutil.Ok(t, err)
 
 	insBkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 	})
@@ -3703,7 +3703,7 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	testutil.Ok(t, err)
 
 	insBkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 	})

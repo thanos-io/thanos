@@ -244,7 +244,7 @@ func newMetaFetcher(
 	if ignoreMarkedForDeletion {
 		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, concurrency))
 	}
-	baseBlockIDsFetcher := thanosblock.NewBaseBlockIDsFetcher(logger, fromBkt)
+	baseBlockIDsFetcher := thanosblock.NewConcurrentLister(logger, fromBkt)
 	return thanosblock.NewMetaFetcher(
 		logger,
 		concurrency,
