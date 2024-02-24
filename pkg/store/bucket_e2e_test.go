@@ -154,7 +154,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}
 
 	insBkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(s.logger, insBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(s.logger, insBkt)
 	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, insBkt, baseBlockIDsFetcher, dir, nil, []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 		block.NewLabelShardedMetaFilter(relabelConfig),
