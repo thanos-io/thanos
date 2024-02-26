@@ -81,7 +81,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 	   Sort posting groups by cardinality, so we can iterate from posting group with the smallest posting size.
 	   The algorithm focuses on fetching fewer data, including postings and series.
 
-	   We need to fetch at least 1 posting group in order to fetch series. So if we only fetch the first posting group,
+	   We need to fetch at least 1 posting group with add keys in order to fetch series. So if we only fetch the first posting group with add keys,
 	   the data bytes we need to download is formula F1: P1 * 4 + P1 * S where P1 is the number of postings in group 1
 	   and S is the size per series. 4 is the byte size per posting.
 
@@ -117,20 +117,56 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 	   Based on formula Pn * 4 < P1 * S * R^(n - 2) * (1 - R), left hand side is always increasing while iterating to larger
 	   posting groups while right hand side value is always decreasing as R < 1.
 	*/
-	seriesBytesToFetch := postingGroups[0].cardinality * seriesMaxSize
-	p := float64(1)
-	i := 1 // Start from index 1 as we always need to fetch the smallest posting group.
-	hasAdd := !postingGroups[0].addAll
+	var (
+		negativeCardinalities int64
+		i                     int
+	)
+	for i = range postingGroups {
+		if postingGroups[i].addAll {
+			negativeCardinalities += postingGroups[i].cardinality
+			continue
+		}
+		break
+	}
+	// If the first posting group with add keys is already the last posting group
+	// then there is no need to set up lazy expanded posting groups.
+	if i >= len(postingGroups)-1 {
+		return postingGroups, false, nil
+	}
+
+	// Assume only seriesMatchRatio postings will be matched every posting group.
+	seriesMatched := postingGroups[i].cardinality - int64(math.Ceil(float64(negativeCardinalities)*seriesMatchRatio))
+	i++ // Start from next posting group as we always need to fetch at least one posting group with add keys.
 	for i < len(postingGroups) {
 		pg := postingGroups[i]
-		// Need to fetch more data on postings than series we avoid fetching, stop here and lazy expanding rest of matchers.
-		// If there is no posting group with add keys, don't skip any posting group until we have one.
-		// Fetch posting group with addAll is much more expensive due to fetch all postings.
-		if hasAdd && pg.cardinality*4 > int64(p*math.Ceil((1-seriesMatchRatio)*float64(seriesBytesToFetch))) {
+		var (
+			underfetchedSeries     int64
+			underfetchedSeriesSize int64
+		)
+		// Unlikely but keep it as a safeguard. When estimated matching series
+		// is <= 0, we stop early and mark rest of posting groups as lazy.
+		if seriesMatched <= 0 {
 			break
 		}
-		hasAdd = hasAdd || !pg.addAll
-		p = p * seriesMatchRatio
+		if pg.addAll {
+			// For posting group that has negative matchers, we assume we can underfetch
+			// min(pg.cardinality, current_series_matched) * match ratio series.
+			if pg.cardinality > seriesMatched {
+				underfetchedSeries = int64(math.Ceil(float64(seriesMatched) * seriesMatchRatio))
+			} else {
+				underfetchedSeries = int64(math.Ceil(float64(pg.cardinality) * seriesMatchRatio))
+			}
+			seriesMatched -= underfetchedSeries
+			underfetchedSeriesSize = underfetchedSeries * seriesMaxSize
+		} else {
+			underfetchedSeriesSize = seriesMaxSize * int64(math.Ceil(float64(seriesMatched)*(1-seriesMatchRatio)))
+			seriesMatched = int64(math.Ceil(float64(seriesMatched) * seriesMatchRatio))
+		}
+
+		// Need to fetch more data on postings than series we underfetch, stop here and lazy expanding rest of matchers.
+		if pg.cardinality*4 > underfetchedSeriesSize {
+			break
+		}
 		i++
 	}
 	for i < len(postingGroups) {

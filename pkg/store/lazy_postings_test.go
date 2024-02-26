@@ -479,6 +479,29 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				{addAll: true, name: "bar", removeKeys: []string{"foo"}, cardinality: 250000, lazy: true},
 			},
 		},
+		{
+			name: "four posting groups with either add or remove keys, negative matcher group has the lowest cardinality, only the largest group is lazy",
+			inputPostings: map[string]map[string]index.Range{
+				"foo":     {"bar": index.Range{End: 8}},
+				"bar":     {"foo": index.Range{Start: 8, End: 2012}},
+				"baz":     {"foo": index.Range{Start: 2012, End: 4020}},
+				"cluster": {"us": index.Range{Start: 4020, End: 1004024}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+				{name: "baz", addKeys: []string{"foo"}},
+				{name: "cluster", addKeys: []string{"us"}},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
+				{name: "bar", addKeys: []string{"foo"}, cardinality: 500},
+				{name: "baz", addKeys: []string{"foo"}, cardinality: 501},
+				{name: "cluster", addKeys: []string{"us"}, cardinality: 250000, lazy: true},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			headerReader := &mockIndexHeaderReader{postings: tc.inputPostings, err: tc.inputError}
