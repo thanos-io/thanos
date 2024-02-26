@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dario.cat/mergo"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
@@ -54,11 +55,17 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 		promResponses = append(promResponses, resp.(*queryrange.PrometheusInstantQueryResponse))
 	}
 
-	var explanation *queryrange.Explanation
+	var analysis queryrange.Analysis
 	for i := range promResponses {
-		if promResponses[i].Data.GetExplanation() != nil {
-			explanation = promResponses[i].Data.GetExplanation()
-			break
+		if promResponses[i].Data.GetAnalysis() == nil {
+			continue
+		}
+
+		if err := mergo.Merge(&analysis,
+			promResponses[i].Data.GetAnalysis(),
+			mergo.WithTransformers(queryrange.TimeDurationTransformer{}),
+		); err != nil {
+			return nil, err
 		}
 	}
 
@@ -74,8 +81,8 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Matrix: matrixMerge(promResponses),
 					},
 				},
-				Stats:       queryrange.StatsMerge(responses),
-				Explanation: explanation,
+				Analysis: &analysis,
+				Stats:    queryrange.StatsMerge(responses),
 			},
 		}
 	default:
@@ -92,8 +99,8 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Vector: v,
 					},
 				},
-				Stats:       queryrange.StatsMerge(responses),
-				Explanation: explanation,
+				Analysis: &analysis,
+				Stats:    queryrange.StatsMerge(responses),
 			},
 		}
 	}
@@ -111,6 +118,14 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if len(r.FormValue("analyze")) > 0 {
+		analyze, err := strconv.ParseBool(r.FormValue("analyze"))
+		if err != nil {
+			return nil, err
+		}
+		result.Analyze = analyze
 	}
 
 	result.Dedup, err = parseEnableDedupParam(r.FormValue(queryv1.DedupParam))
@@ -153,7 +168,6 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
-	result.Analyze = r.FormValue("analyze")
 	result.Engine = r.FormValue("engine")
 
 	for _, header := range forwardHeaders {
@@ -164,6 +178,7 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 			}
 		}
 	}
+
 	return &result, nil
 }
 
@@ -175,8 +190,8 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 	params := url.Values{
 		"query":                      []string{thanosReq.Query},
 		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
+		queryv1.QueryAnalyzeParam:    []string{strconv.FormatBool(thanosReq.Analyze)},
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
-		queryv1.QueryAnalyzeParam:    []string{thanosReq.Analyze},
 		queryv1.EngineParam:          []string{thanosReq.Engine},
 		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
 	}

@@ -1195,10 +1195,9 @@ func TestQueryFrontendAnalyze(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	r := regexp.MustCompile(
-		`{"status":"success","data":{"resultType":"scalar","result":\[.+,".+"\],"analysis":{"name":"\[duplicateLabelCheck\]","executionTime":".+"}}}`,
+		`{"status":"success","data":{"resultType":"scalar","result":\[.+,".+"\],"analysis":{"name":"\[duplicateLabelCheck\]","executionTime":".+","children":null}}}`,
 	)
 	t.Log(strings.TrimSpace(string(body)))
 
-	// TODO(Giedrius): fix.
-	require.NotEqual(t, true, r.MatchString(strings.TrimSpace(string(body))))
+	require.Equal(t, true, r.MatchString(strings.TrimSpace(string(body))))
 }
