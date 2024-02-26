@@ -116,6 +116,7 @@ require (
 )
 
 require (
+	dario.cat/mergo v1.0.0
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.27.10
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
