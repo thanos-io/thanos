@@ -671,7 +671,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*numberLiteralSelector] 2",
+				OperatorName: "[numberLiteral] 2",
 			},
 		},
 		{
@@ -684,7 +684,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*noArgFunctionOperator] time()",
+				OperatorName: "[noArgFunction] time()",
 			},
 		},
 	}

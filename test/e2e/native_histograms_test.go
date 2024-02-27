@@ -54,7 +54,6 @@ func TestQueryNativeHistograms(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	querier := e2ethanos.NewQuerierBuilder(e, "querier", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
-		WithEnabledFeatures([]string{"query-pushdown"}).
 		Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
@@ -95,7 +94,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 		})
 	})
 
-	t.Run("query histogram using group function for testing pushdown", func(t *testing.T) {
+	t.Run("query histogram using group function", func(t *testing.T) {
 		queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return fmt.Sprintf("group(%v)", testHistogramMetricName) }, ts, promclient.QueryOptions{Deduplicate: true}, model.Vector{
 			&model.Sample{
 				Value:  1,

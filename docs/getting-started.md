@@ -137,7 +137,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
   * [Adopting Thanos at LastPass](https://krisztianfekete.org/adopting-thanos-at-lastpass/)
 
 * 2020:
-  * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
+  * [Banzai Cloud user story](https://outshift.cisco.com/blog/multi-cluster-monitoring)
   * [Monitoring the Beat microservices: A tale of evolution](https://build.thebeat.co/monitoring-the-beat-microservices-a-tale-of-evolution-4e246882606e)
 
 * 2019:

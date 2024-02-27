@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -16,9 +17,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/sony/gobreaker"
 	"go.uber.org/atomic"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
 )
@@ -58,6 +61,44 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 				MaxAsyncConcurrency: 1,
 			},
 			expected: errMemcachedDNSUpdateIntervalNotPositive,
+		},
+		"should fail on circuit_breaker_consecutive_failures = 0": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				SetAsyncCircuitBreaker: CircuitBreakerConfig{
+					Enabled:             true,
+					ConsecutiveFailures: 0,
+				},
+			},
+			expected: errCircuitBreakerConsecutiveFailuresNotPositive,
+		},
+		"should fail on circuit_breaker_failure_percent <= 0": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				SetAsyncCircuitBreaker: CircuitBreakerConfig{
+					Enabled:             true,
+					ConsecutiveFailures: 1,
+					FailurePercent:      0,
+				},
+			},
+			expected: errCircuitBreakerFailurePercentInvalid,
+		},
+		"should fail on circuit_breaker_failure_percent >= 1": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				SetAsyncCircuitBreaker: CircuitBreakerConfig{
+					Enabled:             true,
+					ConsecutiveFailures: 1,
+					FailurePercent:      1.1,
+				},
+			},
+			expected: errCircuitBreakerFailurePercentInvalid,
 		},
 	}
 
@@ -491,6 +532,9 @@ type memcachedClientBackendMock struct {
 	items          map[string]*memcache.Item
 	getMultiCount  int
 	getMultiErrors int
+
+	setCount  int
+	setErrors int
 }
 
 func newMemcachedClientBackendMock() *memcachedClientBackendMock {
@@ -522,17 +566,30 @@ func (c *memcachedClientBackendMock) Set(item *memcache.Item) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	c.setCount++
+	if c.setCount <= c.setErrors {
+		return errors.New("mocked Set error")
+	}
+
 	c.items[item.Key] = item
 
 	return nil
 }
 
+func (c *memcachedClientBackendMock) waitSetCount(expected int) error {
+	return c.waitFor(expected, "the number of set operations", func() int { return c.setCount })
+}
+
 func (c *memcachedClientBackendMock) waitItems(expected int) error {
+	return c.waitFor(expected, "items", func() int { return len(c.items) })
+}
+
+func (c *memcachedClientBackendMock) waitFor(expected int, name string, valueFunc func() int) error {
 	deadline := time.Now().Add(1 * time.Second)
 
 	for time.Now().Before(deadline) {
 		c.lock.Lock()
-		count := len(c.items)
+		count := valueFunc()
 		c.lock.Unlock()
 
 		if count >= expected {
@@ -540,7 +597,7 @@ func (c *memcachedClientBackendMock) waitItems(expected int) error {
 		}
 	}
 
-	return errors.New("timeout expired while waiting for items in the memcached mock")
+	return fmt.Errorf("timeout expired while waiting for %s in the memcached mock", name)
 }
 
 // countingGate implements gate.Gate and counts the number of times Start is called.
@@ -629,4 +686,80 @@ func (c *memcachedClientBlockingMock) GetMulti([]string) (map[string]*memcache.I
 
 func (c *memcachedClientBlockingMock) Set(*memcache.Item) error {
 	return nil
+}
+
+func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
+	for _, testdata := range []struct {
+		name                     string
+		setErrors                int
+		minRequests              uint32
+		consecutiveFailures      uint32
+		failurePercent           float64
+		expectCircuitBreakerOpen bool
+	}{
+		{
+			name:                     "remains closed due to min requests not satisfied",
+			setErrors:                10,
+			minRequests:              100,
+			consecutiveFailures:      1,
+			failurePercent:           0.00001,
+			expectCircuitBreakerOpen: false,
+		},
+		{
+			name:                     "opened because too many consecutive failures",
+			setErrors:                10,
+			minRequests:              10,
+			consecutiveFailures:      10,
+			failurePercent:           1,
+			expectCircuitBreakerOpen: true,
+		},
+		{
+			name:                     "opened because failure percent too high",
+			setErrors:                10,
+			minRequests:              10,
+			consecutiveFailures:      100,
+			failurePercent:           0.1,
+			expectCircuitBreakerOpen: true,
+		},
+	} {
+		t.Run(testdata.name, func(t *testing.T) {
+			config := defaultMemcachedClientConfig
+			config.Addresses = []string{"127.0.0.1:11211"}
+			config.SetAsyncCircuitBreaker.Enabled = true
+			config.SetAsyncCircuitBreaker.OpenDuration = 2 * time.Millisecond
+			config.SetAsyncCircuitBreaker.HalfOpenMaxRequests = 100
+			config.SetAsyncCircuitBreaker.MinRequests = testdata.minRequests
+			config.SetAsyncCircuitBreaker.ConsecutiveFailures = testdata.consecutiveFailures
+			config.SetAsyncCircuitBreaker.FailurePercent = testdata.failurePercent
+
+			backendMock := newMemcachedClientBackendMock()
+			backendMock.setErrors = testdata.setErrors
+
+			client, err := prepare(config, backendMock)
+			testutil.Ok(t, err)
+			defer client.Stop()
+
+			// Populate memcached with the initial items.
+			for i := 0; i < testdata.setErrors; i++ {
+				testutil.Ok(t, client.SetAsync(strconv.Itoa(i), []byte("value"), time.Second))
+			}
+
+			testutil.Ok(t, backendMock.waitSetCount(testdata.setErrors))
+			cbimpl := client.setAsyncCircuitBreaker.(gobreakerCircuitBreaker).CircuitBreaker
+			if testdata.expectCircuitBreakerOpen {
+				// Trigger the state transaction.
+				time.Sleep(time.Millisecond)
+				testutil.Ok(t, client.SetAsync(strconv.Itoa(testdata.setErrors), []byte("value"), time.Second))
+				testutil.Equals(t, gobreaker.StateOpen, cbimpl.State(), "state should be open")
+
+				time.Sleep(config.SetAsyncCircuitBreaker.OpenDuration)
+				for i := testdata.setErrors; i < testdata.setErrors+10; i++ {
+					testutil.Ok(t, client.SetAsync(strconv.Itoa(i), []byte("value"), time.Second))
+				}
+				testutil.Ok(t, backendMock.waitItems(10))
+			} else {
+				testutil.Equals(t, gobreaker.StateClosed, cbimpl.State())
+			}
+		})
+	}
 }
