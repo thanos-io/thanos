@@ -24,8 +24,8 @@ import (
 
 const (
 	query                 = "/api/v1/query_range?end=1536716898&query=sum%28container_memory_rss%29+by+%28namespace%29&start=1536673680&stats=all&step=120"
-	responseBody          = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"foo":"bar"},"values":[[1536673680,"137"],[1536673780,"137"]]}],"explanation":null}}`
-	histogramResponseBody = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"fake":"histogram"},"histograms":[[1536673680,{"count":"5","sum":"18.4","buckets":[[3,"-0.001","0.001","2"],[0,"0.7071067811865475","1","1"],[0,"1","1.414213562373095","2"],[0,"2","2.82842712474619","1"],[0,"2.82842712474619","4","1"]]}]]}],"explanation":null}}`
+	responseBody          = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"foo":"bar"},"values":[[1536673680,"137"],[1536673780,"137"]]}],"analysis":null}}`
+	histogramResponseBody = `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"fake":"histogram"},"histograms":[[1536673680,{"count":"5","sum":"18.4","buckets":[[3,"-0.001","0.001","2"],[0,"0.7071067811865475","1","1"],[0,"1","1.414213562373095","2"],[0,"2","2.82842712474619","1"],[0,"2.82842712474619","4","1"]]}]]}],"analysis":null}}`
 )
 
 var (
@@ -78,6 +78,7 @@ var (
 		Status: "success",
 		Data: PrometheusData{
 			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
 			Result: []SampleStream{
 				{
 					Labels: []cortexpb.LabelAdapter{
@@ -95,6 +96,7 @@ var (
 		Status: "success",
 		Data: PrometheusData{
 			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
 			Result: []SampleStream{
 				{
 					Labels: []cortexpb.LabelAdapter{
@@ -143,6 +145,7 @@ func mkAPIResponseWithStats(start, end, step int64, withStats bool) *PrometheusR
 		Data: PrometheusData{
 			ResultType: matrix,
 			Stats:      stats,
+			Analysis:   &Analysis{},
 			Result: []SampleStream{
 				{
 					Labels: []cortexpb.LabelAdapter{
@@ -1070,21 +1073,24 @@ func TestResultsCache(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	useResp := *parsedResponse
+	useResp.Data.Analysis = &Analysis{}
+
 	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
 		calls++
-		return parsedResponse, nil
+		return &useResp, nil
 	}))
 	ctx := user.InjectOrgID(context.Background(), "1")
 	resp, err := rc.Do(ctx, parsedRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, parsedResponse, resp)
+	require.Equal(t, &useResp, resp)
 
 	// Doing same request again shouldn't change anything.
 	resp, err = rc.Do(ctx, parsedRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, parsedResponse, resp)
+	require.Equal(t, &useResp, resp)
 
 	// Doing request with new end time should do one more query.
 	req := parsedRequest.WithStartEnd(parsedRequest.GetStart(), parsedRequest.GetEnd()+100)
@@ -1351,21 +1357,24 @@ func TestNativeHistograms(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	useResp := *parsedHistogramResponse
+	useResp.Data.Analysis = &Analysis{}
+
 	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
 		calls++
-		return parsedHistogramResponse, nil
+		return &useResp, nil
 	}))
 	ctx := user.InjectOrgID(context.Background(), "1")
 	resp, err := rc.Do(ctx, parsedHistogramRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, parsedHistogramResponse, resp)
+	require.Equal(t, &useResp, resp)
 
 	// Doing same request again shouldn't change anything.
 	resp, err = rc.Do(ctx, parsedHistogramRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, parsedHistogramResponse, resp)
+	require.Equal(t, &useResp, resp)
 
 	// Doing request with new end time should do one more query.
 	req := parsedHistogramRequest.WithStartEnd(parsedHistogramRequest.GetStart(), parsedHistogramRequest.GetEnd()+100)

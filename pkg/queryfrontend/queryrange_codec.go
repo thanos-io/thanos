@@ -129,7 +129,12 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 	}
 
 	result.Query = r.FormValue("query")
-	result.Analyze = r.FormValue(queryv1.QueryAnalyzeParam)
+	if len(r.FormValue(queryv1.QueryAnalyzeParam)) > 0 {
+		result.Analyze, err = strconv.ParseBool(r.FormValue(queryv1.QueryAnalyzeParam))
+		if err != nil {
+			return nil, err
+		}
+	}
 	result.Engine = r.FormValue(queryv1.EngineParam)
 	result.Path = r.URL.Path
 
@@ -161,7 +166,7 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 		"end":                        []string{encodeTime(thanosReq.End)},
 		"step":                       []string{encodeDurationMillis(thanosReq.Step)},
 		"query":                      []string{thanosReq.Query},
-		queryv1.QueryAnalyzeParam:    []string{thanosReq.Analyze},
+		queryv1.QueryAnalyzeParam:    []string{strconv.FormatBool(thanosReq.Analyze)},
 		queryv1.EngineParam:          []string{thanosReq.Engine},
 		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
