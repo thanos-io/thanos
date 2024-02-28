@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
@@ -154,7 +155,34 @@ type tenant struct {
 	exemplarsTSDB *exemplars.TSDB
 	ship          *shipper.Shipper
 
-	mtx *sync.RWMutex
+	mtx  *sync.RWMutex
+	tsdb *tsdb.DB
+
+	// For tests.
+	blocksToDeleteFn func(db *tsdb.DB) tsdb.BlocksToDeleteFunc
+}
+
+func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	if t.tsdb == nil {
+		return nil
+	}
+
+	deletable := t.blocksToDeleteFn(t.tsdb)(blocks)
+	if t.ship == nil {
+		return deletable
+	}
+
+	uploaded := t.ship.UploadedBlocks()
+	for deletableID := range deletable {
+		if _, ok := uploaded[deletableID]; !ok {
+			delete(deletable, deletableID)
+		}
+	}
+
+	return deletable
 }
 
 func newTenant() *tenant {
@@ -202,14 +230,15 @@ func (t *tenant) shipper() *shipper.Shipper {
 func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
-	t.setComponents(storeTSDB, ship, exemplarsTSDB)
+	t.setComponents(storeTSDB, ship, exemplarsTSDB, tenantTSDB)
 	t.mtx.Unlock()
 }
 
-func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
+func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB) {
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
+	t.tsdb = tenantTSDB
 }
 
 func (t *MultiTSDB) Open() error {
@@ -353,7 +382,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 
 // pruneTSDB removes a TSDB if its past the retention period.
 // It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
-func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (bool, error) {
+func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (pruned bool, rerr error) {
 	tenantTSDB := tenantInstance.readyStorage()
 	if tenantTSDB == nil {
 		return false, nil
@@ -383,9 +412,23 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	tenantTSDB.mtx.Lock()
 	defer tenantTSDB.mtx.Unlock()
 
-	// Lock the entire tenant to make sure the shipper is not running in parallel.
+	// Make sure the shipper is not running in parallel.
 	tenantInstance.mtx.Lock()
-	defer tenantInstance.mtx.Unlock()
+	shipper := tenantInstance.ship
+	tenantInstance.ship = nil
+	tenantInstance.mtx.Unlock()
+	shipper.DisableWait()
+
+	defer func() {
+		if pruned {
+			return
+		}
+		// If the tenant was not pruned, re-enable the shipper.
+		tenantInstance.mtx.Lock()
+		tenantInstance.ship = shipper
+		shipper.Enable()
+		tenantInstance.mtx.Unlock()
+	}()
 
 	sinceLastAppendMillis = time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	if sinceLastAppendMillis <= compactThreshold {
@@ -402,8 +445,10 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Pruning tenant")
-	if tenantInstance.ship != nil {
-		uploaded, err := tenantInstance.ship.Sync(ctx)
+	if shipper != nil {
+		// No other code can reach this shipper anymore so enable it again to be able to sync manually.
+		shipper.Enable()
+		uploaded, err := shipper.Sync(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -421,8 +466,10 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, err
 	}
 
+	tenantInstance.mtx.Lock()
 	tenantInstance.readyS.set(nil)
-	tenantInstance.setComponents(nil, nil, nil)
+	tenantInstance.setComponents(nil, nil, nil, nil)
+	tenantInstance.mtx.Unlock()
 
 	return true, nil
 }
@@ -574,6 +621,8 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
+	opts.BlocksToDelete = tenant.blocksToDelete
+	tenant.blocksToDeleteFn = tsdb.DefaultBlocksToDelete
 
 	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL
 	// which gets later converted into a block. Without setting this flag to false, the block would get compacted
