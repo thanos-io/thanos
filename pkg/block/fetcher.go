@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +57,7 @@ type FetcherMetrics struct {
 	Modified *extprom.TxGaugeVec
 
 	SyncedByTenant *extprom.TxGaugeVec
+	Assigned       *extprom.TxGaugeVec
 }
 
 // Submit applies new values for metrics tracked by transaction GaugeVec.
@@ -63,6 +65,7 @@ func (s *FetcherMetrics) Submit() {
 	s.Synced.Submit()
 	s.Modified.Submit()
 	s.SyncedByTenant.Submit()
+	s.Assigned.Submit()
 }
 
 // ResetTx starts new transaction for metrics tracked by transaction GaugeVec.
@@ -70,6 +73,7 @@ func (s *FetcherMetrics) ResetTx() {
 	s.Synced.ResetTx()
 	s.Modified.ResetTx()
 	s.SyncedByTenant.ResetTx()
+	s.Assigned.ResetTx()
 }
 
 const (
@@ -98,8 +102,10 @@ const (
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 
-	tenantLabel  = "__tenant__"
-	defautTenant = "__unknown__"
+	tenantLabel    = "__tenant__"
+	defautTenant   = "__not_set__"
+	replicaLabel   = "__replica__"
+	defaultReplica = ""
 )
 
 func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
@@ -161,6 +167,16 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 			Help:      "Number of metadata blocks synced broken down by tenant",
 		},
 		[]string{"tenant"},
+		// No init label values is fine. The only downside is those guages won't be reset to 0, but it's fine for the use case.
+	)
+	m.Assigned = extprom.NewTxGaugeVec(
+		reg,
+		prometheus.GaugeOpts{
+			Subsystem: fetcherSubSys,
+			Name:      "assigned",
+			Help:      "Number of metadata blocks assigned to this pod after all filters.",
+		},
+		[]string{"tenant", "level", "replica"},
 		// No init label values is fine. The only downside is those guages won't be reset to 0, but it's fine for the use case.
 	)
 	return &m
@@ -584,7 +600,23 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 			return nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
-	level.Debug(f.logger).Log("msg", "filtered out block meta data", "before", blockMetaBeforeFilters, "after", len(metas))
+	level.Info(f.logger).Log("msg", "filtered out block meta data", "before", blockMetaBeforeFilters, "after", len(metas), "filters", len(filters))
+	// If filters is empty, it's a global fetch for all block file metadata. metrics.Assigned is for the blocks assigned to this instance.
+	// Therefore, it's skipped to update the gauge.
+	if len(filters) > 0 {
+		for _, m := range metas {
+			var tenant, replica string
+			var ok bool
+			// tenant and replica will have the zero value ("") if the key is not in the map.
+			if tenant, ok = m.Thanos.Labels[tenantLabel]; !ok {
+				tenant = defautTenant
+			}
+			if replica, ok = m.Thanos.Labels[replicaLabel]; !ok {
+				replica = defaultReplica
+			}
+			metrics.Assigned.WithLabelValues(tenant, strconv.Itoa(m.BlockMeta.Compaction.Level), replica).Inc()
+		}
+	}
 
 	metrics.Synced.WithLabelValues(LoadedMeta).Set(float64(len(metas)))
 	metrics.Submit()
