@@ -364,7 +364,7 @@ func TestWriter(t *testing.T) {
 			w := NewWriter(logger, m, testData.opts)
 
 			for idx, req := range testData.reqs {
-				err = w.Write(context.Background(), tenancy.DefaultTenant, req)
+				err = w.Write(context.Background(), tenancy.DefaultTenant, req.Timeseries)
 
 				// We expect no error on any request except the last one
 				// which may error (and in that case we assert on it).
@@ -466,7 +466,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
 
@@ -477,7 +477,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
 

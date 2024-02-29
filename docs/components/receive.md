@@ -26,6 +26,25 @@ If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the si
 
 This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
 
+### Replication protocols
+
+By default, Receivers will replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can often be resource intensive and cause a lot of GC pressure.
+It is possible to use [Cap'N Proto](https://capnproto.org/) as the replication encoding and RPC framework. 
+
+In order to enable this mode, you can enable the `receive.capnproto-replication` flag on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in 
+the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+```json
+[
+    {
+        "endpoints": [
+          {"address": "node-1:10901", "capnproto_address": "node-1:19391"},
+          {"address": "node-2:10901", "capnproto_address": "node-2:19391"},
+          {"address": "node-3:10901", "capnproto_address": "node-3:19391"}
+        ]
+    }
+]
+```
+
 ### Hashring management and autoscaling in Kubernetes
 
 The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-controller) project aims to automate hashring management when running Thanos in Kubernetes. In combination with the Ketama hashring algorithm, this controller can also be used to keep hashrings up to date when Receivers are scaled automatically using an HPA or [Keda](https://keda.sh/).

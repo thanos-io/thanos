@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"os"
 	"path"
 	"strings"
@@ -271,6 +273,7 @@ func runReceive(
 		Limiter:              limiter,
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
+		UseCapNProtoReplication: conf.useCapNProtoReplication,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -463,6 +466,26 @@ func runReceive(
 				cancel()
 			})
 		}
+	}
+
+	{
+		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
+			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
+		})
+		handler := receive.NewCapNProtoHandler(logger, capNProtoWriter)
+		listener, err := net.Listen("tcp", conf.replicationAddr)
+		if err != nil {
+			return err
+		}
+		server := receive.NewCapNProtoServer(listener, handler)
+		g.Add(func() error {
+			return server.ListenAndServe()
+		}, func(err error) {
+			server.Shutdown()
+			if err := listener.Close(); err != nil {
+				level.Warn(logger).Log("msg", "Cap'n Proto server did not shut down gracefully", "err", err.Error())
+			}
+		})
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
@@ -795,6 +818,7 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
+	replicationAddr    string
 	rwAddress          string
 	rwServerCert       string
 	rwServerKey        string
@@ -816,17 +840,18 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	refreshInterval   *model.Duration
-	endpoint          string
-	tenantHeader      string
-	tenantField       string
-	tenantLabelName   string
-	defaultTenantID   string
-	replicaHeader     string
-	replicationFactor uint64
-	forwardTimeout    *model.Duration
-	maxBackoff        *model.Duration
-	compression       string
+	refreshInterval         *model.Duration
+	endpoint                string
+	tenantHeader            string
+	tenantField             string
+	tenantLabelName         string
+	defaultTenantID         string
+	replicaHeader           string
+	replicationFactor       uint64
+	forwardTimeout          *model.Duration
+	maxBackoff              *model.Duration
+	compression             string
+	useCapNProtoReplication bool
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -928,6 +953,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
+
+	cmd.Flag("receive.capnproto-replication", "Use Cap'n Proto for replication requests.").Default("false").BoolVar(&rc.useCapNProtoReplication)
+
+	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
