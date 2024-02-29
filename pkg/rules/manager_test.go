@@ -359,7 +359,7 @@ func TestManager_Rules(t *testing.T) {
 		thanosRuleMgr.Run()
 		thanosRuleMgr.Stop()
 	}()
-	testRulesAgainstExamples(t, filepath.Join(curr, "../../examples/alerts"), thanosRuleMgr)
+	testRulesAgainstExamples(t, filepath.Join(curr, "../../examples/alerts"), thanosRuleMgr, false)
 }
 
 func TestManagerUpdateWithNoRules(t *testing.T) {
