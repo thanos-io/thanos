@@ -24,6 +24,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
+	"github.com/golang/groupcache/singleflight"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -1096,11 +1097,15 @@ func (b *blockSeriesClient) ExpandPostings(
 	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
-	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.lazyExpandedPostingSizeBytes, b.tenant)
+	matchersKey := storecache.LabelMatchersToString(matchers)
+	res, err := b.indexr.block.g.Do(matchersKey, func() (interface{}, error) {
+		return b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.lazyExpandedPostingSizeBytes, b.tenant)
+	})
 	if err != nil {
 		return errors.Wrap(err, "expanded matching posting")
 	}
 
+	ps := res.(*lazyExpandedPostings)
 	if ps == nil || len(ps.postings) == 0 {
 		b.lazyPostings = emptyLazyPostings
 		return nil
@@ -2244,6 +2249,8 @@ type bucketBlock struct {
 	pendingReaders sync.WaitGroup
 
 	partitioner Partitioner
+
+	g singleflight.Group
 
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
