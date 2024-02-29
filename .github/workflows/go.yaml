@@ -24,7 +24,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version: 1.22.x
+          go-version: 1.23.x
 
       - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
@@ -51,7 +51,7 @@ jobs:
     - name: Install Go
       uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
       with:
-        go-version: 1.22.x
+        go-version: 1.23.x
 
     - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
@@ -145,7 +145,7 @@ jobs:
           check_filenames: false
           check_hidden: true
           skip: ./pkg/ui/*,./pkg/store/6545postingsrepro,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
-          ignore_words_list: intrumentation,mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te
+          ignore_words_list: intrumentation,mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te,ans
 
   e2e:
     strategy:
@@ -164,7 +164,7 @@ jobs:
       - name: Install Go.
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version: 1.22.x
+          go-version: 1.23.x
 
       - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
