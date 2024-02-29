@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/groupcache/singleflight"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -160,6 +161,8 @@ type RedisClient struct {
 	p *AsyncOperationProcessor
 
 	setAsyncCircuitBreaker CircuitBreaker
+
+	g singleflight.Group
 }
 
 // NewRedisClient makes a new RedisClient.
@@ -262,7 +265,10 @@ func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) erro
 	return c.p.EnqueueAsync(func() {
 		start := time.Now()
 		err := c.setAsyncCircuitBreaker.Execute(func() error {
-			return c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error()
+			_, err := c.g.Do(key, func() (interface{}, error) {
+				return nil, c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error()
+			})
+			return err
 		})
 		if err != nil {
 			level.Warn(c.logger).Log("msg", "failed to set item into redis", "err", err, "key", key, "value_size", len(value))

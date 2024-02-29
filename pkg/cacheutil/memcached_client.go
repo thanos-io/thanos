@@ -14,6 +14,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/groupcache/singleflight"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -206,6 +207,8 @@ type memcachedClient struct {
 	p *AsyncOperationProcessor
 
 	setAsyncCircuitBreaker CircuitBreaker
+
+	g singleflight.Group
 }
 
 // AddressProvider performs node address resolution given a list of clusters.
@@ -388,11 +391,14 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 		c.operations.WithLabelValues(opSet).Inc()
 
 		err := c.setAsyncCircuitBreaker.Execute(func() error {
-			return c.client.Set(&memcache.Item{
-				Key:        key,
-				Value:      value,
-				Expiration: int32(time.Now().Add(ttl).Unix()),
+			_, err := c.g.Do(key, func() (interface{}, error) {
+				return nil, c.client.Set(&memcache.Item{
+					Key:        key,
+					Value:      value,
+					Expiration: int32(time.Now().Add(ttl).Unix()),
+				})
 			})
+			return err
 		})
 		if err != nil {
 			if errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests) {
