@@ -48,6 +48,7 @@ export interface PanelProps {
   enableLinter: boolean;
   defaultStep: string;
   defaultEngine: string;
+  queryMode: string;
   onUsePartialResponseChange: (value: boolean) => void;
 }
 
@@ -539,6 +540,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           <Col>
             <div className="float-left">
               <Checkbox
+                disabled={this.props.queryMode != 'local' && this.props.options.engine != 'prometheus'}
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`use-deduplication-checkbox-${id}`}
                 onChange={this.handleChangeDeduplication}
@@ -547,6 +549,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 Use Deduplication
               </Checkbox>
               <Checkbox
+                disabled={this.props.queryMode != 'local' && this.props.options.engine != 'prometheus'}
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`use-partial-resp-checkbox-${id}`}
                 onChange={this.handleChangePartialResponse}
@@ -726,6 +729,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                       resolution={options.resolution}
                       stacked={options.stacked}
                       maxSourceResolution={options.maxSourceResolution}
+                      queryMode={this.props.queryMode}
+                      engine={options.engine}
                       onChangeRange={this.handleChangeRange}
                       onChangeEndTime={this.handleChangeEndTime}
                       onChangeResolution={this.handleChangeResolution}

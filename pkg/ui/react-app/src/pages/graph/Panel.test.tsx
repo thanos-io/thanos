@@ -51,6 +51,7 @@ const defaultProps: PanelProps = {
   enableHighlighting: true,
   enableLinter: true,
   defaultEngine: 'prometheus',
+  queryMode: 'local',
   usePartialResponse: true,
 };
 
