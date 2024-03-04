@@ -29,7 +29,7 @@ jobs:
             make install-tool-deps
       - go/save-cache
       - setup_remote_docker:
-          version: 20.10.12
+          version: docker24
       - run:
           name: Create Secret if PR is not forked
           # GCS integration tests are run only for author's PR that have write access, because these tests
@@ -82,7 +82,7 @@ jobs:
       - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.12
+          version: docker24
       - attach_workspace:
           at: .
       # Register qemu to support multi-arch.
@@ -104,7 +104,7 @@ jobs:
       - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.12
+          version: docker24
       - attach_workspace:
           at: .
       - run: make tarballs-release
