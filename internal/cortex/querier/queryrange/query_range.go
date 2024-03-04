@@ -12,14 +12,12 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unsafe"
 
-	"dario.cat/mergo"
 	"github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	"github.com/gogo/status"
@@ -211,22 +209,38 @@ func NewEmptyPrometheusInstantQueryResponse() *PrometheusInstantQueryResponse {
 	}
 }
 
-type TimeDurationTransformer struct{}
+func traverseAnalysis(a *Analysis, results *[]*Analysis) {
+	if a == nil {
+		return
+	}
 
-func (t TimeDurationTransformer) Transformer(typ reflect.Type) func(dst, src reflect.Value) error {
-	if typ == reflect.TypeOf(Duration(0)) {
-		return func(dst, src reflect.Value) error {
-			if dst.CanSet() {
-				d := dst.Interface().(Duration)
-				s := src.Interface().(Duration)
+	*results = append(*results, a)
 
-				merged := d + s
-				dst.Set(reflect.ValueOf(merged))
-			}
-			return nil
+	for _, ch := range a.Children {
+		traverseAnalysis(ch, results)
+	}
+}
+
+func AnalyzesMerge(analysis ...*Analysis) *Analysis {
+	if len(analysis) == 0 {
+		return &Analysis{}
+	}
+
+	root := analysis[0]
+
+	var rootElements []*Analysis
+	traverseAnalysis(root, &rootElements)
+
+	for _, a := range analysis[1:] {
+		var elements []*Analysis
+		traverseAnalysis(a, &elements)
+
+		for i := 0; i < len(elements) && i < len(rootElements); i++ {
+			rootElements[i].ExecutionTime += analysis[i].ExecutionTime
 		}
 	}
-	return nil
+
+	return root
 }
 
 func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response, error) {
@@ -246,18 +260,13 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 	// Merge the responses.
 	sort.Sort(byFirstTime(promResponses))
 
-	var analysis Analysis
+	analyzes := make([]*Analysis, 0, len(responses))
 	for i := range promResponses {
 		if promResponses[i].Data.GetAnalysis() == nil {
 			continue
 		}
 
-		if err := mergo.Merge(&analysis,
-			promResponses[i].Data.GetAnalysis(),
-			mergo.WithTransformers(TimeDurationTransformer{}),
-		); err != nil {
-			return nil, err
-		}
+		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
 	}
 
 	response := PrometheusResponse{
@@ -266,7 +275,7 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 			ResultType: model.ValMatrix.String(),
 			Result:     matrixMerge(promResponses),
 			Stats:      StatsMerge(responses),
-			Analysis:   &analysis,
+			Analysis:   AnalyzesMerge(analyzes...),
 		},
 	}
 

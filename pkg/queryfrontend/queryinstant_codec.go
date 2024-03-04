@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"dario.cat/mergo"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
@@ -55,18 +54,13 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 		promResponses = append(promResponses, resp.(*queryrange.PrometheusInstantQueryResponse))
 	}
 
-	var analysis queryrange.Analysis
+	var analyzes []*queryrange.Analysis
 	for i := range promResponses {
 		if promResponses[i].Data.GetAnalysis() == nil {
 			continue
 		}
 
-		if err := mergo.Merge(&analysis,
-			promResponses[i].Data.GetAnalysis(),
-			mergo.WithTransformers(queryrange.TimeDurationTransformer{}),
-		); err != nil {
-			return nil, err
-		}
+		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
 	}
 
 	var res queryrange.Response
@@ -81,7 +75,7 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Matrix: matrixMerge(promResponses),
 					},
 				},
-				Analysis: &analysis,
+				Analysis: queryrange.AnalyzesMerge(analyzes...),
 				Stats:    queryrange.StatsMerge(responses),
 			},
 		}
@@ -99,7 +93,7 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Vector: v,
 					},
 				},
-				Analysis: &analysis,
+				Analysis: queryrange.AnalyzesMerge(analyzes...),
 				Stats:    queryrange.StatsMerge(responses),
 			},
 		}
