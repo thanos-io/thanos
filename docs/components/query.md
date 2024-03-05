@@ -278,11 +278,9 @@ Further, note that there are no authentication mechanisms in Thanos, so anyone c
 
 The distributed execution mode can be enabled using `--query.mode=distributed`. When this mode is enabled, the Querier will break down each query into independent fragments and delegate them to components which implement the Query API.
 
-This mode is particularly useful in architectures where multiple independent Queriers are deployed in separate environments (different regions or different Kubernetes clusters) and are federated through a separate central Querier.
-A Querier running in the distributed mode will only talk to Queriers, or other components which implement the Query API. Endpoints which only act as Stores (e.g. Store Gateways or Rulers), and are directly connected to a distributed Querier, will not be included in the execution of a distributed query.
-This constraint should help with keeping the distributed query execution simple and efficient, but could be removed in the future if there are good use cases for it.
+This mode is particularly useful in architectures where multiple independent Queriers are deployed in separate environments (different regions or different Kubernetes clusters) and are federated through a separate central Querier. A Querier running in the distributed mode will only talk to Queriers, or other components which implement the Query API. Endpoints which only act as Stores (e.g. Store Gateways or Rulers), and are directly connected to a distributed Querier, will not be included in the execution of a distributed query. This constraint should help with keeping the distributed query execution simple and efficient, but could be removed in the future if there are good use cases for it.
 
-For further details on the design and use cases of this feature, see the [official design document](https://thanos.io/tip/proposals-accepted/202301-distributed-query-execution.md/).
+For further details on the design and use cases of this feature, see the [official design document](https://thanos.io/tip/proposals-done/202301-distributed-query-execution.md/).
 
 ## Flags
 
