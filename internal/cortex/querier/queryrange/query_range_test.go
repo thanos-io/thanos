@@ -345,6 +345,72 @@ func TestMergeAPIResponses(t *testing.T) {
 		},
 
 		{
+			name: "Basic merging of two responses with nested analysis trees.",
+			input: []Response{
+				&PrometheusResponse{
+					Data: PrometheusData{
+						ResultType: matrix,
+						Analysis: &Analysis{
+							Name:          "foo",
+							Children:      []*Analysis{{Name: "bar", ExecutionTime: Duration(1 * time.Second)}},
+							ExecutionTime: Duration(1 * time.Second),
+						},
+						Result: []SampleStream{
+							{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
+									{Value: 0, TimestampMs: 0},
+									{Value: 1, TimestampMs: 1},
+								},
+							},
+						},
+					},
+				},
+				&PrometheusResponse{
+					Data: PrometheusData{
+						ResultType: matrix,
+						Analysis: &Analysis{
+							Name:          "foo",
+							Children:      []*Analysis{{Name: "bar", ExecutionTime: Duration(1 * time.Second)}},
+							ExecutionTime: Duration(1 * time.Second),
+						},
+						Result: []SampleStream{
+							{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
+									{Value: 2, TimestampMs: 2},
+									{Value: 3, TimestampMs: 3},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: &PrometheusResponse{
+				Status: StatusSuccess,
+				Data: PrometheusData{
+					ResultType: matrix,
+					Analysis: &Analysis{
+						Name:          "foo",
+						Children:      []*Analysis{{Name: "bar", ExecutionTime: Duration(2 * time.Second)}},
+						ExecutionTime: Duration(2 * time.Second),
+					},
+					Result: []SampleStream{
+						{
+							Labels: []cortexpb.LabelAdapter{},
+							Samples: []cortexpb.Sample{
+								{Value: 0, TimestampMs: 0},
+								{Value: 1, TimestampMs: 1},
+								{Value: 2, TimestampMs: 2},
+								{Value: 3, TimestampMs: 3},
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
 			name: "Merging of responses when labels are in different order.",
 			input: []Response{
 				mustParse(t, `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"a":"b","c":"d"},"values":[[0,"0"],[1,"1"]]}]}}`),
