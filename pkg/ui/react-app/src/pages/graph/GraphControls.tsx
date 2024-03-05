@@ -14,6 +14,8 @@ interface GraphControlsProps {
   resolution: number | null;
   stacked: boolean;
   maxSourceResolution: string;
+  engine: string;
+  queryMode: string;
 
   onChangeRange: (range: number) => void;
   onChangeEndTime: (endTime: number | null) => void;
@@ -154,8 +156,8 @@ class GraphControls extends Component<GraphControlsProps> {
             <FontAwesomeIcon icon={faChartArea} fixedWidth />
           </Button>
         </ButtonGroup>
-
         <Input
+          disabled={this.props.queryMode != 'local' && this.props.engine != 'prometheus'}
           type="select"
           value={this.props.maxSourceResolution}
           onChange={this.handleMaxSourceResChange}
