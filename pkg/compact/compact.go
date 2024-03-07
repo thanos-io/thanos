@@ -967,6 +967,10 @@ type RetryError struct {
 	err error
 }
 
+func NewRetryError(err error) error {
+	return retry(err)
+}
+
 func retry(err error) error {
 	if IsHaltError(err) {
 		return err
