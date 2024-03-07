@@ -391,7 +391,7 @@ func runRule(
 			queryClients = append(queryClients, queryClient)
 			promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
 			// Discover and resolve query addresses.
-			addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
+			addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval, logger)
 		}
 
 		if cfg.GRPCConfig != nil {
@@ -578,7 +578,7 @@ func runRule(
 			return err
 		}
 		// Discover and resolve Alertmanager addresses.
-		addDiscoveryGroups(g, amClient, conf.alertmgr.alertmgrsDNSSDInterval)
+		addDiscoveryGroups(g, amClient, conf.alertmgr.alertmgrsDNSSDInterval, logger)
 
 		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout), cfg.APIVersion))
 	}
@@ -981,7 +981,7 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.Duration, logger log.Logger) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)
@@ -991,9 +991,10 @@ func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.
 	})
 
 	g.Add(func() error {
-		return runutil.Repeat(interval, ctx.Done(), func() error {
+		runutil.RepeatInfinitely(logger, interval, ctx.Done(), func() error {
 			return c.Resolve(ctx)
 		})
+		return nil
 	}, func(error) {
 		cancel()
 	})
