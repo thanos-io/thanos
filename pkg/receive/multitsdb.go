@@ -419,8 +419,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	tenantInstance.mtx.Lock()
 	shipper := tenantInstance.ship
 	tenantInstance.ship = nil
-	tenantInstance.mtx.Unlock()
 	shipper.DisableWait()
+	tenantInstance.mtx.Unlock()
 
 	defer func() {
 		if pruned {
