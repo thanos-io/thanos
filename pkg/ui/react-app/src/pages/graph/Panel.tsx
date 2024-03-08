@@ -30,7 +30,7 @@ import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseDuration } from '../../utils';
-import { defaultTenant, tenantHeader } from '../../thanos/config';
+import { defaultTenant, tenantHeader, displayTenantBox } from '../../thanos/config';
 
 export interface PanelProps {
   id: string;
@@ -587,14 +587,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 <option value="prometheus">Prometheus</option>
                 <option value="thanos">Thanos</option>
               </Input>
-              <Label style={{ marginLeft: '10px', display: 'inline-block' }} className="control-label">
+              <Label style={{ marginLeft: '10px', display: displayTenantBox }} className="control-label">
                 Tenant
               </Label>
               <Input
                 style={{
                   width: 'auto',
                   marginLeft: '10px',
-                  display: 'inline-block',
+                  display: displayTenantBox,
                 }}
                 id={`tenant=${id}`}
                 type="text"
