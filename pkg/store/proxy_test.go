@@ -20,6 +20,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -67,7 +69,7 @@ func TestProxyStore_Info(t *testing.T) {
 		nil,
 		func() []Client { return nil },
 		component.Query,
-		labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval),
+		labels.EmptyLabels(), 0*time.Second, EagerRetrieval,
 	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
@@ -120,6 +122,7 @@ func TestProxyStore_Series(t *testing.T) {
 		expectedSeries      []rawSeries
 		expectedErr         error
 		expectedWarningsLen int
+		relabelConfig       string
 	}{
 		{
 			title: "no storeAPI available",
@@ -622,6 +625,123 @@ func TestProxyStore_Series(t *testing.T) {
 				},
 			},
 		},
+		{
+			title: "relabel config with flat store layout",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "2")},
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("zone", "2"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						},
+					},
+				},
+				&storetestutil.TestClient{
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("zone", "1"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						},
+					},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 300,
+				Matchers: []storepb.LabelMatcher{
+					{Name: "zone", Value: ".+", Type: storepb.LabelMatcher_RE},
+				},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("zone", "1"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+			},
+			relabelConfig: `
+              - source_labels: [ext]
+                action: hashmod
+                target_label: shard
+                modulus: 2
+              - action: keep
+                source_labels: [shard]
+                regex: 1
+              `,
+		},
+		{
+			title: "relabel config with nested store layout",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1", "ext2", "2"), labels.FromStrings("ext", "2")},
+					StoreClient: storepb.ServerAsClient(NewProxyStore(log.NewNopLogger(), prometheus.NewRegistry(), func() []Client {
+						return []Client{
+							&storetestutil.TestClient{
+								MinTime: 1,
+								MaxTime: 300,
+								ExtLset: []labels.Labels{labels.FromStrings("ext", "1", "ext2", "2")},
+								StoreClient: &mockedStoreAPI{
+									RespSeries: []*storepb.SeriesResponse{
+										storeSeriesResponse(t, labels.FromStrings("zone", "1"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+									},
+								},
+							},
+							&storetestutil.TestClient{
+								MinTime: 1,
+								MaxTime: 300,
+								ExtLset: []labels.Labels{labels.FromStrings("ext", "2")},
+								StoreClient: &mockedStoreAPI{
+									RespSeries: []*storepb.SeriesResponse{
+										storeSeriesResponse(t, labels.FromStrings("zone", "2"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+									},
+								},
+							},
+						}
+					}, component.Store, labels.FromStrings("role", "proxy"), 1*time.Minute, EagerRetrieval), 1),
+				},
+				&storetestutil.TestClient{
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "3")},
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("zone", "3"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						},
+					},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 300,
+				Matchers: []storepb.LabelMatcher{
+					{Name: "zone", Value: ".+", Type: storepb.LabelMatcher_RE},
+				},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("zone", "1"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+				{
+					lset:   labels.FromStrings("zone", "3"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+			},
+			relabelConfig: `
+              - source_labels: [ext]
+                action: hashmod
+                target_label: shard
+                modulus: 2
+              - action: keep
+                source_labels: [shard]
+                regex: 1
+              `,
+		},
 	} {
 		t.Run(tc.title, func(t *testing.T) {
 			for _, replicaLabelSupport := range []bool{false, true} {
@@ -632,12 +752,15 @@ func TestProxyStore_Series(t *testing.T) {
 					}
 					for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 						t.Run(string(strategy), func(t *testing.T) {
+							relabelConfig, err := block.ParseRelabelConfig([]byte(tc.relabelConfig), block.SelectorSupportedRelabelActions)
+							testutil.Ok(t, err)
 							q := NewProxyStore(nil,
 								nil,
 								func() []Client { return tc.storeAPIs },
 								component.Query,
 								tc.selectorLabels,
 								5*time.Second, strategy,
+								WithTSDBSelector(NewTSDBSelector(relabelConfig)),
 							)
 
 							ctx := context.Background()
@@ -646,7 +769,7 @@ func TestProxyStore_Series(t *testing.T) {
 							}
 
 							s := newStoreSeriesServer(ctx)
-							err := q.Series(tc.req, s)
+							err = q.Series(tc.req, s)
 							if tc.expectedErr != nil {
 								testutil.NotOk(t, err)
 								testutil.Equals(t, tc.expectedErr.Error(), err.Error())

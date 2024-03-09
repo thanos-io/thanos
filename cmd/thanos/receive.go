@@ -317,9 +317,8 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		options := []store.ProxyStoreOption{}
-		if debugLogging {
-			options = append(options, store.WithProxyStoreDebugLogging())
+		options := []store.ProxyStoreOption{
+			store.WithProxyStoreDebugLogging(debugLogging),
 		}
 
 		proxy := store.NewProxyStore(

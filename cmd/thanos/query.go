@@ -32,6 +32,7 @@ import (
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -208,6 +209,8 @@ func registerQuery(app *extkingpin.App) {
 		Default("1s"))
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	storeSelectorRelabelConf := *extkingpin.RegisterSelectorRelabelFlags(cmd)
+
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
@@ -272,6 +275,15 @@ func registerQuery(app *extkingpin.App) {
 
 		if *webRoutePrefix != *webExternalPrefix {
 			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
+		}
+
+		tsdbRelabelConfig, err := storeSelectorRelabelConf.Content()
+		if err != nil {
+			return errors.Wrap(err, "error while parsing tsdb selector configuration")
+		}
+		tsdbSelector, err := block.ParseRelabelConfig(tsdbRelabelConfig, block.SelectorSupportedRelabelActions)
+		if err != nil {
+			return err
 		}
 
 		return runQuery(
@@ -343,6 +355,7 @@ func registerQuery(app *extkingpin.App) {
 			*defaultEngine,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
+			store.NewTSDBSelector(tsdbSelector),
 			queryMode(*promqlQueryMode),
 			*tenantHeader,
 			*defaultTenant,
@@ -424,6 +437,7 @@ func runQuery(
 	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
+	tsdbSelector *store.TSDBSelector,
 	queryMode queryMode,
 	tenantHeader string,
 	defaultTenant string,
@@ -501,9 +515,9 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
-	options := []store.ProxyStoreOption{}
-	if debugLogging {
-		options = append(options, store.WithProxyStoreDebugLogging())
+	options := []store.ProxyStoreOption{
+		store.WithTSDBSelector(tsdbSelector),
+		store.WithProxyStoreDebugLogging(debugLogging),
 	}
 
 	var (
@@ -524,6 +538,7 @@ func runQuery(
 			strictEndpoints,
 			endpointGroupAddrs,
 			strictEndpointGroups,
+			tsdbSelector,
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
@@ -839,6 +854,7 @@ func prepareEndpointSet(
 	strictEndpoints []string,
 	endpointGroupAddrs []string,
 	strictEndpointGroups []string,
+	tsdbSelector *store.TSDBSelector,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
