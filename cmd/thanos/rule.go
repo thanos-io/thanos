@@ -436,7 +436,6 @@ func runRule(
 			nil,
 			nil,
 			nil,
-			store.DefaultSelector,
 			dialOpts,
 			5*time.Minute,
 			5*time.Second,
