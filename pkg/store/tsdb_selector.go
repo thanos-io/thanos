@@ -32,9 +32,12 @@ func NewTSDBSelector(relabelConfig []*relabel.Config) *TSDBSelector {
 	}
 }
 
-func (sr *TSDBSelector) MatchStore(labelSets ...labels.Labels) (bool, []labels.Labels) {
+// MatchStore returns true if the selector matches the given store label sets.
+// If only certain labels match, the method also returns those matching labels.
+func (sr *TSDBSelector) MatchStore(store Client) (bool, []labels.Labels) {
+	labelSets := store.LabelSets()
 	if sr.relabelConfig == nil || len(labelSets) == 0 {
-		return true, labelSets
+		return true, nil
 	}
 	matchedLabelSets := sr.runRelabelRules(labelSets)
 	return len(matchedLabelSets) > 0, matchedLabelSets

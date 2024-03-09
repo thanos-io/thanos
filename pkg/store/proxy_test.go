@@ -2023,6 +2023,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		metrics:           newProxyStoreMetrics(nil),
 		responseTimeout:   5 * time.Second,
 		retrievalStrategy: EagerRetrieval,
+		tsdbSelector:      DefaultSelector,
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -2151,6 +2152,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		metrics:           newProxyStoreMetrics(nil),
 		responseTimeout:   0,
 		retrievalStrategy: EagerRetrieval,
+		tsdbSelector:      DefaultSelector,
 	}
 
 	t.Run("failling send", func(t *testing.T) {
