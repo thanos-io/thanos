@@ -656,12 +656,6 @@ func TestProxyStore_Series(t *testing.T) {
 					{Name: "zone", Value: ".+", Type: storepb.LabelMatcher_RE},
 				},
 			},
-			expectedSeries: []rawSeries{
-				{
-					lset:   labels.FromStrings("zone", "1"),
-					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
-				},
-			},
 			relabelConfig: `
               - source_labels: [ext]
                 action: hashmod
@@ -671,6 +665,12 @@ func TestProxyStore_Series(t *testing.T) {
                 source_labels: [shard]
                 regex: 1
               `,
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("zone", "1"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+			},
 		},
 		{
 			title: "relabel config with nested store layout",
@@ -722,6 +722,15 @@ func TestProxyStore_Series(t *testing.T) {
 					{Name: "zone", Value: ".+", Type: storepb.LabelMatcher_RE},
 				},
 			},
+			relabelConfig: `
+              - source_labels: [ext]
+                action: hashmod
+                target_label: shard
+                modulus: 2
+              - action: keep
+                source_labels: [shard]
+                regex: 1
+              `,
 			expectedSeries: []rawSeries{
 				{
 					lset:   labels.FromStrings("zone", "1"),
@@ -732,15 +741,6 @@ func TestProxyStore_Series(t *testing.T) {
 					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
 				},
 			},
-			relabelConfig: `
-              - source_labels: [ext]
-                action: hashmod
-                target_label: shard
-                modulus: 2
-              - action: keep
-                source_labels: [shard]
-                regex: 1
-              `,
 		},
 	} {
 		t.Run(tc.title, func(t *testing.T) {

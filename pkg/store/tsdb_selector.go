@@ -8,13 +8,12 @@ import (
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"golang.org/x/exp/maps"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-const (
-	reMatchAny = "^$"
-)
+const reMatchEmpty = "^$"
 
 var DefaultSelector = noopSelector()
 
@@ -56,32 +55,43 @@ func (sr *TSDBSelector) runRelabelRules(labelSets []labels.Labels) []labels.Labe
 	return result
 }
 
-func (sr *TSDBSelector) buildTSDBMatchers(labelSets []labels.Labels) []storepb.LabelMatcher {
-	labelCounts := make(map[string]int)
-	matcherSet := make(map[string]map[string]struct{})
+// matchersForLabelSets generates a list of label matchers for the given label sets.
+func matchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
+	var (
+		// labelNameCounts tracks how many times a label name appears in the given label
+		// sets. This is used to make sure that an explicit empty value matcher is
+		// generated when a label name is missing from a label set.
+		labelNameCounts = make(map[string]int)
+		// labelNameValues contains an entry for each label name and label value
+		// combination that is present in the given label sets. This map is used to build
+		// out the label matchers.
+		labelNameValues = make(map[string]map[string]struct{})
+	)
 	for _, labelSet := range labelSets {
 		for _, lbl := range labelSet {
-			if _, ok := matcherSet[lbl.Name]; !ok {
-				matcherSet[lbl.Name] = make(map[string]struct{})
+			if _, ok := labelNameValues[lbl.Name]; !ok {
+				labelNameValues[lbl.Name] = make(map[string]struct{})
 			}
-			labelCounts[lbl.Name]++
-			matcherSet[lbl.Name][lbl.Value] = struct{}{}
+			labelNameCounts[lbl.Name]++
+			labelNameValues[lbl.Name][lbl.Value] = struct{}{}
 		}
 	}
 
-	for k := range matcherSet {
-		if labelCounts[k] < len(labelSets) {
-			matcherSet[k][reMatchAny] = struct{}{}
+	// If a label name is missing from a label set, force an empty value matcher for
+	// that label name.
+	for labelName := range labelNameValues {
+		if labelNameCounts[labelName] < len(labelSets) {
+			labelNameValues[labelName][reMatchEmpty] = struct{}{}
 		}
 	}
 
-	matchers := make([]storepb.LabelMatcher, 0, len(matcherSet))
-	for k, v := range matcherSet {
-		var matchedValues []string
-		for val := range v {
-			matchedValues = append(matchedValues, val)
+	matchers := make([]storepb.LabelMatcher, 0, len(labelNameValues))
+	for lblName, lblVals := range labelNameValues {
+		matcher := storepb.LabelMatcher{
+			Name:  lblName,
+			Value: strings.Join(maps.Keys(lblVals), "|"),
+			Type:  storepb.LabelMatcher_RE,
 		}
-		matcher := storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: k, Value: strings.Join(matchedValues, "|")}
 		matchers = append(matchers, matcher)
 	}
 

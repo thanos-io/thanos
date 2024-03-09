@@ -350,7 +350,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
 	}
-	r.Matchers = append(r.Matchers, s.tsdbSelector.buildTSDBMatchers(storeLabelSets)...)
+	r.Matchers = append(r.Matchers, matchersForLabelSets(storeLabelSets)...)
 
 	storeResponses := make([]respSet, 0, len(stores))
 
