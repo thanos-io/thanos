@@ -4,6 +4,7 @@
 package store
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -31,12 +32,11 @@ func NewTSDBSelector(relabelConfig []*relabel.Config) *TSDBSelector {
 	}
 }
 
-// MatchStore returns true if the selector matches the given store label sets.
-// If only certain labels match, the method also returns those matching labels.
-func (sr *TSDBSelector) MatchStore(store Client) (bool, []labels.Labels) {
-	labelSets := store.LabelSets()
+// MatchLabelSets returns true if the given label sets match the TSDBSelector.
+// It also returns those label sets that were matched.
+func (sr *TSDBSelector) MatchLabelSets(labelSets ...labels.Labels) (bool, []labels.Labels) {
 	if sr.relabelConfig == nil || len(labelSets) == 0 {
-		return true, nil
+		return true, labelSets
 	}
 	matchedLabelSets := sr.runRelabelRules(labelSets)
 	return len(matchedLabelSets) > 0, matchedLabelSets
@@ -55,8 +55,8 @@ func (sr *TSDBSelector) runRelabelRules(labelSets []labels.Labels) []labels.Labe
 	return result
 }
 
-// matchersForLabelSets generates a list of label matchers for the given label sets.
-func matchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
+// MatchersForLabelSets generates a list of label matchers for the given label sets.
+func MatchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
 	var (
 		// labelNameCounts tracks how many times a label name appears in the given label
 		// sets. This is used to make sure that an explicit empty value matcher is
@@ -87,9 +87,11 @@ func matchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
 
 	matchers := make([]storepb.LabelMatcher, 0, len(labelNameValues))
 	for lblName, lblVals := range labelNameValues {
+		values := maps.Keys(lblVals)
+		sort.Strings(values)
 		matcher := storepb.LabelMatcher{
 			Name:  lblName,
-			Value: strings.Join(maps.Keys(lblVals), "|"),
+			Value: strings.Join(values, "|"),
 			Type:  storepb.LabelMatcher_RE,
 		}
 		matchers = append(matchers, matcher)
