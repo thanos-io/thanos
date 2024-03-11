@@ -6,6 +6,7 @@ package receive
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -249,7 +250,7 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 type multiHashring struct {
 	cache      map[string]Hashring
 	hashrings  []Hashring
-	tenantSets []map[string]struct{}
+	tenantSets []map[string]tenantMatcher
 
 	// We need a mutex to guard concurrent access
 	// to the cache map, as this is both written to
@@ -273,6 +274,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		return h.GetN(tenant, ts, n)
 	}
 	var found bool
+
 	// If the tenant is not in the cache, then we need to check
 	// every tenant in the configuration.
 	for i, t := range m.tenantSets {
@@ -280,8 +282,29 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		// considered a default hashring and matches everything.
 		if t == nil {
 			found = true
-		} else if _, ok := t[tenant]; ok {
-			found = true
+		} else {
+			// Fast path for the common case of direct match.
+			if mt, ok := t[tenant]; ok && isExactMatcher(mt) {
+				found = true
+			} else {
+				for tenantPattern, matcherType := range t {
+					switch matcherType {
+					case TenantMatcherGlob:
+						matches, err := filepath.Match(tenantPattern, tenant)
+						if err != nil {
+							return "", fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
+						}
+						found = matches
+					case TenantMatcherTypeExact:
+						// Already checked above, skipping.
+						fallthrough
+					default:
+						continue
+					}
+
+				}
+			}
+
 		}
 		if found {
 			m.mu.Lock()
@@ -320,12 +343,12 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		}
 		m.nodes = append(m.nodes, hashring.Nodes()...)
 		m.hashrings = append(m.hashrings, hashring)
-		var t map[string]struct{}
+		var t map[string]tenantMatcher
 		if len(h.Tenants) != 0 {
-			t = make(map[string]struct{})
+			t = make(map[string]tenantMatcher)
 		}
 		for _, tenant := range h.Tenants {
-			t[tenant] = struct{}{}
+			t[tenant] = h.TenantMatcherType
 		}
 		m.tenantSets = append(m.tenantSets, t)
 	}

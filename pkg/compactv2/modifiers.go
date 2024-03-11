@@ -277,11 +277,11 @@ func (p *delSeriesIterator) Seek(t int64) chunkenc.ValueType {
 func (p *delSeriesIterator) At() (int64, float64) { return p.curr.At() }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (p *delSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (p *delSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (p *delSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (p *delSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 

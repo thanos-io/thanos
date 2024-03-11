@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
@@ -104,7 +105,6 @@ func registerQuery(app *extkingpin.App) {
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
 	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
-		Hidden().
 		Default(string(queryModeLocal)).
 		Enum(string(queryModeLocal), string(queryModeDistributed))
 
@@ -261,7 +261,7 @@ func registerQuery(app *extkingpin.App) {
 				RefreshInterval: *fileSDInterval,
 			}
 			var err error
-			if fileSD, err = file.NewDiscovery(conf, logger, reg); err != nil {
+			if fileSD, err = file.NewDiscovery(conf, logger, conf.NewDiscovererMetrics(reg, discovery.NewRefreshMetrics(reg))); err != nil {
 				return err
 			}
 		}
@@ -646,6 +646,8 @@ func runQuery(
 
 	var remoteEngineEndpoints api.RemoteEndpoints
 	if queryMode != queryModeLocal {
+		level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
+		defaultEngine = string(apiv1.PromqlEngineThanos)
 		remoteEngineEndpoints = query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
 			AutoDownsample:        enableAutodownsampling,
 			ReplicaLabels:         queryReplicaLabels,
@@ -685,7 +687,7 @@ func runQuery(
 
 		ins := extpromhttp.NewTenantInstrumentationMiddleware(tenantHeader, defaultTenant, reg, nil)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL).Register(router, ins)
+		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL, tenantHeader, defaultTenant, enforceTenancy).Register(router, ins)
 
 		api := apiv1.NewQueryAPI(
 			logger,

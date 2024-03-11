@@ -365,7 +365,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 
 		// We ignore any block that has the deletion marker file.
 		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)}
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
@@ -423,7 +423,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
@@ -525,7 +525,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
@@ -669,7 +669,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of block as well.
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg),
 			[]block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
@@ -848,7 +848,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		var sy *compact.Syncer
 		{
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
@@ -1391,7 +1391,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 		var sy *compact.Syncer
 		{
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")

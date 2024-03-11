@@ -13,6 +13,8 @@ const defaultGraphControlProps = {
   resolution: 10,
   stacked: false,
   maxSourceResolution: '0s',
+  queryMode: 'local',
+  engine: 'prometheus',
 
   onChangeRange: (): void => {
     // Do nothing.

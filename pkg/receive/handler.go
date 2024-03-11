@@ -638,14 +638,6 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
-	// It is possible that hashring is ready in testReady() but unready now,
-	// so need to lock here.
-	h.mtx.RLock()
-	if h.hashring == nil {
-		h.mtx.RUnlock()
-		return errors.New("hashring is not ready")
-	}
-
 	var replicas []uint64
 	if r.replicated {
 		replicas = []uint64{r.n}
@@ -1384,7 +1376,7 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	}
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
-		p.markPeerUnavailable(addr)
+		p.markPeerUnavailableUnlocked(addr)
 		dialError := errors.Wrap(err, "failed to dial peer")
 		return nil, errors.Wrap(dialError, errUnavailable.Error())
 	}
@@ -1397,6 +1389,10 @@ func (p *peerGroup) markPeerUnavailable(addr string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
+	p.markPeerUnavailableUnlocked(addr)
+}
+
+func (p *peerGroup) markPeerUnavailableUnlocked(addr string) {
 	state, ok := p.peerStates[addr]
 	if !ok {
 		state = &retryState{attempt: -1}

@@ -410,12 +410,12 @@ func (it *dedupSeriesIterator) At() (int64, float64) {
 	return it.lastIter.At()
 }
 
-func (it *dedupSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	return it.lastIter.AtHistogram()
+func (it *dedupSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.lastIter.AtHistogram(h)
 }
 
-func (it *dedupSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	return it.lastIter.AtFloatHistogram()
+func (it *dedupSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return it.lastIter.AtFloatHistogram(fh)
 }
 
 func (it *dedupSeriesIterator) AtT() int64 {
@@ -460,12 +460,12 @@ func (it *boundedSeriesIterator) At() (t int64, v float64) {
 	return it.it.At()
 }
 
-func (it *boundedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	return it.it.AtHistogram()
+func (it *boundedSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.it.AtHistogram(h)
 }
 
-func (it *boundedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	return it.it.AtFloatHistogram()
+func (it *boundedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return it.it.AtFloatHistogram(fh)
 }
 
 func (it *boundedSeriesIterator) AtT() int64 {

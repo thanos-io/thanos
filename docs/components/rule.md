@@ -401,6 +401,10 @@ Flags:
       --query.default-step=1s    Default range query step to use. This is
                                  only used in stateless Ruler and alert state
                                  restoration.
+      --query.enable-x-functions
+                                 Whether to enable extended rate functions
+                                 (xrate, xincrease and xdelta). Only has effect
+                                 when used with Thanos engine.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
       --query.sd-dns-interval=30s

@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/util/annotations"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/efficientgo/core/testutil"
@@ -101,11 +102,11 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (s *mockedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (s *mockedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
