@@ -49,7 +49,7 @@ func (d *dedupChunksIterator) At() chunks.Meta {
 }
 
 // Next method is almost the same as https://github.com/prometheus/prometheus/blob/v2.27.1/storage/merge.go#L615.
-// The difference is that it handles both XOR and Aggr chunk Encoding.
+// The difference is that it handles both XOR/Histogram/FloatHistogram and Aggr chunk Encoding.
 func (d *dedupChunksIterator) Next() bool {
 	if d.h == nil {
 		for _, iter := range d.iterators {
@@ -151,8 +151,10 @@ func (h *chunkIteratorHeap) Pop() interface{} {
 }
 
 type overlappingMerger struct {
-	xorIterators  []chunkenc.Iterator
-	aggrIterators [5][]chunkenc.Iterator
+	xorIterators       []chunkenc.Iterator
+	histIterators      []chunkenc.Iterator
+	floatHistIterators []chunkenc.Iterator
+	aggrIterators      [5][]chunkenc.Iterator
 
 	samplesMergeFunc func(a, b chunkenc.Iterator) chunkenc.Iterator
 }
@@ -160,8 +162,10 @@ type overlappingMerger struct {
 func newOverlappingMerger() *overlappingMerger {
 	return &overlappingMerger{
 		samplesMergeFunc: func(a, b chunkenc.Iterator) chunkenc.Iterator {
-			it := noopAdjustableSeriesIterator{a}
-			return newDedupSeriesIterator(it, noopAdjustableSeriesIterator{b})
+			return newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{a},
+				noopAdjustableSeriesIterator{b},
+			)
 		},
 	}
 }
@@ -170,6 +174,10 @@ func (o *overlappingMerger) addChunk(chk chunks.Meta) {
 	switch chk.Chunk.Encoding() {
 	case chunkenc.EncXOR:
 		o.xorIterators = append(o.xorIterators, chk.Chunk.Iterator(nil))
+	case chunkenc.EncFloatHistogram:
+		o.floatHistIterators = append(o.floatHistIterators, chk.Chunk.Iterator(nil))
+	case chunkenc.EncHistogram:
+		o.histIterators = append(o.histIterators, chk.Chunk.Iterator(nil))
 	case downsample.ChunkEncAggr:
 		aggrChk := chk.Chunk.(*downsample.AggrChunk)
 		for i := downsample.AggrCount; i <= downsample.AggrCounter; i++ {
@@ -177,13 +185,15 @@ func (o *overlappingMerger) addChunk(chk chunks.Meta) {
 				o.aggrIterators[i] = append(o.aggrIterators[i], c.Iterator(nil))
 			}
 		}
+	case chunkenc.EncNone:
+	default:
+		// exhausted options for chunk
+		return
 	}
 }
 
 func (o *overlappingMerger) empty() bool {
-	// OverlappingMerger only contains either xor chunk or aggr chunk.
-	// If xor chunks are present then we don't need to check aggr chunks.
-	if len(o.xorIterators) > 0 {
+	if len(o.xorIterators) > 0 || len(o.histIterators) > 0 || len(o.floatHistIterators) > 0 {
 		return false
 	}
 	return len(o.aggrIterators[downsample.AggrCount]) == 0
@@ -203,6 +213,28 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 				}
 				return it
 			}}).Iterator(nil)
+
+	case chunkenc.EncHistogram:
+		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
+			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
+				it = baseChk.Chunk.Iterator(nil)
+				for _, i := range o.histIterators {
+					it = o.samplesMergeFunc(it, i)
+				}
+				return it
+			},
+		}).Iterator(nil)
+
+	case chunkenc.EncFloatHistogram:
+		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
+			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
+				it = baseChk.Chunk.Iterator(nil)
+				for _, i := range o.floatHistIterators {
+					it = o.samplesMergeFunc(it, i)
+				}
+				return it
+			},
+		}).Iterator(nil)
 
 	case downsample.ChunkEncAggr:
 		// If Aggr encoding, each aggregated chunks need to be expanded and deduplicated,
@@ -225,10 +257,9 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 		}
 
 		return newAggrChunkIterator(samplesIter)
+	default:
+		return nil
 	}
-
-	// Impossible for now.
-	return nil
 }
 
 type aggrChunkIterator struct {
