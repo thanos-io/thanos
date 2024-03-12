@@ -1094,21 +1094,25 @@ func (cg *Group) removeOverlappedBlocks(ctx context.Context, toCompact []*metada
 	kept := toCompact[0]
 	for _, m := range toCompact {
 		if m.MinTime < kept.MinTime && m.MaxTime > kept.MaxTime {
-			level.Warn(cg.logger).Log("msg", "found overlapping block in plan that are not the first", "block", m.String())
+			level.Warn(cg.logger).Log("msg", "found overlapped block in plan that are not the first",
+				"first", kept.String(), "block", m.String())
 			kept = m
 		} else if m.MinTime < kept.MinTime || m.MaxTime > kept.MaxTime {
-			return halt(errors.Errorf("found partially overlapping block: %s", m.String()))
+			return halt(errors.Errorf("found partially overlapped block: %s vs %s", m.String(), kept.String()))
 		}
 	}
 	for _, m := range toCompact {
 		if m.ULID.Compare(kept.ULID) == 0 {
-			level.Info(cg.logger).Log("msg", "skip the longest overlapping block", "block", m.String())
+			level.Info(cg.logger).Log("msg", "skip the longest overlapped block", "block", m.String(),
+				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
 			return errors.Wrapf(err, "remove old block dir %s", m.String())
 		}
 		if blockDeletableChecker.CanDelete(cg, m.ULID) {
+			level.Warn(cg.logger).Log("msg", "deleting overlapped block", "block", m.String(),
+				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
 			return block.Delete(ctx, cg.logger, cg.bkt, m.ULID)
 		}
 	}
