@@ -107,6 +107,7 @@ type compactMetrics struct {
 	blocksCleaned               prometheus.Counter
 	blockCleanupFailures        prometheus.Counter
 	blocksMarked                *prometheus.CounterVec
+	blocksOverlapped            prometheus.Counter
 	garbageCollectedBlocks      prometheus.Counter
 }
 
@@ -153,6 +154,10 @@ func newCompactMetrics(reg *prometheus.Registry, deleteDelay time.Duration) *com
 		Name: "thanos_compact_blocks_marked_total",
 		Help: "Total number of blocks marked in compactor.",
 	}, []string{"marker", "reason"})
+	m.blocksOverlapped = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_blocks_overlapped_total",
+		Help: "Total number of blocks detected overlapped in compactor.",
+	})
 	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason)
 	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason)
 	m.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")
@@ -357,6 +362,7 @@ func runCompact(
 		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
 		compactMetrics.garbageCollectedBlocks,
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
+		compactMetrics.blocksOverlapped,
 		metadata.HashFunc(conf.hashFunc),
 		conf.blockFilesConcurrency,
 		conf.compactBlocksFetchConcurrency,

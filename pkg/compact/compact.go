@@ -239,6 +239,7 @@ type DefaultGrouper struct {
 	garbageCollectedBlocks        prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
+	blocksOverlapped              prometheus.Counter
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
@@ -254,6 +255,7 @@ func NewDefaultGrouper(
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
+	blocksOverlapped prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
@@ -286,6 +288,7 @@ func NewDefaultGrouper(
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
+		blocksOverlapped:              blocksOverlapped,
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
@@ -306,6 +309,7 @@ func NewDefaultGrouperWithMetrics(
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
+	blocksOverlapped prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
@@ -323,6 +327,7 @@ func NewDefaultGrouperWithMetrics(
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
+		blocksOverlapped:              blocksOverlapped,
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
@@ -355,6 +360,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.garbageCollectedBlocks,
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
+				g.blocksOverlapped,
 				g.hashFunc,
 				g.blockFilesConcurrency,
 				g.compactBlocksFetchConcurrency,
@@ -395,6 +401,7 @@ type Group struct {
 	groupGarbageCollectedBlocks   prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
+	blocksOverlapped              prometheus.Counter
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
@@ -418,6 +425,7 @@ func NewGroup(
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
+	blocksOverlapped prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
@@ -446,6 +454,7 @@ func NewGroup(
 		groupGarbageCollectedBlocks:   groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
+		blocksOverlapped:              blocksOverlapped,
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
@@ -1078,6 +1087,34 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
+func (cg *Group) removeOverlappedBlocks(ctx context.Context, toCompact []*metadata.Meta, dir string, blockDeletableChecker BlockDeletableChecker) error {
+	if len(toCompact) == 0 {
+		return nil
+	}
+	kept := toCompact[0]
+	for _, m := range toCompact {
+		if m.MinTime < kept.MinTime && m.MaxTime > kept.MaxTime {
+			level.Warn(cg.logger).Log("msg", "found overlapping block in plan that are not the first", "block", m.String())
+			kept = m
+		} else if m.MinTime < kept.MinTime || m.MaxTime > kept.MaxTime {
+			return halt(errors.Errorf("found partially overlapping block: %s", m.String()))
+		}
+	}
+	for _, m := range toCompact {
+		if m.ULID.Compare(kept.ULID) == 0 {
+			level.Info(cg.logger).Log("msg", "skip the longest overlapping block", "block", m.String())
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
+			return errors.Wrapf(err, "remove old block dir %s", m.String())
+		}
+		if blockDeletableChecker.CanDelete(cg, m.ULID) {
+			return block.Delete(ctx, cg.logger, cg.bkt, m.ULID)
+		}
+	}
+	return nil
+}
+
 func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (shouldRerun bool, compID ulid.ULID, _ error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
@@ -1113,7 +1150,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	begin := groupCompactionBegin
 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
-		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
+		level.Error(cg.logger).Log("msg", fmt.Sprintf("failed to run pre compaction callback for plan: %v", toCompact), "err", err)
+		// instead of halting, we attempt to remove overlapped blocks and only keep the longest one.
+		return false, ulid.ULID{}, cg.removeOverlappedBlocks(ctx, toCompact, dir, blockDeletableChecker)
 	}
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
