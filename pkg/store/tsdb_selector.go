@@ -33,10 +33,11 @@ func NewTSDBSelector(relabelConfig []*relabel.Config) *TSDBSelector {
 }
 
 // MatchLabelSets returns true if the given label sets match the TSDBSelector.
-// It also returns those label sets that were matched.
+// As a second parameter, it returns the matched label sets if they are a subset of the given input.
+// Otherwise the second return value is nil.
 func (sr *TSDBSelector) MatchLabelSets(labelSets ...labels.Labels) (bool, []labels.Labels) {
 	if sr.relabelConfig == nil || len(labelSets) == 0 {
-		return true, labelSets
+		return true, nil
 	}
 	matchedLabelSets := sr.runRelabelRules(labelSets)
 	return len(matchedLabelSets) > 0, matchedLabelSets

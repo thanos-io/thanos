@@ -338,13 +338,12 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
-		matches, matched := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {
 			continue
 		}
-		if len(matched) < len(st.LabelSets()) {
-			storeLabelSets = append(storeLabelSets, matched...)
-		}
+		storeLabelSets = append(storeLabelSets, extraMatchers...)
+
 		stores = append(stores, st)
 	}
 	if len(stores) == 0 {

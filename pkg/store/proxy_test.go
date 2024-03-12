@@ -1688,7 +1688,7 @@ type rawSeries struct {
 }
 
 func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
-	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n %v", got)
+	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n want: %v \n  got: %v", expected, got)
 
 	ret := make([]rawSeries, len(got))
 	for i, s := range got {
