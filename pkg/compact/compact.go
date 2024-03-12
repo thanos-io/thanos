@@ -1029,6 +1029,39 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 	return nil
 }
 
+func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metadata.Meta, dir string, blockDeletableChecker BlockDeletableChecker) error {
+	if len(toCompact) == 0 {
+		return nil
+	}
+	kept := toCompact[0]
+	for _, m := range toCompact {
+		if m.MinTime < kept.MinTime && m.MaxTime > kept.MaxTime {
+			level.Warn(cg.logger).Log("msg", "found overlapping block in plan that are not the first",
+				"first", kept.String(), "block", m.String())
+			kept = m
+		} else if m.MinTime < kept.MinTime || m.MaxTime > kept.MaxTime {
+			return halt(errors.Errorf("found partially overlapping block: %s vs %s", m.String(), kept.String()))
+		}
+	}
+	for _, m := range toCompact {
+		if m.ULID.Compare(kept.ULID) == 0 {
+			level.Info(cg.logger).Log("msg", "skip the longest overlapping block", "block", m.String(),
+				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
+			continue
+		}
+		cg.blocksOverlapped.Inc()
+		if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
+			return errors.Wrapf(err, "remove old block dir %s", m.String())
+		}
+		if blockDeletableChecker.CanDelete(cg, m.ULID) {
+			level.Warn(cg.logger).Log("msg", "deleting overlapping block", "block", m.String(),
+				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
+			return block.Delete(ctx, cg.logger, cg.bkt, m.ULID)
+		}
+	}
+	return nil
+}
+
 // RepairIssue347 repairs the https://github.com/prometheus/tsdb/issues/347 issue when having issue347Error.
 func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
@@ -1087,38 +1120,6 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) removeOverlappedBlocks(ctx context.Context, toCompact []*metadata.Meta, dir string, blockDeletableChecker BlockDeletableChecker) error {
-	if len(toCompact) == 0 {
-		return nil
-	}
-	kept := toCompact[0]
-	for _, m := range toCompact {
-		if m.MinTime < kept.MinTime && m.MaxTime > kept.MaxTime {
-			level.Warn(cg.logger).Log("msg", "found overlapped block in plan that are not the first",
-				"first", kept.String(), "block", m.String())
-			kept = m
-		} else if m.MinTime < kept.MinTime || m.MaxTime > kept.MaxTime {
-			return halt(errors.Errorf("found partially overlapped block: %s vs %s", m.String(), kept.String()))
-		}
-	}
-	for _, m := range toCompact {
-		if m.ULID.Compare(kept.ULID) == 0 {
-			level.Info(cg.logger).Log("msg", "skip the longest overlapped block", "block", m.String(),
-				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
-			return errors.Wrapf(err, "remove old block dir %s", m.String())
-		}
-		if blockDeletableChecker.CanDelete(cg, m.ULID) {
-			level.Warn(cg.logger).Log("msg", "deleting overlapped block", "block", m.String(),
-				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
-			return block.Delete(ctx, cg.logger, cg.bkt, m.ULID)
-		}
-	}
-	return nil
-}
-
 func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (shouldRerun bool, compID ulid.ULID, _ error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
@@ -1156,7 +1157,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		level.Error(cg.logger).Log("msg", fmt.Sprintf("failed to run pre compaction callback for plan: %v", toCompact), "err", err)
 		// instead of halting, we attempt to remove overlapped blocks and only keep the longest one.
-		return false, ulid.ULID{}, cg.removeOverlappedBlocks(ctx, toCompact, dir, blockDeletableChecker)
+		return false, ulid.ULID{}, cg.removeOverlappingBlocks(ctx, toCompact, dir, blockDeletableChecker)
 	}
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
