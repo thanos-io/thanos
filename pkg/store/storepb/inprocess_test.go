@@ -59,6 +59,7 @@ func (t *testStoreServer) LabelValues(_ context.Context, r *LabelValuesRequest) 
 }
 
 func TestServerAsClient(t *testing.T) {
+	ctx := context.Background()
 	for _, bufferSize := range []int{0, 1, 20, 100} {
 		t.Run(fmt.Sprintf("buffer=%v", bufferSize), func(t *testing.T) {
 			t.Run("Info", func(t *testing.T) {
@@ -72,7 +73,7 @@ func TestServerAsClient(t *testing.T) {
 				t.Run("ok", func(t *testing.T) {
 					for i := 0; i < 20; i++ {
 						r := &InfoRequest{}
-						resp, err := ServerAsClient(s, 0).Info(context.TODO(), r)
+						resp, err := ServerAsClient(s).Info(ctx, r)
 						testutil.Ok(t, err)
 						testutil.Equals(t, s.info, resp)
 						testutil.Equals(t, r, s.infoLastReq)
@@ -83,7 +84,7 @@ func TestServerAsClient(t *testing.T) {
 					s.err = errors.New("some error")
 					for i := 0; i < 20; i++ {
 						r := &InfoRequest{}
-						_, err := ServerAsClient(s, 0).Info(context.TODO(), r)
+						_, err := ServerAsClient(s).Info(ctx, r)
 						testutil.NotOk(t, err)
 						testutil.Equals(t, s.err, err)
 					}
@@ -114,7 +115,7 @@ func TestServerAsClient(t *testing.T) {
 							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						client, err := ServerAsClient(s, 0).Series(context.TODO(), r)
+						client, err := ServerAsClient(s).Series(ctx, r)
 						testutil.Ok(t, err)
 						var resps []*SeriesResponse
 						for {
@@ -139,7 +140,7 @@ func TestServerAsClient(t *testing.T) {
 							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						client, err := ServerAsClient(s, 0).Series(context.TODO(), r)
+						client, err := ServerAsClient(s).Series(ctx, r)
 						testutil.Ok(t, err)
 						var resps []*SeriesResponse
 						for {
@@ -167,7 +168,7 @@ func TestServerAsClient(t *testing.T) {
 							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						client, err := ServerAsClient(s, 0).Series(context.TODO(), r)
+						client, err := ServerAsClient(s).Series(ctx, r)
 						testutil.Ok(t, err)
 						var resps []*SeriesResponse
 						for {
@@ -202,7 +203,7 @@ func TestServerAsClient(t *testing.T) {
 							End:                     234,
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						resp, err := ServerAsClient(s, 0).LabelNames(context.TODO(), r)
+						resp, err := ServerAsClient(s).LabelNames(ctx, r)
 						testutil.Ok(t, err)
 						testutil.Equals(t, s.labelNames, resp)
 						testutil.Equals(t, r, s.labelNamesLastReq)
@@ -217,7 +218,7 @@ func TestServerAsClient(t *testing.T) {
 							End:                     234,
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						_, err := ServerAsClient(s, 0).LabelNames(context.TODO(), r)
+						_, err := ServerAsClient(s).LabelNames(ctx, r)
 						testutil.NotOk(t, err)
 						testutil.Equals(t, s.err, err)
 					}
@@ -238,7 +239,7 @@ func TestServerAsClient(t *testing.T) {
 							End:                     234,
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						resp, err := ServerAsClient(s, 0).LabelValues(context.TODO(), r)
+						resp, err := ServerAsClient(s).LabelValues(ctx, r)
 						testutil.Ok(t, err)
 						testutil.Equals(t, s.labelValues, resp)
 						testutil.Equals(t, r, s.labelValuesLastReq)
@@ -254,7 +255,7 @@ func TestServerAsClient(t *testing.T) {
 							End:                     234,
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
-						_, err := ServerAsClient(s, 0).LabelValues(context.TODO(), r)
+						_, err := ServerAsClient(s).LabelValues(ctx, r)
 						testutil.NotOk(t, err)
 						testutil.Equals(t, s.err, err)
 					}
