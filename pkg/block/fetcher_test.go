@@ -280,7 +280,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				if tcase.expectedMetaErr != nil {
 					expectedFailures = 1
 				}
-				testutil.Equals(t, float64(i+1), promtest.ToFloat64(baseFetcher.syncs))
+				testutil.Equals(t, float64(i+1), promtest.ToFloat64(baseFetcher.metrics.Syncs))
 				testutil.Equals(t, float64(i+1), promtest.ToFloat64(fetcher.metrics.Syncs))
 				testutil.Equals(t, float64(len(tcase.expectedMetas)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(LoadedMeta)))
 				testutil.Equals(t, float64(len(tcase.expectedNoMeta)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(NoMeta)))
@@ -359,6 +359,60 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 	testutil.Equals(t, 3.0, promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
+}
+
+func TestLabelShardedMetaFilter_Filter_Level(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	relabelContentYaml := `
+    - action: keep
+      regex: "0|1|2|3|4"
+      source_labels: [%s]
+    `
+	relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYaml, BlockLevelLabel)), SelectorSupportedRelabelActions)
+	testutil.Ok(t, err)
+
+	f := NewLabelShardedMetaFilter(relabelConfig)
+
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{Level: 5},
+			},
+		},
+		ULID(2): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{Level: 2},
+			},
+		},
+		ULID(3): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{Level: 0},
+			},
+		},
+		ULID(4): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{Level: 23},
+			},
+		},
+		ULID(5): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{Level: 1},
+			},
+		},
+	}
+	expected := map[ulid.ULID]*metadata.Meta{
+		ULID(2): input[ULID(2)],
+		ULID(3): input[ULID(3)],
+		ULID(5): input[ULID(5)],
+	}
+
+	m := newTestFetcherMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
+
+	testutil.Equals(t, 2.0, promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
+	testutil.Equals(t, expected, input)
 }
 
 func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {

@@ -54,6 +54,13 @@ const (
 	ThanosVersion1 = 1
 )
 
+const (
+	TenantLabel = "__tenant__"
+
+	ObsoletedTenantLabel = "tenant_id"
+	DefaultTenant        = "__not_set__"
+)
+
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
 // extends it by Thanos-specific fields.
 type Meta struct {
