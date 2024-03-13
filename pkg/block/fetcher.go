@@ -42,7 +42,9 @@ const FetcherConcurrency = 32
 // to allow depending projects (eg. Cortex) to implement their own custom metadata fetcher while tracking
 // compatible metrics.
 type BaseFetcherMetrics struct {
-	Syncs prometheus.Counter
+	Syncs          prometheus.Counter
+	CacheMemoryHit prometheus.Counter
+	CacheDiskHit   prometheus.Counter
 }
 
 // FetcherMetrics holds metrics tracked by the metadata fetcher. This struct and its fields are exported
@@ -116,7 +118,16 @@ func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
 		Name:      "base_syncs_total",
 		Help:      "Total blocks metadata synchronization attempts by base Fetcher",
 	})
-
+	m.CacheMemoryHit = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Subsystem: fetcherSubSys,
+		Name:      "base_cache_memory_hits_total",
+		Help:      "Total blocks metadata from memory cache hits",
+	})
+	m.CacheDiskHit = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Subsystem: fetcherSubSys,
+		Name:      "base_cache_disk_hits_total",
+		Help:      "Total blocks metadata from disk cache hits",
+	})
 	return &m
 }
 
@@ -274,11 +285,12 @@ type BaseFetcher struct {
 
 	// Optional local directory to cache meta.json files.
 	cacheDir string
-	syncs    prometheus.Counter
 	g        singleflight.Group
 
 	mtx    sync.Mutex
 	cached map[ulid.ULID]*metadata.Meta
+
+	metrics *BaseFetcherMetrics
 }
 
 // NewBaseFetcher constructs BaseFetcher.
@@ -307,7 +319,7 @@ func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 		blockIDsFetcher: blockIDsFetcher,
 		cacheDir:        cacheDir,
 		cached:          map[ulid.ULID]*metadata.Meta{},
-		syncs:           metrics.Syncs,
+		metrics:         metrics,
 	}, nil
 }
 
@@ -359,6 +371,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	)
 
 	if m, seen := f.cached[id]; seen {
+		f.metrics.CacheMemoryHit.Inc()
 		return m, nil
 	}
 
@@ -366,6 +379,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	if f.cacheDir != "" {
 		m, err := metadata.ReadFromDir(cachedBlockDir)
 		if err == nil {
+			f.metrics.CacheDiskHit.Inc()
 			return m, nil
 		}
 
@@ -426,7 +440,7 @@ type response struct {
 }
 
 func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
-	f.syncs.Inc()
+	f.metrics.Syncs.Inc()
 
 	var (
 		resp = response{
@@ -706,8 +720,13 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
 }
 
-// Special label that will have an ULID of the meta.json being referenced to.
-const BlockIDLabel = "__block_id"
+const (
+	// BlockIDLabel Special label that will have an ULID of the meta.json being referenced to.
+	BlockIDLabel = "__block_id"
+
+	// BlockLevelLabel Special label that will have the compaction level of the meta.json being referenced to.
+	BlockLevelLabel = "__block_level"
+)
 
 // Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
 func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
@@ -715,6 +734,7 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 	for id, m := range metas {
 		b.Reset(labels.EmptyLabels())
 		b.Set(BlockIDLabel, id.String())
+		b.Set(BlockLevelLabel, strconv.Itoa(m.BlockMeta.Compaction.Level))
 
 		for k, v := range m.Thanos.Labels {
 			b.Set(k, v)

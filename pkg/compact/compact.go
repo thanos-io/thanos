@@ -236,10 +236,10 @@ type DefaultGrouper struct {
 	compactionRunsCompleted       *prometheus.CounterVec
 	compactionFailures            *prometheus.CounterVec
 	verticalCompactions           *prometheus.CounterVec
+	overlappingBlocks             *prometheus.CounterVec
 	garbageCollectedBlocks        prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
-	blocksOverlapped              prometheus.Counter
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
@@ -255,7 +255,6 @@ func NewDefaultGrouper(
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
-	blocksOverlapped prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
@@ -285,10 +284,13 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
+		overlappingBlocks: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_compact_group_blocks_overlapped_total",
+			Help: "Total number of blocks that are overlapped and not compacted.",
+		}, []string{"resolution", "level"}),
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
-		blocksOverlapped:              blocksOverlapped,
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
@@ -306,10 +308,10 @@ func NewDefaultGrouperWithMetrics(
 	compactionRunsCompleted *prometheus.CounterVec,
 	compactionFailures *prometheus.CounterVec,
 	verticalCompactions *prometheus.CounterVec,
+	overrlappingBlocks *prometheus.CounterVec,
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
-	blocksOverlapped prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
@@ -324,10 +326,10 @@ func NewDefaultGrouperWithMetrics(
 		compactionRunsCompleted:       compactionRunsCompleted,
 		compactionFailures:            compactionFailures,
 		verticalCompactions:           verticalCompactions,
+		overlappingBlocks:             overrlappingBlocks,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
-		blocksOverlapped:              blocksOverlapped,
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
@@ -357,10 +359,10 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.compactionRunsCompleted.WithLabelValues(resolutionLabel),
 				g.compactionFailures.WithLabelValues(resolutionLabel),
 				g.verticalCompactions.WithLabelValues(resolutionLabel),
+				g.overlappingBlocks.WithLabelValues(resolutionLabel, fmt.Sprintf("%d", m.Compaction.Level)),
 				g.garbageCollectedBlocks,
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
-				g.blocksOverlapped,
 				g.hashFunc,
 				g.blockFilesConcurrency,
 				g.compactBlocksFetchConcurrency,
@@ -398,10 +400,10 @@ type Group struct {
 	compactionRunsCompleted       prometheus.Counter
 	compactionFailures            prometheus.Counter
 	verticalCompactions           prometheus.Counter
+	overlappingBlocks             prometheus.Counter
 	groupGarbageCollectedBlocks   prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
-	blocksOverlapped              prometheus.Counter
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
@@ -422,10 +424,10 @@ func NewGroup(
 	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	verticalCompactions prometheus.Counter,
+	overlappingBlocks prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
-	blocksOverlapped prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
@@ -451,10 +453,10 @@ func NewGroup(
 		compactionRunsCompleted:       compactionRunsCompleted,
 		compactionFailures:            compactionFailures,
 		verticalCompactions:           verticalCompactions,
+		overlappingBlocks:             overlappingBlocks,
 		groupGarbageCollectedBlocks:   groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
-		blocksOverlapped:              blocksOverlapped,
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
@@ -1029,7 +1031,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 	return nil
 }
 
-func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metadata.Meta, dir string, blockDeletableChecker BlockDeletableChecker) error {
+func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metadata.Meta, dir string) error {
 	if len(toCompact) == 0 {
 		return nil
 	}
@@ -1039,7 +1041,8 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 			level.Warn(cg.logger).Log("msg", "found overlapping block in plan that are not the first",
 				"first", kept.String(), "block", m.String())
 			kept = m
-		} else if m.MinTime < kept.MinTime || m.MaxTime > kept.MaxTime {
+		} else if (m.MinTime < kept.MinTime && kept.MinTime < m.MaxTime) ||
+			(m.MinTime < kept.MaxTime && kept.MaxTime < m.MaxTime) {
 			return halt(errors.Errorf("found partially overlapping block: %s vs %s", m.String(), kept.String()))
 		}
 	}
@@ -1049,14 +1052,14 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
 			continue
 		}
-		cg.blocksOverlapped.Inc()
+		cg.overlappingBlocks.Inc()
+		level.Warn(cg.logger).Log("msg", "delete overlapping block immediately", "block", m.String(),
+			"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
+		if err := block.Delete(ctx, cg.logger, cg.bkt, m.ULID); err != nil {
+			return errors.Wrapf(err, "delete overlapping block %s", m.String())
+		}
 		if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
 			return errors.Wrapf(err, "remove old block dir %s", m.String())
-		}
-		if blockDeletableChecker.CanDelete(cg, m.ULID) {
-			level.Warn(cg.logger).Log("msg", "deleting overlapping block", "block", m.String(),
-				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
-			return block.Delete(ctx, cg.logger, cg.bkt, m.ULID)
 		}
 	}
 	return nil
@@ -1157,7 +1160,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		level.Error(cg.logger).Log("msg", fmt.Sprintf("failed to run pre compaction callback for plan: %v", toCompact), "err", err)
 		// instead of halting, we attempt to remove overlapped blocks and only keep the longest one.
-		return false, ulid.ULID{}, cg.removeOverlappingBlocks(ctx, toCompact, dir, blockDeletableChecker)
+		return false, ulid.ULID{}, cg.removeOverlappingBlocks(ctx, toCompact, dir)
 	}
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
