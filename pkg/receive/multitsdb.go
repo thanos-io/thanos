@@ -183,7 +183,7 @@ func (t *tenant) client(logger log.Logger) store.Client {
 		return nil
 	}
 
-	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
+	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore))
 	return newLocalClient(client, tsdbStore)
 }
 
