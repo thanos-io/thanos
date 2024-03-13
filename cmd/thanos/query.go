@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"google.golang.org/grpc"
 
 	"github.com/go-kit/log"
@@ -209,7 +210,13 @@ func registerQuery(app *extkingpin.App) {
 		Default("1s"))
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
-	storeSelectorRelabelConf := *extkingpin.RegisterSelectorRelabelFlags(cmd)
+
+	storeSelectorRelabelConf := *extflag.RegisterPathOrContent(
+		cmd,
+		"selector.relabel-config",
+		"YAML with relabeling configuration that allows the Querier to select specific TSDBs by their external label. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		extflag.WithEnvSubstitution(),
+	)
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 

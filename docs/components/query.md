@@ -462,16 +462,17 @@ Flags:
                                  info endpoint (repeated).
       --selector.relabel-config=<content>
                                  Alternative to 'selector.relabel-config-file'
-                                 flag (mutually exclusive). Content of
-                                 YAML file that contains relabeling
-                                 configuration that allows selecting
-                                 blocks. It follows native Prometheus
+                                 flag (mutually exclusive). Content of YAML
+                                 with relabeling configuration that allows
+                                 the Querier to select specific TSDBs by their
+                                 external label. It follows native Prometheus
                                  relabel-config syntax. See format details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config-file=<file-path>
-                                 Path to YAML file that contains relabeling
-                                 configuration that allows selecting
-                                 blocks. It follows native Prometheus
+                                 Path to YAML with relabeling configuration
+                                 that allows the Querier to select
+                                 specific TSDBs by their external label.
+                                 It follows native Prometheus
                                  relabel-config syntax. See format details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --store=<store> ...        Deprecation Warning - This flag is deprecated
