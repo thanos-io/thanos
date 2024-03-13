@@ -453,7 +453,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 			for id := range ch {
 				meta, err := f.loadMeta(ctx, id)
 				numBlocks += 1
-				if (numBlocks % 10) == 0 {
+				if (numBlocks % 1000) == 0 {
 					level.Debug(f.logger).Log("msg", "loaded the metadata of a block from one goroutine",
 						"block", id,
 						"n_th_block", numBlocks,

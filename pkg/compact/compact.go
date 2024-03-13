@@ -4,6 +4,7 @@
 package compact
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1069,7 +1070,7 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 	for _, m := range toCompact {
 		if m.ULID.Compare(kept.ULID) == 0 {
 			level.Info(cg.logger).Log("msg", "skip the longest overlapping block", "block", m.String(),
-				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
+				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", map2str(m.Thanos.Labels))
 			continue
 		}
 		cg.overlappingBlocks.Inc()
@@ -1078,9 +1079,17 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 	return nil
 }
 
+func map2str(labels map[string]string) string {
+	b := new(bytes.Buffer)
+	for k, v := range labels {
+		fmt.Fprintf(b, "%s=%s,", k, v)
+	}
+	return b.String()
+}
+
 func DeleteBlockNow(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string) error {
 	level.Warn(logger).Log("msg", "delete polluted block immediately", "block", m.String(),
-		"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.Labels)
+		"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", map2str(m.Thanos.Labels))
 	if err := block.Delete(ctx, logger, bkt, m.ULID); err != nil {
 		return errors.Wrapf(err, "delete overlapping block %s", m.String())
 	}
