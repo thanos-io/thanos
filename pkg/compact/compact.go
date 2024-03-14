@@ -306,8 +306,8 @@ func NewDefaultGrouper(
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
 		overlappingBlocks: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_compact_group_blocks_overlapped_total",
-			Help: "Total number of blocks that are overlapped and not compacted.",
+			Name: "thanos_compact_group_overlapping_blocks_total",
+			Help: "Total number of blocks that are overlapping and to be deleted.",
 		}, []string{"resolution", "level"}),
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
@@ -1064,7 +1064,13 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 			kept = m
 		} else if (m.MinTime < kept.MinTime && kept.MinTime < m.MaxTime) ||
 			(m.MinTime < kept.MaxTime && kept.MaxTime < m.MaxTime) {
-			return halt(errors.Errorf("found partially overlapping block: %s vs %s", m.String(), kept.String()))
+			err := errors.Errorf("found partially overlapping block: %s vs %s", m.String(), kept.String())
+			if cg.enableVerticalCompaction {
+				level.Error(cg.logger).Log("msg", "best effort to vertical compact", "err", err)
+				return nil
+			} else {
+				return halt(err)
+			}
 		}
 	}
 	for _, m := range toCompact {
@@ -1074,9 +1080,11 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 			continue
 		}
 		cg.overlappingBlocks.Inc()
-		return DeleteBlockNow(ctx, cg.logger, cg.bkt, m, dir)
+		if err := DeleteBlockNow(ctx, cg.logger, cg.bkt, m, dir); err != nil {
+			return retry(err)
+		}
 	}
-	return nil
+	return retry(errors.Errorf("found overlapping blocks in plan. Only kept %s", kept.String()))
 }
 
 func map2str(labels map[string]string) string {
@@ -1194,7 +1202,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		level.Error(cg.logger).Log("msg", fmt.Sprintf("failed to run pre compaction callback for plan: %v", toCompact), "err", err)
 		// instead of halting, we attempt to remove overlapped blocks and only keep the longest one.
-		return false, ulid.ULID{}, cg.removeOverlappingBlocks(ctx, toCompact, dir)
+		if newErr := cg.removeOverlappingBlocks(ctx, toCompact, dir); newErr != nil {
+			return false, ulid.ULID{}, newErr
+		}
 	}
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 

@@ -429,7 +429,7 @@ func runCompact(
 
 	compactMainFn := func() error {
 		if err := compactor.Compact(ctx); err != nil {
-			return errors.Wrap(err, "compaction")
+			return errors.Wrap(err, "whole compaction error")
 		}
 
 		if !conf.disableDownsampling {
