@@ -250,8 +250,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		if err != nil {
 			return &promql.Result{Err: err}
 		}
-		result := make(promql.Vector, 0)
-
+		var (
+			result  = make(promql.Vector, 0)
+			builder = labels.NewScratchBuilder(8)
+		)
 		for {
 			msg, err := qry.Recv()
 			if err == io.EOF {
@@ -266,14 +268,17 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 
 			ts := msg.GetTimeseries()
-
+			builder.Reset()
+			for _, l := range ts.Labels {
+				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+			}
 			// Point might have a different timestamp, force it to the evaluation
 			// timestamp as that is when we ran the evaluation.
 			// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
 			if len(ts.Histograms) > 0 {
-				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
+				result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
 			} else {
-				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
+				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
 		}
 
@@ -301,8 +306,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	var (
 		result   = make(promql.Matrix, 0)
 		warnings annotations.Annotations
+		builder  = labels.NewScratchBuilder(8)
 	)
-
 	for {
 		msg, err := qry.Recv()
 		if err == io.EOF {
@@ -321,12 +326,12 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		if ts == nil {
 			continue
 		}
-		lbls := labels.NewScratchBuilder(len(ts.Labels))
+		builder.Reset()
 		for _, l := range ts.Labels {
-			lbls.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+			builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
 		}
 		series := promql.Series{
-			Metric:     lbls.Labels(),
+			Metric:     builder.Labels(),
 			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
 			Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
 		}

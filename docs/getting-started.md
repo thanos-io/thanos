@@ -125,6 +125,9 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Blog posts
 
+* 2024:
+  * [Streamlining Long-Term Storage Query Performance for Metrics With Thanos.](https://blog.devops.dev/streamlining-long-term-storage-query-performance-for-metrics-with-thanos-b44419c70cc4)
+
 * 2023:
   * [Thanos Ruler and Prometheus Rules — a match made in heaven.](https://medium.com/@helia.barroso/thanos-ruler-and-prometheus-rules-a-match-made-in-heaven-a4f08f2399ac)
 

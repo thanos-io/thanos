@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -95,7 +96,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(nil, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(nil, insBkt)
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			duplicateBlocksFilter,
 		})
@@ -197,7 +198,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
@@ -509,7 +510,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,

@@ -64,11 +64,25 @@ func (e *Endpoint) UnmarshalJSON(data []byte) error {
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
-	Hashring       string            `json:"hashring,omitempty"`
-	Tenants        []string          `json:"tenants,omitempty"`
-	Endpoints      []Endpoint        `json:"endpoints"`
-	Algorithm      HashringAlgorithm `json:"algorithm,omitempty"`
-	ExternalLabels labels.Labels     `json:"external_labels,omitempty"`
+	Hashring          string            `json:"hashring,omitempty"`
+	Tenants           []string          `json:"tenants,omitempty"`
+	TenantMatcherType tenantMatcher     `json:"tenant_matcher_type,omitempty"`
+	Endpoints         []Endpoint        `json:"endpoints"`
+	Algorithm         HashringAlgorithm `json:"algorithm,omitempty"`
+	ExternalLabels    labels.Labels     `json:"external_labels,omitempty"`
+}
+
+type tenantMatcher string
+
+const (
+	// TenantMatcherTypeExact matches tenants exactly. This is also the default one.
+	TenantMatcherTypeExact tenantMatcher = "exact"
+	// TenantMatcherGlob matches tenants using glob patterns.
+	TenantMatcherGlob tenantMatcher = "glob"
+)
+
+func isExactMatcher(m tenantMatcher) bool {
+	return m == TenantMatcherTypeExact || m == ""
 }
 
 // ConfigWatcher is able to watch a file containing a hashring configuration

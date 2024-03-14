@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"testing"
 	"time"
 
@@ -16,13 +17,19 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/matchers"
+	logkit "github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/prompb"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -967,4 +974,47 @@ test_metric{a="2", b="2"} 1`)
 			},
 		})
 	})
+}
+
+func TestReceiveGlob(t *testing.T) {
+	e, err := e2e.NewDockerEnvironment("receive-glob")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	h := receive.HashringConfig{
+		TenantMatcherType: "glob",
+		Tenants: []string{
+			"default*",
+		},
+		Endpoints: []receive.Endpoint{
+			{Address: i.InternalEndpoint("grpc")},
+		},
+	}
+
+	r := e2ethanos.NewReceiveBuilder(e, "router").WithRouting(1, h).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "aa", Value: "bb"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+
 }

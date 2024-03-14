@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/notifier"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/storage/remote"
@@ -44,6 +45,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
+	"github.com/thanos-io/promql-engine/execution/parse"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -105,6 +107,8 @@ type ruleConfig struct {
 	lset              labels.Labels
 	ignoredLabelNames []string
 	storeRateLimits   store.SeriesSelectLimits
+
+	extendedFunctionsEnabled bool
 }
 
 type Expression struct {
@@ -154,6 +158,8 @@ func registerRule(app *extkingpin.App) {
 
 	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
+
+	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
@@ -385,7 +391,7 @@ func runRule(
 			queryClients = append(queryClients, queryClient)
 			promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
 			// Discover and resolve query addresses.
-			addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
+			addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval, logger)
 		}
 
 		if cfg.GRPCConfig != nil {
@@ -572,7 +578,7 @@ func runRule(
 			return err
 		}
 		// Discover and resolve Alertmanager addresses.
-		addDiscoveryGroups(g, amClient, conf.alertmgr.alertmgrsDNSSDInterval)
+		addDiscoveryGroups(g, amClient, conf.alertmgr.alertmgrsDNSSDInterval, logger)
 
 		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout), cfg.APIVersion))
 	}
@@ -582,6 +588,12 @@ func runRule(
 		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
 	)
 	{
+		if conf.extendedFunctionsEnabled {
+			for k, fn := range parse.XFunctions {
+				parser.Functions[k] = fn
+			}
+		}
+
 		// Run rule evaluation and alert notifications.
 		notifyFunc := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
 			res := make([]*notifier.Alert, 0, len(alerts))
@@ -969,7 +981,7 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.Duration, logger log.Logger) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)
@@ -979,9 +991,10 @@ func addDiscoveryGroups(g *run.Group, c *clientconfig.HTTPClient, interval time.
 	})
 
 	g.Add(func() error {
-		return runutil.Repeat(interval, ctx.Done(), func() error {
+		runutil.RepeatInfinitely(logger, interval, ctx.Done(), func() error {
 			return c.Resolve(ctx)
 		})
+		return nil
 	}, func(error) {
 		cancel()
 	})
