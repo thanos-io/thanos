@@ -2427,3 +2427,66 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		return reflect.DeepEqual(res, expected)
 	})
 }
+
+func TestQuerySelectWithRelabel(t *testing.T) {
+	t.Parallel()
+
+	timeNow := time.Now().UnixNano()
+
+	ts := []struct {
+		samples       []fakeMetricSample
+		query         string
+		result        model.Vector
+		relabelConfig string
+	}{
+		{
+			query:   `my_fake_metric`,
+			samples: []fakeMetricSample{{"i1", 1, timeNow}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"__name__": "my_fake_metric", "instance": "i1", "prometheus": "p1", "replica": "0"},
+					Value:  1,
+				},
+			},
+			relabelConfig: `
+            - source_labels: [prometheus]
+              regex: p1
+              action: keep
+            `,
+		},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.query, func(t *testing.T) {
+			e, err := e2e.NewDockerEnvironment("pushdown-dedup")
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
+
+			endpoints := []string{
+				sidecar1.InternalEndpoint("grpc"),
+				sidecar2.InternalEndpoint("grpc"),
+			}
+			q := e2ethanos.
+				NewQuerierBuilder(e, "1", endpoints...).
+				WithSelectorRelabelConfig(tc.relabelConfig).
+				Init()
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			t.Cleanup(cancel)
+
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, tc.samples))
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, tc.samples))
+
+			testQuery := func() string { return tc.query }
+			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{}, tc.result)
+		})
+	}
+}
