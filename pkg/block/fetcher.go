@@ -591,6 +591,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 		if tenant, ok := m.Thanos.Labels[metadata.TenantLabel]; ok {
 			numBlocksByTenant[tenant]++
 		} else {
+			level.Error(f.logger).Log("msg", "found blocks without label "+metadata.TenantLabel,
+				"block", m.String(), "level", m.Compaction.Level, "labels", m.Thanos.GetLabels())
 			numBlocksByTenant[metadata.DefaultTenant]++
 		}
 	}
@@ -618,6 +620,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 			var ok bool
 			// tenant and replica will have the zero value ("") if the key is not in the map.
 			if tenant, ok = m.Thanos.Labels[metadata.TenantLabel]; !ok {
+				level.Error(f.logger).Log("msg", "found blocks without label "+metadata.TenantLabel,
+					"block", m.String(), "level", m.Compaction.Level, "labels", m.Thanos.GetLabels())
 				tenant = metadata.DefaultTenant
 			}
 			metrics.Assigned.WithLabelValues(tenant, strconv.Itoa(m.BlockMeta.Compaction.Level)).Inc()

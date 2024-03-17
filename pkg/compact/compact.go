@@ -4,7 +4,6 @@
 package compact
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -71,7 +70,6 @@ type SyncerMetrics struct {
 	GarbageCollectionFailures prometheus.Counter
 	GarbageCollectionDuration prometheus.Observer
 	BlocksMarkedForDeletion   prometheus.Counter
-	ObsoletedBlocks           prometheus.Counter
 }
 
 func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) *SyncerMetrics {
@@ -90,10 +88,6 @@ func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 		Name:    "thanos_compact_garbage_collection_duration_seconds",
 		Help:    "Time it took to perform garbage collection iteration.",
 		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
-	})
-	m.ObsoletedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compact_obsoleted_blocks_total",
-		Help: "Total number of blocks that are obsoleted and deleted",
 	})
 
 	m.BlocksMarkedForDeletion = blocksMarkedForDeletion
@@ -219,21 +213,6 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 	}
 	s.metrics.GarbageCollections.Inc()
 	s.metrics.GarbageCollectionDuration.Observe(time.Since(begin).Seconds())
-	return nil
-}
-
-func (s *Syncer) DeleteObsoletedBlocks(ctx context.Context, dir string) error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	for _, m := range s.blocks {
-		if _, ok := m.Thanos.Labels[metadata.ObsoletedTenantLabel]; ok {
-			s.metrics.ObsoletedBlocks.Inc()
-			if err := DeleteBlockNow(ctx, s.logger, s.bkt, m, dir); err != nil {
-				level.Error(s.logger).Log("msg", "deleting block failed", "block", m.String(), "err", err)
-			}
-		}
-	}
 	return nil
 }
 
@@ -1074,9 +1053,9 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 		}
 	}
 	for _, m := range toCompact {
-		if m.ULID.Compare(kept.ULID) == 0 {
-			level.Info(cg.logger).Log("msg", "skip the longest overlapping block", "block", m.String(),
-				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", map2str(m.Thanos.Labels))
+		if m.ULID.Compare(kept.ULID) == 0 || m.Thanos.Source == metadata.ReceiveSource {
+			level.Info(cg.logger).Log("msg", "keep this overlapping block", "block", m.String(),
+				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels())
 			continue
 		}
 		cg.overlappingBlocks.Inc()
@@ -1087,17 +1066,9 @@ func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metad
 	return retry(errors.Errorf("found overlapping blocks in plan. Only kept %s", kept.String()))
 }
 
-func map2str(labels map[string]string) string {
-	b := new(bytes.Buffer)
-	for k, v := range labels {
-		fmt.Fprintf(b, "%s=%s,", k, v)
-	}
-	return b.String()
-}
-
 func DeleteBlockNow(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string) error {
 	level.Warn(logger).Log("msg", "delete polluted block immediately", "block", m.String(),
-		"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", map2str(m.Thanos.Labels))
+		"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels())
 	if err := block.Delete(ctx, logger, bkt, m.ULID); err != nil {
 		return errors.Wrapf(err, "delete overlapping block %s", m.String())
 	}
@@ -1426,7 +1397,7 @@ func NewBucketCompactor(
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
 ) (*BucketCompactor, error) {
-	if concurrency <= 0 {
+	if concurrency < 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
 	return NewBucketCompactorWithCheckerAndCallback(
@@ -1457,7 +1428,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
 ) (*BucketCompactor, error) {
-	if concurrency <= 0 {
+	if concurrency < 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
 	return &BucketCompactor{
@@ -1477,6 +1448,10 @@ func NewBucketCompactorWithCheckerAndCallback(
 
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
+	if c.concurrency == 0 {
+		level.Warn(c.logger).Log("msg", "compactor is disabled")
+		return nil
+	}
 	defer func() {
 		// Do not remove the compactDir if an error has occurred
 		// because potentially on the next run we would not have to download
@@ -1559,10 +1534,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
 			return errors.Wrap(err, "garbage")
-		}
-
-		if err := c.sy.DeleteObsoletedBlocks(ctx, c.compactDir); err != nil {
-			return errors.Wrap(err, "delete obsoleted blocks")
 		}
 
 		groups, err := c.grouper.Groups(c.sy.Metas())
