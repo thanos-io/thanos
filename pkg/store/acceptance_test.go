@@ -1008,8 +1008,8 @@ func TestProxyStore_Acceptance(t *testing.T) {
 		p2 := startNestedStore(tt, extLset, appendFn)
 
 		clients := []Client{
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1, 0)},
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2, 0)},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1)},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2)},
 		}
 
 		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
