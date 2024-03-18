@@ -9,6 +9,7 @@ package metadata
 // this package.
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,8 +58,7 @@ const (
 const (
 	TenantLabel = "__tenant__"
 
-	ObsoletedTenantLabel = "tenant_id"
-	DefaultTenant        = "__not_set__"
+	DefaultTenant = "__not_set__"
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
@@ -113,6 +113,14 @@ type IndexStats struct {
 
 func (m *Thanos) ParseExtensions(v any) (any, error) {
 	return ConvertExtensions(m.Extensions, v)
+}
+
+func (m *Thanos) GetLabels() string {
+	b := new(bytes.Buffer)
+	for k, v := range m.Labels {
+		fmt.Fprintf(b, "%s=%s,", k, v)
+	}
+	return b.String()
 }
 
 // ConvertExtensions converts extensions with `any` type into specific type `v`

@@ -341,6 +341,15 @@ func TestMeta_ReadWrite(t *testing.T) {
 	})
 }
 
+func TestMeta_GetLabels(t *testing.T) {
+	m := Meta{
+		Thanos: Thanos{
+			Labels: map[string]string{"a": "b", "c": "d"},
+		},
+	}
+	testutil.Equals(t, "a=b,c=d,", m.Thanos.GetLabels())
+}
+
 type TestExtensions struct {
 	Field1 int    `json:"field1"`
 	Field2 string `json:"field2"`
