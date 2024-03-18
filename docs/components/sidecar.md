@@ -76,6 +76,12 @@ usage: thanos sidecar [<flags>]
 Sidecar for Prometheus server.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption by compact component. This is an
+                                 experimental feature.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

@@ -181,26 +181,26 @@ func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 	return infos
 }
 
-func (r *remoteEngine) NewRangeQuery(_ context.Context, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan parser.Expr, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
 		opts:   r.opts,
 
-		qs:       qs,
+		plan:     plan,
 		start:    start,
 		end:      end,
 		interval: interval,
 	}, nil
 }
 
-func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, plan parser.Expr, ts time.Time) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
 		opts:   r.opts,
 
-		qs:       qs,
+		plan:     plan,
 		start:    ts,
 		end:      ts,
 		interval: 0,
@@ -212,7 +212,7 @@ type remoteQuery struct {
 	client Client
 	opts   Opts
 
-	qs       string
+	plan     parser.Expr
 	start    time.Time
 	end      time.Time
 	interval time.Duration
@@ -235,7 +235,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	// Instant query.
 	if r.start == r.end {
 		request := &querypb.QueryRequest{
-			Query:                 r.qs,
+			Query:                 r.plan.String(),
 			TimeSeconds:           r.start.Unix(),
 			TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
 			EnablePartialResponse: r.opts.EnablePartialResponse,
@@ -286,7 +286,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	}
 
 	request := &querypb.QueryRangeRequest{
-		Query:                 r.qs,
+		Query:                 r.plan.String(),
 		StartTimeSeconds:      r.start.Unix(),
 		EndTimeSeconds:        r.end.Unix(),
 		IntervalSeconds:       int64(r.interval.Seconds()),
@@ -349,7 +349,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	level.Debug(r.logger).Log("msg", "Executed query", "query", r.qs, "time", time.Since(start))
+	level.Debug(r.logger).Log("msg", "Executed query", "query", r.plan, "time", time.Since(start))
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }
@@ -360,7 +360,7 @@ func (r *remoteQuery) Statement() parser.Statement { return nil }
 
 func (r *remoteQuery) Stats() *stats.Statistics { return nil }
 
-func (r *remoteQuery) String() string { return r.qs }
+func (r *remoteQuery) String() string { return r.plan.String() }
 
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {

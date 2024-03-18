@@ -199,10 +199,16 @@ Query frontend command implements a service deployed in front of queriers to
 improve query parallelization and caching.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
       --cache-compression-type=""
                                  Use compression in results cache.
                                  Supported values are: 'snappy' and ” (disable
                                  compression).
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption by compact component. This is an
+                                 experimental feature.
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
