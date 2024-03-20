@@ -444,6 +444,12 @@ Flags:
                                  to the server.
       --remote-write.client-tls-key=""
                                  TLS Key for the client's certificate.
+      --remote-write.client-tls-secure
+                                 Use TLS when talking to the other receivers.
+      --remote-write.client-tls-skip-verify
+                                 Disable TLS certificate verification when
+                                 talking to the other receivers i.e self signed,
+                                 signed by fake CA.
       --remote-write.server-tls-cert=""
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.
