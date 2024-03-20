@@ -3519,6 +3519,9 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	} else {
 		buf = make([]byte, r.block.estimatedMaxChunkSize)
 	}
+	if cap(buf) < r.block.estimatedMaxChunkSize {
+		return errors.Errorf("chunk buffer too small, expected at least %d, got %d", r.block.estimatedMaxChunkSize, cap(buf))
+	}
 	defer r.block.chunkPool.Put(&buf)
 
 	for i, pIdx := range pIdxs {
@@ -3538,6 +3541,10 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			if diff = pIdxs[i+1].offset - pIdx.offset; int(diff) < chunkLen {
 				chunkLen = int(diff)
 			}
+		}
+		if cap(buf) < chunkLen {
+			return errors.Errorf("chunk buffer too small. expected at least %d(estimatedMaxChunkSize = %d), got %d",
+				chunkLen, r.block.estimatedMaxChunkSize, cap(buf))
 		}
 		cb := buf[:chunkLen]
 		n, err = io.ReadFull(bufReader, cb)
