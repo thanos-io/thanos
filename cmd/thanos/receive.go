@@ -144,8 +144,8 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.grpcConfig.tlsSrvCert != "",
-		conf.grpcConfig.tlsSrvClientCA == "",
+		conf.rwClientSecure,
+		conf.rwClientSkipVerify,
 		conf.rwClientCert,
 		conf.rwClientKey,
 		conf.rwClientServerCA,
@@ -785,8 +785,10 @@ type receiveConfig struct {
 	rwServerClientCA   string
 	rwClientCert       string
 	rwClientKey        string
+	rwClientSecure     bool
 	rwClientServerCA   string
 	rwClientServerName string
+	rwClientSkipVerify bool
 
 	dataDir   string
 	labelStrs []string
@@ -859,6 +861,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 
 	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&rc.rwClientKey)
+
+	cmd.Flag("remote-write.client-tls-secure", "Use TLS when talking to the other receivers.").Default("false").BoolVar(&rc.rwClientSecure)
+
+	cmd.Flag("remote-write.client-tls-skip-verify", "Disable TLS certificate verification when talking to the other receivers i.e self signed, signed by fake CA.").Default("false").BoolVar(&rc.rwClientSkipVerify)
 
 	cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").StringVar(&rc.rwClientServerCA)
 
