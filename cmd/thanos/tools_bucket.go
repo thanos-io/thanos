@@ -1232,7 +1232,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				if err != nil {
 					return errors.Wrapf(err, "read meta of %v", id)
 				}
-				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), chunkPool)
+				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), chunkPool, nil)
 				if err != nil {
 					return errors.Wrapf(err, "open block %v", id)
 				}

@@ -1159,7 +1159,7 @@ func TestDownsample(t *testing.T) {
 			_, err = metadata.ReadFromDir(filepath.Join(dir, id.String()))
 			testutil.Ok(t, err)
 
-			indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
+			indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename), nil)
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, indexr.Close()) }()
 
@@ -1288,7 +1288,7 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	_, err = metadata.ReadFromDir(filepath.Join(dir, id.String()))
 	testutil.Ok(t, err)
 
-	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
+	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename), nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, indexr.Close()) }()
 

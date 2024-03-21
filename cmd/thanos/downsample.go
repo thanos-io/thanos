@@ -376,7 +376,7 @@ func processDownsampling(
 		pool = downsample.NewPool()
 	}
 
-	b, err := tsdb.OpenBlock(logger, bdir, pool)
+	b, err := tsdb.OpenBlock(logger, bdir, pool, nil)
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}

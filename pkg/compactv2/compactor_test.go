@@ -612,7 +612,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 				testutil.Ok(t, createBlockSeries(bdir, b))
 				// Meta does not matter, but let's create for OpenBlock to work.
 				testutil.Ok(t, metadata.Meta{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: id}}.WriteToDir(logger, bdir))
-				block, err := tsdb.OpenBlock(logger, bdir, chunkPool)
+				block, err := tsdb.OpenBlock(logger, bdir, chunkPool, nil)
 				testutil.Ok(t, err)
 				blocks = append(blocks, block)
 			}
@@ -653,7 +653,7 @@ type seriesSamples struct {
 func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 	ctx := context.Background()
 
-	indexr, err := index.NewFileReader(filepath.Join(bDir, block.IndexFilename))
+	indexr, err := index.NewFileReader(filepath.Join(bDir, block.IndexFilename), nil)
 	testutil.Ok(t, err)
 	defer indexr.Close()
 
