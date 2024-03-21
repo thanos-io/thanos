@@ -951,7 +951,12 @@ func queryFuncCreator(
 				queryAPIClients := grpcEndpointSet.GetQueryAPIClients()
 				for _, i := range rand.Perm(len(queryAPIClients)) {
 					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{})
-					q, err := e.NewInstantQuery(ctx, nil, qs, t)
+					expr, err := parser.ParseExpr(qs)
+					if err != nil {
+						level.Error(logger).Log("err", err, "query", qs)
+						continue
+					}
+					q, err := e.NewInstantQuery(ctx, nil, expr, t)
 					if err != nil {
 						level.Error(logger).Log("err", err, "query", qs)
 						continue
