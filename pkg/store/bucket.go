@@ -1196,12 +1196,9 @@ OUTER:
 		if err := b.ctx.Err(); err != nil {
 			return err
 		}
-		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
+		hasMatchedChunks, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			return errors.Wrap(err, "read series")
-		}
-		if !ok {
-			continue
 		}
 
 		if err := b.indexr.LookupLabelsSymbols(b.ctx, b.symbolizedLset, b.b); err != nil {
@@ -1220,6 +1217,11 @@ OUTER:
 		}
 		if b.lazyPostings.lazyExpanded() {
 			b.expandedPostings = append(b.expandedPostings, postingsBatch[i])
+		}
+		// Even though there is no chunks found in the requested time range, we need to continue
+		// for loop after checking lazy posting matchers because of the expanded postings cache.
+		if !hasMatchedChunks {
+			continue
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
