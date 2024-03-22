@@ -588,13 +588,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	metas := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
 	for id, m := range resp.metas {
 		metas[id] = m
-		if tenant, ok := m.Thanos.Labels[metadata.TenantLabel]; ok {
-			numBlocksByTenant[tenant]++
-		} else {
-			level.Error(f.logger).Log("msg", "found blocks without label "+metadata.TenantLabel,
-				"block", m.String(), "level", m.Compaction.Level, "labels", m.Thanos.GetLabels())
-			numBlocksByTenant[metadata.DefaultTenant]++
-		}
+		numBlocksByTenant[m.Thanos.GetTenant()]++
 	}
 
 	for tenant, numBlocks := range numBlocksByTenant {
@@ -616,15 +610,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	// Therefore, it's skipped to update the gauge.
 	if len(filters) > 0 {
 		for _, m := range metas {
-			var tenant string
-			var ok bool
-			// tenant and replica will have the zero value ("") if the key is not in the map.
-			if tenant, ok = m.Thanos.Labels[metadata.TenantLabel]; !ok {
-				level.Error(f.logger).Log("msg", "found blocks without label "+metadata.TenantLabel,
-					"block", m.String(), "level", m.Compaction.Level, "labels", m.Thanos.GetLabels())
-				tenant = metadata.DefaultTenant
-			}
-			metrics.Assigned.WithLabelValues(tenant, strconv.Itoa(m.BlockMeta.Compaction.Level)).Inc()
+			metrics.Assigned.WithLabelValues(m.Thanos.GetTenant(), strconv.Itoa(m.BlockMeta.Compaction.Level)).Inc()
 		}
 	}
 

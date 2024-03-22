@@ -115,6 +115,14 @@ func (m *Thanos) ParseExtensions(v any) (any, error) {
 	return ConvertExtensions(m.Extensions, v)
 }
 
+func (m *Thanos) GetTenant() string {
+	if tenant, ok := m.Labels[TenantLabel]; ok {
+		return tenant
+	} else {
+		return DefaultTenant
+	}
+}
+
 func (m *Thanos) GetLabels() string {
 	b := new(bytes.Buffer)
 	for k, v := range m.Labels {

@@ -1,23 +1,23 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package compact
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"os"
-	"path/filepath"
 )
 
 type OverlappingCompactionLifecycleCallback struct {
-	overlappingBlocks prometheus.Counter
-	metaDir           string
 }
 
 func NewOverlappingCompactionLifecycleCallback() *OverlappingCompactionLifecycleCallback {
@@ -30,34 +30,45 @@ func (c *OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx conte
 	if len(toCompact) == 0 {
 		return nil
 	}
-	previous := 0
-	for i, m := range toCompact {
-		kept := toCompact[previous]
-		if previous == 0 || m.Thanos.Source == metadata.ReceiveSource || kept.MaxTime <= m.MinTime {
+	prev := 0
+	for curr, currB := range toCompact {
+		prevB := toCompact[prev]
+		if curr == 0 || currB.Thanos.Source == metadata.ReceiveSource || prevB.MaxTime <= currB.MinTime {
 			// no  overlapping with previous blocks, skip it
-			previous = i
+			prev = curr
 			continue
-		} else if m.MinTime < kept.MinTime {
+		} else if currB.MinTime < prevB.MinTime {
 			// halt when the assumption is broken, need manual investigation
-			return halt(errors.Errorf("later blocks has smaller minTime than previous block: %s -- %s", kept.String(), m.String()))
-		}
-		if kept.MaxTime >= m.MaxTime {
-			level.Warn(logger).Log("msg", "found overlapping block in plan",
-				"toKeep", kept.String(), "toDelete", m.String())
-			cg.overlappingBlocks.Inc()
-			if err := DeleteBlockNow(ctx, logger, cg.bkt, m, c.metaDir); err != nil {
-				return retry(err)
-			}
-			toCompact[i] = nil
-		} else {
-			err := errors.Errorf("found partially overlapping block: %s -- %s", kept.String(), m.String())
+			return halt(errors.Errorf("later blocks has smaller minTime than previous block: %s -- %s", prevB.String(), currB.String()))
+		} else if prevB.MaxTime < currB.MaxTime && prevB.MinTime != currB.MinTime {
+			err := errors.Errorf("found partially overlapping block: %s -- %s", prevB.String(), currB.String())
 			if cg.enableVerticalCompaction {
 				level.Error(logger).Log("msg", "best effort to vertical compact", "err", err)
-				previous = i // move to next block
+				prev = curr
+				continue
 			} else {
 				return halt(err)
 			}
+		} else if prevB.MinTime == currB.MinTime && prevB.MaxTime == currB.MaxTime {
+			continue
 		}
+		// prev min <= curr min < prev max
+		toDelete := -1
+		if prevB.MaxTime >= currB.MaxTime {
+			toDelete = curr
+			level.Warn(logger).Log("msg", "found overlapping block in plan, keep previous block",
+				"toKeep", prevB.String(), "toDelete", currB.String())
+		} else if prevB.MaxTime < currB.MaxTime {
+			toDelete = prev
+			prev = curr
+			level.Warn(logger).Log("msg", "found overlapping block in plan, keep current block",
+				"toKeep", currB.String(), "toDelete", prevB.String())
+		}
+		cg.overlappingBlocks.Inc()
+		if err := DeleteBlockNow(ctx, logger, cg.bkt, toCompact[toDelete]); err != nil {
+			return retry(err)
+		}
+		toCompact[toDelete] = nil
 	}
 	return nil
 }
@@ -70,7 +81,7 @@ func (c *OverlappingCompactionLifecycleCallback) GetBlockPopulator(_ context.Con
 	return tsdb.DefaultBlockPopulator{}, nil
 }
 
-func FilterNilBlocks(blocks []*metadata.Meta) (res []*metadata.Meta) {
+func FilterRemovedBlocks(blocks []*metadata.Meta) (res []*metadata.Meta) {
 	for _, b := range blocks {
 		if b != nil {
 			res = append(res, b)
@@ -79,14 +90,13 @@ func FilterNilBlocks(blocks []*metadata.Meta) (res []*metadata.Meta) {
 	return res
 }
 
-func DeleteBlockNow(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string) error {
+func DeleteBlockNow(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta) error {
 	level.Warn(logger).Log("msg", "delete polluted block immediately", "block", m.String(),
-		"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels())
+		"level", m.Compaction.Level, "parents", fmt.Sprintf("%v", m.Compaction.Parents),
+		"resolution", m.Thanos.Downsample.Resolution, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels(),
+		"series", m.Stats.NumSeries, "samples", m.Stats.NumSamples, "chunks", m.Stats.NumChunks)
 	if err := block.Delete(ctx, logger, bkt, m.ULID); err != nil {
 		return errors.Wrapf(err, "delete overlapping block %s", m.String())
-	}
-	if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
-		return errors.Wrapf(err, "remove old block dir %s", m.String())
 	}
 	return nil
 }

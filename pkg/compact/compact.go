@@ -287,7 +287,7 @@ func NewDefaultGrouper(
 		overlappingBlocks: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_overlapping_blocks_total",
 			Help: "Total number of blocks that are overlapping and to be deleted.",
-		}, []string{"resolution", "level"}),
+		}, []string{"resolution", "tenant"}),
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
@@ -359,7 +359,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.compactionRunsCompleted.WithLabelValues(resolutionLabel),
 				g.compactionFailures.WithLabelValues(resolutionLabel),
 				g.verticalCompactions.WithLabelValues(resolutionLabel),
-				g.overlappingBlocks.WithLabelValues(resolutionLabel, fmt.Sprintf("%d", m.Compaction.Level)),
+				g.overlappingBlocks.WithLabelValues(resolutionLabel, m.Thanos.GetLabels()),
 				g.garbageCollectedBlocks,
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
@@ -1126,7 +1126,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
 	}
-	toCompact = FilterNilBlocks(toCompact)
+	toCompact = FilterRemovedBlocks(toCompact)
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
 	begin = time.Now()
