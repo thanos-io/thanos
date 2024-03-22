@@ -1357,7 +1357,7 @@ func NewBucketCompactor(
 		planner,
 		comp,
 		DefaultBlockDeletableChecker{},
-		NewOverlappingCompactionLifecycleCallback(),
+		DefaultCompactionLifecycleCallback{},
 		compactDir,
 		bkt,
 		concurrency,
