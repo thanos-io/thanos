@@ -236,7 +236,6 @@ type DefaultGrouper struct {
 	compactionRunsCompleted       *prometheus.CounterVec
 	compactionFailures            *prometheus.CounterVec
 	verticalCompactions           *prometheus.CounterVec
-	overlappingBlocks             *prometheus.CounterVec
 	garbageCollectedBlocks        prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
@@ -284,10 +283,6 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
-		overlappingBlocks: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_compact_group_overlapping_blocks_total",
-			Help: "Total number of blocks that are overlapping and to be deleted.",
-		}, []string{"resolution", "tenant"}),
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
@@ -308,7 +303,6 @@ func NewDefaultGrouperWithMetrics(
 	compactionRunsCompleted *prometheus.CounterVec,
 	compactionFailures *prometheus.CounterVec,
 	verticalCompactions *prometheus.CounterVec,
-	overrlappingBlocks *prometheus.CounterVec,
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
@@ -326,7 +320,6 @@ func NewDefaultGrouperWithMetrics(
 		compactionRunsCompleted:       compactionRunsCompleted,
 		compactionFailures:            compactionFailures,
 		verticalCompactions:           verticalCompactions,
-		overlappingBlocks:             overrlappingBlocks,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
@@ -359,7 +352,6 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.compactionRunsCompleted.WithLabelValues(resolutionLabel),
 				g.compactionFailures.WithLabelValues(resolutionLabel),
 				g.verticalCompactions.WithLabelValues(resolutionLabel),
-				g.overlappingBlocks.WithLabelValues(resolutionLabel, m.Thanos.GetLabels()),
 				g.garbageCollectedBlocks,
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
@@ -400,7 +392,6 @@ type Group struct {
 	compactionRunsCompleted       prometheus.Counter
 	compactionFailures            prometheus.Counter
 	verticalCompactions           prometheus.Counter
-	overlappingBlocks             prometheus.Counter
 	groupGarbageCollectedBlocks   prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
@@ -424,7 +415,6 @@ func NewGroup(
 	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	verticalCompactions prometheus.Counter,
-	overlappingBlocks prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
@@ -453,7 +443,6 @@ func NewGroup(
 		compactionRunsCompleted:       compactionRunsCompleted,
 		compactionFailures:            compactionFailures,
 		verticalCompactions:           verticalCompactions,
-		overlappingBlocks:             overlappingBlocks,
 		groupGarbageCollectedBlocks:   groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,

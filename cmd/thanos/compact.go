@@ -369,12 +369,14 @@ func runCompact(
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
 	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(
+	compactor, err := compact.NewBucketCompactorWithCheckerAndCallback(
 		logger,
 		sy,
 		grouper,
 		planner,
 		comp,
+		compact.DefaultBlockDeletableChecker{},
+		compact.NewOverlappingCompactionLifecycleCallback(reg, conf.enableOverlappingRemoval),
 		compactDir,
 		insBkt,
 		conf.compactionConcurrency,
@@ -710,6 +712,7 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
+	enableOverlappingRemoval                       bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
@@ -785,6 +788,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
+
+	cmd.Flag("compact.enable-overlapping-removal", "In house flag to remove overlapping blocks. Turn this on to fix https://github.com/thanos-io/thanos/issues/6775.").
+		Default("false").BoolVar(&cc.enableOverlappingRemoval)
 
 	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
 		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+

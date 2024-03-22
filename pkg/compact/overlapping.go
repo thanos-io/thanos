@@ -11,6 +11,8 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -18,15 +20,24 @@ import (
 )
 
 type OverlappingCompactionLifecycleCallback struct {
+	overlappingBlocks prometheus.Counter
 }
 
-func NewOverlappingCompactionLifecycleCallback() *OverlappingCompactionLifecycleCallback {
-	return &OverlappingCompactionLifecycleCallback{}
+func NewOverlappingCompactionLifecycleCallback(reg *prometheus.Registry, enabled bool) CompactionLifecycleCallback {
+	if enabled {
+		return OverlappingCompactionLifecycleCallback{
+			overlappingBlocks: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+				Name: "thanos_compact_group_overlapping_blocks_total",
+				Help: "Total number of blocks that are overlapping and to be deleted.",
+			}),
+		}
+	}
+	return DefaultCompactionLifecycleCallback{}
 }
 
 // PreCompactionCallback given the assumption that toCompact is sorted by MinTime in ascending order from Planner
 // (not guaranteed on MaxTime order), we will detect overlapping blocks and delete them while retaining all others.
-func (c *OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx context.Context, logger log.Logger, cg *Group, toCompact []*metadata.Meta) error {
+func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx context.Context, logger log.Logger, cg *Group, toCompact []*metadata.Meta) error {
 	if len(toCompact) == 0 {
 		return nil
 	}
@@ -34,11 +45,11 @@ func (c *OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx conte
 	for curr, currB := range toCompact {
 		prevB := toCompact[prev]
 		if curr == 0 || currB.Thanos.Source == metadata.ReceiveSource || prevB.MaxTime <= currB.MinTime {
-			// no  overlapping with previous blocks, skip it
+			// no overlapping with previous blocks, skip it
 			prev = curr
 			continue
 		} else if currB.MinTime < prevB.MinTime {
-			// halt when the assumption is broken, need manual investigation
+			// halt when the assumption is broken, the input toCompact isn't sorted by minTime, need manual investigation
 			return halt(errors.Errorf("later blocks has smaller minTime than previous block: %s -- %s", prevB.String(), currB.String()))
 		} else if prevB.MaxTime < currB.MaxTime && prevB.MinTime != currB.MinTime {
 			err := errors.Errorf("found partially overlapping block: %s -- %s", prevB.String(), currB.String())
@@ -50,7 +61,14 @@ func (c *OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx conte
 				return halt(err)
 			}
 		} else if prevB.MinTime == currB.MinTime && prevB.MaxTime == currB.MaxTime {
-			continue
+			if prevB.Stats.NumSeries != currB.Stats.NumSeries || prevB.Stats.NumSamples != currB.Stats.NumSamples {
+				level.Warn(logger).Log("msg", "found same time range but different stats, keep both blocks",
+					"prev", prevB.String(), "prevSeries", prevB.Stats.NumSeries, "prevSamples", prevB.Stats.NumSamples,
+					"curr", currB.String(), "currSeries", currB.Stats.NumSeries, "currSamples", currB.Stats.NumSamples,
+				)
+				prev = curr
+				continue
+			}
 		}
 		// prev min <= curr min < prev max
 		toDelete := -1
@@ -64,7 +82,7 @@ func (c *OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx conte
 			level.Warn(logger).Log("msg", "found overlapping block in plan, keep current block",
 				"toKeep", currB.String(), "toDelete", prevB.String())
 		}
-		cg.overlappingBlocks.Inc()
+		o.overlappingBlocks.Inc()
 		if err := DeleteBlockNow(ctx, logger, cg.bkt, toCompact[toDelete]); err != nil {
 			return retry(err)
 		}
@@ -73,11 +91,11 @@ func (c *OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx conte
 	return nil
 }
 
-func (c *OverlappingCompactionLifecycleCallback) PostCompactionCallback(_ context.Context, _ log.Logger, _ *Group, _ ulid.ULID) error {
+func (o OverlappingCompactionLifecycleCallback) PostCompactionCallback(_ context.Context, _ log.Logger, _ *Group, _ ulid.ULID) error {
 	return nil
 }
 
-func (c *OverlappingCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
+func (o OverlappingCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
 	return tsdb.DefaultBlockPopulator{}, nil
 }
 

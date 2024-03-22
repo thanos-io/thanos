@@ -347,7 +347,7 @@ func TestMeta_GetLabels(t *testing.T) {
 			Labels: map[string]string{"a": "b", "c": "d"},
 		},
 	}
-	testutil.Equals(t, "a=b,c=d,", m.Thanos.GetLabels())
+	testutil.Equals(t, "a=b,c=d", m.Thanos.GetLabels())
 }
 
 type TestExtensions struct {

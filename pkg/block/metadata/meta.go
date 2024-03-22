@@ -9,12 +9,13 @@ package metadata
 // this package.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
@@ -124,11 +125,12 @@ func (m *Thanos) GetTenant() string {
 }
 
 func (m *Thanos) GetLabels() string {
-	b := new(bytes.Buffer)
+	res := make([]string, 0, len(m.Labels))
 	for k, v := range m.Labels {
-		fmt.Fprintf(b, "%s=%s,", k, v)
+		res = append(res, fmt.Sprintf("%s=%s", k, v))
 	}
-	return b.String()
+	sort.Strings(res)
+	return strings.Join(res, ",")
 }
 
 // ConvertExtensions converts extensions with `any` type into specific type `v`
