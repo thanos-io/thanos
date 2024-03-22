@@ -9,12 +9,13 @@ package metadata
 // this package.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
@@ -115,12 +116,21 @@ func (m *Thanos) ParseExtensions(v any) (any, error) {
 	return ConvertExtensions(m.Extensions, v)
 }
 
-func (m *Thanos) GetLabels() string {
-	b := new(bytes.Buffer)
-	for k, v := range m.Labels {
-		fmt.Fprintf(b, "%s=%s,", k, v)
+func (m *Thanos) GetTenant() string {
+	if tenant, ok := m.Labels[TenantLabel]; ok {
+		return tenant
+	} else {
+		return DefaultTenant
 	}
-	return b.String()
+}
+
+func (m *Thanos) GetLabels() string {
+	res := make([]string, 0, len(m.Labels))
+	for k, v := range m.Labels {
+		res = append(res, fmt.Sprintf("%s=%s", k, v))
+	}
+	sort.Strings(res)
+	return strings.Join(res, ",")
 }
 
 // ConvertExtensions converts extensions with `any` type into specific type `v`

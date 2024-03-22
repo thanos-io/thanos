@@ -236,7 +236,6 @@ type DefaultGrouper struct {
 	compactionRunsCompleted       *prometheus.CounterVec
 	compactionFailures            *prometheus.CounterVec
 	verticalCompactions           *prometheus.CounterVec
-	overlappingBlocks             *prometheus.CounterVec
 	garbageCollectedBlocks        prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
@@ -284,10 +283,6 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"resolution"}),
-		overlappingBlocks: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_compact_group_overlapping_blocks_total",
-			Help: "Total number of blocks that are overlapping and to be deleted.",
-		}, []string{"resolution", "level"}),
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
@@ -308,7 +303,6 @@ func NewDefaultGrouperWithMetrics(
 	compactionRunsCompleted *prometheus.CounterVec,
 	compactionFailures *prometheus.CounterVec,
 	verticalCompactions *prometheus.CounterVec,
-	overrlappingBlocks *prometheus.CounterVec,
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
@@ -326,7 +320,6 @@ func NewDefaultGrouperWithMetrics(
 		compactionRunsCompleted:       compactionRunsCompleted,
 		compactionFailures:            compactionFailures,
 		verticalCompactions:           verticalCompactions,
-		overlappingBlocks:             overrlappingBlocks,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
 		garbageCollectedBlocks:        garbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
@@ -359,7 +352,6 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.compactionRunsCompleted.WithLabelValues(resolutionLabel),
 				g.compactionFailures.WithLabelValues(resolutionLabel),
 				g.verticalCompactions.WithLabelValues(resolutionLabel),
-				g.overlappingBlocks.WithLabelValues(resolutionLabel, fmt.Sprintf("%d", m.Compaction.Level)),
 				g.garbageCollectedBlocks,
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
@@ -400,7 +392,6 @@ type Group struct {
 	compactionRunsCompleted       prometheus.Counter
 	compactionFailures            prometheus.Counter
 	verticalCompactions           prometheus.Counter
-	overlappingBlocks             prometheus.Counter
 	groupGarbageCollectedBlocks   prometheus.Counter
 	blocksMarkedForDeletion       prometheus.Counter
 	blocksMarkedForNoCompact      prometheus.Counter
@@ -424,7 +415,6 @@ func NewGroup(
 	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	verticalCompactions prometheus.Counter,
-	overlappingBlocks prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
@@ -453,7 +443,6 @@ func NewGroup(
 		compactionRunsCompleted:       compactionRunsCompleted,
 		compactionFailures:            compactionFailures,
 		verticalCompactions:           verticalCompactions,
-		overlappingBlocks:             overlappingBlocks,
 		groupGarbageCollectedBlocks:   groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:       blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
@@ -1031,53 +1020,6 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 	return nil
 }
 
-func (cg *Group) removeOverlappingBlocks(ctx context.Context, toCompact []*metadata.Meta, dir string) error {
-	if len(toCompact) == 0 {
-		return nil
-	}
-	kept := toCompact[0]
-	for _, m := range toCompact {
-		if m.MinTime < kept.MinTime && m.MaxTime > kept.MaxTime {
-			level.Warn(cg.logger).Log("msg", "found overlapping block in plan that are not the first",
-				"first", kept.String(), "block", m.String())
-			kept = m
-		} else if (m.MinTime < kept.MinTime && kept.MinTime < m.MaxTime) ||
-			(m.MinTime < kept.MaxTime && kept.MaxTime < m.MaxTime) {
-			err := errors.Errorf("found partially overlapping block: %s vs %s", m.String(), kept.String())
-			if cg.enableVerticalCompaction {
-				level.Error(cg.logger).Log("msg", "best effort to vertical compact", "err", err)
-				return nil
-			} else {
-				return halt(err)
-			}
-		}
-	}
-	for _, m := range toCompact {
-		if m.ULID.Compare(kept.ULID) == 0 || m.Thanos.Source == metadata.ReceiveSource {
-			level.Info(cg.logger).Log("msg", "keep this overlapping block", "block", m.String(),
-				"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels())
-			continue
-		}
-		cg.overlappingBlocks.Inc()
-		if err := DeleteBlockNow(ctx, cg.logger, cg.bkt, m, dir); err != nil {
-			return retry(err)
-		}
-	}
-	return retry(errors.Errorf("found overlapping blocks in plan. Only kept %s", kept.String()))
-}
-
-func DeleteBlockNow(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string) error {
-	level.Warn(logger).Log("msg", "delete polluted block immediately", "block", m.String(),
-		"level", m.Compaction.Level, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels())
-	if err := block.Delete(ctx, logger, bkt, m.ULID); err != nil {
-		return errors.Wrapf(err, "delete overlapping block %s", m.String())
-	}
-	if err := os.RemoveAll(filepath.Join(dir, m.ULID.String())); err != nil {
-		return errors.Wrapf(err, "remove old block dir %s", m.String())
-	}
-	return nil
-}
-
 // RepairIssue347 repairs the https://github.com/prometheus/tsdb/issues/347 issue when having issue347Error.
 func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
@@ -1171,12 +1113,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	begin := groupCompactionBegin
 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
-		level.Error(cg.logger).Log("msg", fmt.Sprintf("failed to run pre compaction callback for plan: %v", toCompact), "err", err)
-		// instead of halting, we attempt to remove overlapped blocks and only keep the longest one.
-		if newErr := cg.removeOverlappingBlocks(ctx, toCompact, dir); newErr != nil {
-			return false, ulid.ULID{}, newErr
-		}
+		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
 	}
+	toCompact = FilterRemovedBlocks(toCompact)
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
 	begin = time.Now()
