@@ -379,8 +379,7 @@ Flags:
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not

@@ -73,8 +73,7 @@ Flags:
                                  cases use Prometheus + sidecar. Ignored if
                                  --no-cache-index-header option is specified.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
-                                 consumption by compact component. This is an
-                                 experimental feature.
+                                 consumption.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -381,8 +380,6 @@ While the remaining settings are **optional**:
 The `redis` index cache allows to use [Redis](https://redis.io) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.RedisClientConfig"
-# command-line-arguments
-ld: warning: ignoring duplicate libraries: '-lproc'
 type: REDIS
 config:
   addr: ""

@@ -207,8 +207,7 @@ Flags:
                                  Supported values are: 'snappy' and ” (disable
                                  compression).
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
-                                 consumption by compact component. This is an
-                                 experimental feature.
+                                 consumption.
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"

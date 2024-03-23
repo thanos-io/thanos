@@ -321,8 +321,7 @@ Flags:
                                  detected maximum container or system memory.
       --data-dir="data/"         data directory
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
-                                 consumption by compact component. This is an
-                                 experimental feature.
+                                 consumption.
       --eval-interval=1m         The default evaluation interval to use.
       --for-grace-period=10m     Minimum duration between alert and restored
                                  "for" state. This is maintained only for alerts

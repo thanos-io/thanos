@@ -298,8 +298,7 @@ Flags:
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
-                                 consumption by compact component. This is an
-                                 experimental feature.
+                                 consumption.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect

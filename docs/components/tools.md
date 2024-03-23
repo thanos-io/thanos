@@ -16,8 +16,7 @@ Flags:
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --log.format=logfmt       Log format to use. Possible options: logfmt or
@@ -126,8 +125,7 @@ Flags:
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --log.format=logfmt       Log format to use. Possible options: logfmt or
@@ -238,8 +236,7 @@ Flags:
                                 Disable UI/API admin operations like marking
                                 blocks for deletion and no compaction.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -372,8 +369,7 @@ Flags:
                                 or compactor is ignoring the deletion because
                                 it's compacting the block at the same time.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --id=ID ...               Block IDs to verify (and optionally repair)
@@ -447,8 +443,7 @@ Flags:
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
       --exclude-delete          Exclude blocks marked for deletion.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
@@ -501,8 +496,7 @@ Flags:
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --log.format=logfmt       Log format to use. Possible options: logfmt or
@@ -574,8 +568,7 @@ Flags:
       --compaction-min=1        Only blocks with at least this compaction level
                                 will be replicated.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -690,8 +683,7 @@ Flags:
                                 Number of goroutines to use when downsampling
                                 blocks.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not
@@ -769,8 +761,7 @@ Flags:
                                 detected maximum container or system memory.
       --details=DETAILS         Human readable details to be put into marker.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --id=ID ...               ID (ULID) of the blocks to be marked for
@@ -857,8 +848,7 @@ Flags:
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not
@@ -934,8 +924,7 @@ Flags:
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --label=key="value" ...   External labels to add to the uploaded blocks
@@ -994,8 +983,7 @@ Flags:
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption by compact component. This is an
-                                experimental feature.
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --log.format=logfmt       Log format to use. Possible options: logfmt or

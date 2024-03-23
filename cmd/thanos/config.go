@@ -292,7 +292,7 @@ type goMemLimitConfig struct {
 
 func (gml *goMemLimitConfig) registerFlag(cmd extkingpin.FlagClause) *goMemLimitConfig {
 	cmd.Flag("enable-auto-gomemlimit",
-		"Enable go runtime to automatically limit memory consumption by compact component. This is an experimental feature.").
+		"Enable go runtime to automatically limit memory consumption.").
 		Default("false").BoolVar(&gml.enableAutoGoMemlimit)
 
 	cmd.Flag("auto-gomemlimit.ratio",
