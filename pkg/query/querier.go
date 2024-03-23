@@ -364,25 +364,25 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	warns := annotations.New().Merge(resp.warnings)
 
 	if !q.isDedupEnabled() {
-		return &promSeriesSet{
-			mint:  q.mint,
-			maxt:  q.maxt,
-			set:   newStoreSeriesSet(resp.seriesSet),
-			aggrs: aggrs,
-			warns: warns,
-		}, resp.seriesSetStats, nil
+		return NewPromSeriesSet(
+			newStoreSeriesSet(resp.seriesSet),
+			q.mint,
+			q.maxt,
+			aggrs,
+			warns,
+		), resp.seriesSetStats, nil
 	}
 
 	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
 	// This however require big refactor, caring about correct AggrChunk to iterator conversion and counter reset apply.
 	// For now we apply simple logic that splits potential overlapping chunks into separate replica series, so we can split the work.
-	set := &promSeriesSet{
-		mint:  q.mint,
-		maxt:  q.maxt,
-		set:   dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
-		aggrs: aggrs,
-		warns: warns,
-	}
+	set := NewPromSeriesSet(
+		dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
+		q.mint,
+		q.maxt,
+		aggrs,
+		warns,
+	)
 
 	return dedup.NewSeriesSet(set, hints.Func), resp.seriesSetStats, nil
 }
