@@ -27,6 +27,17 @@ type promSeriesSet struct {
 	warns annotations.Annotations
 }
 
+// NewPromSeriesSet constructs a promSeriesSet.
+func NewPromSeriesSet(seriesSet storepb.SeriesSet, mint, maxt int64, aggrs []storepb.Aggr, warns annotations.Annotations) storage.SeriesSet {
+	return &promSeriesSet{
+		set:   seriesSet,
+		mint:  mint,
+		maxt:  maxt,
+		aggrs: aggrs,
+		warns: warns,
+	}
+}
+
 func (s *promSeriesSet) Next() bool {
 	return s.set.Next()
 }
