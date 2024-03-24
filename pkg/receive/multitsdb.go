@@ -69,15 +69,16 @@ func NewMultiTSDB(
 	tsdbOpts *tsdb.Options,
 	labels labels.Labels,
 	tenantLabelName string,
+	defaultTenantId string,
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
-) *MultiTSDB {
+) (*MultiTSDB, error) {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
 
-	return &MultiTSDB{
+	res := &MultiTSDB{
 		dataDir:               dataDir,
 		logger:                log.With(l, "component", "multi-tsdb"),
 		reg:                   reg,
@@ -90,6 +91,10 @@ func NewMultiTSDB(
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
 	}
+	// initialize default tenant for warmer startups
+	_, err := res.getOrLoadTenant(defaultTenantId, true)
+
+	return res, err
 }
 
 type localClient struct {
