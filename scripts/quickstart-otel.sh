@@ -7,6 +7,7 @@ trap 'kill 0' SIGTERM
 
 PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"prometheus"}
 THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"thanos"}
+OTEL_EXECUTABLE=${OTEL_EXECUTABLE:-"otelcol-contrib"}
 REMOTE_WRITE_ENABLED=true
 
 if [ ! $(command -v "$PROMETHEUS_EXECUTABLE") ]; then
@@ -46,7 +47,46 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
 
 fi
 
-sleep 0.5
+# Setup alert / rules config file.
+  cat >data/otel-config.yaml <<-EOF
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otel-collector
+          scrape_interval: 5s
+          static_configs:
+            - targets: [localhost:8888]
+exporters:
+  otlphttp/thanos:
+    endpoint: "http://localhost:10908"
+    tls:
+      insecure: true
+  debug:
+    verbosity: detailed
+extensions:
+  health_check:
+  pprof:
+service:
+  telemetry:
+    logs:
+      level: "debug"
+  extensions: [pprof, health_check]
+  pipelines:
+    metrics:
+      receivers:
+        - prometheus
+        - otlp
+      exporters:
+        - otlphttp/thanos
+        #- debug
+EOF
 
 QUERIER_JAEGER_CONFIG=$(
   cat <<-EOF
@@ -72,6 +112,12 @@ for i in $(seq 0 1); do
     --query.replica-label receive_replica \
     ${STORES} &
 done
+
+sleep 0.5
+
+# Requires otel-contrib binary which can be grabbed from https://github.com/open-telemetry/opentelemetry-collector-releases/releases
+${OTEL_EXECUTABLE} \
+  --config=data/otel-config.yaml
 
 sleep 0.5
 
