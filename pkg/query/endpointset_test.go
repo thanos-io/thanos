@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store"
 
 	"golang.org/x/sync/errgroup"
@@ -26,6 +27,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -564,6 +566,20 @@ func TestEndpointSetUpdate_StrictEndpointMetadata(t *testing.T) {
 	testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
 	testutil.Equals(t, info.Store.MinTime, endpointSet.endpoints[addr].metadata.Store.MinTime)
 	testutil.Equals(t, info.Store.MaxTime, endpointSet.endpoints[addr].metadata.Store.MaxTime)
+}
+
+func TestEndpointSetUpdate_ConnectToStrictEndpoint(t *testing.T) {
+	addr := "0.0.0.0:1234"
+	endpointSet := makeEndpointSet([]string{addr}, true, time.Now)
+	defer endpointSet.Close()
+
+	endpointSet.Update(context.Background())
+	testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
+
+	client := endpointSet.GetStoreClients()[0]
+	_, err := client.Series(context.Background(), &storepb.SeriesRequest{})
+	testutil.NotOk(t, err)
 }
 
 func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
