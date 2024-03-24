@@ -294,6 +294,11 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field.
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
