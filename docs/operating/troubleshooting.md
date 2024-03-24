@@ -42,7 +42,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 ### Description
 
 ```shell
-level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="changing probe status" status=not-ready reason="request flags against http://localhost:9090/api/v1/status/config: Get \"http://localhost:9090/api/v1/status/config\": dial tcp 127.0.0.1:9090: connect: connection refused"
+level=warn ts=2020-04-18T03:07:00.512902927Z caller=instrumentation.go:54 msg="changing probe status" status=not-ready reason="request flags against http://localhost:9090/api/v1/status/config: Get \"http://localhost:9090/api/v1/status/config\": dial tcp 127.0.0.1:9090: connect: connection refused"
 ```
 
 * This issue might happen when thanos is not configured properly.

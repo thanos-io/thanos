@@ -231,7 +231,7 @@ At some point during development it is useful, in addition to running unit or e2
 
 ```bash
 querier-1: level=info name=querier-1 ts=2020-04-01T12:53:56.101029491Z caller=http.go:56 service=http/server component=query msg="listening for requests and metrics" address=:80
-querier-1: level=info name=querier-1 ts=2020-04-01T12:53:56.101106805Z caller=intrumentation.go:48 msg="changing probe status" status=ready
+querier-1: level=info name=querier-1 ts=2020-04-01T12:53:56.101106805Z caller=instrumentation.go:48 msg="changing probe status" status=ready
 querier-1: level=info name=querier-1 ts=2020-04-01T12:53:56.101290229Z caller=grpc.go:106 service=gRPC/server component=query msg="listening for StoreAPI gRPC" address=:9091
 Ports for container: e2e_test_store_gateway-querier-1 Mapping: map[80:32825 9091:32824]
 ```
