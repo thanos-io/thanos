@@ -41,12 +41,11 @@ func TestPreCompactionCallback(t *testing.T) {
 	}
 	callback := NewOverlappingCompactionLifecycleCallback(reg, true)
 	for _, tcase := range []struct {
-		testName                 string
-		input                    []*metadata.Meta
-		enableVerticalCompaction bool
-		expectedSize             int
-		expectedBlocks           []*metadata.Meta
-		err                      error
+		testName       string
+		input          []*metadata.Meta
+		expectedSize   int
+		expectedBlocks []*metadata.Meta
+		err            error
 	}{
 		{
 			testName: "empty blocks",
@@ -139,38 +138,29 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 0, 5, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
 			},
-			err: halt(errors.Errorf("expect halt error")),
+			err: halt(errors.Errorf("later blocks has smaller minTime than previous block: %s -- %s",
+				createCustomBlockMeta(6, 2, 3, metadata.CompactorSource, 1).String(),
+				createCustomBlockMeta(7, 0, 5, metadata.CompactorSource, 1).String(),
+			)),
 		},
 		{
-			testName: "partially overlapping blocks with vertical compaction off",
+			testName: "partially overlapping blocks",
 			input: []*metadata.Meta{
 				createCustomBlockMeta(6, 2, 4, metadata.CompactorSource, 1),
 				createCustomBlockMeta(7, 3, 6, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
 			},
-			err: halt(errors.Errorf("expect halt error")),
-		},
-		{
-			testName: "partially overlapping blocks with vertical compaction on",
-			input: []*metadata.Meta{
-				createCustomBlockMeta(6, 2, 4, metadata.CompactorSource, 1),
-				createCustomBlockMeta(7, 3, 6, metadata.CompactorSource, 1),
-				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
-			},
-			enableVerticalCompaction: true,
-			expectedSize:             3,
+			err: retry(errors.Errorf("found partially overlapping block: %s -- %s",
+				createCustomBlockMeta(6, 2, 4, metadata.CompactorSource, 1).String(),
+				createCustomBlockMeta(7, 3, 6, metadata.CompactorSource, 1).String(),
+			)),
 		},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
-			group.enableVerticalCompaction = tcase.enableVerticalCompaction
 			err := callback.PreCompactionCallback(context.Background(), logger, group, tcase.input)
 			if tcase.err != nil {
 				testutil.NotOk(t, err)
-				if IsHaltError(tcase.err) {
-					testutil.Assert(t, IsHaltError(err), "expected halt error")
-				} else if IsRetryError(tcase.err) {
-					testutil.Assert(t, IsRetryError(err), "expected retry error")
-				}
+				testutil.Equals(t, tcase.err.Error(), err.Error())
 				return
 			}
 			testutil.Equals(t, tcase.expectedSize, len(FilterRemovedBlocks(tcase.input)))

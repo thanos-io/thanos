@@ -19,8 +19,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
+const overlappingNoCompactionReason = "blocks-overlapping"
+
 type OverlappingCompactionLifecycleCallback struct {
-	overlappingBlocks prometheus.Counter
+	overlappingBlocks  prometheus.Counter
+	noCompactionBlocks prometheus.Counter
+	deletedBlocks      prometheus.Counter
 }
 
 func NewOverlappingCompactionLifecycleCallback(reg *prometheus.Registry, enabled bool) CompactionLifecycleCallback {
@@ -28,7 +32,15 @@ func NewOverlappingCompactionLifecycleCallback(reg *prometheus.Registry, enabled
 		return OverlappingCompactionLifecycleCallback{
 			overlappingBlocks: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 				Name: "thanos_compact_group_overlapping_blocks_total",
-				Help: "Total number of blocks that are overlapping and to be deleted.",
+				Help: "Total number of blocks that are overlapping.",
+			}),
+			noCompactionBlocks: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+				Name: "thanos_compact_group_overlapping_blocks_no_compaction_total",
+				Help: "Total number of blocks that are overlapping and mark no compaction.",
+			}),
+			deletedBlocks: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+				Name: "thanos_compact_group_overlapping_blocks_deleted_total",
+				Help: "Total number of blocks that are overlapping and deleted.",
 			}),
 		}
 	}
@@ -51,15 +63,20 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 		} else if currB.MinTime < prevB.MinTime {
 			// halt when the assumption is broken, the input toCompact isn't sorted by minTime, need manual investigation
 			return halt(errors.Errorf("later blocks has smaller minTime than previous block: %s -- %s", prevB.String(), currB.String()))
-		} else if prevB.MaxTime < currB.MaxTime && prevB.MinTime != currB.MinTime {
-			err := errors.Errorf("found partially overlapping block: %s -- %s", prevB.String(), currB.String())
-			if cg.enableVerticalCompaction {
-				level.Error(logger).Log("msg", "best effort to vertical compact", "err", err)
-				prev = curr
-				continue
-			} else {
-				return halt(err)
+		}
+		// prev min <= curr min < prev max
+		o.overlappingBlocks.Inc()
+		if prevB.MaxTime < currB.MaxTime && prevB.MinTime != currB.MinTime {
+			reason := fmt.Errorf("found partially overlapping block: %s -- %s", prevB.String(), currB.String())
+			if err := block.MarkForNoCompact(ctx, logger, cg.bkt, prevB.ULID, overlappingNoCompactionReason,
+				reason.Error(), o.noCompactionBlocks); err != nil {
+				return retry(err)
 			}
+			if err := block.MarkForNoCompact(ctx, logger, cg.bkt, currB.ULID, overlappingNoCompactionReason,
+				reason.Error(), o.noCompactionBlocks); err != nil {
+				return retry(err)
+			}
+			return retry(reason)
 		} else if prevB.MinTime == currB.MinTime && prevB.MaxTime == currB.MaxTime {
 			if prevB.Stats.NumSeries != currB.Stats.NumSeries || prevB.Stats.NumSamples != currB.Stats.NumSamples {
 				level.Warn(logger).Log("msg", "found same time range but different stats, keep both blocks",
@@ -70,7 +87,6 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 				continue
 			}
 		}
-		// prev min <= curr min < prev max
 		toDelete := -1
 		if prevB.MaxTime >= currB.MaxTime {
 			toDelete = curr
@@ -82,7 +98,7 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 			level.Warn(logger).Log("msg", "found overlapping block in plan, keep current block",
 				"toKeep", currB.String(), "toDelete", prevB.String())
 		}
-		o.overlappingBlocks.Inc()
+		o.deletedBlocks.Inc()
 		if err := DeleteBlockNow(ctx, logger, cg.bkt, toCompact[toDelete]); err != nil {
 			return retry(err)
 		}
