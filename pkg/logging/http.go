@@ -4,10 +4,13 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sort"
 	"strings"
+
+	"github.com/opentracing/opentracing-go"
 
 	"net/http"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/go-kit/log/level"
 
 	httputil "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
 )
 
 type HTTPServerMiddleware struct {
@@ -23,8 +27,16 @@ type HTTPServerMiddleware struct {
 	logger log.Logger
 }
 
+func logTraceID(ctx context.Context) (string, bool) {
+	span := opentracing.SpanFromContext(ctx)
+	return migration.GetTraceIDFromBridgeSpanForLogging(span)
+}
+
 func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Request) {
 	logger := m.opts.filterLog(m.logger)
+	if traceID, ok := logTraceID(r.Context()); ok {
+		logger = log.With(logger, "TraceID", traceID)
+	}
 	level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
 }
 
@@ -32,7 +44,9 @@ func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *h
 	status := wrapped.Status()
 	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", fmt.Sprintf("%d", status),
 		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))), "http.remote_addr", r.RemoteAddr, "thanos.method_name", name)
-
+	if traceID, ok := logTraceID(r.Context()); ok {
+		logger = log.With(logger, "TraceID", traceID)
+	}
 	logger = m.opts.filterLog(logger)
 	m.opts.levelFunc(logger, status).Log("msg", "finished call")
 }
