@@ -1,3 +1,5 @@
+import { debug } from 'console';
+import { BlocksPool, Block } from './block';
 import { sortBlocks, isOverlapping, getFilteredBlockPools } from './helpers';
 
 // Number of blocks in data: 8.
@@ -654,5 +656,39 @@ describe('Filtered block pools', () => {
   });
   it('should contain the first block having exactly the same labels as in filteredBlocks', () => {
     expect(filteredBlockPoolArray[0].thanos.labels).toEqual(filteredBlocks[0].thanos.labels);
+  });
+});
+
+describe('handle null in blockPool', () => {
+  const newBlockPools = blockPools;
+  const poolArrayIndex: BlocksPool = newBlockPools['1'];
+  const poolArray: Block[][] = poolArrayIndex[Object.keys(poolArrayIndex)[0]];
+  const undefinedBlock: Block = {
+    compaction: {
+      level: null as unknown as number,
+      sources: [],
+      parents: [],
+    },
+    maxTime: null as unknown as number,
+    minTime: null as unknown as number,
+    stats: {
+      numChunks: null as unknown as number,
+      numSamples: null as unknown as number,
+      numSeries: null as unknown as number,
+    },
+    thanos: {
+      downsample: {
+        resolution: null as unknown as number,
+      },
+      labels: {},
+      source: null as unknown as string,
+    },
+    ulid: null as unknown as string,
+    version: null as unknown as number,
+  };
+
+  poolArray[0][0] = undefinedBlock;
+  it('should not crash UI', () => {
+    expect(Object.keys(newBlockPools)).toEqual(Object.keys(blockPools));
   });
 });
