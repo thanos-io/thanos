@@ -9,6 +9,9 @@ PROTOC_VERSION=${PROTOC_VERSION:-3.20.1}
 PROTOC_BIN=${PROTOC_BIN:-protoc}
 GOIMPORTS_BIN=${GOIMPORTS_BIN:-goimports}
 PROTOC_GEN_GOGOFAST_BIN=${PROTOC_GEN_GOGOFAST_BIN:-protoc-gen-gogofast}
+PROTOC_GEN_GO_VTPROTO_BIN=${PROTOC_GEN_GO_VTPROTO_BIN:-protoc-gen-go-vtproto}
+PROTOC_GEN_GO_BIN=${PROTOC_GEN_GO_BIN:-protoc-gen-go}
+PROTOC_GEN_GO_GRPC_BIN=${PROTOC_GEN_GO_GRPC_BIN:-protoc-gen-go-grpc}
 
 if ! [[ "scripts/genproto.sh" =~ $0 ]]; then
   echo "must be run from repository root"
@@ -27,7 +30,7 @@ GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
 DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb"
-echo "generating code"
+echo "generating gogoproto code"
 pushd "pkg"
 for dir in ${DIRS}; do
   ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
@@ -49,8 +52,28 @@ for dir in ${DIRS}; do
 done
 popd
 
+VTPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-go-vtproto.mod -f '{{ .Dir }}' -m github.com/planetscale/vtprotobuf)"
+VTPROTO_PATH="${VTPROTO_ROOT}:${VTPROTO_ROOT}/include"
+
+DIRS="store/storepb/remotewritepb/"
+echo "generating vtproto code"
+pushd "pkg"
+for dir in ${DIRS}; do
+  ${PROTOC_BIN} \
+    --go_out=paths=source_relative:. \
+    --plugin protoc-gen-go=${PROTOC_GEN_GO_BIN} \
+    --go-vtproto_out=paths=source_relative:. \
+    --plugin protoc-gen-go-vtproto=${PROTOC_GEN_GO_VTPROTO_BIN} \
+    --go-vtproto_opt=features=grpc+marshal+unmarshal+size+pool+clone \
+    -I=. \
+    -I="${VTPROTO_PATH}" \
+    ${dir}/*.proto
+done
+popd
+
 # Generate vendored Cortex protobufs.
 CORTEX_DIRS="cortex/querier/queryrange/"
+echo "generating cortex code"
 pushd "internal"
 for dir in ${CORTEX_DIRS}; do
   ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \

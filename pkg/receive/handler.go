@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/jpillora/backoff"
 	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
@@ -37,17 +36,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
-	"github.com/thanos-io/thanos/pkg/logging"
-
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/remotewritepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -77,8 +74,8 @@ var (
 )
 
 type WriteableStoreAsyncClient interface {
-	storepb.WriteableStoreClient
-	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error))
+	remotewritepb.WriteableStoreClient
+	RemoteWriteAsync(context.Context, *remotewritepb.StoreWriteRequest, endpointReplica, []int, chan writeResponse, func(error))
 }
 
 // Options for the web Handler.
@@ -125,6 +122,8 @@ type Handler struct {
 	writeTimeseriesTotal *prometheus.HistogramVec
 
 	Limiter *Limiter
+
+	remotewritepb.UnimplementedWriteableStoreServer
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -435,7 +434,7 @@ type endpointReplica struct {
 
 type trackedSeries struct {
 	seriesIDs  []int
-	timeSeries []prompb.TimeSeries
+	timeSeries []*remotewritepb.TimeSeries
 }
 
 type writeResponse struct {
@@ -520,11 +519,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
-	// from the whole request. Ensure that we always copy those when we want to
-	// store them for longer time.
-	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+	wreq := remotewritepb.WriteRequestFromVTPool()
+	defer wreq.ReturnToVTPool()
+	if err := proto.Unmarshal(reqBuf, wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -566,14 +563,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(&wreq)
+	h.relabel(wreq)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
 	responseStatusCode := http.StatusOK
-	if err := h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
+	if err := h.handleRequest(ctx, rep, tenant, wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
 		case errNotReady:
@@ -594,7 +591,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
-func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *remotewritepb.WriteRequest) error {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	// This replica value is used to detect cycles in cyclic topologies.
@@ -634,7 +631,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 // unless the request needs to be replicated.
 // The function only returns when all requests have finished
 // or the context is canceled.
-func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
+func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *remotewritepb.WriteRequest) error {
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
@@ -659,7 +656,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 
 type remoteWriteParams struct {
 	tenant            string
-	writeRequest      *prompb.WriteRequest
+	writeRequest      *remotewritepb.WriteRequest
 	replicas          []uint64
 	alreadyReplicated bool
 }
@@ -759,7 +756,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) e
 func (h *Handler) distributeTimeseriesToReplicas(
 	tenant string,
 	replicas []uint64,
-	timeseries []prompb.TimeSeries,
+	timeseries []*remotewritepb.TimeSeries,
 ) (map[endpointReplica]trackedSeries, map[endpointReplica]trackedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
@@ -767,7 +764,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	localWrites := make(map[endpointReplica]trackedSeries)
 	for tsIndex, ts := range timeseries {
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := h.hashring.GetN(tenant, ts, rn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -780,7 +777,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			if !ok {
 				writeableSeries = trackedSeries{
 					seriesIDs:  make([]int, 0),
-					timeSeries: make([]prompb.TimeSeries, 0),
+					timeSeries: make([]*remotewritepb.TimeSeries, 0),
 				}
 			}
 			writeableSeries.timeSeries = append(writeDestination[endpointReplica].timeSeries, ts)
@@ -827,9 +824,12 @@ func (h *Handler) sendLocalWrite(
 	defer span.Finish()
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
-	err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
-		Timeseries: trackedSeries.timeSeries,
-	})
+
+	wreq := remotewritepb.WriteRequestFromVTPool()
+	wreq.Timeseries = trackedSeries.timeSeries
+	defer wreq.ReturnToVTPool()
+
+	err := h.writer.Write(tracingCtx, tenant, wreq)
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
@@ -861,16 +861,18 @@ func (h *Handler) sendRemoteWrite(
 		wg.Done()
 		return
 	}
-
 	// This is called "real" because it's 1-indexed.
 	realReplicationIndex := int64(endpointReplica.replica + 1)
+
+	wreq := remotewritepb.StoreWriteRequestFromVTPool()
+	wreq.Timeseries = trackedSeries.timeSeries
+	wreq.Tenant = tenant
+	// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
+	wreq.Replica = realReplicationIndex
+
 	// Actually make the request against the endpoint we determined should handle these time series.
-	cl.RemoteWriteAsync(ctx, &storepb.WriteRequest{
-		Timeseries: trackedSeries.timeSeries,
-		Tenant:     tenant,
-		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-		Replica: realReplicationIndex,
-	}, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+	cl.RemoteWriteAsync(ctx, wreq, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+		wreq.ReturnToVTPool()
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -905,17 +907,23 @@ func quorumReached(successes []int, successThreshold int) bool {
 }
 
 // RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
-func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
+func (h *Handler) RemoteWrite(ctx context.Context, r *remotewritepb.StoreWriteRequest) (*remotewritepb.StoreWriteResponse, error) {
+	defer r.ReturnToVTPool()
+
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	wreq := remotewritepb.WriteRequestFromVTPool()
+	wreq.Timeseries = r.Timeseries
+	defer wreq.ReturnToVTPool()
+
+	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, wreq)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
 	switch errors.Cause(err) {
 	case nil:
-		return &storepb.WriteResponse{}, nil
+		return &remotewritepb.StoreWriteResponse{}, nil
 	case errNotReady:
 		return nil, status.Error(codes.Unavailable, err.Error())
 	case errUnavailable:
@@ -930,18 +938,18 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 }
 
 // relabel relabels the time series labels in the remote write request.
-func (h *Handler) relabel(wreq *prompb.WriteRequest) {
+func (h *Handler) relabel(wreq *remotewritepb.WriteRequest) {
 	if len(h.options.RelabelConfigs) == 0 {
 		return
 	}
-	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	timeSeries := make([]*remotewritepb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(remotewritepb.LabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
 		if !keep {
 			continue
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		ts.Labels = remotewritepb.LabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries
@@ -979,9 +987,9 @@ func isExemplarConflictErr(err error) bool {
 // isLabelsConflictErr returns whether or not the given error represents
 // a labels-related conflict.
 func isLabelsConflictErr(err error) bool {
-	return err == labelpb.ErrDuplicateLabels ||
-		err == labelpb.ErrEmptyLabels ||
-		err == labelpb.ErrOutOfOrderLabels
+	return err == remotewritepb.ErrDuplicateLabels ||
+		err == remotewritepb.ErrEmptyLabels ||
+		err == remotewritepb.ErrOutOfOrderLabels
 }
 
 // isNotReady returns whether or not the given error represents a not ready error.
@@ -1206,7 +1214,7 @@ func (pw *peerWorker) initWorkers() {
 						pw.forwardDelay.Observe(time.Since(w.sendTime).Seconds())
 
 						tracing.DoInSpan(w.workItemCtx, "receive_forward", func(ctx context.Context) {
-							_, err := storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, w.req)
+							_, err := remotewritepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, w.req)
 							w.workResult <- peerWorkResponse{
 								er:  w.er,
 								err: errors.Wrapf(err, "forwarding request to endpoint %v", w.er.endpoint),
@@ -1240,7 +1248,7 @@ func newPeerWorker(cc *grpc.ClientConn, forwardDelay prometheus.Histogram, async
 
 type peerWorkItem struct {
 	cc          *grpc.ClientConn
-	req         *storepb.WriteRequest
+	req         *remotewritepb.StoreWriteRequest
 	workItemCtx context.Context
 
 	workResult chan peerWorkResponse
@@ -1248,7 +1256,7 @@ type peerWorkItem struct {
 	sendTime   time.Time
 }
 
-func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+func (pw *peerWorker) RemoteWrite(ctx context.Context, in *remotewritepb.StoreWriteRequest, opts ...grpc.CallOption) (*remotewritepb.StoreWriteResponse, error) {
 	pw.initWorkers()
 
 	w := peerWorkItem{
@@ -1300,7 +1308,7 @@ type peerWorkResponse struct {
 	err error
 }
 
-func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *remotewritepb.StoreWriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
 	p.initWorkers()
 
 	w := peerWorkItem{

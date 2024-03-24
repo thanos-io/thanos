@@ -32,6 +32,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/tracing"
+
+	_ "github.com/thanos-io/thanos/pkg/extgrpc/codec"
 )
 
 // A Server defines parameters to serve RPC requests, a wrapper around grpc.Server.

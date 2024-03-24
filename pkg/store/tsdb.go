@@ -25,6 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/remotewritepb"
 )
 
 const RemoteReadFrameLimit = 1048576
@@ -48,16 +49,16 @@ type TSDBStore struct {
 	mtx     sync.RWMutex
 }
 
-func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
+func RegisterWritableStoreServer(storeSrv remotewritepb.WriteableStoreServer) func(*grpc.Server) {
 	return func(s *grpc.Server) {
-		storepb.RegisterWriteableStoreServer(s, storeSrv)
+		remotewritepb.RegisterWriteableStoreServer(s, storeSrv)
 	}
 }
 
 // ReadWriteTSDBStore is a TSDBStore that can also be written to.
 type ReadWriteTSDBStore struct {
 	storepb.StoreServer
-	storepb.WriteableStoreServer
+	remotewritepb.WriteableStoreServer
 }
 
 // NewTSDBStore creates a new TSDBStore.

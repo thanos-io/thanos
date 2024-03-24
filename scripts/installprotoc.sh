@@ -4,7 +4,7 @@
 set -e
 set -u
 
-PROTOC_VERSION=${PROTOC_VERSION:-3.20.1}
+PROTOC_VERSION=${PROTOC_VERSION:-26.0}
 TMP_GOPATH=${TMP_GOPATH:-/tmp/thanos-go}
 PROTOC_DOWNLOAD_URL="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}"
 
@@ -59,4 +59,4 @@ adjust_arch
 PACKAGE="protoc-${PROTOC_VERSION}-${OS}-${ARCH}.zip"
 PACKAGE_DOWNLOAD_URL="${PROTOC_DOWNLOAD_URL}/${PACKAGE}"
 curl -LSs ${PACKAGE_DOWNLOAD_URL} -o ${TMP_GOPATH}/${PACKAGE}
-unzip -qqj ${TMP_GOPATH}/${PACKAGE} "bin/protoc" -d "${TMP_GOPATH}/bin/"
+unzip ${TMP_GOPATH}/${PACKAGE} -d "${TMP_GOPATH}"
