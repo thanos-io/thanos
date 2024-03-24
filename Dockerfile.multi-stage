@@ -21,11 +21,6 @@ LABEL maintainer="The Thanos Authors"
 
 COPY --from=builder /go/bin/thanos /bin/thanos
 
-RUN adduser \
-    -D `#Dont assign a password` \
-    -H `#Dont create home directory` \
-    -u 1001 `#User id`\
-    thanos && \
-    chown thanos /bin/thanos
-USER 1001
+USER       nobody
+WORKDIR    /thanos
 ENTRYPOINT [ "/bin/thanos" ]
