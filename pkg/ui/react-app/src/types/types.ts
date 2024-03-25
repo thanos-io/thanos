@@ -17,12 +17,14 @@ export interface QueryParams {
   startTime: number;
   endTime: number;
   resolution: number;
+  traceID: string;
 }
 
 export type Rule = {
   alerts: Alert[];
   annotations: Record<string, string>;
   duration: number;
+  keepFiringFor: number;
   evaluationTime: string;
   health: string;
   labels: Record<string, string>;

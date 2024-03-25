@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/units"
@@ -28,6 +29,7 @@ import (
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	hidden "github.com/thanos-io/thanos/pkg/extflag"
@@ -55,6 +57,13 @@ const (
 	retryIntervalDuration = 10
 )
 
+type syncStrategy string
+
+const (
+	concurrentDiscovery syncStrategy = "concurrent"
+	recursiveDiscovery  syncStrategy = "recursive"
+)
+
 type storeConfig struct {
 	indexCacheConfigs           extflag.PathOrContent
 	objStoreConfig              extflag.PathOrContent
@@ -73,6 +82,7 @@ type storeConfig struct {
 	component                   component.StoreAPI
 	debugLogging                bool
 	syncInterval                time.Duration
+	blockListStrategy           string
 	blockSyncConcurrency        int
 	blockMetaFetchConcurrency   int
 	filterConf                  *store.FilterConfig
@@ -88,6 +98,9 @@ type storeConfig struct {
 	reqLogConfig                *extflag.PathOrContent
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
+	lazyExpandedPostingsEnabled bool
+
+	indexHeaderLazyDownloadStrategy string
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -131,7 +144,11 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.objStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
 
 	cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
-		Default("3m").DurationVar(&sc.syncInterval)
+		Default("15m").DurationVar(&sc.syncInterval)
+
+	strategies := strings.Join([]string{string(concurrentDiscovery), string(recursiveDiscovery)}, ", ")
+	cmd.Flag("block-discovery-strategy", "One of "+strategies+". When set to concurrent, stores will concurrently issue one call per directory to discover active blocks in the bucket. The recursive strategy iterates through all objects in the bucket, recursively traversing into each directory. This avoids N+1 calls at the expense of having slower bucket iterations.").
+		Default(string(concurrentDiscovery)).StringVar(&sc.blockListStrategy)
 
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage. Must be equal or greater than 1.").
 		Default("20").IntVar(&sc.blockSyncConcurrency)
@@ -182,6 +199,13 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").DurationVar(&sc.lazyIndexReaderIdleTimeout)
 
+	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
+		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
+
+	cmd.Flag("store.index-header-lazy-download-strategy", "Strategy of how to download index headers lazily. Supported values: eager, lazy. If eager, always download index header during initial load. If lazy, download index header during query time.").
+		Default(string(indexheader.EagerDownloadStrategy)).
+		EnumVar(&sc.indexHeaderLazyDownloadStrategy, string(indexheader.EagerDownloadStrategy), string(indexheader.LazyDownloadStrategy))
+
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&sc.disableWeb)
 
 	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
@@ -211,12 +235,12 @@ func registerStore(app *extkingpin.App) {
 				conf.filterConf.MinTime, conf.filterConf.MaxTime)
 		}
 
-		httpLogOpts, err := logging.ParseHTTPOptions("", conf.reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -298,7 +322,7 @@ func runStore(
 	r := route.New()
 
 	if len(cachingBucketConfigYaml) > 0 {
-		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r)
+		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r, conf.cachingBucketConfig.Path())
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
@@ -334,8 +358,17 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
+	var blockLister block.Lister
+	switch syncStrategy(conf.blockListStrategy) {
+	case concurrentDiscovery:
+		blockLister = block.NewConcurrentLister(logger, insBkt)
+	case recursiveDiscovery:
+		blockLister = block.NewRecursiveLister(logger, insBkt)
+	default:
+		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
+	}
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
@@ -382,6 +415,10 @@ func runStore(
 			}
 			return conf.estimatedMaxChunkSize
 		}),
+		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
+		store.WithIndexHeaderLazyDownloadStrategy(
+			indexheader.IndexHeaderLazyDownloadStrategy(conf.indexHeaderLazyDownloadStrategy).StrategyToDownloadFunc(),
+		),
 	}
 
 	if conf.debugLogging {
@@ -496,23 +533,6 @@ func runStore(
 		})
 	}
 
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		level.Debug(logger).Log("msg", "setting up periodic update for label names")
-		g.Add(func() error {
-			return runutil.Repeat(10*time.Second, ctx.Done(), func() error {
-				level.Debug(logger).Log("msg", "Starting label names update")
-
-				bs.UpdateLabelNames()
-
-				level.Debug(logger).Log("msg", "Finished label names update")
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
-
-	}
 	// Add bucket UI for loaded blocks.
 	{
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)

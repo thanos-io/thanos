@@ -44,9 +44,11 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/util/annotations"
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
+	"github.com/thanos-io/promql-engine/engine"
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -188,7 +190,7 @@ func TestQueryEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -337,6 +339,7 @@ func TestQueryEndpoints(t *testing.T) {
 				},
 			},
 		},
+
 		// Query endpoint with single deduplication label.
 		{
 			endpoint: api.query,
@@ -628,10 +631,156 @@ func TestQueryEndpoints(t *testing.T) {
 	}
 }
 
+func TestQueryExplainEndpoints(t *testing.T) {
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	now := time.Now()
+	timeout := 100 * time.Second
+	ef := NewQueryEngineFactory(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	}, nil, false)
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		engineFactory:         ef,
+		defaultEngine:         PromqlEnginePrometheus,
+		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
+		gate:                  gate.New(nil, 4, gate.Queries),
+		defaultRangeQueryStep: time.Second,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
+	}
+
+	var tests = []endpointTestCase{
+		{
+			endpoint: api.queryExplain,
+			query: url.Values{
+				"query":  []string{"2"},
+				"time":   []string{"123.4"},
+				"engine": []string{"thanos"},
+			},
+			response: &engine.ExplainOutputNode{
+				OperatorName: "[numberLiteral] 2",
+			},
+		},
+		{
+			endpoint: api.queryRangeExplain,
+			query: url.Values{
+				"query":  []string{"time()"},
+				"start":  []string{"0"},
+				"end":    []string{"500"},
+				"step":   []string{"1"},
+				"engine": []string{"thanos"},
+			},
+			response: &engine.ExplainOutputNode{
+				OperatorName: "[noArgFunction] time()",
+			},
+		},
+	}
+	for i, test := range tests {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+}
+
+func TestQueryAnalyzeEndpoints(t *testing.T) {
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	now := time.Now()
+	timeout := 100 * time.Second
+	ef := NewQueryEngineFactory(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	}, nil, false)
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		engineFactory:         ef,
+		defaultEngine:         PromqlEnginePrometheus,
+		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
+		gate:                  gate.New(nil, 4, gate.Queries),
+		defaultRangeQueryStep: time.Second,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
+	}
+	start := time.Unix(0, 0)
+
+	var tests = []endpointTestCase{
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query":  []string{"2"},
+				"time":   []string{"123.4"},
+				"engine": []string{"thanos"},
+			},
+			response: &queryData{
+				ResultType: parser.ValueTypeScalar,
+				Result: promql.Scalar{
+					V: 2,
+					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
+				},
+				QueryAnalysis: queryTelemetry{},
+			},
+		},
+		{
+			endpoint: api.queryRange,
+			query: url.Values{
+				"query": []string{"time()"},
+				"start": []string{"0"},
+				"end":   []string{"500"},
+				"step":  []string{"1"},
+			},
+			response: &queryData{
+				ResultType: parser.ValueTypeMatrix,
+				Result: promql.Matrix{
+					promql.Series{
+						Floats: func(end, step float64) []promql.FPoint {
+							var res []promql.FPoint
+							for v := float64(0); v <= end; v += step {
+								res = append(res, promql.FPoint{F: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
+							}
+							return res
+						}(500, 1),
+						Metric: nil,
+					},
+				},
+				QueryAnalysis: queryTelemetry{},
+			},
+		},
+	}
+	for i, test := range tests {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+}
+
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil), 0),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil)),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
@@ -691,7 +840,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	var series []storage.Series
 
 	for _, lbl := range old {
-		var samples []tsdbutil.Sample
+		var samples []chunks.Sample
 
 		for i := int64(0); i < 10; i++ {
 			samples = append(samples, sample{
@@ -732,7 +881,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -1571,6 +1720,7 @@ func TestRulesHandler(t *testing.T) {
 			Health:                    "x",
 			Query:                     "sum(up2) == 2",
 			DurationSeconds:           101,
+			KeepFiringForSeconds:      102,
 			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label3"}}},
 			Annotations:               labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "ann", Value: "a1"}}},
 			Alerts: []*rulespb.AlertInstance{
@@ -1601,8 +1751,20 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 122,
 			Health:                    "x",
 			DurationSeconds:           102,
+			KeepFiringForSeconds:      103,
 			Query:                     "sum(up3) == 3",
 			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label4"}}},
+			State:                     rulespb.AlertState_INACTIVE,
+		}),
+		rulespb.NewAlertingRule(&rulespb.Alert{
+			Name:                      "5",
+			LastEvaluation:            time.Time{}.Add(4 * time.Minute),
+			EvaluationDurationSeconds: 122,
+			Health:                    "x",
+			DurationSeconds:           61,
+			KeepFiringForSeconds:      62,
+			Query:                     "sum(up4) == 4",
+			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label5"}}},
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 	}
@@ -1690,6 +1852,7 @@ func TestRulesHandler(t *testing.T) {
 			LastEvaluation: all[2].GetAlert().LastEvaluation,
 			EvaluationTime: all[2].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[2].GetAlert().DurationSeconds,
+			KeepFiringFor:  all[2].GetAlert().KeepFiringForSeconds,
 			Annotations:    labelpb.ZLabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
 			Alerts: []*testpromcompatibility.Alert{
 				{
@@ -1721,6 +1884,22 @@ func TestRulesHandler(t *testing.T) {
 			LastEvaluation: all[3].GetAlert().LastEvaluation,
 			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[3].GetAlert().DurationSeconds,
+			KeepFiringFor:  all[3].GetAlert().KeepFiringForSeconds,
+			Annotations:    nil,
+			Alerts:         []*testpromcompatibility.Alert{},
+			Type:           "alerting",
+		},
+		testpromcompatibility.AlertingRule{
+			State:          strings.ToLower(all[4].GetAlert().State.String()),
+			Name:           all[4].GetAlert().Name,
+			Query:          all[4].GetAlert().Query,
+			Labels:         labelpb.ZLabelsToPromLabels(all[4].GetAlert().Labels.Labels),
+			Health:         rules.RuleHealth(all[2].GetAlert().Health),
+			LastError:      all[4].GetAlert().LastError,
+			LastEvaluation: all[4].GetAlert().LastEvaluation,
+			EvaluationTime: all[4].GetAlert().EvaluationDurationSeconds,
+			Duration:       all[4].GetAlert().DurationSeconds,
+			KeepFiringFor:  all[4].GetAlert().KeepFiringForSeconds,
 			Annotations:    nil,
 			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
@@ -1797,7 +1976,7 @@ func TestRulesHandler(t *testing.T) {
 			}
 			res, errors, apiError, releaseResources := endpoint(req.WithContext(ctx))
 			defer releaseResources()
-			if errors != nil {
+			if len(errors) > 0 {
 				t.Fatalf("Unexpected errors: %s", errors)
 				return
 			}
@@ -1850,11 +2029,11 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 
 type mockedRulesClient struct {
 	g   map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup
-	w   storage.Warnings
+	w   annotations.Annotations
 	err error
 }
 
-func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
+func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, annotations.Annotations, error) {
 	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
 }
 

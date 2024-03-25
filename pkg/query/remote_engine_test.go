@@ -14,6 +14,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -23,15 +24,17 @@ import (
 
 func TestRemoteEngine_Warnings(t *testing.T) {
 	client := NewClient(&queryWarnClient{}, "", nil)
-	engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
 	})
 	var (
-		query = "up"
 		start = time.Unix(0, 0)
 		end   = time.Unix(120, 0)
 		step  = 30 * time.Second
 	)
+	query, err := parser.ParseExpr("up")
+	testutil.Ok(t, err)
+
 	qry, err := engine.NewRangeQuery(context.Background(), nil, query, start, end, step)
 	testutil.Ok(t, err)
 	res := qry.Exec(context.Background())
@@ -87,7 +90,7 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := NewClient(nil, "", testCase.tsdbInfos)
-			engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 				ReplicaLabels: testCase.replicaLabels,
 			})
 
@@ -174,7 +177,7 @@ func TestRemoteEngine_MinT(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := NewClient(nil, "", testCase.tsdbInfos)
-			engine := newRemoteEngine(log.NewNopLogger(), client, Opts{
+			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 				ReplicaLabels: testCase.replicaLabels,
 			})
 

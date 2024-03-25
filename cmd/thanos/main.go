@@ -49,6 +49,10 @@ func main() {
 		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON)
 	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
 
+	goMemLimitConf := goMemLimitConfig{}
+
+	goMemLimitConf.registerFlag(app)
+
 	registerSidecar(app)
 	registerStore(app)
 	registerQuery(app)
@@ -60,6 +64,11 @@ func main() {
 
 	cmd, setup := app.Parse()
 	logger := logging.NewLogger(*logLevel, *logFormat, *debugName)
+
+	if err := configureGoAutoMemLimit(goMemLimitConf); err != nil {
+		level.Error(logger).Log("msg", "failed to configure Go runtime memory limits", "err", err)
+		os.Exit(1)
+	}
 
 	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
 	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.

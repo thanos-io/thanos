@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -94,7 +95,9 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(nil, insBkt)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			duplicateBlocksFilter,
 		})
 		testutil.Ok(t, err)
@@ -194,7 +197,9 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 			noCompactMarkerFilter,
@@ -217,9 +222,9 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		// Compaction on empty should not fail.
 		testutil.Ok(t, bComp.Compact(ctx))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectedBlocks))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.BlocksMarkedForDeletion))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectionFailures))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.blocksMarkedForNoCompact))
 		testutil.Equals(t, 0, MetricCount(grouper.compactions))
 		testutil.Equals(t, 0, MetricCount(grouper.compactionRunsStarted))
@@ -320,10 +325,10 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		groupKey2 := metas[6].Thanos.GroupKey()
 
 		testutil.Ok(t, bComp.Compact(ctx))
-		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
-		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
+		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.GarbageCollectedBlocks))
+		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.BlocksMarkedForDeletion))
 		testutil.Equals(t, 1.0, promtest.ToFloat64(grouper.blocksMarkedForNoCompact))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectionFailures))
 		testutil.Equals(t, 2, MetricCount(grouper.compactions))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(metas[0].Thanos.ResolutionString())))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(metas[5].Thanos.ResolutionString())))
@@ -504,7 +509,9 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+		insBkt := objstore.WithNoopInstr(bkt)
+		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, insBkt, baseBlockIDsFetcher, "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 		})

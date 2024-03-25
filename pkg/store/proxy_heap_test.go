@@ -10,7 +10,6 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -80,33 +79,6 @@ func TestProxyResponseHeapSort(t *testing.T) {
 				storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
 				storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5", "f", "6")),
 				storeSeriesResponse(t, labelsFromStrings("g", "7", "h", "8", "i", "9")),
-			},
-		},
-		{
-			title: "merge duplicated sets that were ordered before adding external labels",
-			input: []respSet{
-				&eagerRespSet{
-					wg: &sync.WaitGroup{},
-					bufferedResponses: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
-					},
-					storeLabels: map[string]struct{}{"c": {}},
-				},
-				&eagerRespSet{
-					wg: &sync.WaitGroup{},
-					bufferedResponses: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
-					},
-					storeLabels: map[string]struct{}{"c": {}},
-				},
-			},
-			exp: []*storepb.SeriesResponse{
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 			},
 		},
 		{
@@ -190,6 +162,37 @@ func TestProxyResponseHeapSort(t *testing.T) {
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 			},
 		},
+		{
+			title: "test",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.5.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.6.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+					},
+					storeLabels: map[string]struct{}{"receive": {}, "tenant_id": {}, "thanos_replica": {}},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.5.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.6.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+					},
+					storeLabels: map[string]struct{}{"cluster": {}, "prometheus": {}, "prometheus_replica": {}, "receive": {}, "tenant_id": {}, "thanos_replica": {}, "thanos_ruler_replica": {}},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+				storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+				storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.5.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+				storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.5.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+				storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.6.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+				storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.6.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
+			},
+		},
 	} {
 		t.Run(tcase.title, func(t *testing.T) {
 			h := NewProxyResponseHeap(tcase.input...)
@@ -244,22 +247,6 @@ func TestSortWithoutLabels(t *testing.T) {
 			},
 			dedupLabels: map[string]struct{}{"b": {}, "b1": {}},
 		},
-		// Pushdown label at the end.
-		{
-			input: []*storepb.SeriesResponse{
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "replica-1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "replica-1", "c", "4", dedup.PushdownMarker.Name, dedup.PushdownMarker.Value)),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "replica-2", "c", "3")),
-			},
-			exp: []*storepb.SeriesResponse{
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", dedup.PushdownMarker.Name, dedup.PushdownMarker.Value)),
-			},
-			dedupLabels: map[string]struct{}{"b": {}},
-		},
 		// Non series responses mixed.
 		{
 			input: []*storepb.SeriesResponse{
@@ -310,12 +297,12 @@ func labelsFromStrings(ss ...string) labels.Labels {
 	if len(ss)%2 != 0 {
 		panic("invalid number of strings")
 	}
-	res := make(labels.Labels, 0, len(ss)/2)
-	for i := 0; i < len(ss); i += 2 {
-		res = append(res, labels.Label{Name: ss[i], Value: ss[i+1]})
-	}
 
-	return res
+	b := labels.NewScratchBuilder(len(ss) / 2)
+	for i := 0; i < len(ss); i += 2 {
+		b.Add(ss[i], ss[i+1])
+	}
+	return b.Labels()
 }
 
 func BenchmarkSortWithoutLabels(b *testing.B) {

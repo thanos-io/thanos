@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -86,6 +85,7 @@ type ProxyStore struct {
 	metrics           *proxyStoreMetrics
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
+	tsdbSelector      *TSDBSelector
 }
 
 type proxyStoreMetrics struct {
@@ -112,10 +112,17 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 // BucketStoreOption are functions that configure BucketStore.
 type ProxyStoreOption func(s *ProxyStore)
 
-// WithProxyStoreDebugLogging enables debug logging.
-func WithProxyStoreDebugLogging() ProxyStoreOption {
+// WithProxyStoreDebugLogging toggles debug logging.
+func WithProxyStoreDebugLogging(enable bool) ProxyStoreOption {
 	return func(s *ProxyStore) {
-		s.debugLogging = true
+		s.debugLogging = enable
+	}
+}
+
+// WithTSDBSelector sets the TSDB selector for the proxy.
+func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.tsdbSelector = selector
 	}
 }
 
@@ -148,6 +155,7 @@ func NewProxyStore(
 		responseTimeout:   responseTimeout,
 		metrics:           metrics,
 		retrievalStrategy: retrievalStrategy,
+		tsdbSelector:      DefaultSelector,
 	}
 
 	for _, option := range options {
@@ -317,7 +325,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
-	stores := []Client{}
+	var (
+		stores         []Client
+		storeLabelSets []labels.Labels
+	)
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
@@ -327,13 +338,19 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
+		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			continue
+		}
+		storeLabelSets = append(storeLabelSets, extraMatchers...)
+
 		stores = append(stores, st)
 	}
-
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
 	}
+	r.Matchers = append(r.Matchers, MatchersForLabelSets(storeLabelSets)...)
 
 	storeResponses := make([]respSet, 0, len(stores))
 
@@ -540,8 +557,10 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		mtx            sync.Mutex
 		g, gctx        = errgroup.WithContext(ctx)
 		storeDebugMsgs []string
-		span           opentracing.Span
 	)
+	if r.Label == "" {
+		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
 
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
@@ -564,12 +583,6 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		if storeID == "" {
 			storeID = "Store Gateway"
 		}
-		span, gctx = tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-			"store.id":       storeID,
-			"store.addr":     storeAddr,
-			"store.is_local": isLocalStore,
-		})
-		defer span.Finish()
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
@@ -583,7 +596,14 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		}
 
 		g.Go(func() error {
-			resp, err := st.LabelValues(gctx, &storepb.LabelValuesRequest{
+			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
+				"store.id":       storeID,
+				"store.addr":     storeAddr,
+				"store.is_local": isLocalStore,
+			})
+			defer span.Finish()
+
+			resp, err := st.LabelValues(spanCtx, &storepb.LabelValuesRequest{
 				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 				Start:                   r.Start,

@@ -14,17 +14,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/objstore"
+
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
 // ReaderPoolMetrics holds metrics tracked by ReaderPool.
 type ReaderPoolMetrics struct {
-	lazyReader *LazyBinaryReaderMetrics
+	lazyReader   *LazyBinaryReaderMetrics
+	binaryReader *BinaryReaderMetrics
 }
 
 // NewReaderPoolMetrics makes new ReaderPoolMetrics.
 func NewReaderPoolMetrics(reg prometheus.Registerer) *ReaderPoolMetrics {
 	return &ReaderPoolMetrics{
-		lazyReader: NewLazyBinaryReaderMetrics(reg),
+		lazyReader:   NewLazyBinaryReaderMetrics(reg),
+		binaryReader: NewBinaryReaderMetrics(reg),
 	}
 }
 
@@ -44,10 +48,47 @@ type ReaderPool struct {
 	// Keep track of all readers managed by the pool.
 	lazyReadersMx sync.Mutex
 	lazyReaders   map[*LazyBinaryReader]struct{}
+
+	lazyDownloadFunc LazyDownloadIndexHeaderFunc
+}
+
+// IndexHeaderLazyDownloadStrategy specifies how to download index headers
+// lazily. Only used when lazy mmap is enabled.
+type IndexHeaderLazyDownloadStrategy string
+
+const (
+	// EagerDownloadStrategy always disables lazy downloading index headers.
+	EagerDownloadStrategy IndexHeaderLazyDownloadStrategy = "eager"
+	// LazyDownloadStrategy always lazily download index headers.
+	LazyDownloadStrategy IndexHeaderLazyDownloadStrategy = "lazy"
+)
+
+func (s IndexHeaderLazyDownloadStrategy) StrategyToDownloadFunc() LazyDownloadIndexHeaderFunc {
+	switch s {
+	case LazyDownloadStrategy:
+		return AlwaysLazyDownloadIndexHeader
+	default:
+		// Always fallback to eager download index header.
+		return AlwaysEagerDownloadIndexHeader
+	}
+}
+
+// LazyDownloadIndexHeaderFunc is used to determinte whether to download the index header lazily
+// or not by checking its block metadata. Usecase can be by time or by index file size.
+type LazyDownloadIndexHeaderFunc func(meta *metadata.Meta) bool
+
+// AlwaysEagerDownloadIndexHeader always eagerly download index header.
+func AlwaysEagerDownloadIndexHeader(meta *metadata.Meta) bool {
+	return false
+}
+
+// AlwaysLazyDownloadIndexHeader always lazily download index header.
+func AlwaysLazyDownloadIndexHeader(meta *metadata.Meta) bool {
+	return true
 }
 
 // NewReaderPool makes a new ReaderPool.
-func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout time.Duration, metrics *ReaderPoolMetrics) *ReaderPool {
+func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout time.Duration, metrics *ReaderPoolMetrics, lazyDownloadFunc LazyDownloadIndexHeaderFunc) *ReaderPool {
 	p := &ReaderPool{
 		logger:                logger,
 		metrics:               metrics,
@@ -55,6 +96,7 @@ func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTime
 		lazyReaderIdleTimeout: lazyReaderIdleTimeout,
 		lazyReaders:           make(map[*LazyBinaryReader]struct{}),
 		close:                 make(chan struct{}),
+		lazyDownloadFunc:      lazyDownloadFunc,
 	}
 
 	// Start a goroutine to close idle readers (only if required).
@@ -79,14 +121,14 @@ func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTime
 // NewBinaryReader creates and returns a new binary reader. If the pool has been configured
 // with lazy reader enabled, this function will return a lazy reader. The returned lazy reader
 // is tracked by the pool and automatically closed once the idle timeout expires.
-func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID, postingOffsetsInMemSampling int) (Reader, error) {
+func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID, postingOffsetsInMemSampling int, meta *metadata.Meta) (Reader, error) {
 	var reader Reader
 	var err error
 
 	if p.lazyReaderEnabled {
-		reader, err = NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.metrics.lazyReader, p.onLazyReaderClosed)
+		reader, err = NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.metrics.lazyReader, p.metrics.binaryReader, p.onLazyReaderClosed, p.lazyDownloadFunc(meta))
 	} else {
-		reader, err = NewBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling)
+		reader, err = NewBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.metrics.binaryReader)
 	}
 
 	if err != nil {

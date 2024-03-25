@@ -77,6 +77,13 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 0
+    open_duration: 0s
+    min_requests: 0
+    consecutive_failures: 0
+    failure_percent: 0
   expiration: 0s
 ```
 
@@ -132,6 +139,13 @@ config:
   master_name: ""
   max_async_buffer_size: 10000
   max_async_concurrency: 20
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 10
+    open_duration: 5s
+    min_requests: 50
+    consecutive_failures: 5
+    failure_percent: 0.05
   expiration: 24h0m0s
 ```
 
@@ -185,10 +199,15 @@ Query frontend command implements a service deployed in front of queriers to
 improve query parallelization and caching.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
       --cache-compression-type=""
                                  Use compression in results cache.
                                  Supported values are: 'snappy' and ” (disable
                                  compression).
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -232,15 +251,6 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would
-                                 be soon deprecated, and replaced with
-                                 `request.logging-config`. Request Logging
-                                 for logging the start and end of requests.
-                                 By default this flag is disabled. LogFinishCall
-                                 : Logs the finish call of the requests.
-                                 LogStartAndFinishCall : Logs the start and
-                                 finish call of the requests. NoLogCall :
-                                 Disable request logging.
       --query-frontend.compress-responses
                                  Compress HTTP responses.
       --query-frontend.downstream-tripper-config=<content>
@@ -261,6 +271,11 @@ Flags:
       --query-frontend.downstream-url="http://localhost:9090"
                                  URL of downstream Prometheus Query compatible
                                  API.
+      --query-frontend.enable-x-functions
+                                 Enable experimental x-
+                                 functions in query-frontend.
+                                 --no-query-frontend.enable-x-functions for
+                                 disabling.
       --query-frontend.forward-header=<http-header-name> ...
                                  List of headers forwarded by the query-frontend
                                  to downstream queriers, default is empty
@@ -269,13 +284,17 @@ Flags:
                                  duration. Set to 0 to disable. Set to < 0 to
                                  enable on all queries.
       --query-frontend.org-id-header=<http-header-name> ...
-                                 Request header names used to identify the
-                                 source of slow queries (repeated flag).
-                                 The values of the header will be added to
-                                 the org id field in the slow query log. If
-                                 multiple headers match the request, the first
-                                 matching arg specified will take precedence.
-                                 If no headers match 'anonymous' will be used.
+                                 Deprecation Warning - This flag
+                                 will be soon deprecated in favor of
+                                 query-frontend.tenant-header and both flags
+                                 cannot be used at the same time. Request header
+                                 names used to identify the source of slow
+                                 queries (repeated flag). The values of the
+                                 header will be added to the org id field in
+                                 the slow query log. If multiple headers match
+                                 the request, the first matching arg specified
+                                 will take precedence. If no headers match
+                                 'anonymous' will be used.
       --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
                                  Number of shards to use when
                                  distributing shardable PromQL queries.

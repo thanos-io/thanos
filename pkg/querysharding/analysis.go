@@ -3,8 +3,6 @@
 
 package querysharding
 
-var excludedLabels = []string{"le"}
-
 type QueryAnalysis struct {
 	// Labels to shard on
 	shardingLabels []string
@@ -21,8 +19,6 @@ func nonShardableQuery() QueryAnalysis {
 }
 
 func (q *QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
-	labels = without(labels, excludedLabels)
-
 	if q.shardingLabels == nil {
 		return QueryAnalysis{
 			shardBy:        by,

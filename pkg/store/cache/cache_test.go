@@ -31,11 +31,11 @@ func TestCacheKey_string(t *testing.T) {
 	matcher2 := labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar")
 
 	tests := map[string]struct {
-		key      cacheKey
+		key      CacheKey
 		expected string
 	}{
 		"should stringify postings cache key": {
-			key: cacheKey{ulidString, cacheKeyPostings(labels.Label{Name: "foo", Value: "bar"}), ""},
+			key: CacheKey{ulidString, CacheKeyPostings(labels.Label{Name: "foo", Value: "bar"}), ""},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte("foo:bar"))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -44,7 +44,7 @@ func TestCacheKey_string(t *testing.T) {
 			}(),
 		},
 		"postings cache key includes compression scheme": {
-			key: cacheKey{ulidString, cacheKeyPostings(labels.Label{Name: "foo", Value: "bar"}), compressionSchemeStreamedSnappy},
+			key: CacheKey{ulidString, CacheKeyPostings(labels.Label{Name: "foo", Value: "bar"}), compressionSchemeStreamedSnappy},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte("foo:bar"))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -53,11 +53,11 @@ func TestCacheKey_string(t *testing.T) {
 			}(),
 		},
 		"should stringify series cache key": {
-			key:      cacheKey{ulidString, cacheKeySeries(12345), ""},
+			key:      CacheKey{ulidString, CacheKeySeries(12345), ""},
 			expected: fmt.Sprintf("S:%s:12345", uid.String()),
 		},
 		"should stringify expanded postings cache key": {
-			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher})), ""},
+			key: CacheKey{ulidString, CacheKeyExpandedPostings(LabelMatchersToString([]*labels.Matcher{matcher})), ""},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte(matcher.String()))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -66,7 +66,7 @@ func TestCacheKey_string(t *testing.T) {
 			}(),
 		},
 		"should stringify expanded postings cache key when multiple matchers": {
-			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher, matcher2})), ""},
+			key: CacheKey{ulidString, CacheKeyExpandedPostings(LabelMatchersToString([]*labels.Matcher{matcher, matcher2})), ""},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte(fmt.Sprintf("%s;%s", matcher.String(), matcher2.String())))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -75,7 +75,7 @@ func TestCacheKey_string(t *testing.T) {
 			}(),
 		},
 		"expanded postings cache key includes compression scheme": {
-			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher})), compressionSchemeStreamedSnappy},
+			key: CacheKey{ulidString, CacheKeyExpandedPostings(LabelMatchersToString([]*labels.Matcher{matcher})), compressionSchemeStreamedSnappy},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte(matcher.String()))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -87,7 +87,7 @@ func TestCacheKey_string(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			actual := testData.key.string()
+			actual := testData.key.String()
 			testutil.Equals(t, testData.expected, actual)
 		})
 	}
@@ -100,25 +100,25 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 	ulidString := uid.String()
 
 	tests := map[string]struct {
-		keys        []cacheKey
+		keys        []CacheKey
 		expectedLen int
 	}{
 		"should guarantee reasonably short key length for postings": {
 			expectedLen: 72,
-			keys: []cacheKey{
-				{ulidString, cacheKeyPostings(labels.Label{Name: "a", Value: "b"}), ""},
-				{ulidString, cacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)}), ""},
+			keys: []CacheKey{
+				{ulidString, CacheKeyPostings(labels.Label{Name: "a", Value: "b"}), ""},
+				{ulidString, CacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)}), ""},
 			},
 		},
 		"should guarantee reasonably short key length for series": {
 			expectedLen: 49,
-			keys: []cacheKey{
-				{ulidString, cacheKeySeries(math.MaxUint64), ""},
+			keys: []CacheKey{
+				{ulidString, CacheKeySeries(math.MaxUint64), ""},
 			},
 		},
 		"should guarantee reasonably short key length for expanded postings": {
 			expectedLen: 73,
-			keys: []cacheKey{
+			keys: []CacheKey{
 				{ulidString, func() interface{} {
 					matchers := make([]*labels.Matcher, 0, 100)
 					name := strings.Repeat("a", 100)
@@ -127,7 +127,7 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 						t := labels.MatchType(i % 4)
 						matchers = append(matchers, labels.MustNewMatcher(t, name, value))
 					}
-					return cacheKeyExpandedPostings(labelMatchersToString(matchers))
+					return CacheKeyExpandedPostings(LabelMatchersToString(matchers))
 				}(), ""},
 			},
 		},
@@ -136,7 +136,7 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			for _, key := range testData.keys {
-				testutil.Equals(t, testData.expectedLen, len(key.string()))
+				testutil.Equals(t, testData.expectedLen, len(key.String()))
 			}
 		})
 	}
@@ -144,20 +144,20 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 
 func BenchmarkCacheKey_string_Postings(b *testing.B) {
 	uid := ulid.MustNew(1, nil)
-	key := cacheKey{uid.String(), cacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)}), ""}
+	key := CacheKey{uid.String(), CacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)}), ""}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key.string()
+		_ = key.String()
 	}
 }
 
 func BenchmarkCacheKey_string_Series(b *testing.B) {
 	uid := ulid.MustNew(1, nil)
-	key := cacheKey{uid.String(), cacheKeySeries(math.MaxUint64), ""}
+	key := CacheKey{uid.String(), CacheKeySeries(math.MaxUint64), ""}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key.string()
+		_ = key.String()
 	}
 }

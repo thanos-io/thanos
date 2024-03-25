@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -36,6 +38,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -85,7 +88,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
 
-	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"promql-negative-offset", "promql-at-modifier"}).Init()
+	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
@@ -93,11 +96,13 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	floatSeries := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
 	nativeHistogramSeries := []labels.Labels{labels.FromStrings("a", "1", "b", "3")}
+	floatHistogramSeries := []labels.Labels{labels.FromStrings("a", "1", "b", "4")}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
 	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
 	extLset4 := labels.FromStrings("ext1", "value1", "replica", "3")
 	extLset5 := labels.FromStrings("ext1", "value3", "replica", "1")
+	extLset6 := labels.FromStrings("ext1", "value3", "replica", "2")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
@@ -113,6 +118,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, err)
 	id5, err := e2eutil.CreateHistogramBlockWithDelay(ctx, dir, nativeHistogramSeries, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset5, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
+	id6, err := e2eutil.CreateFloatHistogramBlockWithDelay(ctx, dir, floatHistogramSeries, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset6, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
 		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
@@ -123,13 +130,14 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id3.String()), id3.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id4.String()), id4.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id5.String()), id5.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id6.String()), id6.String()))
 
 	// Wait for store to sync blocks.
-	// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta.
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+	// thanos_blocks_meta_synced: 4x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta.
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(6), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_blocks_loaded"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4), "thanos_bucket_store_blocks_loaded"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_drops_total"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -137,6 +145,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return fmt.Sprintf("%s @ end()", testQuery) },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
+				HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
 			},
 			[]model.Metric{
 				{
@@ -157,17 +166,34 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "1",
+					"b":       "4",
+					"ext1":    "value3",
+					"replica": "2",
+				},
 			},
 		)
 
 		// 2 x postings, 3 x series, 2 x chunks.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(9), "thanos_bucket_store_series_data_touched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(9), "thanos_bucket_store_series_data_fetched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_touched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_fetched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4), "thanos_bucket_store_series_blocks_queried"))
+
+		tenant1Opts := []e2emon.MetricsOption{
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-1")),
+			e2emon.WaitMissingMetrics(),
+		}
+
+		// Test per tenant store metrics
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(12), []string{"thanos_bucket_store_series_data_touched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(12), []string{"thanos_bucket_store_series_data_fetched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_bucket_store_series_blocks_queried"}, tenant1Opts...))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: true,
+				HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-2"}},
 			},
 			[]model.Metric{
 				{
@@ -180,22 +206,42 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"b":    "3",
 					"ext1": "value3",
 				},
+				{
+					"a":    "1",
+					"b":    "4",
+					"ext1": "value3",
+				},
 			},
 		)
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(18), "thanos_bucket_store_series_data_touched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(12), "thanos_bucket_store_series_data_fetched"))
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3+3), "thanos_bucket_store_series_blocks_queried"))
+		tenant2Opts := []e2emon.MetricsOption{
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, tenancy.MetricLabel, "test-tenant-2")),
+			e2emon.WaitMissingMetrics(),
+		}
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(24), "thanos_bucket_store_series_data_touched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(16), "thanos_bucket_store_series_data_fetched"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4+4), "thanos_bucket_store_series_blocks_queried"))
+
+		// Test tenant some tenant specific store metrics
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(12), []string{"thanos_bucket_store_series_data_touched"}, tenant2Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_bucket_store_series_data_fetched"}, tenant2Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_bucket_store_series_blocks_queried"}, tenant2Opts...))
+
+		// the first tenants metrics should be unaffected by the additional query
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(12), []string{"thanos_bucket_store_series_data_touched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(12), []string{"thanos_bucket_store_series_data_fetched"}, tenant1Opts...))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_bucket_store_series_blocks_queried"}, tenant1Opts...))
+
 	})
 	t.Run("remove meta.json from id1 block", func(t *testing.T) {
 		testutil.Ok(t, bkt.Delete(ctx, filepath.Join(id1.String(), block.MetaFilename)))
 
 		// Wait for store to sync blocks.
-		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+		// thanos_blocks_meta_synced: 3x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(6), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_blocks_loaded"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_blocks_loaded"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -217,9 +263,15 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "1",
+					"b":       "4",
+					"ext1":    "value3",
+					"replica": "2",
+				},
 			},
 		)
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4+4), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(8+3), "thanos_bucket_store_series_blocks_queried"))
 	})
 	t.Run("upload block id5, similar to id1", func(t *testing.T) {
 		id5, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, floatSeries, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset4, 0, metadata.NoneFunc)
@@ -227,11 +279,11 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id5.String()), id5.String()))
 
 		// Wait for store to sync blocks.
-		// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+		// thanos_blocks_meta_synced: 4x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(7), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_blocks_loaded"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(4), "thanos_bucket_store_blocks_loaded"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -258,19 +310,25 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "1",
+					"b":       "4",
+					"ext1":    "value3",
+					"replica": "2",
+				},
 			},
 		)
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(11+2), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(11+4), "thanos_bucket_store_series_blocks_queried"))
 	})
 	t.Run("delete whole id2 block #yolo", func(t *testing.T) {
 		testutil.Ok(t, block.Delete(ctx, l, bkt, id2))
 
 		// Wait for store to sync blocks.
 		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(6), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_blocks_loaded"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(3), "thanos_bucket_store_blocks_loaded"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1+1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
@@ -291,9 +349,15 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "1",
+					"b":       "4",
+					"ext1":    "value3",
+					"replica": "2",
+				},
 			},
 		)
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(14+1), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(15+3), "thanos_bucket_store_series_blocks_queried"))
 	})
 
 	t.Run("negative offset should work", func(t *testing.T) {
@@ -314,9 +378,15 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 					"ext1":    "value3",
 					"replica": "1",
 				},
+				{
+					"a":       "1",
+					"b":       "4",
+					"ext1":    "value3",
+					"replica": "2",
+				},
 			},
 		)
-		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(15+2), "thanos_bucket_store_series_blocks_queried"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(18+3), "thanos_bucket_store_series_blocks_queried"))
 	})
 
 	// TODO(khyati) Let's add some case for compaction-meta.json once the PR will be merged: https://github.com/thanos-io/thanos/pull/2136.
@@ -739,7 +809,7 @@ metafile_content_ttl: 0s`
 
 	// Wait for store to sync blocks.
 	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
-	for _, st := range []*e2emon.InstrumentedRunnable{store1, store2, store3} {
+	for _, st := range []*e2eobs.Observable{store1, store2, store3} {
 		t.Run(st.Name(), func(t *testing.T) {
 			testutil.Ok(t, st.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
 			testutil.Ok(t, st.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
@@ -765,7 +835,7 @@ metafile_content_ttl: 0s`
 			},
 		)
 
-		for _, st := range []*e2emon.InstrumentedRunnable{store1, store2, store3} {
+		for _, st := range []*e2eobs.Observable{store1, store2, store3} {
 			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{`thanos_cache_groupcache_loads_total`}))
 			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{`thanos_store_bucket_cache_operation_hits_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "config", "chunks"))))
 		}
@@ -790,7 +860,7 @@ config:
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	const bucket = "store-gateway-test"
+	const bucket = "store-gateway-test-bytes-limit"
 	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -878,7 +948,7 @@ config:
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
 			if _, _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery, now, opts); err != nil {
 				e := err.Error()
-				if strings.Contains(e, "expanded matching posting: get postings") && strings.Contains(e, "exceeded bytes limit while fetching postings: limit 1 violated") {
+				if strings.Contains(e, "expanded matching posting: fetch and expand postings") && strings.Contains(e, "exceeded bytes limit while fetching postings: limit 1 violated") {
 					return nil
 				}
 				return err
@@ -946,7 +1016,7 @@ func TestRedisClient_Rueidis(t *testing.T) {
 func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("memcached-exp")
+	e, err := e2e.NewDockerEnvironment("memcached-expand")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1046,4 +1116,147 @@ config:
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{`thanos_store_index_cache_requests_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{`thanos_store_index_cache_hits_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
 	})
+}
+
+func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("memcached-lazy")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "store-gateway-lazy-expanded-postings-test"
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	// Create 2 store gateways, one with lazy expanded postings enabled and another one disabled.
+	s1 := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+		},
+		"",
+		"",
+		[]string{"--store.enable-lazy-expanded-postings"},
+	)
+	s2 := e2ethanos.NewStoreGW(
+		e,
+		"2",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+		},
+		"",
+		"",
+		nil,
+	)
+	testutil.Ok(t, e2e.StartAndWaitReady(s1, s2))
+
+	q1 := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
+	q2 := e2ethanos.NewQuerierBuilder(e, "2", s2.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q1, q2))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	numSeries := 10000
+	ss := make([]labels.Labels, 0, 10000)
+	for i := 0; i < numSeries; i++ {
+		ss = append(ss, labels.FromStrings("a", strconv.Itoa(i), "b", "1"))
+	}
+	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+	id, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, ss, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
+
+	// Wait for store to sync blocks.
+	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_blocks_loaded"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_drops_total"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_blocks_loaded"))
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_drops_total"))
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+
+	t.Run("query with count", func(t *testing.T) {
+		queryAndAssert(t, ctx, q1.Endpoint("http"), func() string { return `count({b="1"})` },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			model.Vector{
+				{
+					Metric: map[model.LabelName]model.LabelValue{},
+					Value:  model.SampleValue(numSeries),
+				},
+			},
+		)
+
+		queryAndAssert(t, ctx, q2.Endpoint("http"), func() string { return `count({b="1"})` },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			model.Vector{
+				{
+					Metric: map[model.LabelName]model.LabelValue{},
+					Value:  model.SampleValue(numSeries),
+				},
+			},
+		)
+	})
+
+	// We expect no lazy expanded postings as query `count({b="1"})` won't trigger the optimization.
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_lazy_expanded_postings_total"))
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_lazy_expanded_postings_total"))
+
+	t.Run("query specific series will trigger lazy posting", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), func() string { return `{a="1", b="1"}` },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "1",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+			},
+		)
+
+		queryAndAssertSeries(t, ctx, q2.Endpoint("http"), func() string { return `{a="1", b="1"}` },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "1",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+			},
+		)
+	})
+
+	// Use greater or equal to handle flakiness.
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.GreaterOrEqual(1), "thanos_bucket_store_lazy_expanded_postings_total"), e2emon.WaitMissingMetrics())
+	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_lazy_expanded_postings_total"), e2emon.WaitMissingMetrics())
 }

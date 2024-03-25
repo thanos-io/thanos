@@ -9,7 +9,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-type asyncOperationProcessor struct {
+var (
+	ErrAsyncBufferFull = errors.New("the async buffer is full")
+)
+
+type AsyncOperationProcessor struct {
 	// Channel used to notify internal goroutines when they should quit.
 	stop chan struct{}
 
@@ -20,8 +24,9 @@ type asyncOperationProcessor struct {
 	workers sync.WaitGroup
 }
 
-func newAsyncOperationProcessor(bufferSize, concurrency int) *asyncOperationProcessor {
-	p := &asyncOperationProcessor{
+// NewAsyncOperationProcessor creates an async processor with given bufferSize and concurrency.
+func NewAsyncOperationProcessor(bufferSize, concurrency int) *AsyncOperationProcessor {
+	p := &AsyncOperationProcessor{
 		stop:       make(chan struct{}, 1),
 		asyncQueue: make(chan func(), bufferSize),
 	}
@@ -34,14 +39,14 @@ func newAsyncOperationProcessor(bufferSize, concurrency int) *asyncOperationProc
 	return p
 }
 
-func (p *asyncOperationProcessor) Stop() {
+func (p *AsyncOperationProcessor) Stop() {
 	close(p.stop)
 
 	// Wait until all workers have terminated.
 	p.workers.Wait()
 }
 
-func (p *asyncOperationProcessor) asyncQueueProcessLoop() {
+func (p *AsyncOperationProcessor) asyncQueueProcessLoop() {
 	defer p.workers.Done()
 
 	for {
@@ -54,13 +59,12 @@ func (p *asyncOperationProcessor) asyncQueueProcessLoop() {
 	}
 }
 
-var errAsyncBufferFull = errors.New("the async buffer is full")
-
-func (p *asyncOperationProcessor) enqueueAsync(op func()) error {
+// EnqueueAsync enqueues op to async queue. If enqueue failed, ErrAsyncBufferFull is returned.
+func (p *AsyncOperationProcessor) EnqueueAsync(op func()) error {
 	select {
 	case p.asyncQueue <- op:
 		return nil
 	default:
-		return errAsyncBufferFull
+		return ErrAsyncBufferFull
 	}
 }

@@ -42,11 +42,16 @@ type nopAppender struct{}
 func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, float64) (storage.SeriesRef, error) {
 	return 0, nil
 }
+
 func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.Exemplar) (storage.SeriesRef, error) {
 	return 0, nil
 }
 
 func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	return 0, nil
+}
+
+func (n nopAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
 	return 0, nil
 }
 
@@ -59,7 +64,7 @@ func (n nopAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, metadata.M
 
 type nopQueryable struct{}
 
-func (n nopQueryable) Querier(_ context.Context, _, _ int64) (storage.Querier, error) {
+func (n nopQueryable) Querier(_, _ int64) (storage.Querier, error) {
 	return storage.NoopQuerier(), nil
 }
 
@@ -381,7 +386,7 @@ groups:
 				return nil, nil
 			}
 		},
-		nil,
+		labels.EmptyLabels(),
 		"http://localhost",
 	)
 
@@ -439,7 +444,7 @@ groups:
 				}, nil
 			}
 		},
-		nil,
+		labels.EmptyLabels(),
 		"http://localhost",
 	)
 	thanosRuleMgr.Run()

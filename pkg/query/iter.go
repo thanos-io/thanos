@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -23,7 +24,18 @@ type promSeriesSet struct {
 	mint, maxt int64
 	aggrs      []storepb.Aggr
 
-	warns storage.Warnings
+	warns annotations.Annotations
+}
+
+// NewPromSeriesSet constructs a promSeriesSet.
+func NewPromSeriesSet(seriesSet storepb.SeriesSet, mint, maxt int64, aggrs []storepb.Aggr, warns annotations.Annotations) storage.SeriesSet {
+	return &promSeriesSet{
+		set:   seriesSet,
+		mint:  mint,
+		maxt:  maxt,
+		aggrs: aggrs,
+		warns: warns,
+	}
 }
 
 func (s *promSeriesSet) Next() bool {
@@ -43,7 +55,7 @@ func (s *promSeriesSet) Err() error {
 	return s.set.Err()
 }
 
-func (s *promSeriesSet) Warnings() storage.Warnings {
+func (s *promSeriesSet) Warnings() annotations.Annotations {
 	return s.warns
 }
 
@@ -188,13 +200,17 @@ type errSeriesIterator struct {
 	err error
 }
 
-func (errSeriesIterator) Seek(int64) chunkenc.ValueType                        { return chunkenc.ValNone }
-func (errSeriesIterator) Next() chunkenc.ValueType                             { return chunkenc.ValNone }
-func (errSeriesIterator) At() (int64, float64)                                 { return 0, 0 }
-func (errSeriesIterator) AtHistogram() (int64, *histogram.Histogram)           { return 0, nil }
-func (errSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) { return 0, nil }
-func (errSeriesIterator) AtT() int64                                           { return 0 }
-func (it errSeriesIterator) Err() error                                        { return it.err }
+func (errSeriesIterator) Seek(int64) chunkenc.ValueType { return chunkenc.ValNone }
+func (errSeriesIterator) Next() chunkenc.ValueType      { return chunkenc.ValNone }
+func (errSeriesIterator) At() (int64, float64)          { return 0, 0 }
+func (errSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
+	return 0, nil
+}
+func (errSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return 0, nil
+}
+func (errSeriesIterator) AtT() int64    { return 0 }
+func (it errSeriesIterator) Err() error { return it.err }
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
@@ -232,12 +248,12 @@ func (it *chunkSeriesIterator) At() (t int64, v float64) {
 	return it.chunks[it.i].At()
 }
 
-func (it *chunkSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	return it.chunks[it.i].AtHistogram()
+func (it *chunkSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.chunks[it.i].AtHistogram(h)
 }
 
-func (it *chunkSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	return it.chunks[it.i].AtFloatHistogram()
+func (it *chunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return it.chunks[it.i].AtFloatHistogram(fh)
 }
 
 func (it *chunkSeriesIterator) AtT() int64 {
@@ -297,7 +313,7 @@ func (c *lazySeriesSet) At() storage.Series {
 	return nil
 }
 
-func (c *lazySeriesSet) Warnings() storage.Warnings {
+func (c *lazySeriesSet) Warnings() annotations.Annotations {
 	if c.set != nil {
 		return c.set.Warnings()
 	}

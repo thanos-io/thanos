@@ -39,6 +39,8 @@ var (
 		TLSConfig:              TLSConfig{},
 		MaxAsyncConcurrency:    20,
 		MaxAsyncBufferSize:     10000,
+
+		SetAsyncCircuitBreaker: defaultCircuitBreakerConfig,
 	}
 )
 
@@ -118,6 +120,9 @@ type RedisClientConfig struct {
 
 	// MaxAsyncConcurrency specifies the maximum number of SetAsync goroutines.
 	MaxAsyncConcurrency int `yaml:"max_async_concurrency"`
+
+	// SetAsyncCircuitBreaker configures the circuit breaker for SetAsync operations.
+	SetAsyncCircuitBreaker CircuitBreakerConfig `yaml:"set_async_circuit_breaker_config"`
 }
 
 func (c *RedisClientConfig) validate() error {
@@ -131,6 +136,9 @@ func (c *RedisClientConfig) validate() error {
 		}
 	}
 
+	if err := c.SetAsyncCircuitBreaker.validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -149,7 +157,9 @@ type RedisClient struct {
 	durationSetMulti prometheus.Observer
 	durationGetMulti prometheus.Observer
 
-	p *asyncOperationProcessor
+	p *AsyncOperationProcessor
+
+	setAsyncCircuitBreaker CircuitBreaker
 }
 
 // NewRedisClient makes a new RedisClient.
@@ -221,7 +231,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		client: client,
 		config: config,
 		logger: logger,
-		p:      newAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
+		p:      NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_redis_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
@@ -232,7 +242,9 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 			config.MaxSetMultiConcurrency,
 			gate.Sets,
 		),
+		setAsyncCircuitBreaker: newCircuitBreaker("redis-set-async", config.SetAsyncCircuitBreaker),
 	}
+
 	duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_redis_operation_duration_seconds",
 		Help:    "Duration of operations against redis.",
@@ -247,9 +259,12 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 
 // SetAsync implement RemoteCacheClient.
 func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) error {
-	return c.p.enqueueAsync(func() {
+	return c.p.EnqueueAsync(func() {
 		start := time.Now()
-		if err := c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
+		err := c.setAsyncCircuitBreaker.Execute(func() error {
+			return c.client.Do(context.Background(), c.client.B().Set().Key(key).Value(rueidis.BinaryString(value)).ExSeconds(int64(ttl.Seconds())).Build()).Error()
+		})
+		if err != nil {
 			level.Warn(c.logger).Log("msg", "failed to set item into redis", "err", err, "key", key, "value_size", len(value))
 			return
 		}

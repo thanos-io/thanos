@@ -69,9 +69,9 @@ adopters:
 - name: Amadeus
   url: https://amadeus.com
   logo: amadeus.png
-- name: Grofers
-  url: https://grofers.com
-  logo: grofers.png
+- name: Blinkit
+  url: https://blinkit.com
+  logo: blinkit.png
 - name: Tencent
   url: https://github.com/tkestack/tke
   logo: tencent.png
@@ -228,3 +228,15 @@ adopters:
 - name: Zenduty
   url: https://www.zenduty.com
   logo: zenduty.png
+- name: Banco do Brasil
+  url: https://www.bb.com.br/
+  logo: bb.png
+- name: Grupo OLX
+  url: https://www.olx.com.br/
+  logo: grupo-olx.png
+- name: TrueLayer
+  url: https://truelayer.com/
+  logo: truelayer.png
+- name: Platform Engineers
+  url: https://platformengineers.io
+  logo: platformengineers.png

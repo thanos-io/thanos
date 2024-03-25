@@ -15,6 +15,8 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/util/annotations"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/efficientgo/core/testutil"
@@ -72,7 +74,7 @@ func (s *mockedSeriesSet) At() storage.Series {
 }
 func (s *mockedSeriesSet) Err() error { return nil }
 
-func (s *mockedSeriesSet) Warnings() storage.Warnings { return nil }
+func (s *mockedSeriesSet) Warnings() annotations.Annotations { return nil }
 
 type mockedSeriesIterator struct {
 	cur     int
@@ -100,11 +102,11 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (s *mockedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (s *mockedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
@@ -533,7 +535,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			if tcase.isCounter {
 				f = "rate"
 			}
-			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f, false)
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())
@@ -658,39 +660,4 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	}
 	testutil.Ok(t, it.Err())
 	return res
-}
-
-func TestPushdownSeriesIterator(t *testing.T) {
-	cases := []struct {
-		a, b, exp []sample
-		function  string
-		tcase     string
-	}{
-		{
-			tcase:    "simple case",
-			a:        []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:        []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			exp:      []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			function: "max",
-		},
-		{
-			tcase:    "gaps but catches up",
-			a:        []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:        []sample{{10000, 20}, {40000, 23}},
-			exp:      []sample{{10000, 20}, {20000, 11}, {30000, 12}, {40000, 23}},
-			function: "max",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.tcase, func(t *testing.T) {
-			it := newPushdownSeriesIterator(
-				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
-				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.b)},
-				c.function,
-			)
-			res := expandSeries(t, noopAdjustableSeriesIterator{it})
-			testutil.Equals(t, c.exp, res)
-		})
-
-	}
 }

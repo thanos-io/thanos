@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -72,6 +73,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		ReloadURL:     reloadURL,
 		CfgFile:       input,
 		CfgOutputFile: output,
+		CfgDirs:       nil,
 		WatchedDirs:   nil,
 		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
 		RetryInterval: 100 * time.Millisecond,
@@ -216,6 +218,7 @@ faulty_config:
 		ReloadURL:     reloadURL,
 		CfgFile:       input,
 		CfgOutputFile: output,
+		CfgDirs:       nil,
 		WatchedDirs:   nil,
 		WatchInterval: 10 * time.Second, // 10 seconds to make the reload of faulty config fail quick
 		RetryInterval: 100 * time.Millisecond,
@@ -273,6 +276,516 @@ faulty_config:
 	}
 	cancel2()
 	g.Wait()
+}
+
+func TestReloader_ConfigDirApply(t *testing.T) {
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	i := 0
+	reloads := 0
+	reloadsMtx := sync.Mutex{}
+
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		reloadsMtx.Lock()
+		defer reloadsMtx.Unlock()
+
+		i++
+		if i%2 == 0 {
+			// Fail every second request to ensure that retry works.
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		reloads++
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	ruleDir := t.TempDir()
+	tempRule1File := path.Join(ruleDir, "rule1.yaml")
+	tempRule3File := path.Join(ruleDir, "rule3.yaml")
+	tempRule4File := path.Join(ruleDir, "rule4.yaml")
+
+	testutil.Ok(t, os.WriteFile(tempRule1File, []byte("rule1-changed"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(tempRule3File, []byte("rule3-changed"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(tempRule4File, []byte("rule4-changed"), os.ModePerm))
+
+	dir := t.TempDir()
+	dir2 := t.TempDir()
+
+	outDir := t.TempDir()
+	outDir2 := t.TempDir()
+
+	// dir
+	// └─ rule-dir -> dir2/rule-dir
+	// dir2
+	// └─ rule-dir
+	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
+
+	logger := log.NewNopLogger()
+	r := prometheus.NewRegistry()
+	reloader := New(
+		logger,
+		r,
+		&Options{
+			ReloadURL:     reloadURL,
+			CfgFile:       "",
+			CfgOutputFile: "",
+			CfgDirs: []CfgDirOption{
+				{
+					Dir:       dir,
+					OutputDir: outDir,
+				},
+				{
+					Dir:       dir2,
+					OutputDir: outDir2,
+				},
+			},
+			WatchedDirs:   nil,
+			WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
+			RetryInterval: 100 * time.Millisecond,
+		})
+
+	// dir
+	// ├─ rule-dir -> dir2/rule-dir
+	// └─ rule1.yaml
+	// dir2
+	// ├─ rule-dir
+	// │  └─ rule4.yaml
+	// ├─ rule3-001.yaml -> rule3-source.yaml
+	// └─ rule3-source.yaml
+	// The reloader watches 2 directories: dir and dir/rule-dir.
+	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
+
+	stepFunc := func(rel int) {
+		t.Log("Performing step number", rel)
+		switch rel {
+		case 0:
+			// Create rule2.yaml.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// └─ rule2.yaml (*)
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-001.yaml -> rule3-source.yaml
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
+			// out1
+			// ├─ rule1.yaml
+			// └─ rule2.yaml
+			// out2
+			// ├─ rule3-001.yaml
+			// └─ rule3-source.yaml
+		case 1:
+			// Update rule1.yaml.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml (*)
+			// └─ rule2.yaml
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-001.yaml -> rule3-source.yaml
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.Rename(tempRule1File, path.Join(dir, "rule1.yaml")))
+			// out1
+			// ├─ rule1.yaml
+			// └─ rule2.yaml
+			// out2
+			// ├─ rule3-001.yaml
+			// └─ rule3-source.yaml
+		case 2:
+			// Create dir/rule3.yaml (symlink to rule3-001.yaml).
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-001.yaml -> rule3-source.yaml
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
+			testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+			// out1
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml
+			// out2
+			// ├─ rule3-001.yaml
+			// └─ rule3-source.yaml
+		case 3:
+			// Update the symlinked file and replace the symlink file to trigger fsnotify.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml -> dir2/rule3-002.yaml (*)
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-002.yaml -> rule3-source.yaml (*)
+			// └─ rule3-source.yaml (*)
+			testutil.Ok(t, os.Rename(tempRule3File, path.Join(dir2, "rule3-source.yaml")))
+			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-002.yaml")))
+			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-002.yaml"), path.Join(dir2, "rule3.yaml")))
+			testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+			testutil.Ok(t, os.Remove(path.Join(dir2, "rule3-001.yaml")))
+			// out1
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml
+			// out2
+			// ├─ rule3-002.yaml
+			// └─ rule3-source.yaml
+		case 4:
+			// Update rule4.yaml in the symlinked directory.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml -> rule3-source.yaml
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml (*)
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.Rename(tempRule4File, path.Join(dir2, "rule-dir", "rule4.yaml")))
+			// out1
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml
+			// out2
+			// ├─ rule3-002.yaml
+			// └─ rule3-source.yaml
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	g := sync.WaitGroup{}
+	g.Add(1)
+	go func() {
+		defer g.Done()
+		defer cancel()
+
+		reloadsSeen := 0
+		init := false
+		for {
+			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+
+			reloadsMtx.Lock()
+			rel := reloads
+			reloadsMtx.Unlock()
+			if init && rel <= reloadsSeen {
+				continue
+			}
+
+			// Catch up if reloader is step(s) ahead.
+			for skipped := rel - reloadsSeen - 1; skipped > 0; skipped-- {
+				stepFunc(rel - skipped)
+			}
+
+			stepFunc(rel)
+
+			init = true
+			reloadsSeen = rel
+
+			if rel > 4 {
+				// All good.
+				return
+			}
+		}
+	}()
+	err = reloader.Watch(ctx)
+	cancel()
+	g.Wait()
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, 12.0, promtest.ToFloat64(reloader.watcher.watchEvents))
+	testutil.Equals(t, 0.0, promtest.ToFloat64(reloader.watcher.watchErrors))
+	testutil.Equals(t, 3.0, promtest.ToFloat64(reloader.reloadErrors))
+	testutil.Equals(t, 7.0, promtest.ToFloat64(reloader.reloads))
+	testutil.Equals(t, 4, reloads)
+
+	outEntries, err := os.ReadDir(outDir)
+	testutil.Ok(t, err)
+	outFiles := []string{}
+	for _, entry := range outEntries {
+		outFiles = append(outFiles, entry.Name())
+	}
+	slices.Sort(outFiles)
+	expectedOutFiles := []string{
+		"rule1.yaml",
+		"rule2.yaml",
+		"rule3.yaml",
+	}
+	slices.Sort(expectedOutFiles)
+	testutil.Equals(t, expectedOutFiles, outFiles)
+
+	data, err := os.ReadFile(filepath.Join(outDir, "rule1.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule1-changed", string(data))
+	data, err = os.ReadFile(filepath.Join(outDir, "rule2.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule2", string(data))
+	data, err = os.ReadFile(filepath.Join(outDir, "rule3.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule3-changed", string(data))
+
+	outEntries2, err := os.ReadDir(outDir2)
+	testutil.Ok(t, err)
+	outFiles2 := []string{}
+	for _, entry := range outEntries2 {
+		outFiles2 = append(outFiles2, entry.Name())
+	}
+	slices.Sort(outFiles2)
+	expectedOutFiles2 := []string{
+		"rule3-002.yaml",
+		"rule3-source.yaml",
+	}
+	slices.Sort(expectedOutFiles2)
+	testutil.Equals(t, expectedOutFiles2, outFiles2)
+
+	data, err = os.ReadFile(filepath.Join(outDir2, "rule3-002.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule3-changed", string(data))
+	data, err = os.ReadFile(filepath.Join(outDir2, "rule3-source.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule3-changed", string(data))
+}
+
+func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := &atomic.Value{}
+	reloads.Store(0)
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir := t.TempDir()
+	dir2 := t.TempDir()
+
+	outDir := t.TempDir()
+	outDir2 := t.TempDir()
+
+	// dir
+	// └─ rule-dir -> dir2/rule-dir
+	// dir2
+	// └─ rule-dir
+	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
+
+	logger := log.NewNopLogger()
+	reloader := New(
+		logger,
+		nil,
+		&Options{
+			ReloadURL:     reloadURL,
+			CfgFile:       "",
+			CfgOutputFile: "",
+			CfgDirs: []CfgDirOption{
+				{
+					Dir:       dir,
+					OutputDir: outDir,
+				},
+				{
+					Dir:       dir2,
+					OutputDir: outDir2,
+				},
+			},
+			WatchedDirs:   nil,
+			WatchInterval: 1 * time.Second, // use a small watch interval.
+			RetryInterval: 9999 * time.Hour,
+		},
+	)
+
+	// dir
+	// ├─ rule-dir -> dir2/rule-dir
+	// ├─ rule1.yaml
+	// └─ rule2.yaml
+	// dir2
+	// ├─ rule-dir
+	// │  └─ rule4.yaml
+	// ├─ rule3-001.yaml -> rule3-source.yaml
+	// └─ rule3-source.yaml
+	//
+	// The reloader watches 2 directories: dir and dir/rule-dir.
+	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	g := sync.WaitGroup{}
+	g.Add(1)
+	go func() {
+		defer g.Done()
+		defer cancel()
+
+		reloadsSeen := 0
+		init := false
+		for {
+			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+
+			rel := reloads.Load().(int)
+			if init && rel <= reloadsSeen {
+				continue
+			}
+			init = true
+			reloadsSeen = rel
+
+			t.Log("Performing step number", rel)
+			switch rel {
+			case 0:
+				// Create rule3.yaml (symlink to rule3-001.yaml).
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml
+				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
+				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+				// out1
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml
+				// out2
+				// ├─ rule3-001.yaml
+				// └─ rule3-source.yaml
+			case 1:
+				// Update the symlinked file but do not replace the symlink in dir.
+				//
+				// fsnotify shouldn't send any event because the change happens
+				// in a directory that isn't watched but the reloader should detect
+				// the update thanks to the watch interval.
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> dir2/rule3-001.yaml
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml (*)
+				testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
+				// out1
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml
+				// out2
+				// ├─ rule3-001.yaml
+				// └─ rule3-source.yaml
+			}
+
+			if rel > 1 {
+				// All good.
+				return
+			}
+		}
+	}()
+	err = reloader.Watch(ctx)
+	cancel()
+	g.Wait()
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, 2, reloads.Load().(int))
+
+	outEntries, err := os.ReadDir(outDir)
+	testutil.Ok(t, err)
+	outFiles := []string{}
+	for _, entry := range outEntries {
+		outFiles = append(outFiles, entry.Name())
+	}
+	slices.Sort(outFiles)
+	expectedOutFiles := []string{
+		"rule1.yaml",
+		"rule2.yaml",
+		"rule3.yaml",
+	}
+	slices.Sort(expectedOutFiles)
+	testutil.Equals(t, expectedOutFiles, outFiles)
+
+	data, err := os.ReadFile(filepath.Join(outDir, "rule1.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule", string(data))
+	data, err = os.ReadFile(filepath.Join(outDir, "rule2.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule2", string(data))
+	data, err = os.ReadFile(filepath.Join(outDir, "rule3.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule3-changed", string(data))
+
+	outEntries2, err := os.ReadDir(outDir2)
+	testutil.Ok(t, err)
+	outFiles2 := []string{}
+	for _, entry := range outEntries2 {
+		outFiles2 = append(outFiles2, entry.Name())
+	}
+	slices.Sort(outFiles2)
+	expectedOutFiles2 := []string{
+		"rule3-001.yaml",
+		"rule3-source.yaml",
+	}
+	slices.Sort(expectedOutFiles2)
+	testutil.Equals(t, expectedOutFiles2, outFiles2)
+
+	data, err = os.ReadFile(filepath.Join(outDir2, "rule3-001.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule3-changed", string(data))
+	data, err = os.ReadFile(filepath.Join(outDir2, "rule3-source.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, "rule3-changed", string(data))
 }
 
 func TestReloader_DirectoriesApply(t *testing.T) {
@@ -334,6 +847,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 			ReloadURL:     reloadURL,
 			CfgFile:       "",
 			CfgOutputFile: "",
+			CfgDirs:       nil,
 			WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
 			WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
 			RetryInterval: 100 * time.Millisecond,
@@ -484,7 +998,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	testutil.Equals(t, 5, reloads)
 }
 
-func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
+func TestReloader_DirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -521,6 +1035,7 @@ func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 			ReloadURL:     reloadURL,
 			CfgFile:       "",
 			CfgOutputFile: "",
+			CfgDirs:       nil,
 			WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
 			WatchInterval: 1 * time.Second, // use a small watch interval.
 			RetryInterval: 9999 * time.Hour,
@@ -651,6 +1166,7 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 		ReloadURL:     reloadURL,
 		CfgFile:       input,
 		CfgOutputFile: output,
+		CfgDirs:       nil,
 		WatchedDirs:   nil,
 		WatchInterval: 0, // Set WatchInterval equals to 0
 		RetryInterval: 100 * time.Millisecond,

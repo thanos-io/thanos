@@ -17,6 +17,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	e2eobs "github.com/efficientgo/e2e/observable"
 	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
@@ -26,7 +27,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -140,6 +141,27 @@ groups:
       summary: "I always complain and allow partial response in query."
 `
 
+	testAlertRuleKeepFiringFor = `
+groups:
+- name: example_rule_keep_firing_for
+  interval: 1s
+  rules:
+  - alert: TestAlert_KeepFiringFor
+    expr: absent(metric_keep_firing_for)
+    for: 2s
+    keep_firing_for: 10m
+    labels:
+      severity: page
+`
+	testRecordingRuleKeepFiringFor = `
+groups:
+- name: recording_rule_keep_firing_for
+  interval: 1s
+  rules:
+  - record: metric_keep_firing_for
+    expr: 1
+`
+
 	amTimeout = model.Duration(10 * time.Second)
 )
 
@@ -171,7 +193,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
-func reloadRulesSignal(t *testing.T, r *e2emon.InstrumentedRunnable) {
+func reloadRulesSignal(t *testing.T, r *e2eobs.Observable) {
 	c := e2e.NewCommand("kill", "-1", "1")
 	testutil.Ok(t, r.Exec(c))
 }
@@ -301,8 +323,8 @@ func TestRule(t *testing.T) {
 
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				FileSDConfigs: []httpconfig.FileSDConfig{
+			EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+				FileSDConfigs: []clientconfig.HTTPFileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
 						Files:           []string{filepath.Join(rFuture.InternalDir(), amTargetsSubDir, "*.yaml")},
@@ -317,18 +339,20 @@ func TestRule(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				// We test Statically Addressed queries in other tests. Focus on FileSD here.
-				FileSDConfigs: []httpconfig.FileSDConfig{
-					{
-						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
-						RefreshInterval: model.Duration(time.Second),
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+					// We test Statically Addressed queries in other tests. Focus on FileSD here.
+					FileSDConfigs: []clientconfig.HTTPFileSDConfig{
+						{
+							// FileSD which will be used to register discover dynamically q.
+							Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
+							RefreshInterval: model.Duration(time.Second),
+						},
 					},
+					Scheme: "http",
 				},
-				Scheme: "http",
 			},
 		},
 	})
@@ -514,6 +538,100 @@ func TestRule(t *testing.T) {
 	})
 }
 
+func TestRule_KeepFiringFor(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2eKeepFiringFor")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+
+	queryTargetsSubDir := filepath.Join("rules_query_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
+
+	rulesSubDir := filepath.Join("rules")
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFile(t, filepath.Join(rulesPath, "alert_keep_firing_for.yaml"), testAlertRuleKeepFiringFor)
+
+	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
+		{
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+					// We test Statically Addressed queries in other tests. Focus on FileSD here.
+					FileSDConfigs: []clientconfig.HTTPFileSDConfig{
+						{
+							// FileSD which will be used to register discover dynamically q.
+							Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
+							RefreshInterval: model.Duration(time.Second),
+						},
+					},
+					Scheme: "http",
+				},
+			},
+		},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	// Attach querier to target files.
+	writeTargets(t, filepath.Join(rFuture.Dir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
+
+	t.Run("check keep_firing_for alert is triggering", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_KeepFiringFor",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+		})
+	})
+
+	t.Run("resolve keep_firing_for condition", func(t *testing.T) {
+		// Create a recording rule that will add the missing metric
+		createRuleFile(t, filepath.Join(rulesPath, "record_metric_keep_firing_for.yaml"), testRecordingRuleKeepFiringFor)
+		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
+
+		// Wait for metric to pop up
+		queryWaitAndAssert(t, ctx, q.Endpoint("http"), func() string { return "metric_keep_firing_for" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"__name__": "metric_keep_firing_for",
+					"replica":  "1",
+				},
+				Value: model.SampleValue(1),
+			},
+		})
+	})
+
+	t.Run("keep_firing_for should continue triggering", func(t *testing.T) {
+		// Alert should still be firing
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_KeepFiringFor",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+		})
+	})
+}
+
 // TestRule_CanRemoteWriteData checks that Thanos Ruler can be run in stateless mode
 // where it remote_writes rule evaluations to a Prometheus remote-write endpoint (typically
 // a Thanos Receiver).
@@ -552,7 +670,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
+			EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 				StaticAddresses: []string{
 					am.InternalEndpoint("http"),
 				},
@@ -561,13 +679,15 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{
-					q.InternalEndpoint("http"),
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+					StaticAddresses: []string{
+						q.InternalEndpoint("http"),
+					},
+					Scheme: "http",
 				},
-				Scheme: "http",
 			},
 		},
 	}, []*config.RemoteWriteConfig{
@@ -623,7 +743,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 		WithReplicaLabels("replica", "receive").Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	rulesSubDir := "rules"
-	var rulers []*e2emon.InstrumentedRunnable
+	var rulers []*e2eobs.Observable
 	for i := 1; i <= 2; i++ {
 		rFuture := e2ethanos.NewRulerBuilder(e, fmt.Sprintf("%d", i))
 		rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
@@ -633,7 +753,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 		}
 		r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{
 						am.InternalEndpoint("http"),
 					},
@@ -644,13 +764,15 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 			},
 		}).WithForGracePeriod("500ms").
 			WithRestoreIgnoredLabels("tenant_id").
-			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 				{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
-							q.InternalEndpoint("http"),
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+							StaticAddresses: []string{
+								q.InternalEndpoint("http"),
+							},
+							Scheme: "http",
 						},
-						Scheme: "http",
 					},
 				},
 			}, []*config.RemoteWriteConfig{

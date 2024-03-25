@@ -8,7 +8,8 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/annotations"
+
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -18,7 +19,7 @@ var _ UnaryClient = &GRPCClient{}
 // UnaryClient is a gRPC metadatapb.Metadata client which expands streaming metadata API. Useful for consumers that does not
 // support streaming.
 type UnaryClient interface {
-	MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error)
+	MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, annotations.Annotations, error)
 }
 
 // GRPCClient allows to retrieve metadata from local gRPC streaming server implementation.
@@ -33,7 +34,7 @@ func NewGRPCClient(ts metadatapb.MetadataServer) *GRPCClient {
 	}
 }
 
-func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error) {
+func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "metadata_grpc_request")
 	defer span.Finish()
 
@@ -66,7 +67,7 @@ type metadataServer struct {
 	metric string
 	limit  int
 
-	warnings    []error
+	warnings    annotations.Annotations
 	metadataMap map[string][]metadatapb.Meta
 	mu          sync.Mutex
 }
@@ -75,7 +76,7 @@ func (srv *metadataServer) Send(res *metadatapb.MetricMetadataResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings.Add(errors.New(res.GetWarning()))
 		return nil
 	}
 

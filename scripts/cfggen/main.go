@@ -27,10 +27,9 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 
-	"github.com/thanos-io/thanos/pkg/httpconfig"
-
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
@@ -82,12 +81,12 @@ func init() {
 	configs[name(logging.RequestConfig{})] = logging.RequestConfig{}
 
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
-	alertmgrCfg.EndpointsConfig.FileSDConfigs = []httpconfig.FileSDConfig{{}}
+	alertmgrCfg.EndpointsConfig.FileSDConfigs = []clientconfig.HTTPFileSDConfig{{}}
 	configs[name(alert.AlertingConfig{})] = alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}
 
-	queryCfg := httpconfig.DefaultConfig()
-	queryCfg.EndpointsConfig.FileSDConfigs = []httpconfig.FileSDConfig{{}}
-	configs[name(httpconfig.Config{})] = []httpconfig.Config{queryCfg}
+	queryCfg := clientconfig.DefaultConfig()
+	queryCfg.HTTPConfig.EndpointsConfig.FileSDConfigs = []clientconfig.HTTPFileSDConfig{{}}
+	configs[name(clientconfig.Config{})] = []clientconfig.Config{queryCfg}
 
 	for typ, config := range bucketConfigs {
 		configs[name(config)] = client.BucketConfig{Type: typ, Config: config}

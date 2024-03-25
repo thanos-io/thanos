@@ -28,6 +28,11 @@ permalinks:
   # TODO(bwplotka): Move to mdox + fixes to ensure we don't need to manually do this.
   # For now we added few entries for advance.
   tip: "/:sections/:filename.md"
+  v0.34: "/:sections/:filename.md"
+  v0.33: "/:sections/:filename.md"
+  v0.32: "/:sections/:filename.md"
+  v0.31: "/:sections/:filename.md"
+  v0.30: "/:sections/:filename.md"
   v0.29: "/:sections/:filename.md"
   v0.28: "/:sections/:filename.md"
   v0.27: "/:sections/:filename.md"

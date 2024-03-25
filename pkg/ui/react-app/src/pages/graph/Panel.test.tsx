@@ -19,11 +19,16 @@ const defaultProps: PanelProps = {
     stacked: false,
     maxSourceResolution: 'auto',
     useDeduplication: true,
+    forceTracing: false,
     usePartialResponse: false,
     storeMatches: [],
     engine: 'prometheus',
-    explain: false,
-    disableExplainCheckbox: false,
+    analyze: false,
+    disableAnalyzeCheckbox: false,
+    tenant: 'default-tenant',
+  },
+  onUsePartialResponseChange: (): void => {
+    // Do nothing.
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -46,6 +51,8 @@ const defaultProps: PanelProps = {
   enableHighlighting: true,
   enableLinter: true,
   defaultEngine: 'prometheus',
+  queryMode: 'local',
+  usePartialResponse: true,
 };
 
 describe('Panel', () => {
@@ -94,11 +101,13 @@ describe('Panel', () => {
       stacked: false,
       maxSourceResolution: 'auto',
       useDeduplication: true,
+      forceTracing: false,
       usePartialResponse: false,
       storeMatches: [],
       engine: 'prometheus',
-      explain: false,
-      disableExplainCheckbox: false,
+      analyze: false,
+      disableAnalyzeCheckbox: false,
+      tenant: 'default-tenant',
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

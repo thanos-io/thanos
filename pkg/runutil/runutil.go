@@ -64,6 +64,23 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
+// RepeatInfinitely executes f every interval seconds until stopc is closed or f returns an error.
+func RepeatInfinitely(logger log.Logger, interval time.Duration, stopc <-chan struct{}, f func() error) {
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+
+	for {
+		if err := f(); err != nil {
+			level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
+		}
+		select {
+		case <-stopc:
+			return
+		case <-tick.C:
+		}
+	}
+}
+
 // Repeat executes f every interval seconds until stopc is closed or f returns an error.
 // It executes f once right after being called.
 func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error {
@@ -135,8 +152,7 @@ func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string,
 	CloseWithLogOnErr(logger, r, format, a...)
 }
 
-// CloseWithErrCapture runs function and on error return error by argument including the given error (usually
-// from caller function).
+// CloseWithErrCapture closes closer, wraps any error with message from fmt and args, and stores this in err.
 func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
 	merr := errutil.MultiError{}
 

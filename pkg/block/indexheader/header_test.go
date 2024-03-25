@@ -100,7 +100,7 @@ func TestReaders(t *testing.T) {
 				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
-				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
+				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()
@@ -141,6 +141,38 @@ func TestReaders(t *testing.T) {
 					testutil.Ok(t, err)
 					testutil.Equals(t, []string(nil), vals)
 
+					// single value
+					rngs, err := br.PostingsOffsets("a", "9")
+					testutil.Ok(t, err)
+					for _, rng := range rngs {
+						testutil.Assert(t, rng.End > rng.Start)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "2", "3", "4", "5", "6", "7", "8", "9")
+					testutil.Ok(t, err)
+					for _, rng := range rngs {
+						testutil.Assert(t, rng.End > rng.Start)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "0")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 1)
+					testutil.Equals(t, NotFoundRange, rngs[0])
+
+					rngs, err = br.PostingsOffsets("a", "0", "10", "99")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 3)
+					for _, rng := range rngs {
+						testutil.Equals(t, NotFoundRange, rng)
+					}
+
+					rngs, err = br.PostingsOffsets("a", "1", "10", "9")
+					testutil.Ok(t, err)
+					testutil.Assert(t, len(rngs) == 3)
+					testutil.Assert(t, rngs[0].End > rngs[0].Start)
+					testutil.Assert(t, rngs[2].End > rngs[2].Start)
+					testutil.Equals(t, NotFoundRange, rngs[1])
+
 					// Regression tests for https://github.com/thanos-io/thanos/issues/2213.
 					// Most of not existing value was working despite bug, except in certain unlucky cases
 					// it was causing "invalid size" errors.
@@ -174,7 +206,7 @@ func TestReaders(t *testing.T) {
 				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
-				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), nil)
+				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil, false)
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()
@@ -187,6 +219,8 @@ func TestReaders(t *testing.T) {
 }
 
 func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerReader Reader) {
+	ctx := context.Background()
+
 	indexReader, err := index.NewReader(indexByteSlice)
 	testutil.Ok(t, err)
 	defer func() { _ = indexReader.Close() }()
@@ -200,14 +234,14 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		iter := indexReader.Symbols()
 		i := 0
 		for iter.Next() {
-			r, err := headerReader.LookupSymbol(uint32(i))
+			r, err := headerReader.LookupSymbol(ctx, uint32(i))
 			testutil.Ok(t, err)
 			testutil.Equals(t, iter.At(), r)
 
 			i++
 		}
 		testutil.Ok(t, iter.Err())
-		_, err := headerReader.LookupSymbol(uint32(i))
+		_, err := headerReader.LookupSymbol(ctx, uint32(i))
 		testutil.NotOk(t, err)
 
 	} else {
@@ -216,15 +250,19 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		testutil.Ok(t, err)
 
 		for refs, sym := range symbols {
-			r, err := headerReader.LookupSymbol(refs)
+			r1, err := headerReader.LookupSymbol(ctx, refs)
 			testutil.Ok(t, err)
-			testutil.Equals(t, sym, r)
+			testutil.Equals(t, sym, r1)
+
+			r2, err := headerReader.LookupSymbol(ctx, refs)
+			testutil.Ok(t, err)
+			testutil.Equals(t, sym, r2)
 		}
-		_, err = headerReader.LookupSymbol(200000)
+		_, err = headerReader.LookupSymbol(ctx, 200000)
 		testutil.NotOk(t, err)
 	}
 
-	expLabelNames, err := indexReader.LabelNames()
+	expLabelNames, err := indexReader.LabelNames(ctx)
 	testutil.Ok(t, err)
 	actualLabelNames, err := headerReader.LabelNames()
 	testutil.Ok(t, err)
@@ -236,7 +274,7 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	minStart := int64(math.MaxInt64)
 	maxEnd := int64(math.MinInt64)
 	for il, lname := range expLabelNames {
-		expectedLabelVals, err := indexReader.SortedLabelValues(lname)
+		expectedLabelVals, err := indexReader.SortedLabelValues(ctx, lname)
 		testutil.Ok(t, err)
 
 		vals, err := headerReader.LabelValues(lname)
@@ -361,7 +399,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		br, err := newFileBinaryReader(fn, 32)
+		br, err := newFileBinaryReader(fn, 32, NewBinaryReaderMetrics(nil))
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
 	}
@@ -399,7 +437,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
 	// Create an index reader.
-	reader, err := NewBinaryReader(ctx, logger, bkt, tmpDir, id1, postingOffsetsInMemSampling)
+	reader, err := NewBinaryReader(ctx, logger, bkt, tmpDir, id1, postingOffsetsInMemSampling, NewBinaryReaderMetrics(nil))
 	testutil.Ok(b, err)
 
 	// Get the offset of each label value symbol.
@@ -415,7 +453,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	for n := 0; n < b.N; n++ {
 		for i := 0; i < len(symbolsOffsets); i++ {
-			if _, err := reader.LookupSymbol(symbolsOffsets[i]); err != nil {
+			if _, err := reader.LookupSymbol(ctx, symbolsOffsets[i]); err != nil {
 				b.Fail()
 			}
 		}

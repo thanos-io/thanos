@@ -2,16 +2,16 @@
 version: 2.1
 
 orbs:
-  go: circleci/go@1.7.2
+  go: circleci/go@1.7.3
   git-shallow-clone: guitarrapc/git-shallow-clone@2.5.0
 
 executors:
   golang:
     docker:
-      - image: cimg/go:1.20-node
+      - image: cimg/go:1.21-node
   golang-test:
     docker:
-      - image: cimg/go:1.20-node
+      - image: cimg/go:1.21-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
@@ -21,9 +21,15 @@ jobs:
       GO111MODULE: "on"
     steps:
       - git-shallow-clone/checkout
-      - go/mod-download-cached
+      - go/load-cache
+      - go/mod-download
+      - run:
+          name: Download bingo modules
+          command: |
+            make install-tool-deps
+      - go/save-cache
       - setup_remote_docker:
-          version: 20.10.12
+          version: docker24
       - run:
           name: Create Secret if PR is not forked
           # GCS integration tests are run only for author's PR that have write access, because these tests
@@ -35,6 +41,7 @@ jobs:
             fi
       - run:
           name: "Run unit tests."
+          no_output_timeout: "30m"
           environment:
             THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS
             # Variables for Swift testing.
@@ -75,7 +82,7 @@ jobs:
       - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.12
+          version: docker24
       - attach_workspace:
           at: .
       # Register qemu to support multi-arch.
@@ -97,7 +104,7 @@ jobs:
       - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.12
+          version: docker24
       - attach_workspace:
           at: .
       - run: make tarballs-release

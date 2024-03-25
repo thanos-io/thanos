@@ -59,7 +59,7 @@ func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetr
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "indexheader_lazy_load_duration_seconds",
 			Help:    "Duration of the index-header lazy loading in seconds.",
-			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 120, 300},
+			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
 		}),
 	}
 }
@@ -74,6 +74,7 @@ type LazyBinaryReader struct {
 	id                          ulid.ULID
 	postingOffsetsInMemSampling int
 	metrics                     *LazyBinaryReaderMetrics
+	binaryReaderMetrics         *BinaryReaderMetrics
 	onClosed                    func(*LazyBinaryReader)
 
 	readerMx  sync.RWMutex
@@ -82,6 +83,9 @@ type LazyBinaryReader struct {
 
 	// Keep track of the last time it was used.
 	usedAt *atomic.Int64
+
+	// If true, index header will be downloaded at query time rather than initialization time.
+	lazyDownload bool
 }
 
 // NewLazyBinaryReader makes a new LazyBinaryReader. If the index-header does not exist
@@ -96,9 +100,11 @@ func NewLazyBinaryReader(
 	id ulid.ULID,
 	postingOffsetsInMemSampling int,
 	metrics *LazyBinaryReaderMetrics,
+	binaryReaderMetrics *BinaryReaderMetrics,
 	onClosed func(*LazyBinaryReader),
+	lazyDownload bool,
 ) (*LazyBinaryReader, error) {
-	if dir != "" {
+	if dir != "" && !lazyDownload {
 		indexHeaderFile := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
 		// If the index-header doesn't exist we should download it.
 		if _, err := os.Stat(indexHeaderFile); err != nil {
@@ -114,6 +120,7 @@ func NewLazyBinaryReader(
 			}
 
 			level.Debug(logger).Log("msg", "built index-header file", "path", indexHeaderFile, "elapsed", time.Since(start))
+			binaryReaderMetrics.downloadDuration.Observe(time.Since(start).Seconds())
 		}
 	}
 
@@ -125,8 +132,10 @@ func NewLazyBinaryReader(
 		id:                          id,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		metrics:                     metrics,
+		binaryReaderMetrics:         binaryReaderMetrics,
 		usedAt:                      atomic.NewInt64(time.Now().UnixNano()),
 		onClosed:                    onClosed,
+		lazyDownload:                lazyDownload,
 	}, nil
 }
 
@@ -154,6 +163,19 @@ func (r *LazyBinaryReader) IndexVersion() (int, error) {
 	return r.reader.IndexVersion()
 }
 
+// PostingsOffsets implements Reader.
+func (r *LazyBinaryReader) PostingsOffsets(name string, values ...string) ([]index.Range, error) {
+	r.readerMx.RLock()
+	defer r.readerMx.RUnlock()
+
+	if err := r.load(); err != nil {
+		return nil, err
+	}
+
+	r.usedAt.Store(time.Now().UnixNano())
+	return r.reader.PostingsOffsets(name, values...)
+}
+
 // PostingsOffset implements Reader.
 func (r *LazyBinaryReader) PostingsOffset(name, value string) (index.Range, error) {
 	r.readerMx.RLock()
@@ -168,7 +190,7 @@ func (r *LazyBinaryReader) PostingsOffset(name, value string) (index.Range, erro
 }
 
 // LookupSymbol implements Reader.
-func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
+func (r *LazyBinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
@@ -177,7 +199,7 @@ func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
 	}
 
 	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.LookupSymbol(o)
+	return r.reader.LookupSymbol(ctx, o)
 }
 
 // LabelValues implements Reader.
@@ -244,7 +266,7 @@ func (r *LazyBinaryReader) load() (returnErr error) {
 	r.metrics.loadCount.Inc()
 	startTime := time.Now()
 
-	reader, err := NewBinaryReader(r.ctx, r.logger, r.bkt, r.dir, r.id, r.postingOffsetsInMemSampling)
+	reader, err := NewBinaryReader(r.ctx, r.logger, r.bkt, r.dir, r.id, r.postingOffsetsInMemSampling, r.binaryReaderMetrics)
 	if err != nil {
 		r.metrics.loadFailedCount.Inc()
 		r.readerErr = err

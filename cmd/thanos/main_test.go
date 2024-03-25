@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -77,9 +78,9 @@ func (b *erroringBucket) IsObjNotFoundErr(err error) bool {
 	return b.bkt.IsObjNotFoundErr(err)
 }
 
-// IsCustomerManagedKeyError returns true if error means that customer managed key is invalid.
-func (b *erroringBucket) IsCustomerManagedKeyError(err error) bool {
-	return b.bkt.IsCustomerManagedKeyError(err)
+// IsAccessDeniedErr returns true if error means that access to the object was denied.
+func (b *erroringBucket) IsAccessDeniedErr(err error) bool {
+	return b.bkt.IsAccessDeniedErr(err)
 }
 
 // Attributes returns information about the specified object.
@@ -157,7 +158,8 @@ func TestRegression4960_Deadlock(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
-	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, "", nil, nil)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
+	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
 	metas, _, err := metaFetcher.Fetch(ctx)
@@ -196,7 +198,8 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
-	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, "", nil, nil)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
+	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
 	metas, _, err := metaFetcher.Fetch(ctx)

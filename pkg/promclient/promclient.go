@@ -33,8 +33,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -85,7 +85,7 @@ func NewClient(c HTTPClient, logger log.Logger, userAgent string) *Client {
 
 // NewDefaultClient returns Client with tracing tripperware.
 func NewDefaultClient() *Client {
-	client, _ := httpconfig.NewHTTPClient(httpconfig.ClientConfig{}, "")
+	client, _ := clientconfig.NewHTTPClient(clientconfig.HTTPClientConfig{}, "")
 	return NewWithTracingClient(
 		log.NewNopLogger(),
 		client,
@@ -105,7 +105,7 @@ func NewWithTracingClient(logger log.Logger, httpClient *http.Client, userAgent 
 
 // req2xx sends a request to the given url.URL. If method is http.MethodPost then
 // the raw query is encoded in the body and the appropriate Content-Type is set.
-func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byte, _ int, err error) {
+func (c *Client) req2xx(ctx context.Context, u *url.URL, method string, headers http.Header) (_ []byte, _ int, err error) {
 	var b io.Reader
 	if method == http.MethodPost {
 		rq := u.RawQuery
@@ -117,6 +117,10 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "create %s request", method)
 	}
+	if headers != nil {
+		req.Header = headers
+	}
+
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
 	}
@@ -157,6 +161,22 @@ func IsWALDirAccessible(dir string) error {
 	return nil
 }
 
+// IsDirAccessible returns no error if dir can be found.
+func IsDirAccessible(dir string) error {
+	const errMsg = "Dir is not accessible."
+
+	f, err := os.Stat(dir)
+	if err != nil {
+		return errors.Wrap(err, errMsg)
+	}
+
+	if !f.IsDir() {
+		return errors.New(errMsg)
+	}
+
+	return nil
+}
+
 // ExternalLabels returns sorted external labels from /api/v1/status/config Prometheus endpoint.
 // Note that configuration can be hot reloadable on Prometheus, so this config might change in runtime.
 func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
@@ -166,9 +186,9 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 	span, ctx := tracing.StartSpan(ctx, "/prom_config HTTP[client]")
 	defer span.Finish()
 
-	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
+	body, _, err := c.req2xx(ctx, &u, http.MethodGet, nil)
 	if err != nil {
-		return nil, err
+		return labels.EmptyLabels(), err
 	}
 	var d struct {
 		Data struct {
@@ -176,18 +196,16 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &d); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal response: %v", string(body))
+		return labels.EmptyLabels(), errors.Wrapf(err, "unmarshal response: %v", string(body))
 	}
 	var cfg struct {
 		GlobalConfig config.GlobalConfig `yaml:"global"`
 	}
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
-		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
+		return labels.EmptyLabels(), errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
 
-	lset := cfg.GlobalConfig.ExternalLabels
-	sort.Sort(lset)
-	return lset, nil
+	return cfg.GlobalConfig.ExternalLabels, nil
 }
 
 type Flags struct {
@@ -363,6 +381,8 @@ type QueryOptions struct {
 	MaxSourceResolution     string
 	Engine                  string
 	Explain                 bool
+	Analyze                 bool
+	HTTPHeaders             http.Header
 }
 
 func (p *QueryOptions) AddTo(values url.Values) error {
@@ -372,6 +392,7 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	}
 
 	values.Add("explain", fmt.Sprintf("%v", p.Explain))
+	values.Add("analyze", fmt.Sprintf("%v", p.Analyze))
 	values.Add("engine", p.Engine)
 
 	var partialResponseValue string
@@ -423,7 +444,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 		method = http.MethodGet
 	}
 
-	body, _, err := c.req2xx(ctx, &u, method)
+	body, _, err := c.req2xx(ctx, &u, method, opts.HTTPHeaders)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "read query instant response")
 	}
@@ -483,19 +504,18 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 
 	vec := make(promql.Vector, 0, len(vectorResult))
 
+	b := labels.NewScratchBuilder(0)
 	for _, e := range vectorResult {
-		lset := make(labels.Labels, 0, len(e.Metric))
+		b.Reset()
 
 		for k, v := range e.Metric {
-			lset = append(lset, labels.Label{
-				Name:  string(k),
-				Value: string(v),
-			})
+			b.Add(string(k), string(v))
 		}
-		sort.Sort(lset)
+		// TODO(mhoffm): shouldn't labels from prometheus results be already sorted?
+		b.Sort()
 
 		vec = append(vec, promql.Sample{
-			Metric: lset,
+			Metric: b.Labels(),
 			T:      int64(e.Timestamp),
 			F:      float64(e.Value),
 		})
@@ -529,7 +549,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	span, ctx := tracing.StartSpan(ctx, "/prom_query_range HTTP[client]")
 	defer span.Finish()
 
-	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
+	body, _, err := c.req2xx(ctx, &u, http.MethodGet, opts.HTTPHeaders)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "read query range response")
 	}
@@ -612,7 +632,7 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 	span, ctx := tracing.StartSpan(ctx, "/alertmanager_alerts HTTP[client]")
 	defer span.Finish()
 
-	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
+	body, _, err := c.req2xx(ctx, &u, http.MethodGet, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +663,7 @@ func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error
 	defer span.Finish()
 
 	// We get status code 404 or 405 for prometheus versions lower than 2.14.0
-	body, code, err := c.req2xx(ctx, &u, http.MethodGet)
+	body, code, err := c.req2xx(ctx, &u, http.MethodGet, nil)
 	if err != nil {
 		if code == http.StatusNotFound {
 			return "0", nil
@@ -675,7 +695,7 @@ func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string
 	span, ctx := tracing.StartSpan(ctx, spanName)
 	defer span.Finish()
 
-	body, code, err := c.req2xx(ctx, u, http.MethodGet)
+	body, code, err := c.req2xx(ctx, u, http.MethodGet, nil)
 	if err != nil {
 		if code, exists := statusToCode[code]; exists && code != 0 {
 			return status.Error(code, err.Error())
