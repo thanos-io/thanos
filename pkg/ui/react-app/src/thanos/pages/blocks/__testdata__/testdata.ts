@@ -85,6 +85,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'sidecar',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEG1J4JXZGQMZA9TQ3DHMTET',
         version: 1,
@@ -147,6 +164,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'compactor',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEEXQJ71TT74ZTQZN50CEETE',
         version: 1,
@@ -195,6 +229,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'sidecar',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEAQ4FPMZXKJE0EXE5P0YCWP',
         version: 1,
@@ -219,6 +270,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'sidecar',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEF8AGCHTPJ1MZ8KH0SEJZ4E',
         version: 1,
@@ -291,6 +359,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'sidecar',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEF75H09C3TEPJHRHFTCFQD4',
         version: 1,
@@ -413,6 +498,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'compactor',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEB0R6V1EX65QW2B4A2HT0HH',
         version: 1,
@@ -511,6 +613,23 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
             monitor: 'prometheus_one',
           },
           source: 'compactor',
+          files: [
+            {
+              rel_path: 'chunks/000001',
+              size_bytes: 536870882,
+            },
+            {
+              rel_path: 'chunks/000002',
+              size_bytes: 143670,
+            },
+            {
+              rel_path: 'index',
+              size_bytes: 257574,
+            },
+            {
+              rel_path: 'meta.json',
+            },
+          ],
         },
         ulid: '01EEFA63X7DYWPW0AAGX47MY09',
         version: 1,

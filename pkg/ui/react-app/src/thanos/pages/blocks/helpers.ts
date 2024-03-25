@@ -187,6 +187,25 @@ export const getBlockSizeStats = (block?: Block): BlockSizeStats | undefined => 
   return sizeStats;
 };
 
+export const sumBlockSizeStats = (bp: BlocksPool, compactionLevel: number): BlockSizeStats => {
+  const poolSizeStats: BlockSizeStats = { chunkBytes: 0, indexBytes: 0, totalBytes: 0 };
+
+  Object.values(bp).forEach((rows) => {
+    rows.forEach((row) => {
+      getBlocksByCompactionLevel(row, compactionLevel).forEach((block) => {
+        const blockStats = getBlockSizeStats(block);
+        if (blockStats) {
+          poolSizeStats.chunkBytes += blockStats.chunkBytes;
+          poolSizeStats.indexBytes += blockStats.indexBytes;
+          poolSizeStats.totalBytes += blockStats.totalBytes;
+        }
+      });
+    });
+  });
+
+  return poolSizeStats;
+};
+
 export const humanizeBytes = (bytes?: number): string => {
   if (bytes === undefined || Number.isNaN(bytes)) return 'Unknown Bytes';
 
