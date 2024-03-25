@@ -1,5 +1,5 @@
-import { getBlockSizeStats, getFilteredBlockPools, humanizeBytes, isOverlapping, sortBlocks } from './helpers'; // Number of blocks in data: 8. // Number of blocks in data: 8.
-import { sizeBlock } from './__testdata__/testdata'; // Number of blocks in data: 8.
+import { getBlockSizeStats, getFilteredBlockPools, humanizeBytes, isOverlapping, sortBlocks } from './helpers';
+import { sizeBlock } from './__testdata__/testdata';
 
 // Number of blocks in data: 8.
 const overlapCaseData = {
