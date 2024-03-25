@@ -2058,3 +2058,46 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
   },
   status: 'success',
 };
+
+export const sizeBlock = {
+  ulid: '01FT8X9MJF5G7PFRNGZBYT8SCS',
+  minTime: 1643123700000,
+  maxTime: 1643124000000,
+  stats: {
+    numSamples: 171320,
+    numSeries: 2859,
+    numChunks: 2859,
+  },
+  compaction: {
+    level: 1,
+    sources: ['01FT8X9MJF5G7PFRNGZBYT8SCS'],
+  },
+  version: 1,
+  thanos: {
+    labels: {
+      prometheus: 'prom-2 random:2',
+    },
+    downsample: {
+      resolution: 0,
+    },
+    source: 'sidecar',
+    segment_files: ['000001', '000002'],
+    files: [
+      {
+        rel_path: 'chunks/000001',
+        size_bytes: 536870882,
+      },
+      {
+        rel_path: 'chunks/000002',
+        size_bytes: 143670,
+      },
+      {
+        rel_path: 'index',
+        size_bytes: 257574,
+      },
+      {
+        rel_path: 'meta.json',
+      },
+    ],
+  },
+};
