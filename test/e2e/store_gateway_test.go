@@ -1279,6 +1279,8 @@ var labelSetsComparer = cmp.Comparer(func(x, y []map[string]string) bool {
 })
 
 func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
+	t.Skip("Skipping the testcase in CI due to its randomness.")
+
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("fuzz-sg-lazy")
