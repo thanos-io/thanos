@@ -25,6 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -61,8 +62,9 @@ var (
 )
 
 var (
-	_ RemoteCacheClient = (*memcachedClient)(nil)
-	_ RemoteCacheClient = (*RedisClient)(nil)
+	_  RemoteCacheClient = (*memcachedClient)(nil)
+	_  RemoteCacheClient = (*RedisClient)(nil)
+	sf singleflight.Group
 )
 
 // RemoteCacheClient is a high level client to interact with remote cache.
@@ -206,6 +208,7 @@ type memcachedClient struct {
 	p *AsyncOperationProcessor
 
 	setAsyncCircuitBreaker CircuitBreaker
+	group                  singleflight.Group
 }
 
 // AddressProvider performs node address resolution given a list of clusters.
@@ -433,22 +436,20 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 		return nil
 	}
 
-	batches, err := c.getMultiBatched(ctx, keys)
+	// Use singleflight to cache the result of fetching multiple keys.
+	result, err, _ := sf.Do(strings.Join(keys, ","), func() (interface{}, error) {
+		return c.getMultiBatched(ctx, keys)
+	})
 	if err != nil {
 		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err)
-
-		// In case we have both results and an error, it means some batch requests
-		// failed and other succeeded. In this case we prefer to log it and move on,
-		// given returning some results from the cache is better than returning
-		// nothing.
-		if len(batches) == 0 {
-			return nil
-		}
+		return nil
 	}
 
+	items := result.([]map[string]*memcache.Item)
+
 	hits := map[string][]byte{}
-	for _, items := range batches {
-		for key, item := range items {
+	for _, batch := range items {
+		for key, item := range batch {
 			hits[key] = item.Value
 		}
 	}
