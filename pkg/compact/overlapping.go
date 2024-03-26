@@ -14,17 +14,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
-const overlappingNoCompactionReason = "blocks-overlapping"
+const overlappingReason = "blocks-overlapping"
 
 type OverlappingCompactionLifecycleCallback struct {
-	overlappingBlocks  prometheus.Counter
-	noCompactionBlocks prometheus.Counter
-	deletedBlocks      prometheus.Counter
+	overlappingBlocks prometheus.Counter
+	noCompaction      prometheus.Counter
+	noDownsampling    prometheus.Counter
 }
 
 func NewOverlappingCompactionLifecycleCallback(reg *prometheus.Registry, enabled bool) CompactionLifecycleCallback {
@@ -34,13 +33,13 @@ func NewOverlappingCompactionLifecycleCallback(reg *prometheus.Registry, enabled
 				Name: "thanos_compact_group_overlapping_blocks_total",
 				Help: "Total number of blocks that are overlapping.",
 			}),
-			noCompactionBlocks: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			noCompaction: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 				Name: "thanos_compact_group_overlapping_blocks_no_compaction_total",
 				Help: "Total number of blocks that are overlapping and mark no compaction.",
 			}),
-			deletedBlocks: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-				Name: "thanos_compact_group_overlapping_blocks_deleted_total",
-				Help: "Total number of blocks that are overlapping and deleted.",
+			noDownsampling: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+				Name: "thanos_compact_group_overlapping_blocks_no_downsampling_total",
+				Help: "Total number of blocks that are overlapping and mark no downsampling.",
 			}),
 		}
 	}
@@ -54,6 +53,7 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 		return nil
 	}
 	prev := 0
+	var reason error
 	for curr, currB := range toCompact {
 		prevB := toCompact[prev]
 		if curr == 0 || currB.Thanos.Source == metadata.ReceiveSource || prevB.MaxTime <= currB.MinTime {
@@ -67,13 +67,14 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 		// prev min <= curr min < prev max
 		o.overlappingBlocks.Inc()
 		if prevB.MaxTime < currB.MaxTime && prevB.MinTime != currB.MinTime {
-			reason := fmt.Errorf("found partially overlapping block: %s -- %s", prevB.String(), currB.String())
-			if err := block.MarkForNoCompact(ctx, logger, cg.bkt, prevB.ULID, overlappingNoCompactionReason,
-				reason.Error(), o.noCompactionBlocks); err != nil {
+			o.noCompaction.Inc()
+			reason = fmt.Errorf("found partially overlapping block: %s -- %s", prevB.String(), currB.String())
+			if err := block.MarkForNoCompact(ctx, logger, cg.bkt, prevB.ULID, overlappingReason,
+				reason.Error(), o.noCompaction); err != nil {
 				return retry(err)
 			}
-			if err := block.MarkForNoCompact(ctx, logger, cg.bkt, currB.ULID, overlappingNoCompactionReason,
-				reason.Error(), o.noCompactionBlocks); err != nil {
+			if err := block.MarkForNoCompact(ctx, logger, cg.bkt, currB.ULID, overlappingReason,
+				reason.Error(), o.noCompaction); err != nil {
 				return retry(err)
 			}
 			return retry(reason)
@@ -87,24 +88,26 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 				continue
 			}
 		}
-		toDelete := -1
+		var outer, inner *metadata.Meta
 		if prevB.MaxTime >= currB.MaxTime {
-			toDelete = curr
-			level.Warn(logger).Log("msg", "found overlapping block in plan, keep previous block",
-				"toKeep", prevB.String(), "toDelete", currB.String())
+			inner = currB
+			outer = prevB
 		} else if prevB.MaxTime < currB.MaxTime {
-			toDelete = prev
+			inner = prevB
+			outer = currB
 			prev = curr
-			level.Warn(logger).Log("msg", "found overlapping block in plan, keep current block",
-				"toKeep", currB.String(), "toDelete", prevB.String())
 		}
-		o.deletedBlocks.Inc()
-		if err := DeleteBlockNow(ctx, logger, cg.bkt, toCompact[toDelete]); err != nil {
+		reason = fmt.Errorf("found full overlapping block: %s > %s", outer.String(), inner.String())
+		if err := block.MarkForNoCompact(ctx, logger, cg.bkt, inner.ULID, overlappingReason, reason.Error(),
+			o.noCompaction); err != nil {
 			return retry(err)
 		}
-		toCompact[toDelete] = nil
+		if err := block.MarkForNoDownsample(ctx, logger, cg.bkt, inner.ULID, overlappingReason, reason.Error(),
+			o.noDownsampling); err != nil {
+			return retry(err)
+		}
 	}
-	return nil
+	return reason
 }
 
 func (o OverlappingCompactionLifecycleCallback) PostCompactionCallback(_ context.Context, _ log.Logger, _ *Group, _ ulid.ULID) error {
@@ -113,24 +116,4 @@ func (o OverlappingCompactionLifecycleCallback) PostCompactionCallback(_ context
 
 func (o OverlappingCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
 	return tsdb.DefaultBlockPopulator{}, nil
-}
-
-func FilterRemovedBlocks(blocks []*metadata.Meta) (res []*metadata.Meta) {
-	for _, b := range blocks {
-		if b != nil {
-			res = append(res, b)
-		}
-	}
-	return res
-}
-
-func DeleteBlockNow(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta) error {
-	level.Warn(logger).Log("msg", "delete polluted block immediately", "block", m.String(),
-		"level", m.Compaction.Level, "parents", fmt.Sprintf("%v", m.Compaction.Parents),
-		"resolution", m.Thanos.Downsample.Resolution, "source", m.Thanos.Source, "labels", m.Thanos.GetLabels(),
-		"series", m.Stats.NumSeries, "samples", m.Stats.NumSamples, "chunks", m.Stats.NumChunks)
-	if err := block.Delete(ctx, logger, bkt, m.ULID); err != nil {
-		return errors.Wrapf(err, "delete overlapping block %s", m.String())
-	}
-	return nil
 }
