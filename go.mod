@@ -61,7 +61,7 @@ require (
 	github.com/prometheus/common v0.46.0
 	github.com/prometheus/exporter-toolkit v0.11.0
 	// Prometheus maps version 2.x.y to tags v0.x.y.
-	github.com/prometheus/prometheus v0.49.2-0.20240126144015-960b6266e2ba
+	github.com/prometheus/prometheus v0.50.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.4
 	github.com/thanos-io/objstore v0.0.0-20240309075357-e8336a5fd5f3
@@ -128,6 +128,7 @@ require (
 	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
 	github.com/cilium/ebpf v0.11.0 // indirect
 	github.com/containerd/cgroups/v3 v3.0.3 // indirect
+	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/go-openapi/runtime v0.27.1 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect

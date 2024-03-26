@@ -811,3 +811,113 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 
 	return iw.Close()
 }
+
+// CreateBlockWithChurn writes a block with the given series. Start time of each series
+// will be randomized in the given time window to create churn. Only float chunk is supported right now.
+func CreateBlockWithChurn(
+	ctx context.Context,
+	rnd *rand.Rand,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	extLset labels.Labels,
+	resolution int64,
+	scrapeInterval int64,
+	seriesSize int64,
+) (id ulid.ULID, err error) {
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
+	headOpts.ChunkRange = 10000000000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	if err != nil {
+		return id, errors.Wrap(err, "create head block")
+	}
+	defer func() {
+		runutil.CloseWithErrCapture(&err, h, "TSDB Head")
+		if e := os.RemoveAll(headOpts.ChunkDirRoot); e != nil {
+			err = errors.Wrap(e, "delete chunks dir")
+		}
+	}()
+
+	app := h.Appender(ctx)
+	for i := 0; i < len(series); i++ {
+
+		var ref storage.SeriesRef
+		start := RandRange(rnd, mint, maxt)
+		for j := 0; j < numSamples; j++ {
+			if ref == 0 {
+				ref, err = app.Append(0, series[i], start, float64(i+j))
+			} else {
+				ref, err = app.Append(ref, series[i], start, float64(i+j))
+			}
+			if err != nil {
+				if rerr := app.Rollback(); rerr != nil {
+					err = errors.Wrapf(err, "rollback failed: %v", rerr)
+				}
+				return id, errors.Wrap(err, "add sample")
+			}
+			start += scrapeInterval
+			if start > maxt {
+				break
+			}
+		}
+	}
+	if err := app.Commit(); err != nil {
+		return id, errors.Wrap(err, "commit")
+	}
+
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
+	if err != nil {
+		return id, errors.Wrap(err, "create compactor")
+	}
+
+	id, err = c.Write(dir, h, mint, maxt, nil)
+	if err != nil {
+		return id, errors.Wrap(err, "write block")
+	}
+
+	if id.Compare(ulid.ULID{}) == 0 {
+		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
+	}
+
+	blockDir := filepath.Join(dir, id.String())
+	logger := log.NewNopLogger()
+
+	if _, err = metadata.InjectThanos(logger, blockDir, metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: resolution},
+		Source:     metadata.TestSource,
+		IndexStats: metadata.IndexStats{SeriesMaxSize: seriesSize},
+	}, nil); err != nil {
+		return id, errors.Wrap(err, "finalize block")
+	}
+
+	return id, nil
+}
+
+func RandRange(rnd *rand.Rand, min, max int64) int64 {
+	return rnd.Int63n(max-min) + min
+}
+
+func AddDelay(blockID ulid.ULID, dir string, blockDelay time.Duration) (ulid.ULID, error) {
+	id, err := ulid.New(uint64(timestamp.FromTime(timestamp.Time(int64(blockID.Time())).Add(-blockDelay))), bytes.NewReader(blockID.Entropy()))
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "create block id")
+	}
+
+	bdir := path.Join(dir, blockID.String())
+	m, err := metadata.ReadFromDir(bdir)
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "open meta file")
+	}
+
+	logger := log.NewNopLogger()
+	m.ULID = id
+	m.Compaction.Sources = []ulid.ULID{id}
+	if err := m.WriteToDir(logger, path.Join(dir, blockID.String())); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
+	}
+
+	return id, os.Rename(path.Join(dir, blockID.String()), path.Join(dir, id.String()))
+}
