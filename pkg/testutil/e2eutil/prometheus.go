@@ -896,10 +896,7 @@ func CreateBlockWithChurn(
 	return id, nil
 }
 
-func RandRange(rnd *rand.Rand, min, max int64) int64 {
-	return rnd.Int63n(max-min) + min
-}
-
+// AddDelay rewrites a given block with delay.
 func AddDelay(blockID ulid.ULID, dir string, blockDelay time.Duration) (ulid.ULID, error) {
 	id, err := ulid.New(uint64(timestamp.FromTime(timestamp.Time(int64(blockID.Time())).Add(-blockDelay))), bytes.NewReader(blockID.Entropy()))
 	if err != nil {
