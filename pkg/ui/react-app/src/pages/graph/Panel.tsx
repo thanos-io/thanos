@@ -212,7 +212,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     const params: URLSearchParams = new URLSearchParams({
       query: expr,
       dedup: this.props.options.useDeduplication.toString(),
-      partial_response: this.props.options.usePartialResponse.toString(),
+      partialResponse: this.props.options.usePartialResponse.toString(),
     });
 
     // Add storeMatches to query params.
@@ -435,7 +435,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     const params: URLSearchParams = new URLSearchParams({
       query: this.state.exprInputValue,
       dedup: this.props.options.useDeduplication.toString(),
-      partial_response: this.props.options.usePartialResponse.toString(),
+      partialResponse: this.props.options.usePartialResponse.toString(),
     });
 
     // Add storeMatches to query params.
