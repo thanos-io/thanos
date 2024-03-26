@@ -1115,7 +1115,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := compactionLifecycleCallback.PreCompactionCallback(ctx, cg.logger, cg, toCompact); err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
 	}
-	toCompact = FilterRemovedBlocks(toCompact)
 	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "plan", fmt.Sprintf("%v", toCompact))
 
 	begin = time.Now()
