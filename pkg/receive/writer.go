@@ -72,7 +72,7 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage, opts *WriterOptions) 
 	}
 }
 
-func (r *Writer) Write(ctx context.Context, tenantID string, wreq *remotewritepb.WriteRequest) error {
+func (r *Writer) Write(ctx context.Context, tenantID string, timeseries []*remotewritepb.TimeSeries) error {
 	tLogger := log.With(r.logger, "tenant", tenantID)
 
 	var (
@@ -112,7 +112,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *remotewritepb
 		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
 		Appender:       app,
 	}
-	for _, t := range wreq.Timeseries {
+	for _, t := range timeseries {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
 		lset := remotewritepb.LabelsToPromLabels(t.Labels)

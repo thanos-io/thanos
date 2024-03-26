@@ -825,11 +825,7 @@ func (h *Handler) sendLocalWrite(
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
 
-	wreq := remotewritepb.WriteRequestFromVTPool()
-	wreq.Timeseries = trackedSeries.timeSeries
-	defer wreq.ReturnToVTPool()
-
-	err := h.writer.Write(tracingCtx, tenant, wreq)
+	err := h.writer.Write(tracingCtx, tenant, trackedSeries.timeSeries)
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.msg", err.Error())
@@ -864,15 +860,15 @@ func (h *Handler) sendRemoteWrite(
 	// This is called "real" because it's 1-indexed.
 	realReplicationIndex := int64(endpointReplica.replica + 1)
 
-	wreq := remotewritepb.StoreWriteRequestFromVTPool()
-	wreq.Timeseries = trackedSeries.timeSeries
-	wreq.Tenant = tenant
-	// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-	wreq.Replica = realReplicationIndex
+	wreq := &remotewritepb.StoreWriteRequest{
+		Timeseries: trackedSeries.timeSeries,
+		Tenant:     tenant,
+		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
+		Replica: realReplicationIndex,
+	}
 
 	// Actually make the request against the endpoint we determined should handle these time series.
 	cl.RemoteWriteAsync(ctx, wreq, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
-		wreq.ReturnToVTPool()
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -908,8 +904,6 @@ func quorumReached(successes []int, successThreshold int) bool {
 
 // RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
 func (h *Handler) RemoteWrite(ctx context.Context, r *remotewritepb.StoreWriteRequest) (*remotewritepb.StoreWriteResponse, error) {
-	defer r.ReturnToVTPool()
-
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
