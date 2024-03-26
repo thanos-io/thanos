@@ -389,7 +389,19 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 
 	val := r.FormValue(MaxSourceResolutionParam)
 	if qapi.enableAutodownsampling || (val == "auto") {
-		maxSourceResolution = defaultVal
+		query := r.FormValue("query")
+		if len(query) > 0 {
+			expr, err := parser.ParseExpr(query)
+			if err != nil {
+				return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "'query' parameter")}
+			}
+			if minRes := MinResolutionFromExpr(expr); minRes > 0 {
+				maxSourceResolution = minRes
+			}
+		}
+		if maxSourceResolution == 0 {
+			maxSourceResolution = defaultVal
+		}
 	}
 	if val != "" && val != "auto" {
 		var err error
@@ -1548,4 +1560,37 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 
 		return t, warnings.AsErrors(), nil, func() {}
 	}
+}
+
+// MinResolutionFromExpr inspects the query expression and find the minimum required resolution for the
+// query. Right now it only considers promql functions that require at least 2 samples such as rate, irate, etc.
+func MinResolutionFromExpr(expr parser.Expr) time.Duration {
+	var minRes time.Duration
+	parser.Inspect(expr, func(n parser.Node, nodes []parser.Node) error {
+		switch e := n.(type) {
+		case *parser.MatrixSelector:
+			var found bool
+		OUTER:
+			for i := len(nodes) - 1; i >= 0; i-- {
+				node := nodes[i]
+				if f, ok := node.(*parser.Call); ok {
+					switch f.Func.Name {
+					// Functions that require at least 2 samples.
+					case "rate", "irate", "increase", "idelta", "deriv", "predict_linear":
+						found = true
+						break OUTER
+					}
+				}
+			}
+			if !found {
+				return nil
+			}
+			step := e.Range / 2
+			if minRes == 0 || minRes > step {
+				minRes = step
+			}
+		}
+		return nil
+	})
+	return minRes
 }
