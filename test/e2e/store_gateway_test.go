@@ -1377,7 +1377,6 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 
 	type testCase struct {
 		matchers                     string
-		start, end                   int64
 		res1, newRes1, res2, newRes2 []map[string]string
 	}
 
@@ -1407,7 +1406,9 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		res2, err := client.SeriesInGRPC(ctx, u2, matchers, minT, maxT)
 		testutil.Ok(t, err)
 
-		// Try again and let requests hit cache.
+		// Try again with a different timestamp and let requests hit posting cache.
+		minT = e2eutil.RandRange(rnd, startMs, endMs)
+		maxT = e2eutil.RandRange(rnd, minT+1, endMs)
 		newRes1, err := client.SeriesInGRPC(ctx, u1, matchers, minT, maxT)
 		testutil.Ok(t, err)
 		newRes2, err := client.SeriesInGRPC(ctx, u2, matchers, minT, maxT)
@@ -1415,8 +1416,6 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 
 		cases = append(cases, &testCase{
 			matchers: matcherStrings,
-			start:    minT,
-			end:      maxT,
 			res1:     res1,
 			newRes1:  newRes1,
 			res2:     res2,
@@ -1427,13 +1426,10 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	failures := 0
 	for i, tc := range cases {
 		if !cmp.Equal(tc.res1, tc.res2, labelSetsComparer) {
-			t.Logf("case %d results mismatch.\n%s\nres1 len: %d data: %s\nres2 len: %d data: %s\n", i, tc.matchers, len(tc.res1), tc.res1, len(tc.res2), tc.res2)
+			t.Logf("case %d results mismatch for the first attempt.\n%s\nres1 len: %d data: %s\nres2 len: %d data: %s\n", i, tc.matchers, len(tc.res1), tc.res1, len(tc.res2), tc.res2)
 			failures++
-		} else if !cmp.Equal(tc.res1, tc.newRes1, labelSetsComparer) {
-			t.Logf("case %d old and new res1 mismatch.\n%s\nres1 len: %d data: %s\nnew_res1 len: %d data: %s\n", i, tc.matchers, len(tc.res1), tc.res1, len(tc.newRes1), tc.newRes1)
-			failures++
-		} else if !cmp.Equal(tc.res2, tc.newRes2, labelSetsComparer) {
-			t.Logf("case %d old and new res2 mismatch.\n%s\nres2 len: %d data: %s\nnew_res2 len: %d data: %s\n", i, tc.matchers, len(tc.res2), tc.res2, len(tc.newRes2), tc.newRes2)
+		} else if !cmp.Equal(tc.newRes1, tc.newRes2, labelSetsComparer) {
+			t.Logf("case %d results mismatch for the second attempt.\n%s\nres1 len: %d data: %s\nres2 len: %d data: %s\n", i, tc.matchers, len(tc.newRes1), tc.newRes1, len(tc.newRes2), tc.newRes2)
 			failures++
 		}
 	}
