@@ -116,6 +116,7 @@ require (
 )
 
 require (
+	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.27.10
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
@@ -128,7 +129,6 @@ require (
 	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
 	github.com/cilium/ebpf v0.11.0 // indirect
 	github.com/containerd/cgroups/v3 v3.0.3 // indirect
-	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/go-openapi/runtime v0.27.1 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
