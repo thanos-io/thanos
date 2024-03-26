@@ -208,7 +208,6 @@ type memcachedClient struct {
 	p *AsyncOperationProcessor
 
 	setAsyncCircuitBreaker CircuitBreaker
-	group                  singleflight.Group
 }
 
 // AddressProvider performs node address resolution given a list of clusters.
