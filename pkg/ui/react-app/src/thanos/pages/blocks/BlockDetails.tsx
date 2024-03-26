@@ -3,8 +3,8 @@ import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
 import PathPrefixProps from '../../../types/PathPrefixProps';
-import { Button, Modal, ModalBody, Form, Input, ModalHeader, ModalFooter } from 'reactstrap';
-import { download } from './helpers';
+import { Button, Form, Input, Modal, ModalBody, ModalFooter, ModalHeader } from 'reactstrap';
+import { download, getBlockSizeStats, humanizeBytes } from './helpers';
 
 export interface BlockDetailsProps {
   block: Block | undefined;
@@ -20,6 +20,8 @@ export const BlockDetails: FC<BlockDetailsProps & PathPrefixProps> = ({
 }) => {
   const [modalAction, setModalAction] = useState<string>('');
   const [detailValue, setDetailValue] = useState<string | null>(null);
+
+  const sizeStats = getBlockSizeStats(block);
 
   const submitMarkBlock = async (action: string, ulid: string, detail: string | null) => {
     try {
@@ -80,6 +82,39 @@ export const BlockDetails: FC<BlockDetailsProps & PathPrefixProps> = ({
             <b>Chunks:</b> <span>{block.stats.numChunks}</span>
           </div>
           <hr />
+          {sizeStats && (
+            <>
+              <div data-testid="total-size">
+                <b>Total size:</b>&nbsp;
+                <span title={sizeStats.totalBytes + ' Bytes'}>{humanizeBytes(sizeStats.totalBytes)}</span>
+              </div>
+              <div data-testid="chunk-size">
+                <b>Chunks:</b>&nbsp;
+                <span title={sizeStats.chunkBytes + ' Bytes'}>
+                  {humanizeBytes(sizeStats.chunkBytes)} ({((sizeStats.chunkBytes / sizeStats.totalBytes) * 100).toFixed(2)}%)
+                </span>
+              </div>
+              <div data-testid="index-size">
+                <b>Index:</b>&nbsp;
+                <span title={sizeStats.indexBytes + ' Bytes'}>
+                  {humanizeBytes(sizeStats.indexBytes)} ({((sizeStats.indexBytes / sizeStats.totalBytes) * 100).toFixed(2)}%)
+                </span>
+              </div>
+              <div data-testid="daily-bytes">
+                <b>Daily:</b>&nbsp;
+                <span
+                  title={
+                    Math.round(sizeStats.totalBytes / moment.duration(block.maxTime - block.minTime, 'ms').as('day')) +
+                    ' Bytes / day'
+                  }
+                >
+                  {humanizeBytes(sizeStats.totalBytes / moment.duration(block.maxTime - block.minTime, 'ms').as('day'))} /
+                  day
+                </span>
+              </div>
+              <hr />
+            </>
+          )}
           <div data-testid="resolution">
             <b>Resolution:</b> <span>{block.thanos.downsample.resolution}</span>
           </div>
