@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/promql"
-	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -102,7 +101,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		query.NoopSeriesStatsReporter,
 	)
 
-	var engine v1.QueryEngine
+	var engine promql.QueryEngine
 	engineParam := request.Engine
 	if engineParam == querypb.EngineType_default {
 		engineParam = g.defaultEngine
@@ -203,7 +202,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	endTime := time.Unix(request.EndTimeSeconds, 0)
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
-	var engine v1.QueryEngine
+	var engine promql.QueryEngine
 	engineParam := request.Engine
 	if engineParam == querypb.EngineType_default {
 		engineParam = g.defaultEngine
