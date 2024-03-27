@@ -1159,10 +1159,11 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 	}
 	b.i = end
 
+	lazyExpandedPosting := b.lazyPostings.lazyExpanded()
 	postingsBatch := b.lazyPostings.postings[start:end]
 	if len(postingsBatch) == 0 {
 		b.hasMorePostings = false
-		if b.lazyPostings.lazyExpanded() {
+		if lazyExpandedPosting {
 			// No need to fetch index version again if lazy posting has 0 length.
 			if len(b.lazyPostings.postings) > 0 {
 				v, err := b.indexr.IndexVersion()
@@ -1196,11 +1197,13 @@ OUTER:
 		if err := b.ctx.Err(); err != nil {
 			return err
 		}
-		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
+		hasMatchedChunks, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			return errors.Wrap(err, "read series")
 		}
-		if !ok {
+		// Skip getting series symbols if we know there is no matched chunks
+		// and lazy expanded posting not enabled.
+		if !lazyExpandedPosting && !hasMatchedChunks {
 			continue
 		}
 
@@ -1218,8 +1221,14 @@ OUTER:
 				continue OUTER
 			}
 		}
-		if b.lazyPostings.lazyExpanded() {
+		if lazyExpandedPosting {
 			b.expandedPostings = append(b.expandedPostings, postingsBatch[i])
+		}
+		// If lazy expanded postings enabled, due to expanded postings cache, we need to
+		// make sure we check lazy posting matchers and update expanded postings before
+		// going to next series.
+		if !hasMatchedChunks {
+			continue
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
@@ -1261,7 +1270,7 @@ OUTER:
 		b.entries = append(b.entries, s)
 	}
 
-	if b.lazyPostings.lazyExpanded() {
+	if lazyExpandedPosting {
 		// Apply series limit before fetching chunks, for actual series matched.
 		if err := b.seriesLimiter.Reserve(uint64(seriesMatched)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)

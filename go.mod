@@ -61,7 +61,7 @@ require (
 	github.com/prometheus/common v0.46.0
 	github.com/prometheus/exporter-toolkit v0.11.0
 	// Prometheus maps version 2.x.y to tags v0.x.y.
-	github.com/prometheus/prometheus v0.49.2-0.20240126144015-960b6266e2ba
+	github.com/prometheus/prometheus v0.50.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.4
 	github.com/thanos-io/objstore v0.0.0-20240309075357-e8336a5fd5f3
@@ -116,6 +116,7 @@ require (
 )
 
 require (
+	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.27.10
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
