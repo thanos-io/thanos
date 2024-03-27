@@ -97,14 +97,19 @@ func (o OverlappingCompactionLifecycleCallback) PreCompactionCallback(ctx contex
 			outer = currB
 			prev = curr
 		}
-		reason = fmt.Errorf("found full overlapping block: %s > %s", outer.String(), inner.String())
+		if outer.Thanos.Source == metadata.ReceiveSource {
+			level.Warn(logger).Log("msg", "bypass if larger blocks are from receive",
+				"outer", outer.String(), "inner", inner.String())
+			continue
+		}
+		reason = retry(fmt.Errorf("found full overlapping block: %s > %s", outer.String(), inner.String()))
 		if err := block.MarkForNoCompact(ctx, logger, cg.bkt, inner.ULID, overlappingReason, reason.Error(),
 			o.noCompaction); err != nil {
-			return retry(err)
+			return err
 		}
 		if err := block.MarkForNoDownsample(ctx, logger, cg.bkt, inner.ULID, overlappingReason, reason.Error(),
 			o.noDownsampling); err != nil {
-			return retry(err)
+			return err
 		}
 	}
 	return reason
