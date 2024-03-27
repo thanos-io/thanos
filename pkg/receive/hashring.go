@@ -12,15 +12,11 @@ import (
 	"sync"
 
 	"github.com/cespare/xxhash"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-
 	"github.com/pkg/errors"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
-
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/remotewritepb"
 )
 
 // HashringAlgorithm is the algorithm used to distribute series in the ring.
@@ -53,9 +49,9 @@ func (i *insufficientNodesError) Error() string {
 // It returns the node and any error encountered.
 type Hashring interface {
 	// Get returns the first node that should handle the given tenant and time series.
-	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
+	Get(tenant string, timeSeries *remotewritepb.TimeSeries) (string, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
-	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (string, error)
+	GetN(tenant string, timeSeries *remotewritepb.TimeSeries, n uint64) (string, error)
 	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
 	// if, for example, the same address is used for multiple tenants in the multi-hashring.
 	Nodes() []string
@@ -65,7 +61,7 @@ type Hashring interface {
 type SingleNodeHashring string
 
 // Get implements the Hashring interface.
-func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (s SingleNodeHashring) Get(tenant string, ts *remotewritepb.TimeSeries) (string, error) {
 	return s.GetN(tenant, ts, 0)
 }
 
@@ -74,7 +70,7 @@ func (s SingleNodeHashring) Nodes() []string {
 }
 
 // GetN implements the Hashring interface.
-func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (string, error) {
+func (s SingleNodeHashring) GetN(_ string, _ *remotewritepb.TimeSeries, n uint64) (string, error) {
 	if n > 0 {
 		return "", &insufficientNodesError{have: 1, want: n + 1}
 	}
@@ -102,17 +98,17 @@ func (s simpleHashring) Nodes() []string {
 }
 
 // Get returns a target to handle the given tenant and time series.
-func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (s simpleHashring) Get(tenant string, ts *remotewritepb.TimeSeries) (string, error) {
 	return s.GetN(tenant, ts, 0)
 }
 
 // GetN returns the nth target to handle the given tenant and time series.
-func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (s simpleHashring) GetN(tenant string, ts *remotewritepb.TimeSeries, n uint64) (string, error) {
 	if n >= uint64(len(s)) {
 		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
 
-	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
+	return s[(remotewritepb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
 }
 
 type section struct {
@@ -219,16 +215,16 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 	}
 }
 
-func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (c ketamaHashring) Get(tenant string, ts *remotewritepb.TimeSeries) (string, error) {
 	return c.GetN(tenant, ts, 0)
 }
 
-func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (c ketamaHashring) GetN(tenant string, ts *remotewritepb.TimeSeries, n uint64) (string, error) {
 	if n >= c.numEndpoints {
 		return "", &insufficientNodesError{have: c.numEndpoints, want: n + 1}
 	}
 
-	v := labelpb.HashWithPrefix(tenant, ts.Labels)
+	v := remotewritepb.HashWithPrefix(tenant, ts.Labels)
 
 	var i uint64
 	i = uint64(sort.Search(len(c.sections), func(i int) bool {
@@ -261,12 +257,12 @@ type multiHashring struct {
 }
 
 // Get returns a target to handle the given tenant and time series.
-func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (m *multiHashring) Get(tenant string, ts *remotewritepb.TimeSeries) (string, error) {
 	return m.GetN(tenant, ts, 0)
 }
 
 // GetN returns the nth target to handle the given tenant and time series.
-func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (m *multiHashring) GetN(tenant string, ts *remotewritepb.TimeSeries, n uint64) (string, error) {
 	m.mu.RLock()
 	h, ok := m.cache[tenant]
 	m.mu.RUnlock()

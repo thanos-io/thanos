@@ -17,6 +17,7 @@ run:
   skip-dirs:
     - vendor
     - internal/cortex
+    - pkg/store/storepb/remotewritepb
 
 
 # output configuration options
