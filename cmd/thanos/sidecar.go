@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"sync"
@@ -363,6 +364,9 @@ func runSidecar(
 				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				// Generate random delay using upload jitter.
+				jitter := time.Duration(rand.Int63n(int64(conf.shipper.uploadJitter)))
+				time.Sleep(jitter)
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
@@ -506,7 +510,30 @@ type sidecarConfig struct {
 	storeRateLimits store.SeriesSelectLimits
 }
 
+type durationValue time.Duration
+
+// Set implements the Set method of the kingpin.Value interface.
+func (d *durationValue) Set(value string) error {
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return err
+	}
+	*d = durationValue(duration)
+	return nil
+}
+
+// String implements the String method of the kingpin.Value interface.
+func (d *durationValue) String() string {
+	return time.Duration(*d).String()
+}
+
+// Register a flag with the provided duration value.
+func registerDurationFlag(cmd extkingpin.FlagClause, value *time.Duration, flagName string, defaultValue string, help string) {
+	cmd.Flag(flagName, help).Default(defaultValue).SetValue((*durationValue)(value))
+}
+
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
+	var uploadJitter time.Duration
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)
@@ -518,4 +545,6 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.storeRateLimits.RegisterFlags(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
+	registerDurationFlag(cmd, &uploadJitter, "upload-jitter", "0s", "Maximum random delay before uploading blocks.")
+	sc.shipper.uploadJitter = uploadJitter
 }

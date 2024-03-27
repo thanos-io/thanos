@@ -228,6 +228,7 @@ Flags:
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tsdb.path="./data"       Data directory of TSDB.
+      --upload-jitter=0s         Maximum random delay before uploading blocks.
       --version                  Show application version.
 
 ```
