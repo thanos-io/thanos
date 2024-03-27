@@ -46,6 +46,7 @@ import (
 	"github.com/prometheus/prometheus/util/stats"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
+	"github.com/thanos-io/promql-engine/logicalplan"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -80,6 +81,7 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
+	QueryExplainParam        = "explain"
 )
 
 type PromqlEngineType string
@@ -112,6 +114,28 @@ func (f *QueryEngineFactory) GetPrometheusEngine() promql.QueryEngine {
 	return f.prometheusEngine
 }
 
+type secondPrecisionEngine struct {
+	ng promql.QueryEngine
+}
+
+func newSecondPrecisionEngine(ng promql.QueryEngine) *secondPrecisionEngine {
+	return &secondPrecisionEngine{ng: ng}
+}
+
+func (s secondPrecisionEngine) SetQueryLogger(l promql.QueryLogger) {}
+
+func (s secondPrecisionEngine) NewInstantQuery(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+	ts = ts.Truncate(time.Second)
+	return s.ng.NewInstantQuery(ctx, q, opts, qs, ts)
+}
+
+func (s secondPrecisionEngine) NewRangeQuery(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+	start = start.Truncate(time.Second)
+	end = end.Truncate(time.Second)
+	interval = interval.Truncate(time.Second)
+	return s.ng.NewRangeQuery(ctx, q, opts, qs, start, end, interval)
+}
+
 func (f *QueryEngineFactory) GetThanosEngine() promql.QueryEngine {
 	f.createThanosEngine.Do(func() {
 		if f.thanosEngine != nil {
@@ -120,7 +144,21 @@ func (f *QueryEngineFactory) GetThanosEngine() promql.QueryEngine {
 		if f.remoteEngineEndpoints == nil {
 			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
 		} else {
-			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
+			f.thanosEngine = newSecondPrecisionEngine(
+				engine.New(
+					engine.Opts{
+						EngineOpts:     f.engineOpts,
+						Engine:         f.GetPrometheusEngine(),
+						EnableAnalysis: true,
+						LogicalOptimizers: []logicalplan.Optimizer{
+							logicalplan.PassthroughOptimizer{Endpoints: f.remoteEngineEndpoints},
+							logicalplan.DistributeAvgOptimizer{},
+							logicalplan.DistributedExecutionOptimizer{Endpoints: f.remoteEngineEndpoints},
+						},
+						EnableXFunctions: f.enableXFunctions,
+					},
+				),
+			)
 		}
 	})
 
