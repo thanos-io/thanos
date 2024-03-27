@@ -6,7 +6,9 @@ package store
 import (
 	"container/heap"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"hash"
 	"io"
 	"sort"
 	"sync"
@@ -111,24 +113,30 @@ func (d *dedupResponseHeap) Next() bool {
 func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
 	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
 
+	buf := make([]byte, 8)
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
+
 	for _, s := range series {
 		for _, chk := range s.GetSeries().Chunks {
+			hasher.Reset()
 			for _, field := range []*storepb.Chunk{
 				chk.Raw, chk.Count, chk.Max, chk.Min, chk.Sum, chk.Counter,
 			} {
-				if field == nil {
-					continue
+				switch {
+				case field == nil:
+					binary.BigEndian.PutUint64(buf, 0)
+				case field.Hash != 0:
+					binary.BigEndian.PutUint64(buf, field.Hash)
+				default:
+					binary.BigEndian.PutUint64(buf, xxhash.Sum64(field.Data))
 				}
-				hash := field.Hash
-				if hash == 0 {
-					hash = xxhash.Sum64(field.Data)
-				}
-
-				if _, ok := chunkDedupMap[hash]; !ok {
-					chk := chk
-					chunkDedupMap[hash] = &chk
-					break
-				}
+				_, _ = hasher.Write(buf)
+			}
+			aggrChunkHash := hasher.Sum64()
+			if _, ok := chunkDedupMap[aggrChunkHash]; !ok {
+				chk := chk
+				chunkDedupMap[aggrChunkHash] = &chk
 			}
 		}
 	}

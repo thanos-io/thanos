@@ -2198,6 +2198,55 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 		tname     string
 	}{
 		{
+			tname: "dedups identical series with multiple chunks",
+			responses: []*storepb.SeriesResponse{
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Count: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`count`),
+									},
+									Sum: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`sum`),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Count: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`count`),
+									},
+									Sum: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`sum`),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
+				testutil.Equals(t, true, h.Next())
+				resp := h.At()
+				testutil.Equals(t, responses[0], resp)
+				testutil.Equals(t, false, h.Next())
+			},
+		},
+		{
 			tname:     "edge case with zero responses",
 			responses: []*storepb.SeriesResponse{},
 			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
