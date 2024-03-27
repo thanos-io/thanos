@@ -72,7 +72,6 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 2, 7, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 2, 8, metadata.ReceiveSource, 1),
 			},
-			expectedMarks: map[int]int{7: 2},
 		},
 		{
 			testName: "full overlapping blocks",
@@ -116,10 +115,15 @@ func TestPreCompactionCallback(t *testing.T) {
 			bkt := objstore.NewInMemBucket()
 			group := &Group{logger: log.NewNopLogger(), bkt: bkt}
 			err := callback.PreCompactionCallback(ctx, logger, group, tcase.input)
-			if tcase.expectedErr != nil || len(tcase.expectedMarks) != 0 {
+			if len(tcase.expectedMarks) != 0 {
 				testutil.NotOk(t, err)
+				testutil.Assert(t, IsRetryError(err))
+			} else if tcase.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Assert(t, IsHaltError(err))
 			} else {
 				testutil.Ok(t, err)
+				testutil.Assert(t, err == nil)
 			}
 			objs := bkt.Objects()
 			expectedSize := 0
