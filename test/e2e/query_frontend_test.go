@@ -1167,7 +1167,7 @@ func TestQueryFrontendExplain(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, `{"status":"success","data":{"name":"[noArgFunction] time()"}}`, strings.TrimSpace(string(body)))
+	require.Equal(t, `{"status":"success","data":{"name":"[duplicateLabelCheck]","children":[{"name":"[noArgFunction]"}]}}`, strings.TrimSpace(string(body)))
 }
 
 func TestQueryFrontendAnalyze(t *testing.T) {
