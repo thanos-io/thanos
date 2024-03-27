@@ -1159,10 +1159,11 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 	}
 	b.i = end
 
+	lazyExpandedPosting := b.lazyPostings.lazyExpanded()
 	postingsBatch := b.lazyPostings.postings[start:end]
 	if len(postingsBatch) == 0 {
 		b.hasMorePostings = false
-		if b.lazyPostings.lazyExpanded() {
+		if lazyExpandedPosting {
 			// No need to fetch index version again if lazy posting has 0 length.
 			if len(b.lazyPostings.postings) > 0 {
 				v, err := b.indexr.IndexVersion()
@@ -1200,6 +1201,11 @@ OUTER:
 		if err != nil {
 			return errors.Wrap(err, "read series")
 		}
+		// Skip getting series symbols if we know there is no matched chunks
+		// and lazy expanded posting not enabled.
+		if !lazyExpandedPosting && !hasMatchedChunks {
+			continue
+		}
 
 		if err := b.indexr.LookupLabelsSymbols(b.ctx, b.symbolizedLset, b.b); err != nil {
 			return errors.Wrap(err, "Lookup labels symbols")
@@ -1215,7 +1221,7 @@ OUTER:
 				continue OUTER
 			}
 		}
-		if b.lazyPostings.lazyExpanded() {
+		if lazyExpandedPosting {
 			b.expandedPostings = append(b.expandedPostings, postingsBatch[i])
 		}
 		// Even though there is no chunks found in the requested time range, we need to continue
@@ -1263,7 +1269,7 @@ OUTER:
 		b.entries = append(b.entries, s)
 	}
 
-	if b.lazyPostings.lazyExpanded() {
+	if lazyExpandedPosting {
 		// Apply series limit before fetching chunks, for actual series matched.
 		if err := b.seriesLimiter.Reserve(uint64(seriesMatched)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
