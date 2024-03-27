@@ -54,9 +54,14 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			return nil, false, errors.Wrapf(err, "postings offsets for %s", pg.name)
 		}
 
-		// No posting ranges found means empty posting.
-		if len(rngs) == 0 {
+		// If the posting group adds keys, no posting ranges found means empty posting.
+		if len(pg.addKeys) > 0 && len(rngs) == 0 {
 			return nil, true, nil
+		}
+		// If the posting group removes keys, no posting ranges found is fine. It means
+		// that the posting group is a noop. {job != "some_non_existent_value"}
+		if len(pg.removeKeys) > 0 && len(rngs) == 0 {
+			continue
 		}
 		for _, r := range rngs {
 			if r == indexheader.NotFoundRange {
