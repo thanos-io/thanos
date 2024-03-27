@@ -1224,8 +1224,9 @@ OUTER:
 		if lazyExpandedPosting {
 			b.expandedPostings = append(b.expandedPostings, postingsBatch[i])
 		}
-		// Even though there is no chunks found in the requested time range, we need to continue
-		// for loop after checking lazy posting matchers because of the expanded postings cache.
+		// If lazy expanded postings enabled, due to expanded postings cache, we need to
+		// make sure we check lazy posting matchers and update expanded postings before
+		// going to next series.
 		if !hasMatchedChunks {
 			continue
 		}
