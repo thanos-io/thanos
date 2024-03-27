@@ -9,17 +9,21 @@ import (
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -28,6 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -466,8 +471,16 @@ func TestMultiTSDBPrune(t *testing.T) {
 			}
 
 			testutil.Ok(t, m.Prune(ctx))
+			if test.bucket != nil {
+				_, err := m.Sync(ctx)
+				testutil.Ok(t, err)
+			}
+
 			testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
 			var shippedBlocks int
+			if test.bucket == nil && shippedBlocks > 0 {
+				t.Fatal("can't expect uploads when there is no bucket")
+			}
 			if test.bucket != nil {
 				testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
 					shippedBlocks++
@@ -828,4 +841,60 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = a.Append(0, l, int64(i), float64(i))
 	}
+}
+
+func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
+	tenant := &tenant{
+		mtx: &sync.RWMutex{},
+	}
+
+	t.Run("no blocks", func(t *testing.T) {
+		require.Equal(t, (map[ulid.ULID]struct{})(nil), tenant.blocksToDelete(nil))
+	})
+
+	tenant.tsdb = &tsdb.DB{}
+
+	mockBlockIDs := []ulid.ULID{
+		ulid.MustNew(1, nil),
+		ulid.MustNew(2, nil),
+	}
+
+	t.Run("no shipper", func(t *testing.T) {
+		tenant.blocksToDeleteFn = func(db *tsdb.DB) tsdb.BlocksToDeleteFunc {
+			return func(_ []*tsdb.Block) map[ulid.ULID]struct{} {
+				return map[ulid.ULID]struct{}{
+					mockBlockIDs[0]: {},
+					mockBlockIDs[1]: {},
+				}
+			}
+		}
+
+		require.Equal(t, map[ulid.ULID]struct{}{
+			mockBlockIDs[0]: {},
+			mockBlockIDs[1]: {},
+		}, tenant.blocksToDelete(nil))
+	})
+
+	t.Run("some blocks uploaded", func(t *testing.T) {
+		tenant.blocksToDeleteFn = func(db *tsdb.DB) tsdb.BlocksToDeleteFunc {
+			return func(_ []*tsdb.Block) map[ulid.ULID]struct{} {
+				return map[ulid.ULID]struct{}{
+					mockBlockIDs[0]: {},
+					mockBlockIDs[1]: {},
+				}
+			}
+		}
+
+		td := t.TempDir()
+
+		require.NoError(t, shipper.WriteMetaFile(log.NewNopLogger(), filepath.Join(td, shipper.DefaultMetaFilename), &shipper.Meta{
+			Version:  shipper.MetaVersion1,
+			Uploaded: []ulid.ULID{mockBlockIDs[0]},
+		}))
+
+		tenant.ship = shipper.New(log.NewNopLogger(), nil, td, nil, nil, metadata.BucketUploadSource, nil, false, metadata.NoneFunc, "")
+		require.Equal(t, map[ulid.ULID]struct{}{
+			mockBlockIDs[0]: {},
+		}, tenant.blocksToDelete(nil))
+	})
 }

@@ -82,6 +82,8 @@ type Shipper struct {
 
 	labels func() labels.Labels
 	mtx    sync.RWMutex
+	closed bool
+	wg     sync.WaitGroup
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
@@ -247,6 +249,30 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 	return nil
 }
 
+// DisableWait disables the shipper and waits for all ongoing syncs to finish.
+// Useful when you want to sync one last time before pruning a TSDB.
+func (s *Shipper) DisableWait() {
+	if s == nil {
+		return
+	}
+	s.mtx.Lock()
+	s.closed = true
+	s.mtx.Unlock()
+	s.wg.Wait()
+}
+
+// Enable enables the shipper again.
+// Useful when you want to sync one last time before pruning a TSDB.
+// Remove all references to the shipper, call DisableWait, call Enable, and then call Sync() one last time.
+func (s *Shipper) Enable() {
+	if s == nil {
+		return
+	}
+	s.mtx.Lock()
+	s.closed = false
+	s.mtx.Unlock()
+}
+
 // Sync performs a single synchronization, which ensures all non-compacted local blocks have been uploaded
 // to the object bucket once.
 //
@@ -254,6 +280,16 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 //
 // It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok).
 func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
+	s.mtx.Lock()
+	if s.closed {
+		s.mtx.Unlock()
+		return 0, nil
+	}
+	s.wg.Add(1)
+	s.mtx.Unlock()
+
+	defer s.wg.Done()
+
 	meta, err := ReadMetaFile(s.metadataFilePath)
 	if err != nil {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
@@ -353,6 +389,21 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		s.metrics.uploadedCompacted.Set(0)
 	}
 	return uploaded, nil
+}
+
+func (s *Shipper) UploadedBlocks() map[ulid.ULID]struct{} {
+	meta, err := ReadMetaFile(s.metadataFilePath)
+	if err != nil {
+		// NOTE(GiedriusS): Sync() will inform users about any problems.
+		return nil
+	}
+
+	ret := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
+	for _, id := range meta.Uploaded {
+		ret[id] = struct{}{}
+	}
+
+	return ret
 }
 
 // sync uploads the block if not exists in remote storage.
