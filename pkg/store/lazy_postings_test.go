@@ -208,7 +208,10 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			keys, matchers := keysToFetchFromPostingGroups(tc.pgs)
 			testutil.Equals(t, tc.expectedLabels, keys)
-			testutil.Equals(t, tc.expectedMatchers, matchers)
+			testutil.Assert(t, len(tc.expectedMatchers) == len(matchers))
+			for i := 0; i < len(tc.expectedMatchers); i++ {
+				testutil.Equals(t, tc.expectedMatchers[i].String(), matchers[i].String())
+			}
 		})
 	}
 }
