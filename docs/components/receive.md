@@ -199,7 +199,7 @@ To configure the gates and limits you can use one of the two options:
 - `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file. Any modification to the indicated file will trigger a configuration reload. If the updated configuration is invalid an error will be logged and it won't replace the previous valid configuration.
 - `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
 
-By default all the limits and gates are **disabled**.
+By default all the limits and gates are **disabled**. These options should be added to the routing-receivers when using the [Routing Receive and Ingesting Receive](https://thanos.io/tip/proposals-accepted/202012-receive-split.md/).
 
 ### Understanding the configuration file
 
