@@ -17,7 +17,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -34,7 +33,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
@@ -709,107 +707,6 @@ func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
 	}
 
 	return maxSeriesSize, nil
-}
-
-var indexFilename = "index"
-
-type indexWriterSeries struct {
-	labels labels.Labels
-	chunks []chunks.Meta // series file offset of chunks
-}
-
-type indexWriterSeriesSlice []*indexWriterSeries
-
-// PutOutOfOrderIndex updates the index in blockDir with an index containing an out-of-order chunk
-// copied from https://github.com/prometheus/prometheus/blob/b1ed4a0a663d0c62526312311c7529471abbc565/tsdb/index/index_test.go#L346
-func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
-
-	if minTime >= maxTime || minTime+4 >= maxTime {
-		return fmt.Errorf("minTime must be at least 4 less than maxTime to not create overlapping chunks")
-	}
-
-	lbls := []labels.Labels{
-		labels.FromStrings("lbl1", "1"),
-	}
-
-	// Sort labels as the index writer expects series in sorted order.
-	sort.Sort(labels.Slice(lbls))
-
-	symbols := map[string]struct{}{}
-	for _, lset := range lbls {
-		lset.Range(func(l labels.Label) {
-			symbols[l.Name] = struct{}{}
-			symbols[l.Value] = struct{}{}
-		})
-	}
-
-	var input indexWriterSeriesSlice
-
-	// Generate ChunkMetas for every label set.
-	// Ignoring gosec as it is only used for tests.
-	for _, lset := range lbls {
-		var metas []chunks.Meta
-		// only need two chunks that are out-of-order
-		chk1 := chunks.Meta{
-			MinTime: maxTime - 2,
-			MaxTime: maxTime - 1,
-			Ref:     chunks.ChunkRef(rand.Uint64()), // nolint:gosec
-			Chunk:   chunkenc.NewXORChunk(),
-		}
-		metas = append(metas, chk1)
-		chk2 := chunks.Meta{
-			MinTime: minTime + 1,
-			MaxTime: minTime + 2,
-			Ref:     chunks.ChunkRef(rand.Uint64()), // nolint:gosec
-			Chunk:   chunkenc.NewXORChunk(),
-		}
-		metas = append(metas, chk2)
-
-		input = append(input, &indexWriterSeries{
-			labels: lset,
-			chunks: metas,
-		})
-	}
-
-	iw, err := index.NewWriter(context.Background(), filepath.Join(blockDir, indexFilename))
-	if err != nil {
-		return err
-	}
-
-	syms := []string{}
-	for s := range symbols {
-		syms = append(syms, s)
-	}
-	sort.Strings(syms)
-	for _, s := range syms {
-		if err := iw.AddSymbol(s); err != nil {
-			return err
-		}
-	}
-
-	// Population procedure as done by compaction.
-	var (
-		postings = index.NewMemPostings()
-		values   = map[string]map[string]struct{}{}
-	)
-
-	for i, s := range input {
-		if err := iw.AddSeries(storage.SeriesRef(i), s.labels, s.chunks...); err != nil {
-			return err
-		}
-
-		s.labels.Range(func(l labels.Label) {
-			valset, ok := values[l.Name]
-			if !ok {
-				valset = map[string]struct{}{}
-				values[l.Name] = valset
-			}
-			valset[l.Value] = struct{}{}
-		})
-		postings.Add(storage.SeriesRef(i), s.labels)
-	}
-
-	return iw.Close()
 }
 
 // CreateBlockWithChurn writes a block with the given series. Start time of each series
