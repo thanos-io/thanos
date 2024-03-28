@@ -2761,7 +2761,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
 		// Fast-path for set matching.
 		if m.Type == labels.MatchNotRegexp {
-			if vals := findSetMatches(m.Value); len(vals) > 0 {
+			if vals := m.SetMatches(); len(vals) > 0 {
 				sort.Strings(vals)
 				return newPostingGroup(true, m.Name, nil, vals), nil, nil
 			}
@@ -2790,7 +2790,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
 	}
 	if m.Type == labels.MatchRegexp {
-		if vals := findSetMatches(m.Value); len(vals) > 0 {
+		if vals := m.SetMatches(); len(vals) > 0 {
 			sort.Strings(vals)
 			return newPostingGroup(false, m.Name, vals, nil), nil, nil
 		}

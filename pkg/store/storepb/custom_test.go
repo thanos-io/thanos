@@ -522,7 +522,10 @@ func TestMatchersToString_Translate(t *testing.T) {
 			// Is this parsable?
 			promMsParsed, err := parser.ParseMetricSelector(c.expected)
 			testutil.Ok(t, err)
-			testutil.Equals(t, promMs, promMsParsed)
+			testutil.Assert(t, len(promMs) == len(promMsParsed))
+			for i := 0; i < len(promMs); i++ {
+				testutil.Equals(t, promMs[i].String(), promMsParsed[i].String())
+			}
 		})
 
 	}
