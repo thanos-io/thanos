@@ -88,6 +88,17 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Talks
 
+* 2024
+  * [6 Learnings from Building Thanos Project](https://www.youtube.com/watch?v=ur8dDFaNEFg)
+  * [Monitoring the World: Scaling Thanos in Dynamic Prometheus Environments](https://www.youtube.com/watch?v=ofhvbG0iTjU)
+  * [Scaling Thanos at Reddit](https://www.youtube.com/watch?v=c18RGbAxCfI)
+  * [Thanos Project Updates](https://www.youtube.com/watch?v=wmNtCj5D4_A)
+  * [Connecting Thanos to the Outer Rim via Query API](https://www.youtube.com/watch?v=E8L8fuRj66o)
+  * [Multiverse of Thanos: Making Thanos Multi-Tenanted](https://www.youtube.com/watch?v=SAyPQ2d8v4Q)
+  * [Thanos Receiver Deep Dive](https://www.youtube.com/watch?v=jn_zIfBuUyE)
+  * [From UI to Storage: Unraveling the Magic of Thanos Query Processing](https://www.youtube.com/watch?v=ZGQIitaKoTM)
+  * [Thanos’ Infinity Stones and How You Can Operate Them!](https://www.youtube.com/watch?v=e8kvX6mRlyE)
+
 * 2023
   * [Planetscale monitoring: Handling billions of active series with Prometheus and Thanos](https://www.youtube.com/watch?v=Or8r46fSaOg)
   * [Taming the Tsunami: low latency ingestion of push-based metrics in Prometheus](https://www.youtube.com/watch?v=W81x1j765hc)
