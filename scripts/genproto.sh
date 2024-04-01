@@ -62,11 +62,9 @@ for dir in ${DIRS}; do
   ${PROTOC_BIN} \
     --go_out=paths=source_relative:. \
     --plugin protoc-gen-go=${PROTOC_GEN_GO_BIN} \
-    --go-grpc_out=paths=source_relative:. \
-    --plugin protoc-gen-go-grpc=${PROTOC_GEN_GO_GRPC_BIN} \
     --go-vtproto_out=paths=source_relative:. \
     --plugin protoc-gen-go-vtproto=${PROTOC_GEN_GO_VTPROTO_BIN} \
-    --go-vtproto_opt=features=marshal+unmarshal+size+pool+clone \
+    --go-vtproto_opt=features=marshal+unmarshal+size+pool+clone+grpc \
     -I=. \
     -I="${VTPROTO_PATH}" \
     ${dir}/*.proto

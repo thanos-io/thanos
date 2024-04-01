@@ -5,9 +5,13 @@
 package remotewritepb
 
 import (
+	context "context"
 	binary "encoding/binary"
 	fmt "fmt"
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	io "io"
@@ -431,6 +435,99 @@ func (m *ChunkedSeries) CloneVT() *ChunkedSeries {
 
 func (m *ChunkedSeries) CloneMessageVT() proto.Message {
 	return m.CloneVT()
+}
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
+const _ = grpc.SupportPackageIsVersion7
+
+// WriteableStoreClient is the client API for WriteableStore service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type WriteableStoreClient interface {
+	// WriteRequest allows you to write metrics to this store via remote write
+	RemoteWrite(ctx context.Context, in *StoreWriteRequest, opts ...grpc.CallOption) (*StoreWriteResponse, error)
+}
+
+type writeableStoreClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewWriteableStoreClient(cc grpc.ClientConnInterface) WriteableStoreClient {
+	return &writeableStoreClient{cc}
+}
+
+func (c *writeableStoreClient) RemoteWrite(ctx context.Context, in *StoreWriteRequest, opts ...grpc.CallOption) (*StoreWriteResponse, error) {
+	out := new(StoreWriteResponse)
+	err := c.cc.Invoke(ctx, "/thanos.WriteableStore/RemoteWrite", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WriteableStoreServer is the server API for WriteableStore service.
+// All implementations must embed UnimplementedWriteableStoreServer
+// for forward compatibility
+type WriteableStoreServer interface {
+	// WriteRequest allows you to write metrics to this store via remote write
+	RemoteWrite(context.Context, *StoreWriteRequest) (*StoreWriteResponse, error)
+	mustEmbedUnimplementedWriteableStoreServer()
+}
+
+// UnimplementedWriteableStoreServer must be embedded to have forward compatible implementations.
+type UnimplementedWriteableStoreServer struct {
+}
+
+func (UnimplementedWriteableStoreServer) RemoteWrite(context.Context, *StoreWriteRequest) (*StoreWriteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoteWrite not implemented")
+}
+func (UnimplementedWriteableStoreServer) mustEmbedUnimplementedWriteableStoreServer() {}
+
+// UnsafeWriteableStoreServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WriteableStoreServer will
+// result in compilation errors.
+type UnsafeWriteableStoreServer interface {
+	mustEmbedUnimplementedWriteableStoreServer()
+}
+
+func RegisterWriteableStoreServer(s grpc.ServiceRegistrar, srv WriteableStoreServer) {
+	s.RegisterService(&WriteableStore_ServiceDesc, srv)
+}
+
+func _WriteableStore_RemoteWrite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := StoreWriteRequestFromVTPool()
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WriteableStoreServer).RemoteWrite(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/thanos.WriteableStore/RemoteWrite",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WriteableStoreServer).RemoteWrite(ctx, req.(*StoreWriteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// WriteableStore_ServiceDesc is the grpc.ServiceDesc for WriteableStore service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var WriteableStore_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "thanos.WriteableStore",
+	HandlerType: (*WriteableStoreServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RemoteWrite",
+			Handler:    _WriteableStore_RemoteWrite_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "store/storepb/remotewritepb/rpc.proto",
 }
 
 func (m *StoreWriteResponse) MarshalVT() (dAtA []byte, err error) {
