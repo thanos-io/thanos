@@ -383,7 +383,9 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
 	if lset := s.getLabels(); !lset.IsEmpty() {
-		meta.Thanos.Labels = lset.Map()
+		lset.Range(func(l labels.Label) {
+			meta.Thanos.Labels[l.Name] = l.Value
+		})
 	}
 	meta.Thanos.Source = s.source
 	meta.Thanos.SegmentFiles = block.GetSegmentFiles(updir)
