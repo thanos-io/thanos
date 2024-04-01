@@ -14,13 +14,12 @@ import (
 
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/remotewritepb"
 )
 
 func TestHashringGet(t *testing.T) {
-	ts := &prompb.TimeSeries{
-		Labels: []labelpb.ZLabel{
+	ts := &remotewritepb.TimeSeries{
+		Labels: []*remotewritepb.Label{
 			{
 				Name:  "foo",
 				Value: "bar",
@@ -160,8 +159,8 @@ func TestHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringGet(t *testing.T) {
-	baseTS := &prompb.TimeSeries{
-		Labels: []labelpb.ZLabel{
+	baseTS := &remotewritepb.TimeSeries{
+		Labels: []*remotewritepb.Label{
 			{
 				Name:  "pod",
 				Value: "nginx",
@@ -172,7 +171,7 @@ func TestKetamaHashringGet(t *testing.T) {
 		name         string
 		endpoints    []Endpoint
 		expectedNode string
-		ts           *prompb.TimeSeries
+		ts           *remotewritepb.TimeSeries
 		n            uint64
 	}{
 		{
@@ -217,8 +216,8 @@ func TestKetamaHashringGet(t *testing.T) {
 		{
 			name:      "base case with different timeseries",
 			endpoints: []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
-			ts: &prompb.TimeSeries{
-				Labels: []labelpb.ZLabel{
+			ts: &remotewritepb.TimeSeries{
+				Labels: []*remotewritepb.Label{
 					{
 						Name:  "pod",
 						Value: "thanos",
@@ -380,9 +379,9 @@ func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
 
 func TestKetamaHashringEvenAZSpread(t *testing.T) {
 	tenant := "default-tenant"
-	ts := &prompb.TimeSeries{
-		Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
-		Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+	ts := &remotewritepb.TimeSeries{
+		Labels:  remotewritepb.LabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+		Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 0}},
 	}
 
 	for _, tt := range []struct {
@@ -553,9 +552,9 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 			optimalSpread := int(tt.numSeries*tt.replicas) / len(tt.nodes)
 			nodeSpread := make(map[string]int)
 			for i := 0; i < int(tt.numSeries); i++ {
-				ts := &prompb.TimeSeries{
-					Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
-					Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+				ts := &remotewritepb.TimeSeries{
+					Labels:  remotewritepb.LabelsFromPromLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
+					Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 0}},
 				}
 				for j := 0; j < int(tt.replicas); j++ {
 					r, err := hashRing.GetN(tenant, ts, uint64(j))
@@ -592,12 +591,12 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 	}
 }
 
-func makeSeries() []prompb.TimeSeries {
+func makeSeries() []*remotewritepb.TimeSeries {
 	numSeries := 10000
-	series := make([]prompb.TimeSeries, numSeries)
+	series := make([]*remotewritepb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
-		series[i] = prompb.TimeSeries{
-			Labels: []labelpb.ZLabel{
+		series[i] = &remotewritepb.TimeSeries{
+			Labels: []*remotewritepb.Label{
 				{
 					Name:  "pod",
 					Value: fmt.Sprintf("nginx-%d", i),
@@ -608,10 +607,10 @@ func makeSeries() []prompb.TimeSeries {
 	return series
 }
 
-func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, newSeries prompb.TimeSeries) bool {
+func findSeries(initialAssignments map[string][]*remotewritepb.TimeSeries, node string, newSeries *remotewritepb.TimeSeries) bool {
 	for _, oldSeries := range initialAssignments[node] {
-		l1 := labelpb.ZLabelsToPromLabels(newSeries.Labels)
-		l2 := labelpb.ZLabelsToPromLabels(oldSeries.Labels)
+		l1 := remotewritepb.LabelsToPromLabels(newSeries.Labels)
+		l2 := remotewritepb.LabelsToPromLabels(oldSeries.Labels)
 		if labels.Equal(l1, l2) {
 			return true
 		}
@@ -620,19 +619,19 @@ func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, 
 	return false
 }
 
-func assignSeries(series []prompb.TimeSeries, nodes []Endpoint) (map[string][]prompb.TimeSeries, error) {
+func assignSeries(series []*remotewritepb.TimeSeries, nodes []Endpoint) (map[string][]*remotewritepb.TimeSeries, error) {
 	return assignReplicatedSeries(series, nodes, 0)
 }
 
-func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]prompb.TimeSeries, error) {
+func assignReplicatedSeries(series []*remotewritepb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]*remotewritepb.TimeSeries, error) {
 	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas)
 	if err != nil {
 		return nil, err
 	}
-	assignments := make(map[string][]prompb.TimeSeries)
+	assignments := make(map[string][]*remotewritepb.TimeSeries)
 	for i := uint64(0); i < replicas; i++ {
 		for _, ts := range series {
-			result, err := hashRing.GetN("tenant", &ts, i)
+			result, err := hashRing.GetN("tenant", ts, i)
 			if err != nil {
 				return nil, err
 			}

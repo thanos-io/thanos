@@ -188,8 +188,8 @@ func deltasToCounts(deltas []int64) []float64 {
 }
 
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L709-L723
-func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) Histogram {
-	return Histogram{
+func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) *Histogram {
+	return &Histogram{
 		Count:          &Histogram_CountInt{CountInt: h.Count},
 		Sum:            h.Sum,
 		Schema:         h.Schema,
@@ -205,8 +205,8 @@ func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) Histogra
 }
 
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L725-L739
-func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogram) Histogram {
-	return Histogram{
+func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogram) *Histogram {
+	return &Histogram{
 		Count:          &Histogram_CountFloat{CountFloat: fh.Count},
 		Sum:            fh.Sum,
 		Schema:         fh.Schema,

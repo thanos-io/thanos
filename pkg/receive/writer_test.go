@@ -24,30 +24,30 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/remotewritepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 func TestWriter(t *testing.T) {
 	now := model.Now()
-	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
+	lbls := []*remotewritepb.Label{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {
-		reqs             []*prompb.WriteRequest
+		reqs             []*remotewritepb.WriteRequest
 		expectedErr      error
-		expectedIngested []prompb.TimeSeries
+		expectedIngested []*remotewritepb.TimeSeries
 		maxExemplars     int64
 		opts             *WriterOptions
 	}{
 		"should error out on series with no labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 						{
-							Labels:  []labelpb.ZLabel{{Name: "__name__", Value: ""}},
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  []*remotewritepb.Label{{Name: "__name__", Value: ""}},
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
 				},
@@ -55,31 +55,31 @@ func TestWriter(t *testing.T) {
 			expectedErr: errors.Wrapf(labelpb.ErrEmptyLabels, "add 2 series"),
 		},
 		"should succeed on series with valid labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
 				},
 			},
 			expectedErr: nil,
-			expectedIngested: []prompb.TimeSeries{
+			expectedIngested: []*remotewritepb.TimeSeries{
 				{
-					Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+					Labels:  append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+					Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 				},
 			},
 		},
 		"should error out and skip series with out-of-order labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "Z", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "1"}, &remotewritepb.Label{Name: "Z", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
 				},
@@ -87,12 +87,12 @@ func TestWriter(t *testing.T) {
 			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 1 series"),
 		},
 		"should error out and skip series with duplicate labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}, labelpb.ZLabel{Name: "z", Value: "1"}),
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}, &remotewritepb.Label{Name: "z", Value: "1"}),
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
 				},
@@ -100,60 +100,60 @@ func TestWriter(t *testing.T) {
 			expectedErr: errors.Wrapf(labelpb.ErrDuplicateLabels, "add 1 series"),
 		},
 		"should error out and skip series with out-of-order labels; accept series with valid labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "A", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  append(lbls, &remotewritepb.Label{Name: "A", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  append(lbls, &remotewritepb.Label{Name: "c", Value: "1"}, &remotewritepb.Label{Name: "d", Value: "2"}),
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "E", Value: "1"}, labelpb.ZLabel{Name: "f", Value: "2"}),
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+							Labels:  append(lbls, &remotewritepb.Label{Name: "E", Value: "1"}, &remotewritepb.Label{Name: "f", Value: "2"}),
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
 				},
 			},
 			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 2 series"),
-			expectedIngested: []prompb.TimeSeries{
+			expectedIngested: []*remotewritepb.TimeSeries{
 				{
-					Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
-					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+					Labels:  append(lbls, &remotewritepb.Label{Name: "c", Value: "1"}, &remotewritepb.Label{Name: "d", Value: "2"}),
+					Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
 				},
 			},
 		},
 		"should succeed when sample timestamp is NOT too far in the future": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
 							Labels:  lbls,
-							Samples: []prompb.Sample{{Value: 1, Timestamp: int64(now)}},
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: int64(now)}},
 						},
 					},
 				},
 			},
 			expectedErr: nil,
-			expectedIngested: []prompb.TimeSeries{
+			expectedIngested: []*remotewritepb.TimeSeries{
 				{
 					Labels:  lbls,
-					Samples: []prompb.Sample{{Value: 1, Timestamp: int64(now)}},
+					Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: int64(now)}},
 				},
 			},
 			opts: &WriterOptions{TooFarInFutureTimeWindow: 30 * int64(time.Second)},
 		},
 		"should error out when sample timestamp is too far in the future": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
 							Labels: lbls,
 							// A sample with a very large timestamp in year 5138 (milliseconds)
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 99999999999999}},
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 99999999999999}},
 						},
 					},
 				},
@@ -162,20 +162,20 @@ func TestWriter(t *testing.T) {
 			opts:        &WriterOptions{TooFarInFutureTimeWindow: 10000},
 		},
 		"should succeed on valid series with exemplars": {
-			reqs: []*prompb.WriteRequest{{
-				Timeseries: []prompb.TimeSeries{
+			reqs: []*remotewritepb.WriteRequest{{
+				Timeseries: []*remotewritepb.TimeSeries{
 					{
 						Labels: lbls,
 						// Ingesting an exemplar requires a sample to create the series first.
-						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-						Exemplars: []prompb.Exemplar{
+						Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
+						Exemplars: []*remotewritepb.Exemplar{
 							{
-								Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "123"}},
+								Labels:    []*remotewritepb.Label{{Name: "traceID", Value: "123"}},
 								Value:     111,
 								Timestamp: 11,
 							},
 							{
-								Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "234"}},
+								Labels:    []*remotewritepb.Label{{Name: "traceID", Value: "234"}},
 								Value:     112,
 								Timestamp: 12,
 							},
@@ -187,16 +187,16 @@ func TestWriter(t *testing.T) {
 			maxExemplars: 2,
 		},
 		"should error out on valid series with out of order exemplars": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
 							Labels: lbls,
 							// Ingesting an exemplar requires a sample to create the series first.
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-							Exemplars: []prompb.Exemplar{
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
+							Exemplars: []*remotewritepb.Exemplar{
 								{
-									Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "123"}},
+									Labels:    []*remotewritepb.Label{{Name: "traceID", Value: "123"}},
 									Value:     111,
 									Timestamp: 11,
 								},
@@ -205,12 +205,12 @@ func TestWriter(t *testing.T) {
 					},
 				},
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
 							Labels: lbls,
-							Exemplars: []prompb.Exemplar{
+							Exemplars: []*remotewritepb.Exemplar{
 								{
-									Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "1234"}},
+									Labels:    []*remotewritepb.Label{{Name: "traceID", Value: "1234"}},
 									Value:     111,
 									Timestamp: 10,
 								},
@@ -223,16 +223,16 @@ func TestWriter(t *testing.T) {
 			maxExemplars: 2,
 		},
 		"should error out when exemplar label length exceeds the limit": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
 							Labels: lbls,
 							// Ingesting an exemplar requires a sample to create the series first.
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-							Exemplars: []prompb.Exemplar{
+							Samples: []*remotewritepb.Sample{{Value: 1, Timestamp: 10}},
+							Exemplars: []*remotewritepb.Exemplar{
 								{
-									Labels:    []labelpb.ZLabel{{Name: strings.Repeat("a", exemplar.ExemplarMaxLabelSetLength), Value: "1"}},
+									Labels:    []*remotewritepb.Label{{Name: strings.Repeat("a", exemplar.ExemplarMaxLabelSetLength), Value: "1"}},
 									Value:     111,
 									Timestamp: 11,
 								},
@@ -245,80 +245,80 @@ func TestWriter(t *testing.T) {
 			maxExemplars: 2,
 		},
 		"should succeed on histogram with valid labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Histograms: []prompb.Histogram{
-								prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
+							Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Histograms: []*remotewritepb.Histogram{
+								remotewritepb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 							},
 						},
 					},
 				},
 			},
 			expectedErr: nil,
-			expectedIngested: []prompb.TimeSeries{
+			expectedIngested: []*remotewritepb.TimeSeries{
 				{
-					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-					Histograms: []prompb.Histogram{
-						prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
+					Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+					Histograms: []*remotewritepb.Histogram{
+						remotewritepb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 					},
 				},
 			},
 		},
 		"should succeed on float histogram with valid labels": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Histograms: []prompb.Histogram{
-								prompb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
+							Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Histograms: []*remotewritepb.Histogram{
+								remotewritepb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
 							},
 						},
 					},
 				},
 			},
 			expectedErr: nil,
-			expectedIngested: []prompb.TimeSeries{
+			expectedIngested: []*remotewritepb.TimeSeries{
 				{
-					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-					Histograms: []prompb.Histogram{
-						prompb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
+					Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+					Histograms: []*remotewritepb.Histogram{
+						remotewritepb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
 					},
 				},
 			},
 		},
 		"should error out on valid histograms with out of order histogram": {
-			reqs: []*prompb.WriteRequest{
+			reqs: []*remotewritepb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Histograms: []prompb.Histogram{
-								prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
+							Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Histograms: []*remotewritepb.Histogram{
+								remotewritepb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 							},
 						},
 					},
 				},
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*remotewritepb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-							Histograms: []prompb.Histogram{
-								prompb.HistogramToHistogramProto(9, tsdbutil.GenerateTestHistogram(0)),
+							Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+							Histograms: []*remotewritepb.Histogram{
+								remotewritepb.HistogramToHistogramProto(9, tsdbutil.GenerateTestHistogram(0)),
 							},
 						},
 					},
 				},
 			},
 			expectedErr: errors.Wrapf(storage.ErrOutOfOrderSample, "add 1 samples"),
-			expectedIngested: []prompb.TimeSeries{
+			expectedIngested: []*remotewritepb.TimeSeries{
 				{
-					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
-					Histograms: []prompb.Histogram{
-						prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
+					Labels: append(lbls, &remotewritepb.Label{Name: "a", Value: "1"}, &remotewritepb.Label{Name: "b", Value: "2"}),
+					Histograms: []*remotewritepb.Histogram{
+						remotewritepb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 					},
 				},
 			},
@@ -364,7 +364,7 @@ func TestWriter(t *testing.T) {
 			w := NewWriter(logger, m, testData.opts)
 
 			for idx, req := range testData.reqs {
-				err = w.Write(context.Background(), tenancy.DefaultTenant, req)
+				err = w.Write(context.Background(), tenancy.DefaultTenant, req.Timeseries)
 
 				// We expect no error on any request except the last one
 				// which may error (and in that case we assert on it).
@@ -382,7 +382,7 @@ func TestWriter(t *testing.T) {
 			gr := a.(storage.GetRef)
 
 			for _, ts := range testData.expectedIngested {
-				l := labelpb.ZLabelsToPromLabels(ts.Labels)
+				l := remotewritepb.LabelsToPromLabels(ts.Labels)
 				ref, _ := gr.GetRef(l, l.Hash())
 				testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
 			}
@@ -455,7 +455,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 
 	timeSeries := generateLabelsAndSeries(labelsNum, seriesNum, generateHistograms)
 
-	wreq := &prompb.WriteRequest{
+	wreq := &remotewritepb.WriteRequest{
 		Timeseries: timeSeries,
 	}
 
@@ -466,7 +466,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
 
@@ -477,7 +477,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
 
@@ -488,26 +488,26 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 // duplicates without error (see comment https://github.com/prometheus/prometheus/blob/release-2.37/tsdb/head_append.go#L316).
 // This also means the sample won't be appended, which means the overhead of appending additional samples to head is not
 // reflected in the benchmark, but should still capture the performance of receive writer.
-func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bool) []prompb.TimeSeries {
+func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bool) []*remotewritepb.TimeSeries {
 	// Generate some labels first.
-	l := make([]labelpb.ZLabel, 0, numLabels)
-	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
+	l := make([]*remotewritepb.Label, 0, numLabels)
+	l = append(l, &remotewritepb.Label{Name: "__name__", Value: "test"})
 	for i := 0; i < numLabels; i++ {
-		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
+		l = append(l, &remotewritepb.Label{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
 	}
 
-	ts := make([]prompb.TimeSeries, numSeries)
+	ts := make([]*remotewritepb.TimeSeries, numSeries)
 	for j := 0; j < numSeries; j++ {
-		ts[j] = prompb.TimeSeries{
+		ts[j] = &remotewritepb.TimeSeries{
 			Labels: l,
 		}
 
 		if generateHistograms {
-			ts[j].Histograms = []prompb.Histogram{prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0))}
+			ts[j].Histograms = []*remotewritepb.Histogram{remotewritepb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0))}
 			continue
 		}
 
-		ts[j].Samples = []prompb.Sample{{Value: 1, Timestamp: 10}}
+		ts[j].Samples = []*remotewritepb.Sample{{Value: 1, Timestamp: 10}}
 	}
 
 	return ts
