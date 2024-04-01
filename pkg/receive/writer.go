@@ -118,13 +118,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, timeseries []*remot
 		lset := remotewritepb.LabelsToPromLabels(t.Labels)
 		if err := remotewritepb.ValidateLabels(t.Labels); err != nil {
 			switch err {
-			case labelpb.ErrOutOfOrderLabels:
+			case remotewritepb.ErrOutOfOrderLabels:
 				numLabelsOutOfOrder++
 				level.Debug(tLogger).Log("msg", "Out of order labels in the label set", "lset", lset.String())
-			case labelpb.ErrDuplicateLabels:
+			case remotewritepb.ErrDuplicateLabels:
 				numLabelsDuplicates++
 				level.Debug(tLogger).Log("msg", "Duplicate labels in the label set", "lset", lset.String())
-			case labelpb.ErrEmptyLabels:
+			case remotewritepb.ErrEmptyLabels:
 				numLabelsEmpty++
 				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", lset.String())
 			default:

@@ -519,9 +519,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wreq := remotewritepb.WriteRequestFromVTPool()
-	defer wreq.ReturnToVTPool()
-	if err := proto.Unmarshal(reqBuf, wreq); err != nil {
+	var wreq remotewritepb.WriteRequest
+	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -563,14 +562,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(wreq)
+	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
 	responseStatusCode := http.StatusOK
-	if err := h.handleRequest(ctx, rep, tenant, wreq); err != nil {
+	if err := h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
 		case errNotReady:
@@ -907,11 +906,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *remotewritepb.StoreWriteRe
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	wreq := remotewritepb.WriteRequestFromVTPool()
-	wreq.Timeseries = r.Timeseries
-	defer wreq.ReturnToVTPool()
-
-	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, wreq)
+	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &remotewritepb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
