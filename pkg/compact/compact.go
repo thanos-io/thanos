@@ -831,13 +831,9 @@ func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context,
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
-// This is similar to tsdb.Compactor just without Plan method.
+// It is similar to tsdb.Compactor but only relevant methods are kept. Plan and Write are removed.
 // TODO(bwplotka): Split the Planner from Compactor on upstream as well, so we can import it.
 type Compactor interface {
-	// Write persists a Block into a directory.
-	// No Block is written when resulting Block has 0 samples, and returns empty ulid.ULID{}.
-	Write(dest string, b tsdb.BlockReader, mint, maxt int64, parent *tsdb.BlockMeta) (ulid.ULID, error)
-
 	// Compact runs compaction against the provided directories. Must
 	// only be called concurrently with results of Plan().
 	// Can optionally pass a list of already open blocks,
