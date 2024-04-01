@@ -27,7 +27,6 @@ import (
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -845,7 +844,7 @@ func cycleErrors(errs []error) func() error {
 
 // makeRequest is a helper to make a correct request against a remote write endpoint given a request.
 func makeRequest(h *Handler, tenant string, wreq *remotewritepb.WriteRequest) (*httptest.ResponseRecorder, error) {
-	buf, err := proto.Marshal(wreq)
+	buf, err := wreq.MarshalVT()
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal request")
 	}
@@ -948,7 +947,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 			Samples: []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
 		})
 	}
-	body, err := proto.Marshal(r)
+	body, err := r.Marshal()
 	testutil.Ok(t, err)
 	return snappy.Encode(nil, body)
 }
