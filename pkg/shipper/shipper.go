@@ -82,8 +82,6 @@ type Shipper struct {
 
 	labels func() labels.Labels
 	mtx    sync.RWMutex
-	closed bool
-	wg     sync.WaitGroup
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
@@ -136,13 +134,6 @@ func (s *Shipper) SetLabels(lbls labels.Labels) {
 	defer s.mtx.Unlock()
 
 	s.labels = func() labels.Labels { return lbls }
-}
-
-func (s *Shipper) getLabels() labels.Labels {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	return s.labels()
 }
 
 // Timestamps returns the minimum timestamp for which data is available and the highest timestamp
@@ -249,30 +240,6 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 	return nil
 }
 
-// DisableWait disables the shipper and waits for all ongoing syncs to finish.
-// Useful when you want to sync one last time before pruning a TSDB.
-func (s *Shipper) DisableWait() {
-	if s == nil {
-		return
-	}
-	s.mtx.Lock()
-	s.closed = true
-	s.mtx.Unlock()
-	s.wg.Wait()
-}
-
-// Enable enables the shipper again.
-// Useful when you want to sync one last time before pruning a TSDB.
-// Remove all references to the shipper, call DisableWait, call Enable, and then call Sync() one last time.
-func (s *Shipper) Enable() {
-	if s == nil {
-		return
-	}
-	s.mtx.Lock()
-	s.closed = false
-	s.mtx.Unlock()
-}
-
 // Sync performs a single synchronization, which ensures all non-compacted local blocks have been uploaded
 // to the object bucket once.
 //
@@ -281,14 +248,7 @@ func (s *Shipper) Enable() {
 // It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok).
 func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	s.mtx.Lock()
-	if s.closed {
-		s.mtx.Unlock()
-		return 0, nil
-	}
-	s.wg.Add(1)
-	s.mtx.Unlock()
-
-	defer s.wg.Done()
+	defer s.mtx.Unlock()
 
 	meta, err := ReadMetaFile(s.metadataFilePath)
 	if err != nil {
@@ -311,7 +271,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta.Uploaded = nil
 
 	var (
-		checker    = newLazyOverlapChecker(s.logger, s.bucket, s.getLabels)
+		checker    = newLazyOverlapChecker(s.logger, s.bucket, func() labels.Labels { return s.labels() })
 		uploadErrs int
 	)
 
@@ -433,7 +393,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 		return errors.Wrap(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
-	if lset := s.getLabels(); !lset.IsEmpty() {
+	if lset := s.labels(); !lset.IsEmpty() {
 		lset.Range(func(l labels.Label) {
 			meta.Thanos.Labels[l.Name] = l.Value
 		})
