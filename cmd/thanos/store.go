@@ -309,7 +309,7 @@ func runStore(
 	r := route.New()
 
 	if len(cachingBucketConfigYaml) > 0 {
-		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r)
+		insBkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, insBkt, logger, reg, r, conf.cachingBucketConfig.Path())
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
