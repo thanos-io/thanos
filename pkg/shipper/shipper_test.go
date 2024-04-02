@@ -228,3 +228,71 @@ func TestReadMetaFile(t *testing.T) {
 		testutil.Equals(t, "unexpected meta file version 2", err.Error())
 	})
 }
+
+func TestShipperExistingThanosLabels(t *testing.T) {
+	dir := t.TempDir()
+
+	inmemory := objstore.NewInMemBucket()
+
+	lbls := labels.FromStrings("test", "test")
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
+
+	id := ulid.MustNew(1, nil)
+	id2 := ulid.MustNew(2, nil)
+	blockDir := path.Join(dir, id.String())
+	chunksDir := path.Join(blockDir, block.ChunksDirname)
+	testutil.Ok(t, os.MkdirAll(chunksDir, os.ModePerm))
+	blockDir2 := path.Join(dir, id2.String())
+	chunksDir2 := path.Join(blockDir2, block.ChunksDirname)
+	testutil.Ok(t, os.MkdirAll(chunksDir2, os.ModePerm))
+
+	// Prepare meta.json with Thanos labels.
+	testutil.Ok(t, metadata.Meta{
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"cluster": "us-west-2",
+			},
+		},
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id,
+			MaxTime: 2000,
+			MinTime: 1000,
+			Version: 1,
+			Stats: tsdb.BlockStats{
+				NumSamples: 1000, // Not really, but shipper needs nonzero value.
+			},
+		},
+	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id.String())))
+	// Prepare a meta.json with the same label name set.
+	testutil.Ok(t, metadata.Meta{
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"test":    "aaa",
+				"cluster": "us-east-1",
+			},
+		},
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id2,
+			MaxTime: 2000,
+			MinTime: 1000,
+			Version: 1,
+			Stats: tsdb.BlockStats{
+				NumSamples: 1000, // Not really, but shipper needs nonzero value.
+			},
+		},
+	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id2.String())))
+	testutil.Ok(t, os.WriteFile(filepath.Join(blockDir, "index"), []byte("index file"), 0666))
+	testutil.Ok(t, os.WriteFile(filepath.Join(blockDir2, "index"), []byte("index file"), 0666))
+
+	uploaded, err := s.Sync(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, 2, uploaded)
+
+	meta, err := block.DownloadMeta(context.Background(), log.NewNopLogger(), inmemory, id)
+	testutil.Ok(t, err)
+	testutil.Equals(t, map[string]string{"cluster": "us-west-2", "test": "test"}, meta.Thanos.Labels)
+
+	meta, err = block.DownloadMeta(context.Background(), log.NewNopLogger(), inmemory, id2)
+	testutil.Ok(t, err)
+	testutil.Equals(t, map[string]string{"cluster": "us-east-1", "test": "test"}, meta.Thanos.Labels)
+}

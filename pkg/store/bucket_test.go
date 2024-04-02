@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -2866,6 +2867,23 @@ func TestExpandPostingsWithContextCancel(t *testing.T) {
 	testutil.Equals(t, []storage.SeriesRef(nil), res)
 }
 
+func samePostingGroup(a, b *postingGroup) bool {
+	if a.name != b.name || a.lazy != b.lazy || a.addAll != b.addAll || a.cardinality != b.cardinality || len(a.matchers) != len(b.matchers) {
+		return false
+	}
+
+	if !reflect.DeepEqual(a.addKeys, b.addKeys) || !reflect.DeepEqual(a.removeKeys, b.removeKeys) {
+		return false
+	}
+
+	for i := 0; i < len(a.matchers); i++ {
+		if a.matchers[i].String() != b.matchers[i].String() {
+			return false
+		}
+	}
+	return true
+}
+
 func TestMatchersToPostingGroup(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
@@ -3213,7 +3231,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 				return tc.labelValues[name], nil
 			}, tc.matchers)
 			testutil.Ok(t, err)
-			testutil.Equals(t, tc.expected, actual)
+			testutil.Equals(t, len(tc.expected), len(actual))
+			for i := 0; i < len(tc.expected); i++ {
+				testutil.Assert(t, samePostingGroup(tc.expected[i], actual[i]))
+			}
 		})
 	}
 }
