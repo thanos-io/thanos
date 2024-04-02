@@ -419,7 +419,6 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	tenantInstance.mtx.Lock()
 	shipper := tenantInstance.ship
 	tenantInstance.ship = nil
-	shipper.DisableWait()
 	tenantInstance.mtx.Unlock()
 
 	defer func() {
@@ -429,7 +428,6 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		// If the tenant was not pruned, re-enable the shipper.
 		tenantInstance.mtx.Lock()
 		tenantInstance.ship = shipper
-		shipper.Enable()
 		tenantInstance.mtx.Unlock()
 	}()
 
@@ -450,7 +448,6 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	level.Info(logger).Log("msg", "Pruning tenant")
 	if shipper != nil {
 		// No other code can reach this shipper anymore so enable it again to be able to sync manually.
-		shipper.Enable()
 		uploaded, err := shipper.Sync(ctx)
 		if err != nil {
 			return false, err
