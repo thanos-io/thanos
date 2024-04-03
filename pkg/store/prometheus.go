@@ -480,7 +480,6 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 
 		samples = samples[chunkSize:]
 	}
-
 	return chks, nil
 }
 
