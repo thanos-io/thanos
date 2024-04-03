@@ -798,6 +798,9 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 					Replica: int64(writeTarget.replica + 1),
 				})
 			})
+			if isConflict(err) {
+				err = nil
+			}
 			if err != nil {
 				// Check if peer connection is unavailable, don't attempt to send requests constantly.
 				if st, ok := status.FromError(err); ok {
