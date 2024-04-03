@@ -106,6 +106,19 @@ func registerSidecar(app *extkingpin.App) {
 	})
 }
 
+// DurationWithJitter returns random duration from "input - input*variancePerc" to "input + input*variancePerc" interval.
+func DurationWithJitter(input time.Duration, variancePerc float64) time.Duration {
+
+	if input == 0 {
+		return 0
+	}
+
+	variance := int64(float64(input) * variancePerc)
+	jitter := rand.Int63n(variance*2) - variance
+
+	return input + time.Duration(jitter)
+}
+
 func runSidecar(
 	g *run.Group,
 	logger log.Logger,
@@ -363,10 +376,12 @@ func runSidecar(
 			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
 				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.RepeatWithJitter(30*time.Second, ctx, 0.05, func() error {
 				// Generate random delay using upload jitter.
-				jitter := time.Duration(rand.Int63n(int64(conf.shipper.uploadJitter)))
-				time.Sleep(jitter)
+				jitter := DurationWithJitter(conf.shipper.uploadJitter, 0.05)
+				if jitter > 0 {
+					time.Sleep(jitter)
+				}
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
@@ -510,28 +525,6 @@ type sidecarConfig struct {
 	storeRateLimits store.SeriesSelectLimits
 }
 
-type durationValue time.Duration
-
-// Set implements the Set method of the kingpin.Value interface.
-func (d *durationValue) Set(value string) error {
-	duration, err := time.ParseDuration(value)
-	if err != nil {
-		return err
-	}
-	*d = durationValue(duration)
-	return nil
-}
-
-// String implements the String method of the kingpin.Value interface.
-func (d *durationValue) String() string {
-	return time.Duration(*d).String()
-}
-
-// Register a flag with the provided duration value.
-func registerDurationFlag(cmd extkingpin.FlagClause, value *time.Duration, flagName string, defaultValue string, help string) {
-	cmd.Flag(flagName, help).Default(defaultValue).SetValue((*durationValue)(value))
-}
-
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	var uploadJitter time.Duration
 	sc.http.registerFlag(cmd)
@@ -545,6 +538,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.storeRateLimits.RegisterFlags(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
-	registerDurationFlag(cmd, &uploadJitter, "upload-jitter", "0s", "Maximum random delay before uploading blocks.")
-	sc.shipper.uploadJitter = uploadJitter
+	conf := &sidecarConfig{}
+	cmd.Flag("upload-jitter", "Maximum random delay before uploading blocks.").Default("0s").DurationVar(&uploadJitter)
+	conf.shipper.uploadJitter = uploadJitter
 }
