@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -73,7 +74,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		r := prometheus.NewRegistry()
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := NewBaseBlockIDsFetcher(noopLogger, insBkt)
+		baseBlockIDsFetcher := NewConcurrentLister(noopLogger, insBkt)
 		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
 		testutil.Ok(t, err)
 

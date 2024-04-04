@@ -10,31 +10,28 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb"
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/thanos-io/thanos/pkg/api/status"
-	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/objstore"
-
+	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/exemplars"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -186,7 +183,7 @@ func (t *tenant) client(logger log.Logger) store.Client {
 		return nil
 	}
 
-	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
+	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore))
 	return newLocalClient(client, tsdbStore)
 }
 
@@ -572,12 +569,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	reg = NewUnRegisterer(reg)
 
 	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
-
-	lset, err := t.extractTenantsLabels(tenantID, initialLset)
-	if err != nil {
-		return err
-	}
-
+	lset := t.extractTenantsLabels(tenantID, initialLset)
 	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
@@ -686,14 +678,7 @@ func (t *MultiTSDB) SetHashringConfig(cfg []HashringConfig) error {
 				updatedTenants = append(updatedTenants, tenantID)
 
 				lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
-
-				if hc.ExternalLabels != nil {
-					extendedLset, err := extendLabels(lset, hc.ExternalLabels, t.logger)
-					if err != nil {
-						return errors.Wrap(err, "failed to extend external labels for tenant "+tenantID)
-					}
-					lset = extendedLset
-				}
+				lset = labelpb.ExtendSortedLabels(hc.ExternalLabels, lset)
 
 				if t.tenants[tenantID].ship != nil {
 					t.tenants[tenantID].ship.SetLabels(lset)
@@ -865,63 +850,14 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 // extractTenantsLabels extracts tenant's external labels from hashring configs.
 // If one tenant appears in multiple hashring configs,
 // only the external label set from the first hashring config is applied.
-func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Labels) (labels.Labels, error) {
+func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Labels) labels.Labels {
 	for _, hc := range t.hashringConfigs {
 		for _, tenant := range hc.Tenants {
 			if tenant != tenantID {
 				continue
 			}
-
-			if hc.ExternalLabels != nil {
-				extendedLset, err := extendLabels(initialLset, hc.ExternalLabels, t.logger)
-				if err != nil {
-					return nil, errors.Wrap(err, "failed to extend external labels for tenant "+tenantID)
-				}
-				return extendedLset, nil
-			}
-
-			return initialLset, nil
+			return labelpb.ExtendSortedLabels(hc.ExternalLabels, initialLset)
 		}
 	}
-
-	return initialLset, nil
-}
-
-// extendLabels extends external labels of the initial label set.
-// If an external label shares same name with a label in the initial label set,
-// use the label in the initial label set and inform user about it.
-func extendLabels(labelSet labels.Labels, extend map[string]string, logger log.Logger) (labels.Labels, error) {
-	var extendLabels labels.Labels
-	for name, value := range extend {
-		if !model.LabelName.IsValid(model.LabelName(name)) {
-			return nil, errors.Errorf("unsupported format for label's name: %s", name)
-		}
-		extendLabels = append(extendLabels, labels.Label{Name: name, Value: value})
-	}
-
-	sort.Sort(labelSet)
-	sort.Sort(extendLabels)
-
-	extendedLabelSet := make(labels.Labels, 0, len(labelSet)+len(extendLabels))
-	for len(labelSet) > 0 && len(extendLabels) > 0 {
-		d := strings.Compare(labelSet[0].Name, extendLabels[0].Name)
-		if d == 0 {
-			extendedLabelSet = append(extendedLabelSet, labelSet[0])
-			level.Info(logger).Log("msg", "Duplicate label found. Using initial label instead.",
-				"label's name", extendLabels[0].Name)
-			labelSet, extendLabels = labelSet[1:], extendLabels[1:]
-		} else if d < 0 {
-			extendedLabelSet = append(extendedLabelSet, labelSet[0])
-			labelSet = labelSet[1:]
-		} else if d > 0 {
-			extendedLabelSet = append(extendedLabelSet, extendLabels[0])
-			extendLabels = extendLabels[1:]
-		}
-	}
-	extendedLabelSet = append(extendedLabelSet, labelSet...)
-	extendedLabelSet = append(extendedLabelSet, extendLabels...)
-
-	sort.Sort(extendedLabelSet)
-
-	return extendedLabelSet, nil
+	return initialLset
 }

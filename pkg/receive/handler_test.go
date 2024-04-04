@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -168,7 +169,7 @@ func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels
 }
 
 type fakePeersGroup struct {
-	clients map[string]storepb.WriteableStoreClient
+	clients map[string]WriteableStoreAsyncClient
 
 	closeCalled map[string]bool
 }
@@ -190,7 +191,7 @@ func (g *fakePeersGroup) close(addr string) error {
 	return nil
 }
 
-func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (storepb.WriteableStoreClient, error) {
+func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (WriteableStoreAsyncClient, error) {
 	c, ok := g.clients[addr]
 	if !ok {
 		return nil, fmt.Errorf("client %s not found", addr)
@@ -207,7 +208,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		wOpts    = &WriterOptions{}
 	)
 	fakePeers := &fakePeersGroup{
-		clients: map[string]storepb.WriteableStoreClient{},
+		clients: map[string]WriteableStoreAsyncClient{},
 	}
 
 	ag := addrGen{}
@@ -650,13 +651,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			// Test that each time series is stored
 			// the correct amount of times in each fake DB.
 			for _, ts := range tc.wreq.Timeseries {
-				lset := make(labels.Labels, len(ts.Labels))
-				for j := range ts.Labels {
-					lset[j] = labels.Label{
-						Name:  ts.Labels[j].Name,
-						Value: ts.Labels[j].Value,
-					}
-				}
+				lset := labelpb.ZLabelsToPromLabels(ts.Labels)
 				for j, a := range tc.appendables {
 					if withConsistencyDelay {
 						var expected int
@@ -880,6 +875,16 @@ type fakeRemoteWriteGRPCServer struct {
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
+}
+
+func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+	_, err := f.h.RemoteWrite(ctx, in)
+	responses <- writeResponse{
+		er:        er,
+		err:       err,
+		seriesIDs: seriesIDs,
+	}
+	cb(err)
 }
 
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
@@ -1644,4 +1649,89 @@ func TestHashringChangeCallsClose(t *testing.T) {
 
 	pg := allHandlers[0].peers.(*fakePeersGroup)
 	testutil.Assert(t, len(pg.closeCalled) > 0)
+}
+
+func TestHandlerEarlyStop(t *testing.T) {
+	h := NewHandler(nil, &Options{})
+	h.Close()
+
+	err := h.Run()
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "http: Server closed", err.Error())
+}
+
+func TestHandlerFlippingHashrings(t *testing.T) {
+	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
+	t.Cleanup(h.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	h1, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9090",
+		},
+	})
+	require.NoError(t, err)
+	h2, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9091",
+		},
+	})
+	require.NoError(t, err)
+
+	h.Hashring(h1)
+
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-time.After(50 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+
+			err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+						Samples: []prompb.Sample{
+							{
+								Timestamp: time.Now().Unix(),
+								Value:     123,
+							},
+						},
+					},
+				},
+			})
+			require.Error(t, err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var flipper bool
+
+		for {
+			select {
+			case <-time.After(200 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+
+			if flipper {
+				h.Hashring(h2)
+			} else {
+				h.Hashring(h1)
+			}
+			flipper = !flipper
+		}
+	}()
+
+	<-time.After(1 * time.Second)
+	cancel()
+	wg.Wait()
 }

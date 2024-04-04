@@ -26,6 +26,7 @@ import (
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -33,6 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -252,6 +254,29 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("foo", "bar", "region", "eu-west"),
 					},
+				},
+			},
+		},
+		{
+			desc: "series matcher on other labels when requesting external labels",
+			appendFn: func(app storage.Appender) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar", "job", "C"), 0, 0)
+				testutil.Ok(t, err)
+				_, err = app.Append(0, labels.FromStrings("__name__", "up", "foo", "baz", "job", "C"), 0, 0)
+				testutil.Ok(t, err)
+
+				testutil.Ok(t, app.Commit())
+			},
+			labelValuesCalls: []labelValuesCallCase{
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					label: "region",
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
+						{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "C"},
+					},
+					expectedValues: []string{"eu-west"},
 				},
 			},
 		},
@@ -877,7 +902,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			testutil.Ok(tt, err)
 
 			insBkt := objstore.WithNoopInstr(bkt)
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 			metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 			})
@@ -964,4 +989,31 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 
 	testStoreAPIsAcceptance(t, startStore)
 	testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t, startStore)
+}
+
+func TestProxyStore_Acceptance(t *testing.T) {
+	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			db, err := e2eutil.NewTSDB()
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+			appendFn(db.Appender(context.Background()))
+
+			return NewTSDBStore(nil, db, component.Rule, extLset)
+		}
+
+		p1 := startNestedStore(tt, extLset, appendFn)
+		p2 := startNestedStore(tt, extLset, appendFn)
+
+		clients := []Client{
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1)},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2)},
+		}
+
+		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
+	}
+
+	testStoreAPIsAcceptance(t, startStore)
 }

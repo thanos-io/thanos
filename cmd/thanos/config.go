@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/pkg/errors"
 
@@ -282,4 +283,43 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 	}
 	sort.Sort(lset)
 	return lset, nil
+}
+
+type goMemLimitConfig struct {
+	enableAutoGoMemlimit bool
+	memlimitRatio        float64
+}
+
+func (gml *goMemLimitConfig) registerFlag(cmd extkingpin.FlagClause) *goMemLimitConfig {
+	cmd.Flag("enable-auto-gomemlimit",
+		"Enable go runtime to automatically limit memory consumption.").
+		Default("false").BoolVar(&gml.enableAutoGoMemlimit)
+
+	cmd.Flag("auto-gomemlimit.ratio",
+		"The ratio of reserved GOMEMLIMIT memory to the detected maximum container or system memory.").
+		Default("0.9").FloatVar(&gml.memlimitRatio)
+
+	return gml
+}
+
+func configureGoAutoMemLimit(common goMemLimitConfig) error {
+	if common.memlimitRatio <= 0.0 || common.memlimitRatio > 1.0 {
+		return errors.New("--auto-gomemlimit.ratio must be greater than 0 and less than or equal to 1.")
+	}
+
+	if common.enableAutoGoMemlimit {
+		if _, err := memlimit.SetGoMemLimitWithOpts(
+			memlimit.WithRatio(common.memlimitRatio),
+			memlimit.WithProvider(
+				memlimit.ApplyFallback(
+					memlimit.FromCgroup,
+					memlimit.FromSystem,
+				),
+			),
+		); err != nil {
+			return errors.Wrap(err, "Failed to set GOMEMLIMIT automatically")
+		}
+	}
+
+	return nil
 }

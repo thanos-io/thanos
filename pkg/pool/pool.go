@@ -35,7 +35,7 @@ type BucketedBytes struct {
 	sizes     []int
 	maxTotal  uint64
 	usedTotal uint64
-	mtx       sync.Mutex
+	mtx       sync.RWMutex
 
 	new func(s int) *[]byte
 }
@@ -136,4 +136,11 @@ func (p *BucketedBytes) Put(b *[]byte) {
 	} else {
 		p.usedTotal -= uint64(sz)
 	}
+}
+
+func (p *BucketedBytes) UsedBytes() uint64 {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
+
+	return p.usedTotal
 }

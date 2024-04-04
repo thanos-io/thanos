@@ -4,10 +4,12 @@
 package storecache
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -72,7 +74,7 @@ func (cfg *CachingWithBackendConfig) Defaults() {
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
-func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer, r *route.Router) (objstore.InstrumentedBucket, error) {
+func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer, r *route.Router, configPath string) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading caching bucket configuration")
 
 	config := &CachingWithBackendConfig{}
@@ -81,6 +83,12 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	if err := yaml.UnmarshalStrict(yamlContent, config); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
 	}
+
+	// Append the config path to the YAML content. This allows
+	// using identical config with multiple instances.
+	// TODO(GiedriusS): in the long-term add some kind of "name"
+	// identifier for each instance.
+	cfgHash := string(fmt.Sprintf("%d", xxhash.Sum64(append(yamlContent, []byte(configPath)...))))
 
 	backendConfig, err := yaml.Marshal(config.BackendConfig)
 	if err != nil {
@@ -97,7 +105,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	cfg.CacheGet("meta.jsons", nil, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
-	cfg.CacheIter("blocks-iter", nil, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
+	cfg.CacheIter("blocks-iter", nil, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{}, cfgHash)
 
 	switch strings.ToUpper(string(config.Type)) {
 	case string(MemcachedBucketCacheProvider):

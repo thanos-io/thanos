@@ -208,7 +208,10 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			keys, matchers := keysToFetchFromPostingGroups(tc.pgs)
 			testutil.Equals(t, tc.expectedLabels, keys)
-			testutil.Equals(t, tc.expectedMatchers, matchers)
+			testutil.Assert(t, len(tc.expectedMatchers) == len(matchers))
+			for i := 0; i < len(tc.expectedMatchers); i++ {
+				testutil.Equals(t, tc.expectedMatchers[i].String(), matchers[i].String())
+			}
 		})
 	}
 }
@@ -308,7 +311,19 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			expectedError:         "postings offsets for foo: random",
 		},
 		{
-			name: "posting offsets empty",
+			name:             "posting offsets empty with add keys, expect empty posting",
+			inputPostings:    map[string]map[string]index.Range{},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+			},
+			expectedPostingGroups: nil,
+			expectedEmptyPosting:  true,
+		},
+		{
+			name: "posting group label with add keys doesn't exist, return empty postings",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
 			},
@@ -322,7 +337,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			expectedEmptyPosting:  true,
 		},
 		{
-			name: "posting group label doesn't exist",
+			name: "posting group label with remove keys doesn't exist, noop",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
 			},
@@ -330,10 +345,29 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
-				{name: "bar", addKeys: []string{"foo"}},
+				{name: "bar", removeKeys: []string{"foo"}, addAll: true},
 			},
-			expectedPostingGroups: nil,
-			expectedEmptyPosting:  true,
+			expectedPostingGroups: []*postingGroup{
+				{name: "bar", removeKeys: []string{"foo"}, cardinality: 0, addAll: true},
+				{name: "foo", addKeys: []string{"bar"}, cardinality: 1},
+			},
+		},
+		{
+			name: "posting group label with remove keys exist but no matching value, noop",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 8}},
+				"bar": {"baz": index.Range{Start: 8, End: 16}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", removeKeys: []string{"foo"}, addAll: true},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{name: "bar", removeKeys: []string{"foo"}, cardinality: 0, addAll: true},
+				{name: "foo", addKeys: []string{"bar"}, cardinality: 1},
+			},
 		},
 		{
 			name: "posting group keys partial exist",
@@ -477,6 +511,29 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				{name: "cluster", addKeys: []string{"us"}, cardinality: 1},
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
 				{addAll: true, name: "bar", removeKeys: []string{"foo"}, cardinality: 250000, lazy: true},
+			},
+		},
+		{
+			name: "four posting groups with either add or remove keys, negative matcher group has the lowest cardinality, only the largest group is lazy",
+			inputPostings: map[string]map[string]index.Range{
+				"foo":     {"bar": index.Range{End: 8}},
+				"bar":     {"foo": index.Range{Start: 8, End: 2012}},
+				"baz":     {"foo": index.Range{Start: 2012, End: 4020}},
+				"cluster": {"us": index.Range{Start: 4020, End: 1004024}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+				{name: "baz", addKeys: []string{"foo"}},
+				{name: "cluster", addKeys: []string{"us"}},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1},
+				{name: "bar", addKeys: []string{"foo"}, cardinality: 500},
+				{name: "baz", addKeys: []string{"foo"}, cardinality: 501},
+				{name: "cluster", addKeys: []string{"us"}, cardinality: 250000, lazy: true},
 			},
 		},
 	} {

@@ -168,6 +168,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 				Expiration: config.Expiration,
 				DB:         config.Redis.DB,
 				Password:   flagext.Secret{Value: config.Redis.Password},
+				Username:   config.Redis.Username,
 			},
 			Background: cortexcache.BackgroundConfig{
 				WriteBackBuffer:     config.Redis.MaxSetMultiConcurrency * config.Redis.SetMultiBatchSize,

@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
@@ -53,7 +52,6 @@ type QueryableCreator func(
 	storeDebugMatchers [][]*labels.Matcher,
 	maxResolutionMillis int64,
 	partialResponse,
-	enableQueryPushdown,
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
@@ -76,7 +74,6 @@ func NewQueryableCreator(
 		storeDebugMatchers [][]*labels.Matcher,
 		maxResolutionMillis int64,
 		partialResponse,
-		enableQueryPushdown,
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
@@ -95,7 +92,6 @@ func NewQueryableCreator(
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
-			enableQueryPushdown:  enableQueryPushdown,
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
 		}
@@ -114,14 +110,13 @@ type queryable struct {
 	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
-	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
+	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
 }
 
 type querier struct {
@@ -133,7 +128,6 @@ type querier struct {
 	deduplicate             bool
 	maxResolutionMillis     int64
 	partialResponseStrategy storepb.PartialResponseStrategy
-	enableQueryPushdown     bool
 	skipChunks              bool
 	selectGate              gate.Gate
 	selectTimeout           time.Duration
@@ -153,7 +147,6 @@ func newQuerier(
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse,
-	enableQueryPushdown,
 	skipChunks bool,
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
@@ -186,7 +179,6 @@ func newQuerier(
 		maxResolutionMillis:     maxResolutionMillis,
 		partialResponseStrategy: partialResponseStrategy,
 		skipChunks:              skipChunks,
-		enableQueryPushdown:     enableQueryPushdown,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
 	}
@@ -359,9 +351,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		ShardInfo:               q.shardInfo,
 		PartialResponseStrategy: q.partialResponseStrategy,
 		SkipChunks:              q.skipChunks,
-	}
-	if q.enableQueryPushdown {
-		req.QueryHints = storeHintsFromPromHints(hints)
+		QueryHints:              storeHintsFromPromHints(hints),
 	}
 	if q.isDedupEnabled() {
 		// Soft ask to sort without replica labels and push them at the end of labelset.
@@ -373,44 +363,28 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 	warns := annotations.New().Merge(resp.warnings)
 
-	if q.enableQueryPushdown && (hints.Func == "max_over_time" || hints.Func == "min_over_time") {
-		// On query pushdown, delete the metric's name from the result because that's what the
-		// PromQL does either way, and we want our iterator to work with data
-		// that was either pushed down or not.
-		for i := range resp.seriesSet {
-			lbls := resp.seriesSet[i].Labels
-			for j, lbl := range lbls {
-				if lbl.Name != model.MetricNameLabel {
-					continue
-				}
-				resp.seriesSet[i].Labels = append(resp.seriesSet[i].Labels[:j], resp.seriesSet[i].Labels[j+1:]...)
-				break
-			}
-		}
-	}
-
 	if !q.isDedupEnabled() {
-		return &promSeriesSet{
-			mint:  q.mint,
-			maxt:  q.maxt,
-			set:   newStoreSeriesSet(resp.seriesSet),
-			aggrs: aggrs,
-			warns: warns,
-		}, resp.seriesSetStats, nil
+		return NewPromSeriesSet(
+			newStoreSeriesSet(resp.seriesSet),
+			q.mint,
+			q.maxt,
+			aggrs,
+			warns,
+		), resp.seriesSetStats, nil
 	}
 
 	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
-	// This however require big refactor, caring about correct AggrChunk to iterator conversion, pushdown logic and counter reset apply.
+	// This however require big refactor, caring about correct AggrChunk to iterator conversion and counter reset apply.
 	// For now we apply simple logic that splits potential overlapping chunks into separate replica series, so we can split the work.
-	set := &promSeriesSet{
-		mint:  q.mint,
-		maxt:  q.maxt,
-		set:   dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
-		aggrs: aggrs,
-		warns: warns,
-	}
+	set := NewPromSeriesSet(
+		dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
+		q.mint,
+		q.maxt,
+		aggrs,
+		warns,
+	)
 
-	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
+	return dedup.NewSeriesSet(set, hints.Func), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.

@@ -58,7 +58,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					StaticAddresses: []string{"localhost:9093"},
 					Scheme:          "http",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{
@@ -68,7 +68,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					StaticAddresses: []string{"am.example.com"},
 					Scheme:          "https",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{
@@ -78,7 +78,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					StaticAddresses: []string{"dns+localhost:9093"},
 					Scheme:          "http",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{
@@ -88,7 +88,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					StaticAddresses: []string{"dnssrv+localhost"},
 					Scheme:          "http",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{
@@ -98,7 +98,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					StaticAddresses: []string{"localhost"},
 					Scheme:          "ssh+http",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{
@@ -109,7 +109,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					Scheme:          "https",
 					PathPrefix:      "/path/prefix/",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{
@@ -125,7 +125,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					StaticAddresses: []string{"localhost:9093"},
 					Scheme:          "http",
 				},
-				APIVersion: APIv1,
+				APIVersion: APIv2,
 			},
 		},
 		{

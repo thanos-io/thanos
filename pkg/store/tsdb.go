@@ -309,9 +309,9 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	}
 
 	if len(res) > 0 {
-		for _, lbl := range s.getExtLset() {
-			res = append(res, lbl.Name)
-		}
+		s.getExtLset().Range(func(l labels.Label) {
+			res = append(res, l.Name)
+		})
 		sort.Strings(res)
 	}
 
@@ -339,18 +339,8 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-
 	if !match {
 		return &storepb.LabelValuesResponse{}, nil
-	}
-
-	if v := s.getExtLset().Get(r.Label); v != "" {
-		for _, m := range matchers {
-			if !m.Matches(v) {
-				return &storepb.LabelValuesResponse{}, nil
-			}
-		}
-		return &storepb.LabelValuesResponse{Values: []string{v}}, nil
 	}
 
 	q, err := s.db.ChunkQuerier(r.Start, r.End)
@@ -358,6 +348,25 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label values")
+
+	// If we request label values for an external label while selecting an additional matcher for other label values
+	if val := s.getExtLset().Get(r.Label); val != "" {
+		if len(matchers) == 0 {
+			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		}
+
+		hints := &storage.SelectHints{
+			Start: r.Start,
+			End:   r.End,
+			Func:  "series",
+		}
+		set := q.Select(ctx, false, hints, matchers...)
+
+		for set.Next() {
+			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		}
+		return &storepb.LabelValuesResponse{}, nil
+	}
 
 	res, _, err := q.LabelValues(ctx, r.Label, matchers...)
 	if err != nil {

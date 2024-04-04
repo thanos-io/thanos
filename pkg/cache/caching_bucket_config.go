@@ -64,8 +64,9 @@ type OperationConfig struct {
 // Operation-specific configs.
 type IterConfig struct {
 	OperationConfig
-	TTL   time.Duration
-	Codec IterCodec
+	TTL        time.Duration
+	Codec      IterCodec
+	ConfigHash string
 }
 
 type ExistsConfig struct {
@@ -105,11 +106,12 @@ func newOperationConfig(cache Cache, matcher func(string) bool) OperationConfig 
 }
 
 // CacheIter configures caching of "Iter" operation for matching directories.
-func (cfg *CachingBucketConfig) CacheIter(configName string, cache Cache, matcher func(string) bool, ttl time.Duration, codec IterCodec) {
+func (cfg *CachingBucketConfig) CacheIter(configName string, cache Cache, matcher func(string) bool, ttl time.Duration, codec IterCodec, configHash string) {
 	cfg.iter[configName] = &IterConfig{
 		OperationConfig: newOperationConfig(cache, matcher),
 		TTL:             ttl,
 		Codec:           codec,
+		ConfigHash:      configHash,
 	}
 }
 

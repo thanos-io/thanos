@@ -316,7 +316,12 @@ Flags:
                                  lookups. The port defaults to 9093 or the
                                  SRV record's value. The URL path is used as a
                                  prefix for the regular Alertmanager API path.
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
       --data-dir="data/"         data directory
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --eval-interval=1m         The default evaluation interval to use.
       --for-grace-period=10m     Minimum duration between alert and restored
                                  "for" state. This is maintained only for alerts
@@ -401,6 +406,10 @@ Flags:
       --query.default-step=1s    Default range query step to use. This is
                                  only used in stateless Ruler and alert state
                                  restoration.
+      --query.enable-x-functions
+                                 Whether to enable extended rate functions
+                                 (xrate, xincrease and xdelta). Only has effect
+                                 when used with Thanos engine.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
       --query.sd-dns-interval=30s

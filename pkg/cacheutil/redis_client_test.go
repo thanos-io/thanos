@@ -138,6 +138,7 @@ func TestRedisClient(t *testing.T) {
 }
 
 func TestValidateRedisConfig(t *testing.T) {
+	addr := "127.0.0.1:6789"
 	tests := []struct {
 		name       string
 		config     func() RedisClientConfig
@@ -147,7 +148,7 @@ func TestValidateRedisConfig(t *testing.T) {
 			name: "simpleConfig",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
-				cfg.Addr = "127.0.0.1:6789"
+				cfg.Addr = addr
 				cfg.Username = "user"
 				cfg.Password = "1234"
 				return cfg
@@ -158,7 +159,7 @@ func TestValidateRedisConfig(t *testing.T) {
 			name: "tlsConfigDefaults",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
-				cfg.Addr = "127.0.0.1:6789"
+				cfg.Addr = addr
 				cfg.Username = "user"
 				cfg.Password = "1234"
 				cfg.TLSEnabled = true
@@ -170,7 +171,7 @@ func TestValidateRedisConfig(t *testing.T) {
 			name: "tlsClientCertConfig",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
-				cfg.Addr = "127.0.0.1:6789"
+				cfg.Addr = addr
 				cfg.Username = "user"
 				cfg.Password = "1234"
 				cfg.TLSEnabled = true
@@ -186,13 +187,46 @@ func TestValidateRedisConfig(t *testing.T) {
 			name: "tlsInvalidClientCertConfig",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
-				cfg.Addr = "127.0.0.1:6789"
+				cfg.Addr = addr
 				cfg.Username = "user"
 				cfg.Password = "1234"
 				cfg.TLSEnabled = true
 				cfg.TLSConfig = TLSConfig{
 					CertFile: "cert/client.pem",
 				}
+				return cfg
+			},
+			expect_err: true,
+		},
+		{
+			name: "SetAsyncCircuitBreakerDisabled",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = addr
+				cfg.SetAsyncCircuitBreaker.Enabled = false
+				cfg.SetAsyncCircuitBreaker.ConsecutiveFailures = 0
+				return cfg
+			},
+			expect_err: false,
+		},
+		{
+			name: "invalidCircuitBreakerFailurePercent",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = addr
+				cfg.SetAsyncCircuitBreaker.Enabled = true
+				cfg.SetAsyncCircuitBreaker.ConsecutiveFailures = 0
+				return cfg
+			},
+			expect_err: true,
+		},
+		{
+			name: "invalidCircuitBreakerFailurePercent",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = addr
+				cfg.SetAsyncCircuitBreaker.Enabled = true
+				cfg.SetAsyncCircuitBreaker.FailurePercent = 0
 				return cfg
 			},
 			expect_err: true,

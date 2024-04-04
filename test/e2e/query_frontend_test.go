@@ -7,10 +7,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -1138,4 +1142,62 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 		),
 		e2emon.WaitMissingMetrics(),
 	))
+}
+
+func TestQueryFrontendExplain(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("qfe-explain")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1").Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	qfe := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), queryfrontend.Config{}, queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/api/v1/query_explain?query=time()&engine=thanos", qfe.Endpoint("http")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, `{"status":"success","data":{"name":"[duplicateLabelCheck]","children":[{"name":"[noArgFunction]"}]}}`, strings.TrimSpace(string(body)))
+}
+
+func TestQueryFrontendAnalyze(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("qfe-analyze")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1").Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	qfe := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), queryfrontend.Config{}, queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/api/v1/query?query=time()&engine=thanos&analyze=true", qfe.Endpoint("http")))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	r := regexp.MustCompile(
+		`{"status":"success","data":{"resultType":"scalar","result":\[.+,".+"\],"analysis":{"name":"\[duplicateLabelCheck\]","executionTime":".+","children":\[{"name":"\[noArgFunction\]","executionTime":".+","children":null}\]}}}`,
+	)
+	t.Log(strings.TrimSpace(string(body)))
+
+	require.Equal(t, true, r.MatchString(strings.TrimSpace(string(body))))
 }
