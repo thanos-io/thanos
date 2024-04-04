@@ -113,7 +113,6 @@ func RepeatWithJitter(interval time.Duration, ctx context.Context, jitterFactor 
 		case <-ctx.Done():
 			return nil
 		default:
-
 			if err := f(); err != nil {
 				return err
 			}

@@ -108,7 +108,6 @@ func registerSidecar(app *extkingpin.App) {
 
 // DurationWithJitter returns random duration from "input - input*variancePerc" to "input + input*variancePerc" interval.
 func DurationWithJitter(input time.Duration, variancePerc float64) time.Duration {
-
 	if input == 0 {
 		return 0
 	}
@@ -526,7 +525,6 @@ type sidecarConfig struct {
 }
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
-	var uploadJitter time.Duration
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)
@@ -539,6 +537,5 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
 	conf := &sidecarConfig{}
-	cmd.Flag("upload-jitter", "Maximum random delay before uploading blocks.").Default("0s").DurationVar(&uploadJitter)
-	conf.shipper.uploadJitter = uploadJitter
+	cmd.Flag("upload-jitter", "Maximum random delay before uploading blocks.").Default("0s").DurationVar(&conf.shipper.uploadJitter)
 }
