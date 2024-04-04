@@ -33,7 +33,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Changed
 
 - [#7123](https://github.com/thanos-io/thanos/pull/7123) Rule: Change default Alertmanager API version to v2.
-- [#7222](https://github.com/thanos-io/thanos/pull/7123) Automatic detection of memory limits and configure GOMEMLIMIT to match.
+- [#7223](https://github.com/thanos-io/thanos/pull/7223) Automatic detection of memory limits and configure GOMEMLIMIT to match.
 
 ### Removed
 

@@ -15,9 +15,8 @@ COPY . $GOPATH/src/github.com/thanos-io/thanos
 RUN git update-index --refresh; make build
 
 # -----------------------------------------------------------------------------
-FROM alpine:3.15
 
-#FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
+FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
 LABEL maintainer="The Thanos Authors"
 
 COPY --from=builder /go/bin/thanos /bin/thanos

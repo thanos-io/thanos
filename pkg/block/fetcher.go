@@ -79,7 +79,7 @@ func (s *FetcherMetrics) ResetTx() {
 }
 
 const (
-	fetcherSubSys = "blocks_meta"
+	FetcherSubSys = "blocks_meta"
 
 	CorruptedMeta = "corrupted-meta-json"
 	NoMeta        = "no-meta-json"
@@ -109,17 +109,17 @@ func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
 	var m BaseFetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "base_syncs_total",
 		Help:      "Total blocks metadata synchronization attempts by base Fetcher",
 	})
 	m.CacheMemoryHit = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "base_cache_memory_hits_total",
 		Help:      "Total blocks metadata from memory cache hits",
 	})
 	m.CacheDiskHit = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "base_cache_disk_hits_total",
 		Help:      "Total blocks metadata from disk cache hits",
 	})
@@ -130,17 +130,17 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	var m FetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "syncs_total",
 		Help:      "Total blocks metadata synchronization attempts",
 	})
 	m.SyncFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "sync_failures_total",
 		Help:      "Total blocks metadata synchronization failures",
 	})
 	m.SyncDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Subsystem: fetcherSubSys,
+		Subsystem: FetcherSubSys,
 		Name:      "sync_duration_seconds",
 		Help:      "Duration of the blocks metadata synchronization in seconds",
 		Buckets:   []float64{0.01, 1, 10, 100, 300, 600, 1000},
@@ -148,7 +148,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.Synced = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: fetcherSubSys,
+			Subsystem: FetcherSubSys,
 			Name:      "synced",
 			Help:      "Number of block metadata synced",
 		},
@@ -158,7 +158,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.Modified = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: fetcherSubSys,
+			Subsystem: FetcherSubSys,
 			Name:      "modified",
 			Help:      "Number of blocks whose metadata changed",
 		},
@@ -168,7 +168,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.SyncedByTenant = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: fetcherSubSys,
+			Subsystem: FetcherSubSys,
 			Name:      "synced_by_tenant",
 			Help:      "Number of metadata blocks synced broken down by tenant",
 		},
@@ -178,7 +178,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	m.Assigned = extprom.NewTxGaugeVec(
 		reg,
 		prometheus.GaugeOpts{
-			Subsystem: fetcherSubSys,
+			Subsystem: FetcherSubSys,
 			Name:      "assigned",
 			Help:      "Number of metadata blocks assigned to this pod after all filters.",
 		},
