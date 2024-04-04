@@ -5,6 +5,8 @@ package compact
 
 import (
 	"context"
+	"fmt"
+	"path"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -16,37 +18,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
-func TestFilterNilCompact(t *testing.T) {
-	blocks := []*metadata.Meta{nil, nil}
-	filtered := FilterRemovedBlocks(blocks)
-	testutil.Equals(t, 0, len(filtered))
-
-	meta := []*metadata.Meta{
-		createCustomBlockMeta(6, 1, 3, metadata.CompactorSource, 1),
-		nil,
-		createCustomBlockMeta(7, 3, 5, metadata.CompactorSource, 2),
-		createCustomBlockMeta(8, 5, 10, metadata.CompactorSource, 3),
-		nil,
-	}
-	testutil.Equals(t, 3, len(FilterRemovedBlocks(meta)))
-}
-
 func TestPreCompactionCallback(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
-	bkt := objstore.NewInMemBucket()
-	group := &Group{
-		logger: log.NewNopLogger(),
-		bkt:    bkt,
-	}
 	callback := NewOverlappingCompactionLifecycleCallback(reg, true)
 	for _, tcase := range []struct {
-		testName                 string
-		input                    []*metadata.Meta
-		enableVerticalCompaction bool
-		expectedSize             int
-		expectedBlocks           []*metadata.Meta
-		err                      error
+		testName      string
+		input         []*metadata.Meta
+		expectedMarks map[int]int
+		expectedErr   error
 	}{
 		{
 			testName: "empty blocks",
@@ -58,7 +38,6 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 3, 5, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 5, 10, metadata.CompactorSource, 1),
 			},
-			expectedSize: 3,
 		},
 		{
 			testName: "duplicated blocks",
@@ -67,10 +46,7 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 1, 7, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 1, 7, metadata.CompactorSource, 1),
 			},
-			expectedSize: 1,
-			expectedBlocks: []*metadata.Meta{
-				createCustomBlockMeta(6, 1, 7, metadata.CompactorSource, 1),
-			},
+			expectedMarks: map[int]int{7: 2, 8: 2},
 		},
 		{
 			testName: "overlap non dup blocks",
@@ -79,11 +55,7 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 1, 7, metadata.CompactorSource, 2),
 				createCustomBlockMeta(8, 1, 7, metadata.CompactorSource, 2),
 			},
-			expectedSize: 2,
-			expectedBlocks: []*metadata.Meta{
-				createCustomBlockMeta(6, 1, 7, metadata.CompactorSource, 1),
-				createCustomBlockMeta(7, 1, 7, metadata.CompactorSource, 2),
-			},
+			expectedMarks: map[int]int{8: 2},
 		},
 		{
 			testName: "receive blocks",
@@ -92,18 +64,12 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 1, 7, metadata.ReceiveSource, 2),
 				createCustomBlockMeta(8, 1, 7, metadata.ReceiveSource, 3),
 			},
-			expectedSize: 3,
 		},
 		{
 			testName: "receive + compactor blocks",
 			input: []*metadata.Meta{
 				createCustomBlockMeta(6, 1, 7, metadata.ReceiveSource, 1),
 				createCustomBlockMeta(7, 2, 7, metadata.CompactorSource, 1),
-				createCustomBlockMeta(8, 2, 8, metadata.ReceiveSource, 1),
-			},
-			expectedSize: 2,
-			expectedBlocks: []*metadata.Meta{
-				createCustomBlockMeta(6, 1, 7, metadata.ReceiveSource, 1),
 				createCustomBlockMeta(8, 2, 8, metadata.ReceiveSource, 1),
 			},
 		},
@@ -114,10 +80,7 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 3, 6, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
 			},
-			expectedSize: 1,
-			expectedBlocks: []*metadata.Meta{
-				createCustomBlockMeta(6, 1, 10, metadata.CompactorSource, 1),
-			},
+			expectedMarks: map[int]int{7: 2, 8: 2},
 		},
 		{
 			testName: "part overlapping blocks",
@@ -126,11 +89,7 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 1),
 				createCustomBlockMeta(3, 6, 8, metadata.CompactorSource, 1),
 			},
-			expectedSize: 2,
-			expectedBlocks: []*metadata.Meta{
-				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 1),
-				createCustomBlockMeta(3, 6, 8, metadata.CompactorSource, 1),
-			},
+			expectedMarks: map[int]int{1: 2},
 		},
 		{
 			testName: "out of order blocks",
@@ -139,44 +98,47 @@ func TestPreCompactionCallback(t *testing.T) {
 				createCustomBlockMeta(7, 0, 5, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
 			},
-			err: halt(errors.Errorf("expect halt error")),
+			expectedErr: halt(errors.Errorf("some errors")),
 		},
 		{
-			testName: "partially overlapping blocks with vertical compaction off",
+			testName: "partially overlapping blocks",
 			input: []*metadata.Meta{
 				createCustomBlockMeta(6, 2, 4, metadata.CompactorSource, 1),
 				createCustomBlockMeta(7, 3, 6, metadata.CompactorSource, 1),
 				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
 			},
-			err: halt(errors.Errorf("expect halt error")),
-		},
-		{
-			testName: "partially overlapping blocks with vertical compaction on",
-			input: []*metadata.Meta{
-				createCustomBlockMeta(6, 2, 4, metadata.CompactorSource, 1),
-				createCustomBlockMeta(7, 3, 6, metadata.CompactorSource, 1),
-				createCustomBlockMeta(8, 5, 8, metadata.CompactorSource, 1),
-			},
-			enableVerticalCompaction: true,
-			expectedSize:             3,
+			expectedMarks: map[int]int{6: 1, 7: 1},
 		},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
-			group.enableVerticalCompaction = tcase.enableVerticalCompaction
-			err := callback.PreCompactionCallback(context.Background(), logger, group, tcase.input)
-			if tcase.err != nil {
+			ctx := context.Background()
+			bkt := objstore.NewInMemBucket()
+			group := &Group{logger: log.NewNopLogger(), bkt: bkt}
+			err := callback.PreCompactionCallback(ctx, logger, group, tcase.input)
+			if len(tcase.expectedMarks) != 0 {
 				testutil.NotOk(t, err)
-				if IsHaltError(tcase.err) {
-					testutil.Assert(t, IsHaltError(err), "expected halt error")
-				} else if IsRetryError(tcase.err) {
-					testutil.Assert(t, IsRetryError(err), "expected retry error")
+				testutil.Assert(t, IsRetryError(err))
+			} else if tcase.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Assert(t, IsHaltError(err))
+			} else {
+				testutil.Ok(t, err)
+				testutil.Assert(t, err == nil)
+			}
+			objs := bkt.Objects()
+			expectedSize := 0
+			for id, file := range tcase.expectedMarks {
+				expectedSize += file
+				_, noCompaction := objs[getFile(id, metadata.NoCompactMarkFilename)]
+				_, noDownsampling := objs[getFile(id, metadata.NoDownsampleMarkFilename)]
+				if file <= 2 {
+					testutil.Assert(t, noCompaction, fmt.Sprintf("expect %d has no compaction", id))
 				}
-				return
+				if file == 2 {
+					testutil.Assert(t, noDownsampling, fmt.Sprintf("expect %d has no downsampling", id))
+				}
 			}
-			testutil.Equals(t, tcase.expectedSize, len(FilterRemovedBlocks(tcase.input)))
-			if tcase.expectedSize != len(tcase.input) {
-				testutil.Equals(t, tcase.expectedBlocks, FilterRemovedBlocks(tcase.input))
-			}
+			testutil.Equals(t, expectedSize, len(objs))
 		}); !ok {
 			return
 		}
@@ -189,4 +151,8 @@ func createCustomBlockMeta(id uint64, minTime, maxTime int64, source metadata.So
 	m.Thanos.Source = source
 	m.Stats.NumSeries = numSeries
 	return m
+}
+
+func getFile(id int, mark string) string {
+	return path.Join(fmt.Sprintf("%010d", id)+fmt.Sprintf("%016d", 0), mark)
 }
