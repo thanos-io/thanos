@@ -376,11 +376,6 @@ func runSidecar(
 				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
 			return runutil.RepeatWithJitter(30*time.Second, ctx, 0.05, func() error {
-				// Generate random delay using upload jitter.
-				jitter := DurationWithJitter(conf.shipper.uploadJitter, 0.05)
-				if jitter > 0 {
-					time.Sleep(jitter)
-				}
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
