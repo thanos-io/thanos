@@ -279,6 +279,18 @@ usage: thanos compact [<flags>]
 Continuously compacts blocks in an object store bucket.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --block-discovery-strategy="concurrent"
+                                One of concurrent, recursive. When set to
+                                concurrent, stores will concurrently issue
+                                one call per directory to discover active
+                                blocks in the bucket. The recursive strategy
+                                iterates through all objects in the bucket,
+                                recursively traversing into each directory.
+                                This avoids N+1 calls at the expense of having
+                                slower bucket iterations.
       --block-files-concurrency=1
                                 Number of goroutines to use when
                                 fetching/uploading block files from object
@@ -366,6 +378,8 @@ Flags:
                                 non-downsampled data is not efficient and useful
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not

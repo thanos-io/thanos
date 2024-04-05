@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -157,7 +158,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
 	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
@@ -197,7 +198,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
 	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 

@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	"github.com/gogo/status"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/opentracing/opentracing-go"
@@ -208,6 +209,40 @@ func NewEmptyPrometheusInstantQueryResponse() *PrometheusInstantQueryResponse {
 	}
 }
 
+func traverseAnalysis(a *Analysis, results *[]*Analysis) {
+	if a == nil {
+		return
+	}
+
+	*results = append(*results, a)
+
+	for _, ch := range a.Children {
+		traverseAnalysis(ch, results)
+	}
+}
+
+func AnalyzesMerge(analysis ...*Analysis) *Analysis {
+	if len(analysis) == 0 {
+		return &Analysis{}
+	}
+
+	root := analysis[0]
+
+	var rootElements []*Analysis
+	traverseAnalysis(root, &rootElements)
+
+	for _, a := range analysis[1:] {
+		var elements []*Analysis
+		traverseAnalysis(a, &elements)
+
+		for i := 0; i < len(elements) && i < len(rootElements); i++ {
+			rootElements[i].ExecutionTime += analysis[i].ExecutionTime
+		}
+	}
+
+	return root
+}
+
 func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response, error) {
 	if len(responses) == 0 {
 		return NewEmptyPrometheusResponse(), nil
@@ -225,21 +260,22 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 	// Merge the responses.
 	sort.Sort(byFirstTime(promResponses))
 
-	var explanation *Explanation
+	analyzes := make([]*Analysis, 0, len(responses))
 	for i := range promResponses {
-		if promResponses[i].Data.GetExplanation() != nil {
-			explanation = promResponses[i].Data.GetExplanation()
-			break
+		if promResponses[i].Data.GetAnalysis() == nil {
+			continue
 		}
+
+		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
 	}
 
 	response := PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType:  model.ValMatrix.String(),
-			Result:      matrixMerge(promResponses),
-			Stats:       StatsMerge(responses),
-			Explanation: explanation,
+			ResultType: model.ValMatrix.String(),
+			Result:     matrixMerge(promResponses),
+			Stats:      StatsMerge(responses),
+			Analysis:   AnalyzesMerge(analyzes...),
 		},
 	}
 
@@ -533,10 +569,10 @@ func (s *StringSample) UnmarshalJSON(b []byte) error {
 // UnmarshalJSON implements json.Unmarshaler.
 func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	var queryData struct {
-		ResultType  string                   `json:"resultType"`
-		Result      jsoniter.RawMessage      `json:"result"`
-		Stats       *PrometheusResponseStats `json:"stats,omitempty"`
-		Explanation *Explanation             `json:"explanation,omitempty"`
+		ResultType string                   `json:"resultType"`
+		Result     jsoniter.RawMessage      `json:"result"`
+		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+		Analysis   *Analysis                `json:"analysis,omitempty"`
 	}
 
 	if err := json.Unmarshal(data, &queryData); err != nil {
@@ -545,7 +581,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 
 	s.ResultType = queryData.ResultType
 	s.Stats = queryData.Stats
-	s.Explanation = queryData.Explanation
+	s.Analysis = queryData.Analysis
 	switch s.ResultType {
 	case model.ValVector.String():
 		var result struct {
@@ -605,54 +641,54 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 	switch s.ResultType {
 	case model.ValVector.String():
 		res := struct {
-			ResultType  string                   `json:"resultType"`
-			Data        []*Sample                `json:"result"`
-			Stats       *PrometheusResponseStats `json:"stats,omitempty"`
-			Explanation *Explanation             `json:"explanation,omitempty"`
+			ResultType string                   `json:"resultType"`
+			Data       []*Sample                `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
 		}{
-			ResultType:  s.ResultType,
-			Data:        s.Result.GetVector().Samples,
-			Stats:       s.Stats,
-			Explanation: s.Explanation,
+			ResultType: s.ResultType,
+			Data:       s.Result.GetVector().Samples,
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
 		}
 		return json.Marshal(res)
 	case model.ValMatrix.String():
 		res := struct {
-			ResultType  string                   `json:"resultType"`
-			Data        []*SampleStream          `json:"result"`
-			Stats       *PrometheusResponseStats `json:"stats,omitempty"`
-			Explanation *Explanation             `json:"explanation,omitempty"`
+			ResultType string                   `json:"resultType"`
+			Data       []*SampleStream          `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
 		}{
-			ResultType:  s.ResultType,
-			Data:        s.Result.GetMatrix().SampleStreams,
-			Stats:       s.Stats,
-			Explanation: s.Explanation,
+			ResultType: s.ResultType,
+			Data:       s.Result.GetMatrix().SampleStreams,
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
 		}
 		return json.Marshal(res)
 	case model.ValScalar.String():
 		res := struct {
-			ResultType  string                   `json:"resultType"`
-			Data        *cortexpb.Sample         `json:"result"`
-			Stats       *PrometheusResponseStats `json:"stats,omitempty"`
-			Explanation *Explanation             `json:"explanation,omitempty"`
+			ResultType string                   `json:"resultType"`
+			Data       *cortexpb.Sample         `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
 		}{
-			ResultType:  s.ResultType,
-			Data:        s.Result.GetScalar(),
-			Stats:       s.Stats,
-			Explanation: s.Explanation,
+			ResultType: s.ResultType,
+			Data:       s.Result.GetScalar(),
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
 		}
 		return json.Marshal(res)
 	case model.ValString.String():
 		res := struct {
-			ResultType  string                   `json:"resultType"`
-			Data        *StringSample            `json:"result"`
-			Stats       *PrometheusResponseStats `json:"stats,omitempty"`
-			Explanation *Explanation             `json:"explanation,omitempty"`
+			ResultType string                   `json:"resultType"`
+			Data       *StringSample            `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
 		}{
-			ResultType:  s.ResultType,
-			Data:        s.Result.GetStringSample(),
-			Stats:       s.Stats,
-			Explanation: s.Explanation,
+			ResultType: s.ResultType,
+			Data:       s.Result.GetStringSample(),
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
 		}
 		return json.Marshal(res)
 	default:
@@ -864,4 +900,48 @@ func PrometheusResponseQueryableSamplesStatsPerStepJsoniterEncode(ptr unsafe.Poi
 func init() {
 	jsoniter.RegisterTypeEncoderFunc("queryrange.PrometheusResponseQueryableSamplesStatsPerStep", PrometheusResponseQueryableSamplesStatsPerStepJsoniterEncode, func(unsafe.Pointer) bool { return false })
 	jsoniter.RegisterTypeDecoderFunc("queryrange.PrometheusResponseQueryableSamplesStatsPerStep", PrometheusResponseQueryableSamplesStatsPerStepJsoniterDecode)
+}
+
+type Duration time.Duration
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case float64:
+		*d = Duration(time.Duration(value))
+		return nil
+	case string:
+		tmp, err := time.ParseDuration(value)
+		if err != nil {
+			return err
+		}
+		*d = Duration(tmp)
+		return nil
+	default:
+		return errors.New("invalid duration")
+	}
+}
+
+func (d *Duration) Size() int {
+	return github_com_gogo_protobuf_types.SizeOfStdDuration(time.Duration(*d))
+}
+
+func (d *Duration) Unmarshal(b []byte) error {
+	var td time.Duration
+	if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&td, b); err != nil {
+		return err
+	}
+	*d = Duration(td)
+	return nil
+}
+
+func (d *Duration) MarshalTo(b []byte) (int, error) {
+	return github_com_gogo_protobuf_types.StdDurationMarshalTo(time.Duration(*d), b)
 }

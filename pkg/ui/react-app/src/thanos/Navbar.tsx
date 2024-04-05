@@ -29,7 +29,7 @@ interface NavDropDown {
 const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
   query: [
     { name: 'Graph', uri: '/graph' },
-    { name: 'Stores', uri: '/stores' },
+    { name: 'Endpoints', uri: '/stores' },
     {
       name: 'Status',
       children: [

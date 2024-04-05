@@ -44,7 +44,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
-	v1 "github.com/prometheus/prometheus/web/api/v1"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
 
@@ -95,14 +94,14 @@ type QueryEngineFactory struct {
 	remoteEngineEndpoints promqlapi.RemoteEndpoints
 
 	createPrometheusEngine sync.Once
-	prometheusEngine       v1.QueryEngine
+	prometheusEngine       promql.QueryEngine
 
 	createThanosEngine sync.Once
-	thanosEngine       v1.QueryEngine
+	thanosEngine       promql.QueryEngine
 	enableXFunctions   bool
 }
 
-func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
+func (f *QueryEngineFactory) GetPrometheusEngine() promql.QueryEngine {
 	f.createPrometheusEngine.Do(func() {
 		if f.prometheusEngine != nil {
 			return
@@ -113,7 +112,7 @@ func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
 	return f.prometheusEngine
 }
 
-func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
+func (f *QueryEngineFactory) GetThanosEngine() promql.QueryEngine {
 	f.createThanosEngine.Do(func() {
 		if f.thanosEngine != nil {
 			return
@@ -157,7 +156,6 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
-	enableQueryPushdown                 bool
 	disableCORS                         bool
 
 	replicaLabels  []string
@@ -196,7 +194,6 @@ func NewQueryAPI(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
-	enableQueryPushdown bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -233,7 +230,6 @@ func NewQueryAPI(
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
-		enableQueryPushdown:                    enableQueryPushdown,
 		replicaLabels:                          replicaLabels,
 		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -324,8 +320,8 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 	return enableDeduplication, nil
 }
 
-func (qapi *QueryAPI) parseEngineParam(r *http.Request) (queryEngine v1.QueryEngine, e PromqlEngineType, _ *api.ApiError) {
-	var engine v1.QueryEngine
+func (qapi *QueryAPI) parseEngineParam(r *http.Request) (queryEngine promql.QueryEngine, e PromqlEngineType, _ *api.ApiError) {
+	var engine promql.QueryEngine
 
 	param := PromqlEngineType(r.FormValue("engine"))
 	if param == "" {
@@ -474,7 +470,7 @@ func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	var analysis queryTelemetry
-	analysis.OperatorName = a.OperatorTelemetry.Name()
+	analysis.OperatorName = a.OperatorTelemetry.String()
 	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken().String()
 	for _, c := range a.Children {
 		analysis.Children = append(analysis.Children, processAnalysis(&c))
@@ -565,7 +561,6 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -668,7 +663,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -835,7 +829,6 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -968,7 +961,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
-			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
@@ -1062,7 +1054,6 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		storeDebugMatchers,
 		0,
 		enablePartialResponse,
-		qapi.enableQueryPushdown,
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
@@ -1155,7 +1146,6 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		storeDebugMatchers,
 		math.MaxInt64,
 		enablePartialResponse,
-		qapi.enableQueryPushdown,
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
@@ -1212,7 +1202,6 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		storeDebugMatchers,
 		0,
 		enablePartialResponse,
-		qapi.enableQueryPushdown,
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,

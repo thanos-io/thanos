@@ -936,124 +936,6 @@ func TestQueryStoreMetrics(t *testing.T) {
 
 }
 
-// Regression test for https://github.com/thanos-io/thanos/issues/5033.
-// Tests whether queries work with mixed sources, and with functions
-// that we are pushing down: min, max, min_over_time, max_over_time,
-// group.
-func TestSidecarStorePushdown(t *testing.T) {
-	t.Parallel()
-
-	// Build up.
-	e, err := e2e.NewDockerEnvironment("sidecar-pushdown")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
-
-	const bucket = "store-gateway-test-sidecar-pushdown"
-	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
-	testutil.Ok(t, e2e.StartAndWaitReady(m))
-
-	dir := filepath.Join(e.SharedDir(), "tmp")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
-
-	series := []labels.Labels{labels.FromStrings("__name__", "my_fake_metric", "instance", "foo")}
-	extLset := labels.FromStrings("prometheus", "p1", "replica", "0")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	t.Cleanup(cancel)
-
-	now := time.Now()
-	id1, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc)
-	testutil.Ok(t, err)
-
-	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test")
-	testutil.Ok(t, err)
-	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
-
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
-		client.BucketConfig{
-			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
-		},
-		"",
-		"",
-		nil,
-	)
-	testutil.Ok(t, e2e.StartAndWaitReady(s1))
-
-	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc"), sidecar1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"query-pushdown"}).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
-
-	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, []fakeMetricSample{
-		{
-			label:             "foo",
-			value:             123,
-			timestampUnixNano: now.UnixNano(),
-		},
-	}))
-
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
-		return "max_over_time(my_fake_metric[2h])"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"instance":   "foo",
-			"prometheus": "p1",
-		},
-	})
-
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
-		return "max(my_fake_metric) by (__name__, instance)"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"instance": "foo",
-			"__name__": "my_fake_metric",
-		},
-	})
-
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
-		return "min_over_time(my_fake_metric[2h])"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"instance":   "foo",
-			"prometheus": "p1",
-		},
-	})
-
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
-		return "min(my_fake_metric) by (instance, __name__)"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"instance": "foo",
-			"__name__": "my_fake_metric",
-		},
-	})
-
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
-		return "group(my_fake_metric) by (__name__, instance)"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"instance": "foo",
-			"__name__": "my_fake_metric",
-		},
-	})
-}
-
 type seriesWithLabels struct {
 	intLabels labels.Labels
 	extLabels labels.Labels
@@ -1482,7 +1364,7 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 
 	for _, tc := range ts {
 		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("query-pushdown")
+			e, err := e2e.NewDockerEnvironment("query-evaluation")
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1498,7 +1380,6 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 			}
 			q := e2ethanos.
 				NewQuerierBuilder(e, "1", endpoints...).
-				WithEnabledFeatures([]string{"query-pushdown"}).
 				Init()
 			testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -1912,222 +1793,6 @@ func storeWriteRequest(ctx context.Context, rawRemoteWriteURL string, req *promp
 
 	compressed := snappy.Encode(buf, pBuf.Bytes())
 	return client.Store(ctx, compressed, 0)
-}
-
-func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
-	t.Parallel()
-
-	timeNow := time.Now().UnixNano()
-
-	ts := []struct {
-		prom1Samples []fakeMetricSample
-		prom2Samples []fakeMetricSample
-		query        string
-		result       model.Vector
-	}{
-		{
-			query:        "max (my_fake_metric)",
-			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}, {"i3", 9, timeNow}},
-			prom2Samples: []fakeMetricSample{{"i1", 3, timeNow}, {"i2", 4, timeNow}, {"i3", 10, timeNow}},
-			result: []*model.Sample{
-				{
-					Metric: map[model.LabelName]model.LabelValue{},
-					Value:  10,
-				},
-			},
-		},
-		{
-			query:        "max by (instance) (my_fake_metric)",
-			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}, {"i3", 9, timeNow}},
-			prom2Samples: []fakeMetricSample{{"i1", 3, timeNow}, {"i2", 4, timeNow}, {"i3", 10, timeNow}},
-			result: []*model.Sample{
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
-					Value:  3,
-				},
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
-					Value:  5,
-				},
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
-					Value:  10,
-				},
-			},
-		},
-		{
-			query:        "group by (instance) (my_fake_metric)",
-			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}, {"i3", 9, timeNow}},
-			prom2Samples: []fakeMetricSample{{"i1", 3, timeNow}, {"i2", 4, timeNow}},
-			result: []*model.Sample{
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
-					Value:  1,
-				},
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
-					Value:  1,
-				},
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
-					Value:  1,
-				},
-			},
-		},
-		{
-			query:        "max_over_time(my_fake_metric[10m])",
-			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}},
-			prom2Samples: []fakeMetricSample{{"i1", 3, timeNow}},
-			result: []*model.Sample{
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
-					Value:  3,
-				},
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},
-					Value:  5,
-				},
-			},
-		},
-		{
-			query:        "min_over_time(my_fake_metric[10m])",
-			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}},
-			prom2Samples: []fakeMetricSample{{"i1", 3, timeNow}},
-			result: []*model.Sample{
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
-					Value:  1,
-				},
-				{
-					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},
-					Value:  5,
-				},
-			},
-		},
-	}
-
-	for _, tc := range ts {
-		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("pushdown-dedup")
-			testutil.Ok(t, err)
-			t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
-
-			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
-
-			endpoints := []string{
-				sidecar1.InternalEndpoint("grpc"),
-				sidecar2.InternalEndpoint("grpc"),
-			}
-			q := e2ethanos.
-				NewQuerierBuilder(e, "1", endpoints...).
-				WithEnabledFeatures([]string{"query-pushdown"}).
-				Init()
-			testutil.Ok(t, err)
-			testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			t.Cleanup(cancel)
-
-			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, tc.prom1Samples))
-			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, tc.prom2Samples))
-
-			testQuery := func() string { return tc.query }
-			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
-				Deduplicate: true,
-			}, tc.result)
-		})
-	}
-}
-
-// TestSidecarStoreAlignmentPushdown tests how pushdown works with
-// --min-time and --max-time.
-func TestSidecarAlignmentPushdown(t *testing.T) {
-	t.Parallel()
-
-	e, err := e2e.NewDockerEnvironment("pushdown-min-max")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-	now := time.Now()
-
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), now.Add(time.Duration(-1)*time.Hour).Format(time.RFC3339), now.Format(time.RFC3339), "remote-write-receiver")
-	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
-
-	endpoints := []string{
-		sidecar1.InternalEndpoint("grpc"),
-	}
-	q1 := e2ethanos.
-		NewQuerierBuilder(e, "1", endpoints...).
-		Init()
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(q1))
-	q2 := e2ethanos.
-		NewQuerierBuilder(e, "2", endpoints...).
-		WithEnabledFeatures([]string{"query-pushdown"}).
-		Init()
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(q2))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	t.Cleanup(cancel)
-
-	samples := make([]fakeMetricSample, 0)
-	for i := now.Add(time.Duration(-3) * time.Hour); i.Before(now); i = i.Add(30 * time.Second) {
-		samples = append(samples, fakeMetricSample{
-			label:             "test",
-			value:             1,
-			timestampUnixNano: i.UnixNano(),
-		})
-	}
-
-	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, samples))
-
-	// This query should have identical requests.
-	testQuery := func() string { return `max_over_time({instance="test"}[5m])` }
-
-	logger := log.NewLogfmtLogger(os.Stdout)
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-
-	var expectedRes model.Matrix
-	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, _, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery(),
-			timestamp.FromTime(now.Add(time.Duration(-7*24)*time.Hour)),
-			timestamp.FromTime(now),
-			2419, // Taken from UI.
-			promclient.QueryOptions{
-				Deduplicate: true,
-			})
-		if err != nil {
-			return err
-		}
-
-		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
-		}
-
-		if len(res) == 0 {
-			return errors.Errorf("got empty result")
-		}
-
-		expectedRes = res
-		return nil
-	}))
-
-	rangeQuery(t, ctx, q2.Endpoint("http"), testQuery, timestamp.FromTime(now.Add(time.Duration(-7*24)*time.Hour)),
-		timestamp.FromTime(now),
-		2419, // Taken from UI.
-		promclient.QueryOptions{
-			Deduplicate: true,
-		}, func(res model.Matrix) error {
-			if !reflect.DeepEqual(res, expectedRes) {
-				return fmt.Errorf("unexpected results (got %v but expected %v)", res, expectedRes)
-			}
-			return nil
-		})
 }
 
 func TestGrpcInstantQuery(t *testing.T) {
@@ -2761,4 +2426,67 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		}
 		return reflect.DeepEqual(res, expected)
 	})
+}
+
+func TestQuerySelectWithRelabel(t *testing.T) {
+	t.Parallel()
+
+	timeNow := time.Now().UnixNano()
+
+	ts := []struct {
+		samples       []fakeMetricSample
+		query         string
+		result        model.Vector
+		relabelConfig string
+	}{
+		{
+			query:   `my_fake_metric`,
+			samples: []fakeMetricSample{{"i1", 1, timeNow}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"__name__": "my_fake_metric", "instance": "i1", "prometheus": "p1", "replica": "0"},
+					Value:  1,
+				},
+			},
+			relabelConfig: `
+            - source_labels: [prometheus]
+              regex: p1
+              action: keep
+            `,
+		},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.query, func(t *testing.T) {
+			e, err := e2e.NewDockerEnvironment("pushdown-dedup")
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
+
+			endpoints := []string{
+				sidecar1.InternalEndpoint("grpc"),
+				sidecar2.InternalEndpoint("grpc"),
+			}
+			q := e2ethanos.
+				NewQuerierBuilder(e, "1", endpoints...).
+				WithSelectorRelabelConfig(tc.relabelConfig).
+				Init()
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			t.Cleanup(cancel)
+
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, tc.samples))
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, tc.samples))
+
+			testQuery := func() string { return tc.query }
+			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{}, tc.result)
+		})
+	}
 }

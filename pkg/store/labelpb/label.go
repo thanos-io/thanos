@@ -291,40 +291,14 @@ func (m *ZLabel) Compare(other ZLabel) int {
 // The type conversion is done safely, which means we don't modify extend labels underlying array.
 //
 // In case of existing labels already present in given label set, it will be overwritten by external one.
-// NOTE: Labels and extend has to be sorted.
-func ExtendSortedLabels(lset labels.Labels, extend []labels.Label) labels.Labels {
-	if len(extend) == 0 {
+func ExtendSortedLabels(lset, extend labels.Labels) labels.Labels {
+	if extend.IsEmpty() {
 		return lset.Copy()
 	}
-	b := labels.NewScratchBuilder(lset.Len() + len(extend))
-	lset.Range(func(l labels.Label) {
-		for {
-			if len(extend) == 0 {
-				b.Add(l.Name, l.Value)
-				break
-			} else {
-				e := extend[0]
-				d := strings.Compare(l.Name, e.Name)
-				if d == 0 {
-					// Duplicate, prefer external labels.
-					// NOTE(fabxc): Maybe move it to a prefixed version to still ensure uniqueness of series?
-					b.Add(e.Name, e.Value)
-					extend = extend[1:]
-					break
-				} else if d < 0 {
-					b.Add(l.Name, l.Value)
-					break
-				} else if d > 0 {
-					b.Add(e.Name, e.Value)
-					extend = extend[1:]
-				}
-			}
-		}
+	b := labels.NewBuilder(lset)
+	extend.Range(func(l labels.Label) {
+		b.Set(l.Name, l.Value)
 	})
-	for j := 0; j < len(extend); j++ {
-		b.Add(extend[j].Name, extend[j].Value)
-	}
-
 	return b.Labels()
 }
 

@@ -10,15 +10,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-func ServerAsClient(srv StoreServer, clientReceiveBufferSize int) StoreClient {
-	return &serverAsClient{srv: srv, clientReceiveBufferSize: clientReceiveBufferSize}
+func ServerAsClient(srv StoreServer) StoreClient {
+	return &serverAsClient{srv: srv}
 }
 
 // serverAsClient allows to use servers as clients.
 // NOTE: Passing CallOptions does not work - it would be needed to be implemented in grpc itself (before, after are private).
 type serverAsClient struct {
-	clientReceiveBufferSize int
-	srv                     StoreServer
+	srv StoreServer
 }
 
 func (s serverAsClient) Info(ctx context.Context, in *InfoRequest, _ ...grpc.CallOption) (*InfoResponse, error) {
@@ -34,7 +33,7 @@ func (s serverAsClient) LabelValues(ctx context.Context, in *LabelValuesRequest,
 }
 
 func (s serverAsClient) Series(ctx context.Context, in *SeriesRequest, _ ...grpc.CallOption) (Store_SeriesClient, error) {
-	inSrv := &inProcessStream{recv: make(chan *SeriesResponse, s.clientReceiveBufferSize), err: make(chan error)}
+	inSrv := &inProcessStream{recv: make(chan *SeriesResponse), err: make(chan error)}
 	inSrv.ctx, inSrv.cancel = context.WithCancel(ctx)
 	go func() {
 		inSrv.err <- s.srv.Series(in, inSrv)

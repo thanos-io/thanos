@@ -268,7 +268,8 @@ type QuerierBuilder struct {
 	enforceTenancy bool
 
 	e2e.Linkable
-	f e2e.FutureRunnable
+	f             e2e.FutureRunnable
+	relabelConfig string
 }
 
 func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
@@ -398,6 +399,11 @@ func (q *QuerierBuilder) WithTenancy(enforceTenancy bool) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithSelectorRelabelConfig(relabelConfig string) *QuerierBuilder {
+	q.relabelConfig = relabelConfig
+	return q
+}
+
 func (q *QuerierBuilder) Init() *e2eobs.Observable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -506,6 +512,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.engine != "" {
 		args = append(args, "--query.promql-engine="+string(q.engine))
+	}
+	if q.relabelConfig != "" {
+		args = append(args, "--selector.relabel-config="+q.relabelConfig)
 	}
 
 	return args, nil

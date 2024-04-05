@@ -2,7 +2,7 @@ import React from 'react';
 import { mount } from 'enzyme';
 import moment from 'moment';
 import { BlockDetails, BlockDetailsProps } from './BlockDetails';
-import { sampleAPIResponse } from './__testdata__/testdata';
+import { sampleAPIResponse, sizeBlock } from './__testdata__/testdata';
 
 const sampleBlock = sampleAPIResponse.data.blocks[0];
 const formatTime = (time: number): string => {
@@ -95,5 +95,61 @@ describe('BlockDetails', () => {
 
     const labels = list.find('li');
     expect(labels).toHaveLength(Object.keys(sampleBlock.thanos.labels).length);
+  });
+
+  it("shouldn't render total size when block doesn't have any", () => {
+    const div = blockDetails.find({ 'data-testid': 'total-size' });
+    expect(div).toHaveLength(0);
+  });
+
+  it("shouldn't render chunk size when block doesn't have any", () => {
+    const div = blockDetails.find({ 'data-testid': 'chunk-size' });
+    expect(div).toHaveLength(0);
+  });
+
+  it("shouldn't render index size when block doesn't have any", () => {
+    const div = blockDetails.find({ 'data-testid': 'index-size' });
+    expect(div).toHaveLength(0);
+  });
+
+  it("shouldn't render daily size when block doesn't have any", () => {
+    const div = blockDetails.find({ 'data-testid': 'daily-bytes' });
+    expect(div).toHaveLength(0);
+  });
+});
+
+describe('BlockDetailsWithSize', () => {
+  const defaultProps: BlockDetailsProps = {
+    block: sizeBlock,
+    selectBlock: (): void => {
+      // do nothing
+    },
+    disableAdminOperations: false,
+  };
+  window.URL.createObjectURL = jest.fn();
+  const blockDetails = mount(<BlockDetails {...defaultProps} />);
+
+  it('renders total size', () => {
+    const div = blockDetails.find({ 'data-testid': 'total-size' });
+    expect(div).toHaveLength(1);
+    expect(div.find('span').text()).toBe('512.38 MiB');
+  });
+
+  it('renders chunk size', () => {
+    const div = blockDetails.find({ 'data-testid': 'chunk-size' });
+    expect(div).toHaveLength(1);
+    expect(div.find('span').text()).toBe('512.14 MiB (99.95%)');
+  });
+
+  it('renders index size', () => {
+    const div = blockDetails.find({ 'data-testid': 'index-size' });
+    expect(div).toHaveLength(1);
+    expect(div.find('span').text()).toBe('251.54 KiB (0.05%)');
+  });
+
+  it('renders daily size', () => {
+    const div = blockDetails.find({ 'data-testid': 'daily-bytes' });
+    expect(div).toHaveLength(1);
+    expect(div.find('span').text()).toBe('144.11 GiB / day');
   });
 });

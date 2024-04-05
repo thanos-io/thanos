@@ -671,7 +671,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*numberLiteralSelector] 2",
+				OperatorName: "[numberLiteral] 2",
 			},
 		},
 		{
@@ -684,7 +684,12 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*noArgFunctionOperator] time()",
+				OperatorName: "[duplicateLabelCheck]",
+				Children: []engine.ExplainOutputNode{
+					{
+						OperatorName: "[noArgFunction]",
+					},
+				},
 			},
 		},
 	}
@@ -780,7 +785,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil), 0),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil)),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 

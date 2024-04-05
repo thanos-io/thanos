@@ -19,6 +19,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
@@ -30,7 +31,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	logger := log.NewNopLogger()
 
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
 	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
