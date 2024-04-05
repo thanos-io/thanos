@@ -46,7 +46,6 @@ import (
 	"github.com/prometheus/prometheus/util/stats"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
-	"github.com/thanos-io/promql-engine/logicalplan"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -81,7 +80,6 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
-	QueryExplainParam        = "explain"
 )
 
 type PromqlEngineType string
@@ -122,19 +120,7 @@ func (f *QueryEngineFactory) GetThanosEngine() promql.QueryEngine {
 		if f.remoteEngineEndpoints == nil {
 			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
 		} else {
-			f.thanosEngine = engine.New(
-				engine.Opts{
-					EngineOpts:     f.engineOpts,
-					Engine:         f.GetPrometheusEngine(),
-					EnableAnalysis: true,
-					LogicalOptimizers: []logicalplan.Optimizer{
-						logicalplan.PassthroughOptimizer{Endpoints: f.remoteEngineEndpoints},
-						logicalplan.DistributeAvgOptimizer{},
-						logicalplan.DistributedExecutionOptimizer{Endpoints: f.remoteEngineEndpoints},
-					},
-					EnableXFunctions: f.enableXFunctions,
-				},
-			)
+			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
 		}
 	})
 
