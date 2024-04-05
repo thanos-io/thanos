@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"sync"
@@ -104,18 +103,6 @@ func registerSidecar(app *extkingpin.App) {
 
 		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, httpClient, grpcLogOpts, tagOpts)
 	})
-}
-
-// DurationWithJitter returns random duration from "input - input*variancePerc" to "input + input*variancePerc" interval.
-func DurationWithJitter(input time.Duration, variancePerc float64) time.Duration {
-	if input == 0 {
-		return 0
-	}
-
-	variance := int64(float64(input) * variancePerc)
-	jitter := rand.Int63n(variance*2) - variance
-
-	return input + time.Duration(jitter)
 }
 
 func runSidecar(
@@ -375,7 +362,7 @@ func runSidecar(
 			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
 				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
-			return runutil.RepeatWithJitter(30*time.Second, ctx, 0.05, func() error {
+			return runutil.RepeatWithJitter(30*time.Second, ctx, 0.2, func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
@@ -531,6 +518,4 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.storeRateLimits.RegisterFlags(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
-	conf := &sidecarConfig{}
-	cmd.Flag("upload-jitter", "Maximum random delay before uploading blocks.").Default("0s").DurationVar(&conf.shipper.uploadJitter)
 }

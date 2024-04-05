@@ -164,7 +164,6 @@ type shipperConfig struct {
 	allowOutOfOrderUpload bool
 	hashFunc              string
 	metaFileName          string
-	uploadJitter          time.Duration
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
