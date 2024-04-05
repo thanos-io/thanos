@@ -464,6 +464,23 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 			},
 		},
+		// External label only. Should fetch all series matching external label.
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "ext1", Value: "value1"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expectedChunkLen: 3,
+			expected: [][]labelpb.ZLabel{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+			},
+		},
 	} {
 		if ok := t.Run(fmt.Sprint(i), func(t *testing.T) {
 			srv := newStoreSeriesServer(ctx)
@@ -766,6 +783,20 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 				},
 				expected: nil,
 			},
+			"ext1=value1 matcher": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "ext1",
+							Value: "value1",
+						},
+					},
+				},
+				expected: []string{"a", "b", "ext1"},
+			},
 		} {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelNames(ctx, tc.req)
@@ -923,6 +954,21 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 					},
 				},
 				expected: nil, // ext1 is replaced with ext2 for series with c
+			},
+			"label a, ext1=value1": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "ext1",
+							Value: "value1",
+						},
+					},
+				},
+				expected: []string{"1", "2"},
 			},
 		} {
 			t.Run(name, func(t *testing.T) {

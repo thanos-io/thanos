@@ -112,6 +112,7 @@ const (
 var (
 	errBlockSyncConcurrencyNotValid = errors.New("the block sync concurrency must be equal or greater than 1.")
 	hashPool                        = sync.Pool{New: func() interface{} { return xxhash.New() }}
+	allPostingMatcher               = labels.MustNewMatcher(labels.MatchEqual, "", "")
 )
 
 type bucketStoreMetrics struct {
@@ -1477,6 +1478,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
 			continue
+		}
+		// If no matcher left after removing external label matchers,
+		// fallback to use all posting matcher.
+		if len(blockMatchers) == 0 {
+			blockMatchers = []*labels.Matcher{allPostingMatcher}
 		}
 		// Sort matchers to make sure we generate the same cache key
 		// when fetching expanded postings.
