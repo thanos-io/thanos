@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/promql"
+	"github.com/thanos-io/promql-engine/logicalplan"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -115,7 +116,12 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
-	qry, err := engine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, ts)
+
+	queryExpr, err := extractPlanOrDefaultToQuery(request.QueryPlan, request.Query)
+	if err != nil {
+		return err
+	}
+	qry, err := engine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), queryExpr, ts)
 	if err != nil {
 		return err
 	}
@@ -216,7 +222,12 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
-	qry, err := engine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, startTime, endTime, interval)
+
+	queryExpr, err := extractPlanOrDefaultToQuery(request.QueryPlan, request.Query)
+	if err != nil {
+		return err
+	}
+	qry, err := engine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), queryExpr, startTime, endTime, interval)
 	if err != nil {
 		return err
 	}
@@ -267,4 +278,18 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	}
 
 	return nil
+}
+
+func extractPlanOrDefaultToQuery(plan *querypb.QueryPlan, qry string) (string, error) {
+	var queryExpr string
+	if plan != nil {
+		plan, err := logicalplan.Unmarshal(plan.GetJson())
+		if err != nil {
+			return "", status.Error(codes.InvalidArgument, err.Error())
+		}
+		queryExpr = plan.String()
+	} else {
+		queryExpr = qry
+	}
+	return queryExpr, nil
 }
