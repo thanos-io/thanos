@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/promql"
+	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -102,7 +103,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		query.NoopSeriesStatsReporter,
 	)
 
-	var engine promql.QueryEngine
+	var queryEngine promql.QueryEngine
 	engineParam := request.Engine
 	if engineParam == querypb.EngineType_default {
 		engineParam = g.defaultEngine
@@ -110,20 +111,28 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 
 	switch engineParam {
 	case querypb.EngineType_prometheus:
-		engine = g.engineFactory.GetPrometheusEngine()
+		queryEngine = g.engineFactory.GetPrometheusEngine()
 	case querypb.EngineType_thanos:
-		engine = g.engineFactory.GetThanosEngine()
+		queryEngine = g.engineFactory.GetThanosEngine()
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
 
-	queryExpr, err := extractPlanOrDefaultToQuery(request.QueryPlan, request.Query)
-	if err != nil {
-		return err
-	}
-	qry, err := engine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), queryExpr, ts)
-	if err != nil {
-		return err
+	var qry promql.Query
+	if distEngine, ok := queryEngine.(engine.DistributedEngine); ok && request.QueryPlan != nil {
+		plan, err := logicalplan.Unmarshal(request.QueryPlan.GetJson())
+		if err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+		qry, err = distEngine.NewInstantQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, ts)
+		if err != nil {
+			return err
+		}
+	} else {
+		qry, err = queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, ts)
+		if err != nil {
+			return err
+		}
 	}
 	defer qry.Close()
 
@@ -208,7 +217,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	endTime := time.Unix(request.EndTimeSeconds, 0)
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
-	var engine promql.QueryEngine
+	var queryEngine promql.QueryEngine
 	engineParam := request.Engine
 	if engineParam == querypb.EngineType_default {
 		engineParam = g.defaultEngine
@@ -216,20 +225,28 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 
 	switch engineParam {
 	case querypb.EngineType_prometheus:
-		engine = g.engineFactory.GetPrometheusEngine()
+		queryEngine = g.engineFactory.GetPrometheusEngine()
 	case querypb.EngineType_thanos:
-		engine = g.engineFactory.GetThanosEngine()
+		queryEngine = g.engineFactory.GetThanosEngine()
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
 
-	queryExpr, err := extractPlanOrDefaultToQuery(request.QueryPlan, request.Query)
-	if err != nil {
-		return err
-	}
-	qry, err := engine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), queryExpr, startTime, endTime, interval)
-	if err != nil {
-		return err
+	var qry promql.Query
+	if distEngine, ok := queryEngine.(engine.DistributedEngine); ok && request.QueryPlan != nil {
+		plan, err := logicalplan.Unmarshal(request.QueryPlan.GetJson())
+		if err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+		qry, err = distEngine.NewRangeQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, startTime, endTime, interval)
+		if err != nil {
+			return err
+		}
+	} else {
+		qry, err = queryEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, startTime, endTime, interval)
+		if err != nil {
+			return err
+		}
 	}
 	defer qry.Close()
 
@@ -278,18 +295,4 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	}
 
 	return nil
-}
-
-func extractPlanOrDefaultToQuery(plan *querypb.QueryPlan, qry string) (string, error) {
-	var queryExpr string
-	if plan != nil {
-		plan, err := logicalplan.Unmarshal(plan.GetJson())
-		if err != nil {
-			return "", status.Error(codes.InvalidArgument, err.Error())
-		}
-		queryExpr = plan.String()
-	} else {
-		queryExpr = qry
-	}
-	return queryExpr, nil
 }
