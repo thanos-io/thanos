@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/groupcache/singleflight"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -59,6 +60,8 @@ type Syncer struct {
 	metrics                  *SyncerMetrics
 	duplicateBlocksFilter    block.DeduplicateFilter
 	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
+
+	g singleflight.Group
 }
 
 // SyncerMetrics holds metrics tracked by the syncer. This struct and its fields are exported
@@ -134,15 +137,22 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 
 // SyncMetas synchronizes local state of block metas with what we have in the bucket.
 func (s *Syncer) SyncMetas(ctx context.Context) error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+	type metasContainer struct {
+		metas   map[ulid.ULID]*metadata.Meta
+		partial map[ulid.ULID]error
+	}
 
-	metas, partial, err := s.fetcher.Fetch(ctx)
+	container, err := s.g.Do("", func() (interface{}, error) {
+		metas, partial, err := s.fetcher.Fetch(ctx)
+		return metasContainer{metas, partial}, err
+	})
 	if err != nil {
 		return retry(err)
 	}
-	s.blocks = metas
-	s.partial = partial
+	s.mtx.Lock()
+	s.blocks = container.(metasContainer).metas
+	s.partial = container.(metasContainer).partial
+	s.mtx.Unlock()
 	return nil
 }
 
@@ -171,9 +181,6 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 // block with a higher compaction level.
 // Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
 func (s *Syncer) GarbageCollect(ctx context.Context) error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
 	begin := time.Now()
 
 	// Ignore filter exists before deduplicate filter.
@@ -208,7 +215,9 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
 		// after running garbage collection.
+		s.mtx.Lock()
 		delete(s.blocks, id)
+		s.mtx.Unlock()
 		s.metrics.GarbageCollectedBlocks.Inc()
 	}
 	s.metrics.GarbageCollections.Inc()
