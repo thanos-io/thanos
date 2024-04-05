@@ -2320,12 +2320,18 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		nil,
 	)
 
-	// default-tenant cannot attempt to view other tenants data, by setting the tenant id
+	// default-tenant cannot attempt to view other tenants data, by setting the tenant id.
+	// Query all data from `default-tenant` after enforcing tenancy.
 	queryAndAssertSeries(t, ctx, querierEnforce.Endpoint("http"), func() string { return "{tenant_id=\"tenant-01\"}" },
 		time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		},
-		nil,
+		[]model.Metric{
+			{
+				"c":         "3",
+				"tenant_id": "default-tenant",
+			},
+		},
 	)
 
 	rangeQuery(t, ctx, querierEnforce.Endpoint("http"), func() string { return testQueryA }, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3600,
