@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7122](https://github.com/thanos-io/thanos/pull/7122) Store Gateway: Fix lazy expanded postings estimate base cardinality using posting group with remove keys.
 - [#7224](https://github.com/thanos-io/thanos/pull/7224) Query-frontend: Add Redis username to the client configuration.
 - [#7220](https://github.com/thanos-io/thanos/pull/7220) Store Gateway: Fix lazy expanded postings caching partial expanded postings and bug of estimating remove postings with non existent value. Added `PromQLSmith` based fuzz test to improve correctness.
+- [#7242](https://github.com/thanos-io/thanos/pull/7242): UI: Fixing error when showing overlapping blocks
 
 ### Added
 
