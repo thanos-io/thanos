@@ -119,7 +119,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		queryEngine := g.engineFactory.GetThanosEngine()
 		plan, err := logicalplan.Unmarshal(request.QueryPlan.GetJson())
 		if err != nil {
-			return status.Error(codes.InvalidArgument, err.Error())
+			// fallback to using query string if plan is not provided.
+			qry, err = queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, ts)
+			if err != nil {
+				return err
+			}
 		}
 		qry, err = queryEngine.NewInstantQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, ts)
 		if err != nil {
@@ -228,7 +232,10 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		thanosEngine := g.engineFactory.GetThanosEngine()
 		plan, err := logicalplan.Unmarshal(request.QueryPlan.GetJson())
 		if err != nil {
-			return status.Error(codes.InvalidArgument, err.Error())
+			qry, err = thanosEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, startTime, endTime, interval)
+			if err != nil {
+				return err
+			}
 		}
 		qry, err = thanosEngine.NewRangeQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, startTime, endTime, interval)
 		if err != nil {
