@@ -362,7 +362,7 @@ func runSidecar(
 			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
 				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
-			return runutil.RepeatWithJitter(30*time.Second, ctx, 0.2, func() error {
+			return runutil.RepeatWithJitter(ctx, 30*time.Second, 0.2, func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}

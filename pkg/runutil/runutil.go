@@ -107,7 +107,7 @@ func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error
 // RepeatWithJitter executes f with a random jitter added to the interval between each execution.
 // It continues until ctx is done or f returns an error.
 // The jitter factor should be between 0 and 1, where 0 means no jitter and 1 means the interval can vary from 0 to 2 times the original interval.
-func RepeatWithJitter(interval time.Duration, ctx context.Context, jitterFactor float64, f func() error) error {
+func RepeatWithJitter(ctx context.Context, interval time.Duration, jitterFactor float64, f func() error) error {
 	for {
 		select {
 		case <-ctx.Done():
