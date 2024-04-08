@@ -158,7 +158,6 @@ func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts p
 }
 
 func (e engineStub) NewInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error) {
-	//TODO implement me
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
