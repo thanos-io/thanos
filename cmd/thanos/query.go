@@ -214,7 +214,7 @@ func registerQuery(app *extkingpin.App) {
 	storeSelectorRelabelConf := *extflag.RegisterPathOrContent(
 		cmd,
 		"selector.relabel-config",
-		"YAML with relabeling configuration that allows the Querier to select specific TSDBs by their external label. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		"YAML file with relabeling configuration that allows selecting blocks to query based on their external labels. It follows the Thanos sharding relabel-config syntax. For format details see: https://thanos.io/tip/thanos/sharding.md/#relabelling ",
 		extflag.WithEnvSubstitution(),
 	)
 

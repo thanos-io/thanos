@@ -119,7 +119,7 @@ func RegisterSelectorRelabelFlags(cmd FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		cmd,
 		"selector.relabel-config",
-		"YAML file that contains relabeling configuration that allows selecting blocks. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		"YAML file with relabeling configuration that allows selecting blocks to act on based on their external labels. It follows thanos sharding relabel-config syntax. For format details see: https://thanos.io/tip/thanos/sharding.md/#relabelling ",
 		extflag.WithEnvSubstitution(),
 	)
 }
