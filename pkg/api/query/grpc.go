@@ -124,10 +124,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 			if err != nil {
 				return err
 			}
-		}
-		qry, err = queryEngine.NewInstantQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, ts)
-		if err != nil {
-			return err
+		} else {
+			qry, err = queryEngine.NewInstantQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, ts)
+			if err != nil {
+				return err
+			}
 		}
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
@@ -236,10 +237,11 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 			if err != nil {
 				return err
 			}
-		}
-		qry, err = thanosEngine.NewRangeQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, startTime, endTime, interval)
-		if err != nil {
-			return err
+		} else {
+			qry, err = thanosEngine.NewRangeQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, startTime, endTime, interval)
+			if err != nil {
+				return err
+			}
 		}
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
