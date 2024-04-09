@@ -771,7 +771,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			if err != nil {
 				return nil, nil, err
 			}
-			endpointReplica := endpointReplica{endpoint: endpoint, replica: rn}
+			endpointReplica := endpointReplica{endpoint: endpoint, replica: 0}
 			var writeDestination = remoteWrites
 			if endpoint == h.options.Endpoint {
 				writeDestination = localWrites
@@ -804,13 +804,13 @@ func (h *Handler) sendWrites(
 	// Do the writes to the local node first. This should be easy and fast.
 	for writeDestination := range localWrites {
 		func(writeDestination endpointReplica) {
-			h.sendLocalWrite(ctx, writeDestination, params.tenant, localWrites[writeDestination], responses)
+			go h.sendLocalWrite(ctx, writeDestination, params.tenant, localWrites[writeDestination], responses)
 		}(writeDestination)
 	}
 
 	// Do the writes to remote nodes. Run them all in parallel.
 	for writeDestination := range remoteWrites {
-		h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses, wg)
+		go h.sendRemoteWrite(ctx, params.tenant, writeDestination, remoteWrites[writeDestination], params.alreadyReplicated, responses, wg)
 	}
 }
 
