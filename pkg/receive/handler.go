@@ -44,6 +44,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -1286,90 +1287,23 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func (pw *peerWorker) initWorkers() {
-	pw.initWorkersOnce.Do(func() {
-		work := make(chan peerWorkItem)
-		pw.work = work
-
-		ctx, cancel := context.WithCancel(context.Background())
-		pw.turnOffGoroutines = cancel
-
-		for i := 0; i < int(pw.asyncWorkerCount); i++ {
-			go func() {
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case w := <-work:
-						pw.forwardDelay.Observe(time.Since(w.sendTime).Seconds())
-
-						tracing.DoInSpan(w.workItemCtx, "receive_forward", func(ctx context.Context) {
-							_, err := storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, w.req)
-							w.workResult <- peerWorkResponse{
-								er:  w.er,
-								err: errors.Wrapf(err, "forwarding request to endpoint %v", w.er.endpoint),
-							}
-							if err != nil {
-								sp := trace.SpanFromContext(ctx)
-								sp.SetAttributes(attribute.Bool("error", true))
-								sp.SetAttributes(attribute.String("error.msg", err.Error()))
-							}
-							close(w.workResult)
-						}, opentracing.Tags{
-							"endpoint": w.er.endpoint,
-							"replica":  w.er.replica,
-						})
-
-					}
-				}
-			}()
-		}
-
-	})
-}
-
 func newPeerWorker(cc *grpc.ClientConn, forwardDelay prometheus.Histogram, asyncWorkerCount uint) *peerWorker {
 	return &peerWorker{
-		cc:               cc,
-		asyncWorkerCount: asyncWorkerCount,
-		forwardDelay:     forwardDelay,
+		cc:           cc,
+		wp:           pool.NewWorkerPool(asyncWorkerCount),
+		forwardDelay: forwardDelay,
 	}
-}
-
-type peerWorkItem struct {
-	cc          *grpc.ClientConn
-	req         *storepb.WriteRequest
-	workItemCtx context.Context
-
-	workResult chan peerWorkResponse
-	er         endpointReplica
-	sendTime   time.Time
 }
 
 func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
-	pw.initWorkers()
-
-	w := peerWorkItem{
-		cc:          pw.cc,
-		req:         in,
-		workResult:  make(chan peerWorkResponse, 1),
-		workItemCtx: ctx,
-		sendTime:    time.Now(),
-	}
-
-	pw.work <- w
-	return nil, (<-w.workResult).err
+	return storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, in)
 }
 
 type peerWorker struct {
 	cc *grpc.ClientConn
+	wp pool.WorkerPool
 
-	work              chan peerWorkItem
-	turnOffGoroutines func()
-
-	initWorkersOnce  sync.Once
-	asyncWorkerCount uint
-	forwardDelay     prometheus.Histogram
+	forwardDelay prometheus.Histogram
 }
 
 func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, dialOpts ...grpc.DialOption) peersContainer {
@@ -1393,29 +1327,29 @@ type peersContainer interface {
 	reset()
 }
 
-type peerWorkResponse struct {
-	er  endpointReplica
-	err error
-}
-
 func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
-	p.initWorkers()
+	now := time.Now()
+	p.wp.Go(func() {
+		p.forwardDelay.Observe(time.Since(now).Seconds())
 
-	w := peerWorkItem{
-		cc:          p.cc,
-		req:         req,
-		workResult:  make(chan peerWorkResponse, 1),
-		workItemCtx: ctx,
-		er:          er,
-
-		sendTime: time.Now(),
-	}
-
-	p.work <- w
-	res := <-w.workResult
-
-	responseWriter <- newWriteResponse(seriesIDs, res.err, er)
-	cb(res.err)
+		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			_, err := storepb.NewWriteableStoreClient(p.cc).RemoteWrite(ctx, req)
+			responseWriter <- newWriteResponse(
+				seriesIDs,
+				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
+				er,
+			)
+			if err != nil {
+				sp := trace.SpanFromContext(ctx)
+				sp.SetAttributes(attribute.Bool("error", true))
+				sp.SetAttributes(attribute.String("error.msg", err.Error()))
+			}
+			cb(err)
+		}, opentracing.Tags{
+			"endpoint": er.endpoint,
+			"replica":  er.replica,
+		})
+	})
 }
 
 type peerGroup struct {
@@ -1443,7 +1377,7 @@ func (p *peerGroup) close(addr string) error {
 		return nil
 	}
 
-	p.connections[addr].turnOffGoroutines()
+	p.connections[addr].wp.Close()
 	delete(p.connections, addr)
 	if err := c.cc.Close(); err != nil {
 		return fmt.Errorf("closing connection for %s", addr)
