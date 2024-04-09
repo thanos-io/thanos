@@ -304,6 +304,8 @@ type queryTelemetry struct {
 	// TODO(saswatamcode): Add aggregate fields to enrich data.
 	OperatorName string           `json:"name,omitempty"`
 	Execution    string           `json:"executionTime,omitempty"`
+	PeakSamples  int64            `json:"peakSamples,omitempty"`
+	TotalSamples int64            `json:"totalSamples,omitempty"`
 	Children     []queryTelemetry `json:"children,omitempty"`
 }
 
@@ -472,6 +474,8 @@ func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	var analysis queryTelemetry
 	analysis.OperatorName = a.OperatorTelemetry.String()
 	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken().String()
+	analysis.PeakSamples = a.PeakSamples()
+	analysis.TotalSamples = a.TotalSamples()
 	for _, c := range a.Children {
 		analysis.Children = append(analysis.Children, processAnalysis(&c))
 	}
