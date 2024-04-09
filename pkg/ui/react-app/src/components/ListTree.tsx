@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { InputProps, Collapse, ListGroupItem, ListGroup } from 'reactstrap';
+import { InputProps, Collapse, ListGroupItem, ListGroup, Tooltip } from 'reactstrap';
 import { ExplainTree } from '../pages/graph/ExpressionInput';
 
 export interface QueryTree {
   name: string;
   executionTime?: string;
+  peakSamples?: number;
+  totalSamples?: number;
   children?: QueryTree[];
 }
 
@@ -18,6 +20,30 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
   };
 
   const [mapping, setMapping] = useState<idMapping>({});
+  const [peakSamplesTooltipOpen, setPeakSamplesTooltipOpen] = useState<idMapping>({});
+  const [totalSamplesTooltipOpen, setTotalSamplesTooltipOpen] = useState<idMapping>({});
+  const [executionTimeTooltipOpen, setExecutionTimeTooltipOpen] = useState<idMapping>({});
+  const toggleTotalSamplesTooltip = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.target as HTMLDivElement;
+    const id = el.getAttribute('id');
+    if (id) {
+      setTotalSamplesTooltipOpen({ ...totalSamplesTooltipOpen, [id]: !totalSamplesTooltipOpen[id] });
+    }
+  };
+  const toggleExecutionTimeTooltip = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.target as HTMLDivElement;
+    const id = el.getAttribute('id');
+    if (id) {
+      setExecutionTimeTooltipOpen({ ...executionTimeTooltipOpen, [id]: !executionTimeTooltipOpen[id] });
+    }
+  };
+  const togglePeakSamplesTooltip = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.target as HTMLDivElement;
+    const id = el.getAttribute('id');
+    if (id) {
+      setPeakSamplesTooltipOpen({ ...peakSamplesTooltipOpen, [id]: !peakSamplesTooltipOpen[id] });
+    }
+  };
   const toggle = (e: React.MouseEvent<HTMLDivElement>) => {
     const el = e.target as HTMLDivElement;
     const id = el.getAttribute('id');
@@ -44,7 +70,51 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
                 )}
                 <div id={id} style={{ cursor: `${node.children ? 'pointer' : 'inherit'}` }} onClick={toggle}>
                   {node.name}
-                  {node.executionTime && ` · ${node.executionTime}`}
+                  {node.executionTime && (
+                    <>
+                      <span id={`executionTime-${id}`} style={{ paddingLeft: `20px` }}>
+                        {node.executionTime}
+                      </span>
+                      <Tooltip
+                        isOpen={executionTimeTooltipOpen[`executionTime-${id}`]}
+                        toggle={toggleExecutionTimeTooltip}
+                        target={`executionTime-${id}`}
+                        placement="right"
+                      >
+                        Wall clock time
+                      </Tooltip>
+                    </>
+                  )}
+                  {node.peakSamples && (
+                    <>
+                      <span id={`peakSamples-${id}`} style={{ paddingLeft: `20px` }}>
+                        {node.peakSamples}
+                      </span>
+                      <Tooltip
+                        isOpen={peakSamplesTooltipOpen[`peakSamples-${id}`]}
+                        toggle={togglePeakSamplesTooltip}
+                        target={`peakSamples-${id}`}
+                        placement="right"
+                      >
+                        Peak samples (in all steps)
+                      </Tooltip>
+                    </>
+                  )}
+                  {node.totalSamples && (
+                    <>
+                      <span id={`totalSamples-${id}`} style={{ paddingLeft: `20px` }}>
+                        {node.totalSamples}
+                      </span>
+                      <Tooltip
+                        isOpen={totalSamplesTooltipOpen[`totalSamples-${id}`]}
+                        toggle={toggleTotalSamplesTooltip}
+                        target={`totalSamples-${id}`}
+                        placement="right"
+                      >
+                        Total samples (sum of all steps)
+                      </Tooltip>
+                    </>
+                  )}
                 </div>
               </div>
             }
