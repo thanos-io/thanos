@@ -163,6 +163,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				},
 			),
 			workers,
+			logger,
 			o.DialOpts...),
 		receiverMode: o.ReceiverMode,
 		Limiter:      o.Limiter,
@@ -776,6 +777,8 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			var writeDestination = remoteWrites
 			if endpoint == h.options.Endpoint {
 				writeDestination = localWrites
+			} else {
+				endpointReplica.replica = 0
 			}
 			writeableSeries, ok := writeDestination[endpointReplica]
 			if !ok {
@@ -1209,7 +1212,7 @@ type peerWorker struct {
 	forwardDelay prometheus.Histogram
 }
 
-func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, dialOpts ...grpc.DialOption) peersContainer {
+func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, log log.Logger, dialOpts ...grpc.DialOption) peersContainer {
 	return &peerGroup{
 		dialOpts:                 dialOpts,
 		connections:              map[string]*peerWorker{},
@@ -1219,6 +1222,7 @@ func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, as
 		expBackoff:               backoff,
 		forwardDelay:             forwardDelay,
 		asyncForwardWorkersCount: asyncForwardWorkersCount,
+		log:                      log,
 	}
 }
 
@@ -1262,6 +1266,7 @@ type peerGroup struct {
 	expBackoff               backoff.Backoff
 	forwardDelay             prometheus.Histogram
 	asyncForwardWorkersCount uint
+	log                      log.Logger
 
 	m sync.RWMutex
 
@@ -1317,6 +1322,8 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	}
 
 	p.connections[addr] = newPeerWorker(conn, p.forwardDelay, p.asyncForwardWorkersCount)
+	log.With(p.log).Log("msg", "established connection to peer", "peer", addr,
+		"asyncForwardWorkersCount", p.asyncForwardWorkersCount, "poolSize", p.connections[addr].wp.Size())
 	return p.connections[addr], nil
 }
 
