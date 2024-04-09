@@ -5,7 +5,6 @@ package pool
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +13,7 @@ import (
 func TestGo(t *testing.T) {
 	var expectedWorksDone uint32
 	var workerPoolSize uint
+	var mu sync.Mutex
 	workerPoolSize = 5
 	p := NewWorkerPool(workerPoolSize)
 	p.Init()
@@ -23,7 +23,9 @@ func TestGo(t *testing.T) {
 	for i := 0; i < int(workerPoolSize*3); i++ {
 		wg.Add(1)
 		p.Go(func() {
-			atomic.AddUint32(&expectedWorksDone, 1)
+			mu.Lock()
+			defer mu.Unlock()
+			expectedWorksDone++
 			wg.Done()
 		})
 	}
