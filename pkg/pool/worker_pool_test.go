@@ -24,7 +24,7 @@ func TestGo(t *testing.T) {
 		wg.Add(1)
 		p.Go(func() {
 			mu.Lock()
-			mu.Unlock()
+			defer mu.Unlock()
 			expectedWorksDone++
 			wg.Done()
 		})
