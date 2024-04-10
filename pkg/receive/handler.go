@@ -1238,6 +1238,11 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 
 		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
 			_, err := storepb.NewWriteableStoreClient(p.cc).RemoteWrite(ctx, req)
+			if isConflict(err) && p.wp.Size() > 1 {
+				// conflict errors are valid in our dual scraping setup, worker pool size > 1 to bypass unit tests
+				// see original PR: https://github.com/databricks/thanos/pull/27
+				err = nil
+			}
 			responseWriter <- newWriteResponse(
 				seriesIDs,
 				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
@@ -1252,6 +1257,7 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 		}, opentracing.Tags{
 			"endpoint": er.endpoint,
 			"replica":  er.replica,
+			"samples":  req.Size(),
 		})
 	})
 }
