@@ -371,11 +371,11 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 
 func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
 	if it.useA && it.aval == chunkenc.ValFloat {
-		_, v := it.lastIter.At()
+		_, v := it.a.At()
 		return v, true
 	}
 	if !it.useA && it.bval == chunkenc.ValFloat {
-		_, v := it.lastIter.At()
+		_, v := it.b.At()
 		return v, true
 	}
 	return 0, false

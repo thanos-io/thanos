@@ -15,11 +15,14 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/prometheus/prometheus/util/annotations"
-
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
+
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil/testiters"
 )
 
 type sample struct {
@@ -596,6 +599,33 @@ func TestDedupSeriesIterator(t *testing.T) {
 	}
 }
 
+func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
+	hs := tsdbutil.GenerateTestHistograms(1)
+
+	casesMixed := []struct {
+		a   []sample
+		b   []*testiters.HistogramPair
+		exp []any
+	}{
+		{
+			a:   []sample{{t: 0, f: 0}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: hs[0]}, {T: 20000, H: hs[0]}, {T: 30000, H: hs[0]}, {T: 40000, H: hs[0]}},
+			exp: []any{&sample{t: 0, f: 0}, &testiters.HistogramPair{T: 10000, H: hs[0]}, &testiters.HistogramPair{T: 20000, H: hs[0]}, &testiters.HistogramPair{T: 30000, H: hs[0]}, &testiters.HistogramPair{T: 40000, H: hs[0]}},
+		},
+	}
+
+	for i, c := range casesMixed {
+		c := c
+		t.Logf("case %d:", i)
+		it := newDedupSeriesIterator(
+			noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+			noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+		)
+		res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+		require.EqualValues(t, c.exp, res)
+	}
+}
+
 func BenchmarkDedupSeriesIterator(b *testing.B) {
 	run := func(b *testing.B, s1, s2 []sample) {
 		it := newDedupSeriesIterator(
@@ -661,3 +691,27 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	testutil.Ok(t, it.Err())
 	return res
 }
+
+func expandHistogramSeries(t testing.TB, it chunkenc.Iterator) (res []any) {
+	for {
+		nextVal := it.Next()
+		if nextVal == chunkenc.ValNone {
+			break
+		}
+
+		if nextVal == chunkenc.ValHistogram {
+			t, h := it.AtHistogram(nil)
+			res = append(res, &testiters.HistogramPair{T: t, H: h})
+		} else {
+			t, f := it.At()
+			res = append(res, &sample{t: t, f: f})
+		}
+	}
+	testutil.Ok(t, it.Err())
+	return res
+}
+
+// a: [0, F0]
+// b: [1, H1], [2, H2], [3, H3]
+
+// res: [0, F0], [1, H1], [2, H2], [3, H3]
