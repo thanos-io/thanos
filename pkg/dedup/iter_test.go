@@ -710,8 +710,3 @@ func expandHistogramSeries(t testing.TB, it chunkenc.Iterator) (res []any) {
 	testutil.Ok(t, it.Err())
 	return res
 }
-
-// a: [0, F0]
-// b: [1, H1], [2, H2], [3, H3]
-
-// res: [0, F0], [1, H1], [2, H2], [3, H3]
