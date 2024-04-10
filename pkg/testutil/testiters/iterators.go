@@ -11,9 +11,8 @@ type HistogramPair struct {
 }
 
 type HistogramIterator struct {
-	l   []*HistogramPair
-	i   int
-	cur *HistogramPair
+	l []*HistogramPair
+	i int
 }
 
 func NewHistogramIterator(l []*HistogramPair) *HistogramIterator {

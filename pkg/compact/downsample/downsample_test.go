@@ -1550,7 +1550,7 @@ func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 			var res []*testiters.HistogramPair
 			for x.Next() != chunkenc.ValNone {
 				t, h := x.AtHistogram(nil)
-				res = append(res, &testiters.HistogramPair{t, h})
+				res = append(res, &testiters.HistogramPair{T: t, H: h})
 			}
 			testutil.Ok(t, x.Err())
 			testutil.Equals(t, tcase.expected, res)
