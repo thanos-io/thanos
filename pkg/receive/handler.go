@@ -711,29 +711,31 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(remoteWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+func (h *Handler) gatherWriteStats(writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
 	var stats tenantRequestStats = make(tenantRequestStats)
 
-	for er := range remoteWrites {
-		if er.replica != 0 {
-			continue // Skip replicated writes, only count once.
-		}
-		for tenant, series := range remoteWrites[er] {
-			samples := 0
+	for _, write := range writes {
+		for er := range write {
+            if er.replica != 0 {
+              continue // Skip replicated writes, only count once.
+            }
+			for tenant, series := range write[er] {
+				samples := 0
 
-			for _, ts := range series.timeSeries {
-				samples += len(ts.Samples)
-			}
+				for _, ts := range series.timeSeries {
+					samples += len(ts.Samples)
+				}
 
-			if st, ok := stats[tenant]; ok {
-				st.timeseries += len(series.timeSeries)
-				st.totalSamples += samples
+				if st, ok := stats[tenant]; ok {
+					st.timeseries += len(series.timeSeries)
+					st.totalSamples += samples
 
-				stats[tenant] = st
-			} else {
-				stats[tenant] = requestStats{
-					timeseries:   len(series.timeSeries),
-					totalSamples: samples,
+					stats[tenant] = st
+				} else {
+					stats[tenant] = requestStats{
+						timeseries:   len(series.timeSeries),
+						totalSamples: samples,
+					}
 				}
 			}
 		}
@@ -746,6 +748,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
+	var stats tenantRequestStats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -765,11 +768,10 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
-		return tenantRequestStats{}, err
+		return stats, err
 	}
 
-	// Specific to Databricks setup, we only measure remote writes
-	stats := h.gatherWriteStats(remoteWrites)
+	stats = h.gatherWriteStats(localWrites, remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
