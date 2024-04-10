@@ -285,7 +285,7 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 		a:        a,
 		b:        b,
 		lastT:    math.MinInt64,
-		lastIter: nil,
+		lastIter: a,
 		useA:     true,
 		aval:     a.Next(),
 		bval:     b.Next(),
@@ -372,11 +372,11 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 
 func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
 	if it.useA && it.aval == chunkenc.ValFloat {
-		_, v := it.a.At()
+		_, v := it.lastIter.At()
 		return v, true
 	}
 	if !it.useA && it.bval == chunkenc.ValFloat {
-		_, v := it.b.At()
+		_, v := it.lastIter.At()
 		return v, true
 	}
 	return 0, false

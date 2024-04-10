@@ -623,6 +623,13 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 		)
 		res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
 		require.EqualValues(t, c.exp, res)
+
+		it = newDedupSeriesIterator(
+			noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+			noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+		)
+		res = expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+		require.EqualValues(t, c.exp, res)
 	}
 }
 
