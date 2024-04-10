@@ -418,7 +418,7 @@ Flags:
       --receive.split-tenant-label-name=""
                                  Label name through which the request will
                                  be split into multiple tenants. This takes
-                                 precendence over the HTTP header.
+                                 precedence over the HTTP header.
       --receive.tenant-certificate-field=
                                  Use TLS client's certificate field to
                                  determine tenant for write requests.
