@@ -1711,6 +1711,57 @@ func TestHandlerEarlyStop(t *testing.T) {
 	testutil.Equals(t, "http: Server closed", err.Error())
 }
 
+type hashringSeenTenants struct {
+	Hashring
+
+	seenTenants map[string]struct{}
+}
+
+func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+	if h.seenTenants == nil {
+		h.seenTenants = map[string]struct{}{}
+	}
+	h.seenTenants[tenant] = struct{}{}
+	return h.Hashring.GetN(tenant, ts, n)
+}
+
+func TestDistributeSeries(t *testing.T) {
+	const tenantIDLabelName = "thanos_tenant_id"
+	h := NewHandler(nil, &Options{
+		SplitTenantLabelName: tenantIDLabelName,
+	})
+
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9090",
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	_, remote, err := h.distributeTimeseriesToReplicas(
+		"foo",
+		[]uint64{0},
+		[]prompb.TimeSeries{
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
+			},
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, remote, 1)
+	require.Len(t, remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries, 1)
+	require.Len(t, remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["boo"].timeSeries, 1)
+
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries[0].Labels).Len())
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["boo"].timeSeries[0].Labels).Len())
+	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
+}
+
 func TestHandlerFlippingHashrings(t *testing.T) {
 	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
 	t.Cleanup(h.Close)
@@ -1746,7 +1797,7 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 				return
 			}
 
-			err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
+			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
 				Timeseries: []prompb.TimeSeries{
 					{
 						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
