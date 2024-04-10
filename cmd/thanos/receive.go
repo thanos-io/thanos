@@ -255,6 +255,8 @@ func runReceive(
 		MaxBackoff:        time.Duration(*conf.maxBackoff),
 		TSDBStats:         dbs,
 		Limiter:           limiter,
+
+		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 	})
 
 	grpcProbe := prober.NewGRPC()
