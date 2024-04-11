@@ -921,7 +921,7 @@ func (h *Handler) sendLocalWrite(
 	defer span.Finish()
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
-	span.SetTag("tenant", tenant)
+	span.SetTag("tenant", tenantHTTP)
 	span.SetTag("samples", len(trackedSeries.timeSeries))
 
 	tenantSeriesMapping := map[string][]prompb.TimeSeries{}
@@ -1309,8 +1309,7 @@ func newPeerWorker(cc *grpc.ClientConn, forwardDelay prometheus.Histogram, async
 }
 
 func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
-	_, err := storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, in)
-	return nil, err
+	return storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, in)
 }
 
 type peerWorker struct {
