@@ -28,26 +28,28 @@ type WorkerPool interface {
 
 type workerPool struct {
 	sync.Once
+	ctx    context.Context
 	workCh chan Work
 	cancel context.CancelFunc
 }
 
 func NewWorkerPool(workers uint) WorkerPool {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &workerPool{
+		ctx:    ctx,
+		cancel: cancel,
 		workCh: make(chan Work, workers),
 	}
 }
 
 func (p *workerPool) Init() {
 	p.Do(func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		p.cancel = cancel
-
 		for i := 0; i < cap(p.workCh); i++ {
 			go func() {
 				for {
 					select {
-					case <-ctx.Done():
+					case <-p.ctx.Done():
+						// TODO: exhaust workCh before exit
 						return
 					case work := <-p.workCh:
 						work()
