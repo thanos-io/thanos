@@ -616,20 +616,22 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 
 	for i, c := range casesMixed {
 		c := c
-		t.Logf("case %d:", i)
-		it := newDedupSeriesIterator(
-			noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
-			noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
-		)
-		res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
-		require.EqualValues(t, c.exp, res)
+		t.Run(fmt.Sprintf("mixed-%d", i), func(t *testing.T) {
+			t.Parallel()
+			it := newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+			)
+			res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+			require.EqualValues(t, c.exp, res)
 
-		it = newDedupSeriesIterator(
-			noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
-			noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
-		)
-		res = expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
-		require.EqualValues(t, c.exp, res)
+			it = newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+			)
+			res = expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+			require.EqualValues(t, c.exp, res)
+		})
 	}
 }
 
