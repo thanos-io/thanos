@@ -829,6 +829,8 @@ func (h *Handler) sendLocalWrite(
 	defer span.Finish()
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
+	span.SetTag("tenant", tenant)
+	span.SetTag("samples", len(trackedSeries.timeSeries))
 	err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
 		Timeseries: trackedSeries.timeSeries,
 	})
