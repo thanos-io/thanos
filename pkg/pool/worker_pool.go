@@ -43,11 +43,12 @@ func (p *workerPool) Init() {
 		ctx, cancel := context.WithCancel(context.Background())
 		p.cancel = cancel
 
-		for i := 0; i < cap(p.workCh); i++ {
+		for i := 0; i < p.Size(); i++ {
 			go func() {
 				for {
 					select {
 					case <-ctx.Done():
+						// TODO: exhaust workCh before exit
 						return
 					case work := <-p.workCh:
 						work()
