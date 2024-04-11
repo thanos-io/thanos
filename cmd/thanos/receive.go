@@ -157,6 +157,9 @@ func runReceive(
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
+	if receiveMode == receive.RouterOnly {
+		dialOpts = append(dialOpts, extgrpc.EndpointGroupGRPCOpts()...)
+	}
 
 	var bkt objstore.Bucket
 	confContentYaml, err := conf.objStoreConfig.Content()

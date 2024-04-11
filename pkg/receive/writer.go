@@ -19,6 +19,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // Appendable returns an Appender.
@@ -277,7 +278,8 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		level.Info(tLogger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
 		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", numExemplarsLabelLength))
 	}
-
+	span, _ := tracing.StartSpan(ctx, "receive_commit")
+	defer span.Finish()
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
