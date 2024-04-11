@@ -145,6 +145,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	if workers == 0 {
 		workers = 1
 	}
+	level.Info(logger).Log("msg", "Starting receive handler with async forward workers", "workers", workers)
 
 	h := &Handler{
 		logger:  logger,
