@@ -72,7 +72,7 @@ func validateAddrs(addrs addressSlice) error {
 	return nil
 }
 
-// RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.
+// RegisterHTTPFlags register flags commonly used to configure http servers with.
 func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration, httpTLSConfig *string) {
 	httpBindAddr = cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 	httpGracePeriod = ModelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
