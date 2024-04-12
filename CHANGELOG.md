@@ -44,6 +44,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7289](https://github.com/thanos-io/thanos/pull/7289) Query Frontend: show warnings from downstream queries.
 - [#7308](https://github.com/thanos-io/thanos/pull/7308) Store: Batch TSDB Infos for blocks.
 - [#7301](https://github.com/thanos-io/thanos/pull/7301) Store Gateway: fix index header reader `PostingsOffsets` returning wrong values.
+- [#7277](https://github.com/thanos-io/thanos/pull/7277) Query: added context cancellation check on MergeSlices on get label and label values
 
 ### Added
 

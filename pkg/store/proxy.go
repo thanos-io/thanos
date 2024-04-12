@@ -559,8 +559,12 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 	}
 
 	level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
+	res, err := strutil.MergeUnsortedSlices(ctx, names...)
+	if err != nil {
+		return nil, err
+	}
 	return &storepb.LabelNamesResponse{
-		Names:    strutil.MergeUnsortedSlices(names...),
+		Names:    res,
 		Warnings: warnings,
 	}, nil
 }
@@ -663,8 +667,12 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 	}
 
 	level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
+	values, err := strutil.MergeUnsortedSlices(ctx, all...)
+	if err != nil {
+		return nil, err
+	}
 	return &storepb.LabelValuesResponse{
-		Values:   strutil.MergeUnsortedSlices(all...),
+		Values:   values,
 		Warnings: warnings,
 	}, nil
 }

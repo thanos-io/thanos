@@ -1816,7 +1816,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					}
 				})
 
-				result = strutil.MergeSlices(res, extRes)
+				if result, err = strutil.MergeSlices(ctx, res, extRes); err != nil {
+					return err
+				}
 			} else {
 				seriesReq := &storepb.SeriesRequest{
 					MinTime:              req.Start,
@@ -1910,9 +1912,13 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
+	names, err := strutil.MergeSlices(ctx, sets...)
+	if err != nil {
+		return nil, err
+	}
 
 	return &storepb.LabelNamesResponse{
-		Names: strutil.MergeSlices(sets...),
+		Names: names,
 		Hints: anyHints,
 	}, nil
 }
@@ -2025,7 +2031,10 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 				// Add the external label value as well.
 				if extLabelValue := b.extLset.Get(req.Label); extLabelValue != "" {
-					res = strutil.MergeSlices(res, []string{extLabelValue})
+					res, err = strutil.MergeSlices(ctx, res, []string{extLabelValue})
+					if err != nil {
+						return err
+					}
 				}
 				result = res
 			} else {
@@ -2122,9 +2131,13 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}
+	values, err := strutil.MergeSlices(ctx, sets...)
+	if err != nil {
+		return nil, err
+	}
 
 	return &storepb.LabelValuesResponse{
-		Values: strutil.MergeSlices(sets...),
+		Values: values,
 		Hints:  anyHints,
 	}, nil
 }
