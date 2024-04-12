@@ -362,7 +362,6 @@ func newLazyRespSet(
 				var rerr error
 				// If timer is already stopped
 				if t != nil && !t.Stop() {
-					<-t.C // Drain the channel if it was already stopped.
 					if errors.Is(err, context.Canceled) {
 						// The per-Recv timeout has been reached.
 						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st)
