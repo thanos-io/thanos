@@ -33,6 +33,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7199](https://github.com/thanos-io/thanos/pull/7199): Reloader: Add support for watching and decompressing Prometheus configuration directories
 - [#7200](https://github.com/thanos-io/thanos/pull/7175): Query: Add `--selector.relabel-config` and `--selector.relabel-config-file` flags which allows scoping the Querier to a subset of matched TSDBs.
 - [#7233](https://github.com/thanos-io/thanos/pull/7233): UI: Showing Block Size Stats
+- [#7280](https://github.com/thanos-io/thanos/pull/7281): Adding User-Agent to request logs
 
 ### Changed
 
