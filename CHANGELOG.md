@@ -38,6 +38,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7123](https://github.com/thanos-io/thanos/pull/7123) Rule: Change default Alertmanager API version to v2.
 - [#7223](https://github.com/thanos-io/thanos/pull/7223) Automatic detection of memory limits and configure GOMEMLIMIT to match.
+- [#6699](https://github.com/thanos-io/thanos/pull/6699) Receive: Use new file reloading logic for hashring configuration.
+
 
 ### Removed
 
@@ -50,8 +52,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 ### Changed
-
-- [#6699](https://github.com/thanos-io/thanos/pull/6699) Receive: Use new file reloading logic for hashring configuration.
 
 ### Removed
 
