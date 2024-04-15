@@ -40,7 +40,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7223](https://github.com/thanos-io/thanos/pull/7223) Automatic detection of memory limits and configure GOMEMLIMIT to match.
 - [#6699](https://github.com/thanos-io/thanos/pull/6699) Receive: Use new file reloading logic for hashring configuration.
 
-
 ### Removed
 
 ## [v0.34.1](https://github.com/thanos-io/thanos/tree/release-0.34) - 11.02.24
