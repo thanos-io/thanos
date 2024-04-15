@@ -1,6 +1,6 @@
 import React from 'react';
 import { mount } from 'enzyme';
-import { SourceView, SourceViewProps, BlocksRow } from './SourceView';
+import { BlocksRow, SourceView, SourceViewProps } from './SourceView';
 import { sampleAPIResponse } from './__testdata__/testdata';
 import { sortBlocks } from './helpers';
 
@@ -22,10 +22,12 @@ describe('Blocks SourceView', () => {
 
   const sourceView = mount(<SourceView {...defaultProps} />);
 
-  it('renders a paragraph with title', () => {
+  it('renders a paragraph with title and size', () => {
     const title = sourceView.find('div > span');
-    expect(title).toHaveLength(1);
-    expect(title.text()).toEqual(source);
+    expect(title).toHaveLength(2);
+
+    expect(title.find('span').at(0).text()).toEqual(source);
+    expect(title.find('span').at(1).text()).toEqual('3.50 GiB');
   });
 
   it('renders a row for each unique resolution and compaction level pair', () => {

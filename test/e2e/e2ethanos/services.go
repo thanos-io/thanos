@@ -268,7 +268,8 @@ type QuerierBuilder struct {
 	enforceTenancy bool
 
 	e2e.Linkable
-	f e2e.FutureRunnable
+	f             e2e.FutureRunnable
+	relabelConfig string
 }
 
 func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
@@ -398,6 +399,11 @@ func (q *QuerierBuilder) WithTenancy(enforceTenancy bool) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithSelectorRelabelConfig(relabelConfig string) *QuerierBuilder {
+	q.relabelConfig = relabelConfig
+	return q
+}
+
 func (q *QuerierBuilder) Init() *e2eobs.Observable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -507,6 +513,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.engine != "" {
 		args = append(args, "--query.promql-engine="+string(q.engine))
 	}
+	if q.relabelConfig != "" {
+		args = append(args, "--selector.relabel-config="+q.relabelConfig)
+	}
 
 	return args, nil
 }
@@ -538,6 +547,7 @@ type ReceiveBuilder struct {
 	image               string
 	nativeHistograms    bool
 	labels              []string
+	tenantSplitLabel    string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -576,6 +586,11 @@ func (r *ReceiveBuilder) WithLabel(name, value string) *ReceiveBuilder {
 func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive.HashringConfig) *ReceiveBuilder {
 	r.hashringConfigs = hashringConfigs
 	r.replication = replication
+	return r
+}
+
+func (r *ReceiveBuilder) WithTenantSplitLabel(splitLabel string) *ReceiveBuilder {
+	r.tenantSplitLabel = splitLabel
 	return r
 }
 
@@ -618,6 +633,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
 		"--log.level":            infoLogLevel,
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
+	}
+
+	if r.tenantSplitLabel != "" {
+		args["--receive.split-tenant-label-name"] = r.tenantSplitLabel
 	}
 
 	if len(r.labels) > 0 {

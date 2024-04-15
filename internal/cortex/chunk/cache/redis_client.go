@@ -25,6 +25,7 @@ type RedisConfig struct {
 	Timeout            time.Duration  `yaml:"timeout"`
 	Expiration         time.Duration  `yaml:"expiration"`
 	DB                 int            `yaml:"db"`
+	Username           string         `yaml:"username"`
 	Password           flagext.Secret `yaml:"password"`
 	EnableTLS          bool           `yaml:"tls_enabled"`
 	InsecureSkipVerify bool           `yaml:"tls_insecure_skip_verify"`
@@ -54,6 +55,7 @@ func NewRedisClient(cfg *RedisConfig) (*RedisClient, error) {
 		InitAddress:      strings.Split(cfg.Endpoint, ","),
 		ShuffleInit:      true,
 		Password:         cfg.Password.Value,
+		Username:         cfg.Username,
 		SelectDB:         cfg.DB,
 		Dialer:           net.Dialer{Timeout: cfg.Timeout},
 		ConnWriteTimeout: cfg.Timeout,

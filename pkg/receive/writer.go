@@ -225,9 +225,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 						numExemplarsLabelLength++
 						level.Debug(exLogger).Log("msg", "Label length for exemplar exceeds max limit", "limit", exemplar.ExemplarMaxLabelSetLength)
 					default:
-						if err != nil {
-							level.Debug(exLogger).Log("msg", "Error ingesting exemplar", "err", err)
-						}
+						level.Debug(exLogger).Log("msg", "Error ingesting exemplar", "err", err)
 					}
 				}
 			}

@@ -72,7 +72,7 @@ func validateAddrs(addrs addressSlice) error {
 	return nil
 }
 
-// RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.
+// RegisterHTTPFlags register flags commonly used to configure http servers with.
 func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration, httpTLSConfig *string) {
 	httpBindAddr = cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 	httpGracePeriod = ModelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
@@ -119,7 +119,7 @@ func RegisterSelectorRelabelFlags(cmd FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		cmd,
 		"selector.relabel-config",
-		"YAML file that contains relabeling configuration that allows selecting blocks. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		"YAML file with relabeling configuration that allows selecting blocks to act on based on their external labels. It follows thanos sharding relabel-config syntax. For format details see: https://thanos.io/tip/thanos/sharding.md/#relabelling ",
 		extflag.WithEnvSubstitution(),
 	)
 }

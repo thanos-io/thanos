@@ -1,4 +1,4 @@
-import { LabelSet, Block, BlocksPool } from './block';
+import { Block, BlockSizeStats, BlocksPool, LabelSet } from './block';
 import { Fuzzy, FuzzyResult } from '@nexucis/fuzzy';
 
 const stringify = (map: LabelSet): string => {
@@ -163,4 +163,55 @@ export const getFilteredBlockPools = (
     }
   });
   return newblockPools;
+};
+
+export const getBlockSizeStats = (block?: Block): BlockSizeStats | undefined => {
+  if (!block || !block.thanos.files) return undefined;
+
+  const sizeStats: BlockSizeStats = {
+    chunkBytes: 0,
+    indexBytes: 0,
+    totalBytes: 0,
+  };
+
+  block?.thanos.files?.forEach((f) => {
+    if (f.rel_path === 'index') {
+      sizeStats.indexBytes += f.size_bytes || 0;
+    } else if (f.rel_path.startsWith('chunks/')) {
+      sizeStats.chunkBytes += f.size_bytes || 0;
+    }
+  });
+
+  sizeStats.totalBytes = sizeStats.indexBytes + sizeStats.chunkBytes;
+
+  return sizeStats;
+};
+
+export const sumBlockSizeStats = (bp: BlocksPool, compactionLevel: number): BlockSizeStats => {
+  const poolSizeStats: BlockSizeStats = { chunkBytes: 0, indexBytes: 0, totalBytes: 0 };
+
+  Object.values(bp).forEach((rows) => {
+    rows.forEach((row) => {
+      getBlocksByCompactionLevel(row, compactionLevel).forEach((block) => {
+        const blockStats = getBlockSizeStats(block);
+        if (blockStats) {
+          poolSizeStats.chunkBytes += blockStats.chunkBytes;
+          poolSizeStats.indexBytes += blockStats.indexBytes;
+          poolSizeStats.totalBytes += blockStats.totalBytes;
+        }
+      });
+    });
+  });
+
+  return poolSizeStats;
+};
+
+export const humanizeBytes = (bytes?: number): string => {
+  if (bytes === undefined || Number.isNaN(bytes)) return 'Unknown Bytes';
+
+  const units = ['Bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  if (bytes === 0) return '0 Byte';
+
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, unitIndex)).toFixed(2)} ${units[unitIndex]}`;
 };

@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/compact"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -358,7 +359,7 @@ func processDownsampling(
 
 	err := block.Download(ctx, logger, bkt, m.ULID, bdir, objstore.WithFetchConcurrency(blockFilesConcurrency))
 	if err != nil {
-		return errors.Wrapf(err, "download block %s", m.ULID)
+		return compact.NewRetryError(errors.Wrapf(err, "download block %s", m.ULID))
 	}
 	level.Info(logger).Log("msg", "downloaded block", "id", m.ULID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
@@ -419,7 +420,7 @@ func processDownsampling(
 
 	err = block.Upload(ctx, logger, bkt, resdir, hashFunc)
 	if err != nil {
-		return errors.Wrapf(err, "upload downsampled block %s", id)
+		return compact.NewRetryError(errors.Wrapf(err, "upload downsampled block %s", id))
 	}
 
 	level.Info(logger).Log("msg", "uploaded block", "id", id, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())

@@ -12,20 +12,26 @@ usage: thanos tools <command> [<args> ...]
 Tools utility commands
 
 Flags:
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 Subcommands:
   tools bucket verify [<flags>]
@@ -104,6 +110,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -115,29 +139,36 @@ usage: thanos tools bucket [<flags>] <command> [<args> ...]
 Bucket utility commands
 
 Flags:
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains
-                           object store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object
-                           store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 Subcommands:
   tools bucket verify [<flags>]
@@ -216,9 +247,14 @@ usage: thanos tools bucket web [<flags>]
 Web interface for remote storage bucket.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
       --disable-admin-operations
                                 Disable UI/API admin operations like marking
                                 blocks for deletion and no compaction.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -261,18 +297,19 @@ Flags:
                                 remote storage
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
-                                flag (mutually exclusive). Content of
-                                YAML file that contains relabeling
-                                configuration that allows selecting
-                                blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
-                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+                                flag (mutually exclusive). Content of YAML
+                                file with relabeling configuration that allows
+                                selecting blocks to act on based on their
+                                external labels. It follows thanos sharding
+                                relabel-config syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
       --selector.relabel-config-file=<file-path>
-                                Path to YAML file that contains relabeling
-                                configuration that allows selecting
-                                blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
-                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+                                Path to YAML file with relabeling
+                                configuration that allows selecting blocks
+                                to act on based on their external labels.
+                                It follows thanos sharding relabel-config
+                                syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
       --timeout=5m              Timeout to download metadata from remote storage
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
@@ -334,65 +371,74 @@ issue this might take time and will need downloading all specified blocks to
 disk.
 
 Flags:
-      --delete-delay=0s    Duration after which blocks marked for deletion
-                           would be deleted permanently from source bucket by
-                           compactor component. If delete-delay is non zero,
-                           blocks will be marked for deletion and compactor
-                           component is required to delete blocks from source
-                           bucket. If delete-delay is 0, blocks will be deleted
-                           straight away. Use this if you want to get rid of
-                           or move the block immediately. Note that deleting
-                           blocks immediately can cause query failures, if store
-                           gateway still has the block loaded, or compactor is
-                           ignoring the deletion because it's compacting the
-                           block at the same time.
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --id=ID ...          Block IDs to verify (and optionally repair) only.
-                           If none is specified, all blocks will be verified.
-                           Repeated field
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --delete-delay=0s         Duration after which blocks marked for deletion
+                                would be deleted permanently from source bucket
+                                by compactor component. If delete-delay is
+                                non zero, blocks will be marked for deletion
+                                and compactor component is required to delete
+                                blocks from source bucket. If delete-delay is 0,
+                                blocks will be deleted straight away.
+                                Use this if you want to get rid of or move
+                                the block immediately. Note that deleting
+                                blocks immediately can cause query failures,
+                                if store gateway still has the block loaded,
+                                or compactor is ignoring the deletion because
+                                it's compacting the block at the same time.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --id=ID ...               Block IDs to verify (and optionally repair)
+                                only. If none is specified, all blocks will be
+                                verified. Repeated field
   -i, --issues=index_known_issues... ...
-                           Issues to verify (and optionally repair). Possible
-                           issue to verify, without repair: [overlapped_blocks];
-                           Possible issue to verify and repair:
-                           [index_known_issues duplicated_compaction]
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
+                                Issues to verify (and optionally repair).
+                                Possible issue to verify, without repair:
+                                [overlapped_blocks]; Possible issue to
+                                verify and repair: [index_known_issues
+                                duplicated_compaction]
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --objstore-backup.config=<content>
-                           Alternative to 'objstore-backup.config-file'
-                           flag (mutually exclusive). Content of YAML
-                           file that contains object store-backup
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
-                           Used for repair logic to backup blocks before
-                           removal.
+                                Alternative to 'objstore-backup.config-file'
+                                flag (mutually exclusive). Content of YAML
+                                file that contains object store-backup
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+                                Used for repair logic to backup blocks before
+                                removal.
       --objstore-backup.config-file=<file-path>
-                           Path to YAML file that contains object
-                           store-backup configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
-                           Used for repair logic to backup blocks before
-                           removal.
+                                Path to YAML file that contains object
+                                store-backup configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+                                Used for repair logic to backup blocks before
+                                removal.
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains
-                           object store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object
-                           store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
-  -r, --repair             Attempt to repair blocks for which issues were
-                           detected
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+  -r, --repair                  Attempt to repair blocks for which issues were
+                                detected
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
@@ -412,33 +458,40 @@ usage: thanos tools bucket ls [<flags>]
 List all blocks in the bucket.
 
 Flags:
-      --exclude-delete     Exclude blocks marked for deletion.
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+      --exclude-delete          Exclude blocks marked for deletion.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains
-                           object store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object
-                           store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
-  -o, --output=""          Optional format in which to print each block's
-                           information. Options are 'json', 'wide' or a custom
-                           template.
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+  -o, --output=""               Optional format in which to print each block's
+                                information. Options are 'json', 'wide' or a
+                                custom template.
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
@@ -458,42 +511,48 @@ usage: thanos tools bucket inspect [<flags>]
 Inspect all blocks in the bucket in detailed, table-like way.
 
 Flags:
-  -h, --help                 Show context-sensitive help (also try --help-long
-                             and --help-man).
-      --log.format=logfmt    Log format to use. Possible options: logfmt or
-                             json.
-      --log.level=info       Log filtering level.
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --objstore.config=<content>
-                             Alternative to 'objstore.config-file'
-                             flag (mutually exclusive). Content of
-                             YAML file that contains object store
-                             configuration. See format details:
-                             https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                             Path to YAML file that contains object
-                             store configuration. See format details:
-                             https://thanos.io/tip/thanos/storage.md/#configuration
-      --output=table         Output format for result. Currently supports table,
-                             cvs, tsv.
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --output=table            Output format for result. Currently supports
+                                table, cvs, tsv.
   -l, --selector=<name>=\"<value>\" ...
-                             Selects blocks based on label, e.g. '-l
-                             key1=\"value1\" -l key2=\"value2\"'. All key value
-                             pairs must match.
-      --sort-by=FROM... ...  Sort by columns. It's also possible to sort by
-                             multiple columns, e.g. '--sort-by FROM --sort-by
-                             UNTIL'. I.e., if the 'FROM' value is equal the rows
-                             are then further sorted by the 'UNTIL' value.
-      --timeout=5m           Timeout to download metadata from remote storage
+                                Selects blocks based on label, e.g. '-l
+                                key1=\"value1\" -l key2=\"value2\"'. All key
+                                value pairs must match.
+      --sort-by=FROM... ...     Sort by columns. It's also possible to sort by
+                                multiple columns, e.g. '--sort-by FROM --sort-by
+                                UNTIL'. I.e., if the 'FROM' value is equal the
+                                rows are then further sorted by the 'UNTIL'
+                                value.
+      --timeout=5m              Timeout to download metadata from remote storage
       --tracing.config=<content>
-                             Alternative to 'tracing.config-file' flag
-                             (mutually exclusive). Content of YAML file
-                             with tracing configuration. See format details:
-                             https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                             Path to YAML file with tracing
-                             configuration. See format details:
-                             https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version              Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
@@ -516,85 +575,91 @@ Replicate data from one object storage to another. NOTE: Currently it works only
 with Thanos blocks (meta.json has to have Thanos metadata).
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
       --compaction=COMPACTION ...
-                              Only blocks with these compaction levels
-                              will be replicated. Repeated flag. Overrides
-                              compaction-min and compaction-max if set.
-      --compaction-max=4      Only blocks up to a maximum of this compaction
-                              level will be replicated.
-      --compaction-min=1      Only blocks with at least this compaction level
-                              will be replicated.
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
+                                Only blocks with these compaction levels
+                                will be replicated. Repeated flag. Overrides
+                                compaction-min and compaction-max if set.
+      --compaction-max=4        Only blocks up to a maximum of this compaction
+                                level will be replicated.
+      --compaction-min=1        Only blocks with at least this compaction level
+                                will be replicated.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
       --http-address="0.0.0.0:10902"
-                              Listen host:port for HTTP endpoints.
-      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
-                              Server.
-      --http.config=""        [EXPERIMENTAL] Path to the configuration file
-                              that can enable TLS or authentication for all HTTP
-                              endpoints.
-      --id=ID ...             Block to be replicated to the destination bucket.
-                              IDs will be used to match blocks and other
-                              matchers will be ignored. When specified, this
-                              command will be run only once after successful
-                              replication. Repeated field
+                                Listen host:port for HTTP endpoints.
+      --http-grace-period=2m    Time to wait after an interrupt received for
+                                HTTP Server.
+      --http.config=""          [EXPERIMENTAL] Path to the configuration file
+                                that can enable TLS or authentication for all
+                                HTTP endpoints.
+      --id=ID ...               Block to be replicated to the destination
+                                bucket. IDs will be used to match blocks and
+                                other matchers will be ignored. When specified,
+                                this command will be run only once after
+                                successful replication. Repeated field
       --ignore-marked-for-deletion
-                              Do not replicate blocks that have deletion mark.
-      --log.format=logfmt     Log format to use. Possible options: logfmt or
-                              json.
-      --log.level=info        Log filtering level.
-      --matcher=MATCHER       blocks whose external labels match this matcher
-                              will be replicated. All Prometheus matchers are
-                              supported, including =, !=, =~ and !~.
+                                Do not replicate blocks that have deletion mark.
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
+      --matcher=MATCHER         blocks whose external labels match this matcher
+                                will be replicated. All Prometheus matchers are
+                                supported, including =, !=, =~ and !~.
       --max-time=9999-12-31T23:59:59Z
-                              End of time range limit to replicate. Thanos
-                              Replicate will replicate only metrics, which
-                              happened earlier than this value. Option can be a
-                              constant time in RFC3339 format or time duration
-                              relative to current time, such as -1d or 2h45m.
-                              Valid duration units are ms, s, m, h, d, w, y.
+                                End of time range limit to replicate.
+                                Thanos Replicate will replicate only metrics,
+                                which happened earlier than this value. Option
+                                can be a constant time in RFC3339 format or time
+                                duration relative to current time, such as -1d
+                                or 2h45m. Valid duration units are ms, s, m, h,
+                                d, w, y.
       --min-time=0000-01-01T00:00:00Z
-                              Start of time range limit to replicate. Thanos
-                              Replicate will replicate only metrics, which
-                              happened later than this value. Option can be a
-                              constant time in RFC3339 format or time duration
-                              relative to current time, such as -1d or 2h45m.
-                              Valid duration units are ms, s, m, h, d, w, y.
+                                Start of time range limit to replicate. Thanos
+                                Replicate will replicate only metrics, which
+                                happened later than this value. Option can be a
+                                constant time in RFC3339 format or time duration
+                                relative to current time, such as -1d or 2h45m.
+                                Valid duration units are ms, s, m, h, d, w, y.
       --objstore-to.config=<content>
-                              Alternative to 'objstore-to.config-file'
-                              flag (mutually exclusive). Content of
-                              YAML file that contains object store-to
-                              configuration. See format details:
-                              https://thanos.io/tip/thanos/storage.md/#configuration
-                              The object storage which replicate data to.
+                                Alternative to 'objstore-to.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store-to
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+                                The object storage which replicate data to.
       --objstore-to.config-file=<file-path>
-                              Path to YAML file that contains object
-                              store-to configuration. See format details:
-                              https://thanos.io/tip/thanos/storage.md/#configuration
-                              The object storage which replicate data to.
+                                Path to YAML file that contains object
+                                store-to configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+                                The object storage which replicate data to.
       --objstore.config=<content>
-                              Alternative to 'objstore.config-file'
-                              flag (mutually exclusive). Content of
-                              YAML file that contains object store
-                              configuration. See format details:
-                              https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                              Path to YAML file that contains object
-                              store configuration. See format details:
-                              https://thanos.io/tip/thanos/storage.md/#configuration
-      --resolution=0s... ...  Only blocks with these resolutions will be
-                              replicated. Repeated flag.
-      --single-run            Run replication only one time, then exit.
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --resolution=0s... ...    Only blocks with these resolutions will be
+                                replicated. Repeated flag.
+      --single-run              Run replication only one time, then exit.
       --tracing.config=<content>
-                              Alternative to 'tracing.config-file' flag
-                              (mutually exclusive). Content of YAML file
-                              with tracing configuration. See format details:
-                              https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                              Path to YAML file with tracing
-                              configuration. See format details:
-                              https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version               Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
@@ -615,6 +680,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -624,54 +707,59 @@ usage: thanos tools bucket downsample [<flags>]
 Continuously downsamples blocks in an object store bucket.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
       --block-files-concurrency=1
-                              Number of goroutines to use when
-                              fetching/uploading block files from object
-                              storage.
-      --data-dir="./data"     Data directory in which to cache blocks and
-                              process downsamplings.
+                                Number of goroutines to use when
+                                fetching/uploading block files from object
+                                storage.
+      --data-dir="./data"       Data directory in which to cache blocks and
+                                process downsamplings.
       --downsample.concurrency=1
-                              Number of goroutines to use when downsampling
-                              blocks.
-      --hash-func=            Specify which hash function to use when
-                              calculating the hashes of produced files. If no
-                              function has been specified, it does not happen.
-                              This permits avoiding downloading some files twice
-                              albeit at some performance cost. Possible values
-                              are: "", "SHA256".
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
+                                Number of goroutines to use when downsampling
+                                blocks.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+      --hash-func=              Specify which hash function to use when
+                                calculating the hashes of produced files.
+                                If no function has been specified, it does not
+                                happen. This permits avoiding downloading some
+                                files twice albeit at some performance cost.
+                                Possible values are: "", "SHA256".
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
       --http-address="0.0.0.0:10902"
-                              Listen host:port for HTTP endpoints.
-      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
-                              Server.
-      --http.config=""        [EXPERIMENTAL] Path to the configuration file
-                              that can enable TLS or authentication for all HTTP
-                              endpoints.
-      --log.format=logfmt     Log format to use. Possible options: logfmt or
-                              json.
-      --log.level=info        Log filtering level.
+                                Listen host:port for HTTP endpoints.
+      --http-grace-period=2m    Time to wait after an interrupt received for
+                                HTTP Server.
+      --http.config=""          [EXPERIMENTAL] Path to the configuration file
+                                that can enable TLS or authentication for all
+                                HTTP endpoints.
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --objstore.config=<content>
-                              Alternative to 'objstore.config-file'
-                              flag (mutually exclusive). Content of
-                              YAML file that contains object store
-                              configuration. See format details:
-                              https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                              Path to YAML file that contains object
-                              store configuration. See format details:
-                              https://thanos.io/tip/thanos/storage.md/#configuration
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
-                              Alternative to 'tracing.config-file' flag
-                              (mutually exclusive). Content of YAML file
-                              with tracing configuration. See format details:
-                              https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                              Path to YAML file with tracing
-                              configuration. See format details:
-                              https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version               Show application version.
-      --wait-interval=5m      Wait interval between downsample runs.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
+      --wait-interval=5m        Wait interval between downsample runs.
 
 ```
 
@@ -694,6 +782,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -705,34 +811,41 @@ currently running compacting same block, this operation would be potentially a
 noop.
 
 Flags:
-      --details=DETAILS    Human readable details to be put into marker.
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --id=ID ...          ID (ULID) of the blocks to be marked for deletion
-                           (repeated flag)
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
-      --marker=MARKER      Marker to be put.
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --details=DETAILS         Human readable details to be put into marker.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --id=ID ...               ID (ULID) of the blocks to be marked for
+                                deletion (repeated flag)
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
+      --marker=MARKER           Marker to be put.
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains
-                           object store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object
-                           store configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration
-      --remove             Remove the marker.
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --remove                  Remove the marker.
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
@@ -780,12 +893,17 @@ block for deletion to avoid overlaps. WARNING: This procedure is *IRREVERSIBLE*
 after certain time (delete delay), so do backup your blocks first.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
       --delete-blocks           Whether to delete the original blocks after
                                 rewriting blocks successfully. Available in non
                                 dry-run mode only.
       --dry-run                 Prints the series changes instead of doing them.
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not
@@ -857,35 +975,40 @@ usage: thanos tools bucket upload-blocks [<flags>]
 Upload blocks push blocks from the provided path to the object storage.
 
 Flags:
-  -h, --help                   Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --label=key="value" ...  External labels to add to the uploaded blocks
-                               (repeated).
-      --log.format=logfmt      Log format to use. Possible options: logfmt or
-                               json.
-      --log.level=info         Log filtering level.
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --label=key="value" ...   External labels to add to the uploaded blocks
+                                (repeated).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
       --objstore.config=<content>
-                               Alternative to 'objstore.config-file'
-                               flag (mutually exclusive). Content of
-                               YAML file that contains object store
-                               configuration. See format details:
-                               https://thanos.io/tip/thanos/storage.md/#configuration
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                               Path to YAML file that contains object
-                               store configuration. See format details:
-                               https://thanos.io/tip/thanos/storage.md/#configuration
-      --path="./data"          Path to the directory containing blocks to
-                               upload.
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --path="./data"           Path to the directory containing blocks to
+                                upload.
       --tracing.config=<content>
-                               Alternative to 'tracing.config-file' flag
-                               (mutually exclusive). Content of YAML file
-                               with tracing configuration. See format details:
-                               https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                               Path to YAML file with tracing
-                               configuration. See format details:
-                               https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version                Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
@@ -911,21 +1034,27 @@ usage: thanos tools rules-check --rules=RULES
 Check if the rule files are valid or not.
 
 Flags:
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
-      --log.level=info     Log filtering level.
-      --rules=RULES ...    The rule files glob to check (repeated).
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
+      --rules=RULES ...         The rule files glob to check (repeated).
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag
-                           (mutually exclusive). Content of YAML file
-                           with tracing configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing
-                           configuration. See format details:
-                           https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version            Show application version.
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
 
 ```
 
