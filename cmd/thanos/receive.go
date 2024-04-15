@@ -559,7 +559,6 @@ func startTSDBAndUpload(g *run.Group,
 	bkt objstore.Bucket,
 	hashringAlgorithm receive.HashringAlgorithm,
 ) error {
-
 	log.With(logger, "component", "storage")
 	dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_receive_multi_db_updates_attempted_total",
@@ -852,7 +851,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables the retention policy (i.e. infinite retention). For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
 
-	rc.hashringsPathContent = extflag.RegisterPathOrContent(cmd, "receive.hashrings", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.", extflag.WithEnvSubstitution())
+	rc.hashringsPathContent = extflag.RegisterPathOrContent(cmd, "receive.hashrings", "file that represents the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.", extflag.WithEnvSubstitution())
 
 	hashringAlgorithmsHelptext := strings.Join([]string{string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama)}, ", ")
 	cmd.Flag("receive.hashrings-algorithm", "The algorithm used when distributing series in the hashrings. Must be one of "+hashringAlgorithmsHelptext+". Will be overwritten by the tenant-specific algorithm in the hashring config.").

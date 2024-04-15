@@ -380,9 +380,9 @@ Flags:
                                  to other receivers. Must be one of: snappy,
                                  none
       --receive.hashrings=<content>
-                                 Alternative to 'receive.hashrings-file' flag
-                                 (mutually exclusive). Content of Path to file
-                                 that contains the hashring configuration.
+                                 Alternative to 'receive.hashrings-file'
+                                 flag (mutually exclusive). Content of file
+                                 that represents the hashring configuration.
                                  A watcher is initialized to watch changes and
                                  update the hashring dynamically.
       --receive.hashrings-algorithm=hashmod
@@ -391,7 +391,7 @@ Flags:
                                  Will be overwritten by the tenant-specific
                                  algorithm in the hashring config.
       --receive.hashrings-file=<file-path>
-                                 Path to Path to file that contains the hashring
+                                 Path to file that represents the hashring
                                  configuration. A watcher is initialized
                                  to watch changes and update the hashring
                                  dynamically.
