@@ -234,11 +234,21 @@ func runCompact(
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
 	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
+	noDownsampleMarkerFilter := downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
 
-	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg))
+	var blockLister block.Lister
+	switch syncStrategy(conf.blockListStrategy) {
+	case concurrentDiscovery:
+		blockLister = block.NewConcurrentLister(logger, insBkt)
+	case recursiveDiscovery:
+		blockLister = block.NewRecursiveLister(logger, insBkt)
+	default:
+		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
+	}
+	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
@@ -260,18 +270,21 @@ func runCompact(
 		sy  *compact.Syncer
 	)
 	{
+		filters := []block.MetadataFilter{
+			timePartitionMetaFilter,
+			labelShardedMetaFilter,
+			consistencyDelayMetaFilter,
+			ignoreDeletionMarkFilter,
+			block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
+			duplicateBlocksFilter,
+			noCompactMarkerFilter,
+		}
+		if !conf.disableDownsampling {
+			filters = append(filters, noDownsampleMarkerFilter)
+		}
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
-			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
-				timePartitionMetaFilter,
-				labelShardedMetaFilter,
-				consistencyDelayMetaFilter,
-				ignoreDeletionMarkFilter,
-				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
-				duplicateBlocksFilter,
-				noCompactMarkerFilter,
-			},
-		)
+			extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			api.SetLoaded(blocks, err)
 		})
@@ -436,12 +449,30 @@ func runCompact(
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
 
-			for _, meta := range sy.Metas() {
+			filteredMetas := sy.Metas()
+			noDownsampleBlocks := noDownsampleMarkerFilter.NoDownsampleMarkedBlocks()
+			for ul := range noDownsampleBlocks {
+				delete(filteredMetas, ul)
+			}
+
+			for _, meta := range filteredMetas {
 				groupKey := meta.Thanos.GroupKey()
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, insBkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, conf.blockFilesConcurrency, metadata.HashFunc(conf.hashFunc), conf.acceptMalformedIndex); err != nil {
+
+			if err := downsampleBucket(
+				ctx,
+				logger,
+				downsampleMetrics,
+				insBkt,
+				filteredMetas,
+				downsamplingDir,
+				conf.downsampleConcurrency,
+				conf.blockFilesConcurrency,
+				metadata.HashFunc(conf.hashFunc),
+				conf.acceptMalformedIndex,
+			); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
@@ -449,9 +480,22 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, insBkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, conf.blockFilesConcurrency, metadata.HashFunc(conf.hashFunc), conf.acceptMalformedIndex); err != nil {
+
+			if err := downsampleBucket(
+				ctx,
+				logger,
+				downsampleMetrics,
+				insBkt,
+				filteredMetas,
+				downsamplingDir,
+				conf.downsampleConcurrency,
+				conf.blockFilesConcurrency,
+				metadata.HashFunc(conf.hashFunc),
+				conf.acceptMalformedIndex,
+			); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
+
 			level.Info(logger).Log("msg", "downsampling iterations done")
 		} else {
 			level.Info(logger).Log("msg", "downsampling was explicitly disabled")
@@ -657,6 +701,7 @@ type compactConfig struct {
 	wait                                           bool
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
+	blockListStrategy                              string
 	blockMetaFetchConcurrency                      int
 	blockFilesConcurrency                          int
 	blockViewerSyncBlockInterval                   time.Duration
@@ -718,6 +763,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"as querying long time ranges without non-downsampled data is not efficient and useful e.g it is not possible to render all samples for a human eye anyway").
 		Default("false").BoolVar(&cc.disableDownsampling)
 
+	strategies := strings.Join([]string{string(concurrentDiscovery), string(recursiveDiscovery)}, ", ")
+	cmd.Flag("block-discovery-strategy", "One of "+strategies+". When set to concurrent, stores will concurrently issue one call per directory to discover active blocks in the bucket. The recursive strategy iterates through all objects in the bucket, recursively traversing into each directory. This avoids N+1 calls at the expense of having slower bucket iterations.").
+		Default(string(concurrentDiscovery)).StringVar(&cc.blockListStrategy)
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&cc.blockMetaFetchConcurrency)
 	cmd.Flag("block-files-concurrency", "Number of goroutines to use when fetching/uploading block files from object storage.").

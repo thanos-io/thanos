@@ -87,6 +87,12 @@ func Test_tableLinkForExpression(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			template:  `/graph?g0.expr={{.Expr}}&g0.tab=1`,
+			expr:      `up{app="foo yoo"}`,
+			expectStr: `/graph?g0.expr=up%7Bapp%3D%22foo+yoo%22%7D&g0.tab=1`,
+			expectErr: false,
+		},
+		{
 			template:  `/graph?g0.expr={{.Expression}}&g0.tab=1`,
 			expr:      "test_expr",
 			expectErr: true,

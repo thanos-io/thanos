@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/sony/gobreaker"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -40,7 +41,6 @@ const (
 )
 
 var (
-	errMemcachedAsyncBufferFull                = errors.New("the async buffer is full")
 	errMemcachedConfigNoAddrs                  = errors.New("no memcached addresses provided")
 	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("DNS provider update interval must be positive")
 	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max async concurrency must be positive")
@@ -55,6 +55,8 @@ var (
 		MaxGetMultiBatchSize:      0,
 		DNSProviderUpdateInterval: 10 * time.Second,
 		AutoDiscovery:             false,
+
+		SetAsyncCircuitBreaker: defaultCircuitBreakerConfig,
 	}
 )
 
@@ -142,6 +144,9 @@ type MemcachedClientConfig struct {
 
 	// AutoDiscovery configures memached client to perform auto-discovery instead of DNS resolution
 	AutoDiscovery bool `yaml:"auto_discovery"`
+
+	// SetAsyncCircuitBreaker configures the circuit breaker for SetAsync operations.
+	SetAsyncCircuitBreaker CircuitBreakerConfig `yaml:"set_async_circuit_breaker_config"`
 }
 
 func (c *MemcachedClientConfig) validate() error {
@@ -159,6 +164,9 @@ func (c *MemcachedClientConfig) validate() error {
 		return errMemcachedMaxAsyncConcurrencyNotPositive
 	}
 
+	if err := c.SetAsyncCircuitBreaker.validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -195,7 +203,9 @@ type memcachedClient struct {
 	duration   *prometheus.HistogramVec
 	dataSize   *prometheus.HistogramVec
 
-	p *asyncOperationProcessor
+	p *AsyncOperationProcessor
+
+	setAsyncCircuitBreaker CircuitBreaker
 }
 
 // AddressProvider performs node address resolution given a list of clusters.
@@ -278,7 +288,8 @@ func newMemcachedClient(
 			config.MaxGetMultiConcurrency,
 			gate.Gets,
 		),
-		p: newAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
+		p:                      NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
+		setAsyncCircuitBreaker: newCircuitBreaker("memcached-set-async", config.SetAsyncCircuitBreaker),
 	}
 
 	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
@@ -372,26 +383,35 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 		return nil
 	}
 
-	err := c.p.enqueueAsync(func() {
+	err := c.p.EnqueueAsync(func() {
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
-		err := c.client.Set(&memcache.Item{
-			Key:        key,
-			Value:      value,
-			Expiration: int32(time.Now().Add(ttl).Unix()),
+		err := c.setAsyncCircuitBreaker.Execute(func() error {
+			return c.client.Set(&memcache.Item{
+				Key:        key,
+				Value:      value,
+				Expiration: int32(time.Now().Add(ttl).Unix()),
+			})
 		})
 		if err != nil {
-			// If the PickServer will fail for any reason the server address will be nil
-			// and so missing in the logs. We're OK with that (it's a best effort).
-			serverAddr, _ := c.selector.PickServer(key)
-			level.Debug(c.logger).Log(
-				"msg", "failed to store item to memcached",
-				"key", key,
-				"sizeBytes", len(value),
-				"server", serverAddr,
-				"err", err,
-			)
+			if errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests) {
+				level.Warn(c.logger).Log(
+					"msg", "circuit breaker disallows storing item in memcached",
+					"key", key,
+					"err", err)
+			} else {
+				// If the PickServer will fail for any reason the server address will be nil
+				// and so missing in the logs. We're OK with that (it's a best effort).
+				serverAddr, _ := c.selector.PickServer(key)
+				level.Debug(c.logger).Log(
+					"msg", "failed to store item to memcached",
+					"key", key,
+					"sizeBytes", len(value),
+					"server", serverAddr,
+					"err", err,
+				)
+			}
 			c.trackError(opSet, err)
 			return
 		}
@@ -400,7 +420,7 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 		c.duration.WithLabelValues(opSet).Observe(time.Since(start).Seconds())
 	})
 
-	if errors.Is(err, errMemcachedAsyncBufferFull) {
+	if errors.Is(err, ErrAsyncBufferFull) {
 		c.skipped.WithLabelValues(opSet, reasonAsyncBufferFull).Inc()
 		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.p.asyncQueue))
 		return nil

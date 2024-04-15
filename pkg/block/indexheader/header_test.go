@@ -206,7 +206,7 @@ func TestReaders(t *testing.T) {
 				_, err := WriteBinary(ctx, bkt, id, fn)
 				testutil.Ok(t, err)
 
-				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil)
+				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil, false)
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()

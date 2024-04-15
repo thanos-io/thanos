@@ -118,14 +118,12 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 	   @echo ">> building React app"
 	   @scripts/build-react-app.sh
 
-.PHONY: assets
-assets: # Repacks all static assets into go file for easier deploy.
-assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
-	@echo ">> deleting asset file"
-	@rm pkg/ui/bindata.go || true
-	@echo ">> writing assets"
-	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go  pkg/ui/static/...
-	@$(MAKE) format
+.PHONY: react-app
+react-app: $(REACT_APP_OUTPUT_DIR)
+
+.PHONY: check-react-app
+check-react-app: react-app
+	$(call require_clean_work_tree,'all generated files should be committed, run make react-app and commit changes.')
 
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)

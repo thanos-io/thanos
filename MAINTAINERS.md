@@ -1,19 +1,19 @@
 # Core Maintainers of this repository
 
-| Name                  | Email                     | Slack                    | GitHub                                           | Company             |
-|-----------------------|---------------------------|--------------------------|--------------------------------------------------|---------------------|
-| Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)         | Red Hat             |
-| Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)             | Polar Signals       |
-| Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)       | Vinted              |
-| Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)         | Polar Signals       |
-| Lucas Servén Marín    | lserven@gmail.com         | `@squat`                 | [@squat](https://github.com/squat)               | Red Hat             |
-| Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)             | Red Hat             |
-| Matthias Loibl        | mail@matthiasloibl.com    | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)     | Polar Signals       |
-| Ben Ye                | yb532204897@gmail.com     | `@yeya24`                | [@yeya24](https://github.com/yeya24)             | Amazon Web Services |
-| Wiard van Rij         | wiard@outlook.com         | `@wiard van Rij`         | [@wiardvanrij](https://github.com/wiardvanrij)   | Roku                |
-| Matej Gera            | matejgera@gmail.com       | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)           | Red Hat             |
-| Filip Petkovski       | filip.petkovsky@gmail.com | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)     | Shopify             |
-| Saswata Mukherjee     | saswata.mukhe@gmail.com   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode) | Red Hat             |
+| Name                  | Email                     | Slack                    | GitHub                                             | Company             |
+|-----------------------|---------------------------|--------------------------|----------------------------------------------------|---------------------|
+| Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
+| Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
+| Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
+| Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)           | Polar Signals       |
+| Lucas Servén Marín    | lserven@gmail.com         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
+| Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
+| Matthias Loibl        | mail@matthiasloibl.com    | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)       | Polar Signals       |
+| Ben Ye                | yb532204897@gmail.com     | `@yeya24`                | [@yeya24](https://github.com/yeya24)               | Amazon Web Services |
+| Matej Gera            | matejgera@gmail.com       | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)             | Coralogix           |
+| Filip Petkovski       | filip.petkovsky@gmail.com | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)       | Shopify             |
+| Saswata Mukherjee     | saswata.mukhe@gmail.com   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode)   | Red Hat             |
+| Michael Hoffmann      | mhoffm@posteo.de          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Aiven               |
 
 We are bunch of people from different companies with various interests and skills. We are from different parts of the world: Germany, Holland, Lithuania, US, UK and India. We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
@@ -31,16 +31,15 @@ We also have some nice souls that help triaging issues and PRs. See [here](https
 
 Full list of triage persons is displayed below:
 
-| Name             | Slack               | GitHub                                             | Company |
-|------------------|---------------------|----------------------------------------------------|---------|
-| Adrien Fillon    | `@Adrien F`         | [@adrien-f](https://github.com/adrien-f)           |         |
-| Ian Billett      | `@billett`          | [@bill3tt](https://github.com/bill3tt)             | Red Hat |
-| Martin Chodur    | `@FUSAKLA`          | [@fusakla](https://github.com/fusakla)             |         |
-| Michael Dai      | `@jojohappy`        | [@jojohappy](https://github.com/jojohappy)         |         |
-| Xiang Dai        | `@daixiang0`        | [@daixiang0](https://github.com/daixiang0)         |         |
-| Jimmie Han       | `@hanjm`            | [@hanjm](https://github.com/hanjm)                 | Tencent |
-| Michael Hoffmann | `@Michael Hoffmann` | [@MichaHoffmann](https://github.com/MichaHoffmann) | Aiven   |
-| Douglas Camata   | `@douglascamata`    | [@douglascamata](https://github.com/douglascamata) | Red Hat |
+| Name           | Slack            | GitHub                                             | Company |
+|----------------|------------------|----------------------------------------------------|---------|
+| Adrien Fillon  | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)           |         |
+| Ian Billett    | `@billett`       | [@bill3tt](https://github.com/bill3tt)             | Red Hat |
+| Martin Chodur  | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)             |         |
+| Michael Dai    | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)         |         |
+| Xiang Dai      | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)         |         |
+| Jimmie Han     | `@hanjm`         | [@hanjm](https://github.com/hanjm)                 | Tencent |
+| Douglas Camata | `@douglascamata` | [@douglascamata](https://github.com/douglascamata) | Red Hat |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 

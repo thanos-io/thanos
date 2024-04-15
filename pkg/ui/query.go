@@ -30,10 +30,17 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string) *Query {
+func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string, tenantHeader string, defaultTenant string, enforceTenancy bool) *Query {
+	displayTenantBox := "none"
+	if enforceTenancy {
+		displayTenantBox = "inline-block"
+	}
 	tmplVariables := map[string]string{
-		"Component": component.Query.String(),
-		"queryURL":  alertQueryURL,
+		"Component":        component.Query.String(),
+		"queryURL":         alertQueryURL,
+		"tenantHeader":     tenantHeader,
+		"defaultTenant":    defaultTenant,
+		"displayTenantBox": displayTenantBox,
 	}
 	runtimeInfo := api.GetRuntimeInfoFunc(logger)
 

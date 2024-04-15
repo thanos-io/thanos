@@ -400,7 +400,7 @@ func TestCachedIter(t *testing.T) {
 
 	const cfgName = "dirs"
 	cfg := thanoscache.NewCachingBucketConfig()
-	cfg.CacheIter(cfgName, cache, func(string) bool { return true }, 5*time.Minute, JSONIterCodec{})
+	cfg.CacheIter(cfgName, cache, func(string) bool { return true }, 5*time.Minute, JSONIterCodec{}, "")
 
 	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
 	testutil.Ok(t, err)

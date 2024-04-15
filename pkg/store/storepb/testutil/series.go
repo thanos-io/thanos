@@ -120,6 +120,8 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 			appendFloatSamples(t, app, tsLabel, opts)
 		case chunkenc.ValHistogram:
 			appendHistogramSamples(t, app, tsLabel, opts)
+		case chunkenc.ValFloatHistogram:
+			appendFloatHistogramSamples(t, app, tsLabel, opts)
 		}
 	}
 	testutil.Ok(t, app.Commit())
@@ -155,7 +157,8 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 		}
 
 		for _, c := range chunkMetas {
-			chEnc, err := chks.Chunk(c)
+			// Ignore iterable as it happens in OOOHead only.
+			chEnc, _, err := chks.ChunkOrIterable(c)
 			testutil.Ok(t, err)
 
 			// Open Chunk.
@@ -218,6 +221,39 @@ func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opt
 
 	for is := 1; is < opts.SamplesPerSeries; is++ {
 		_, err := app.AppendHistogram(ref, labels.EmptyLabels(), int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), sample, nil)
+		testutil.Ok(t, err)
+	}
+}
+
+func appendFloatHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
+	sample := &histogram.FloatHistogram{
+		ZeroThreshold: 0.01,
+		ZeroCount:     5.5,
+		Count:         15,
+		Sum:           11.5,
+		PositiveSpans: []histogram.Span{
+			{Offset: -2, Length: 2},
+			{Offset: 1, Length: 3},
+		},
+		PositiveBuckets: []float64{0.5, 0, 1.5, 2, 3.5},
+		NegativeSpans: []histogram.Span{
+			{Offset: 3, Length: 2},
+			{Offset: 3, Length: 2},
+		},
+		NegativeBuckets: []float64{1.5, 0.5, 2.5, 3},
+	}
+
+	ref, err := app.AppendHistogram(
+		0,
+		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
+		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
+		nil,
+		sample,
+	)
+	testutil.Ok(t, err)
+
+	for is := 1; is < opts.SamplesPerSeries; is++ {
+		_, err := app.AppendHistogram(ref, labels.EmptyLabels(), int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), nil, sample)
 		testutil.Ok(t, err)
 	}
 }

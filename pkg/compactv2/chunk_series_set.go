@@ -91,8 +91,10 @@ func (e errChunkIterator) Seek(int64) chunkenc.ValueType { return chunkenc.ValNo
 func (e errChunkIterator) At() (int64, float64)          { return 0, 0 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (e errChunkIterator) AtHistogram() (int64, *histogram.Histogram) { panic("not implemented") }
-func (e errChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (e errChunkIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+func (e errChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 func (e errChunkIterator) AtT() int64               { return 0 }
@@ -111,7 +113,8 @@ func (e errChunk) Compact()                                     {}
 func (l *lazyPopulatableChunk) populate() {
 	// TODO(bwplotka): In most cases we don't need to parse anything, just copy. Extend reader/writer for this.
 	var err error
-	l.populated, err = l.cr.Chunk(*l.m)
+	// Ignore iterable as it should be nil.
+	l.populated, _, err = l.cr.ChunkOrIterable(*l.m)
 	if err != nil {
 		l.m.Chunk = errChunk{err: errChunkIterator{err: errors.Wrapf(err, "cannot populate chunk %d", l.m.Ref)}}
 		return

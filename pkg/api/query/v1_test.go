@@ -190,7 +190,7 @@ func TestQueryEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -643,7 +643,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -671,7 +671,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*numberLiteralSelector] 2",
+				OperatorName: "[numberLiteral] 2",
 			},
 		},
 		{
@@ -684,7 +684,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[*noArgFunctionOperator] time()",
+				OperatorName: "[noArgFunction] time()",
 			},
 		},
 	}
@@ -707,7 +707,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -881,7 +881,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -1720,6 +1720,7 @@ func TestRulesHandler(t *testing.T) {
 			Health:                    "x",
 			Query:                     "sum(up2) == 2",
 			DurationSeconds:           101,
+			KeepFiringForSeconds:      102,
 			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label3"}}},
 			Annotations:               labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "ann", Value: "a1"}}},
 			Alerts: []*rulespb.AlertInstance{
@@ -1750,8 +1751,20 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 122,
 			Health:                    "x",
 			DurationSeconds:           102,
+			KeepFiringForSeconds:      103,
 			Query:                     "sum(up3) == 3",
 			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label4"}}},
+			State:                     rulespb.AlertState_INACTIVE,
+		}),
+		rulespb.NewAlertingRule(&rulespb.Alert{
+			Name:                      "5",
+			LastEvaluation:            time.Time{}.Add(4 * time.Minute),
+			EvaluationDurationSeconds: 122,
+			Health:                    "x",
+			DurationSeconds:           61,
+			KeepFiringForSeconds:      62,
+			Query:                     "sum(up4) == 4",
+			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label5"}}},
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 	}
@@ -1839,6 +1852,7 @@ func TestRulesHandler(t *testing.T) {
 			LastEvaluation: all[2].GetAlert().LastEvaluation,
 			EvaluationTime: all[2].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[2].GetAlert().DurationSeconds,
+			KeepFiringFor:  all[2].GetAlert().KeepFiringForSeconds,
 			Annotations:    labelpb.ZLabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
 			Alerts: []*testpromcompatibility.Alert{
 				{
@@ -1870,6 +1884,22 @@ func TestRulesHandler(t *testing.T) {
 			LastEvaluation: all[3].GetAlert().LastEvaluation,
 			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[3].GetAlert().DurationSeconds,
+			KeepFiringFor:  all[3].GetAlert().KeepFiringForSeconds,
+			Annotations:    nil,
+			Alerts:         []*testpromcompatibility.Alert{},
+			Type:           "alerting",
+		},
+		testpromcompatibility.AlertingRule{
+			State:          strings.ToLower(all[4].GetAlert().State.String()),
+			Name:           all[4].GetAlert().Name,
+			Query:          all[4].GetAlert().Query,
+			Labels:         labelpb.ZLabelsToPromLabels(all[4].GetAlert().Labels.Labels),
+			Health:         rules.RuleHealth(all[2].GetAlert().Health),
+			LastError:      all[4].GetAlert().LastError,
+			LastEvaluation: all[4].GetAlert().LastEvaluation,
+			EvaluationTime: all[4].GetAlert().EvaluationDurationSeconds,
+			Duration:       all[4].GetAlert().DurationSeconds,
+			KeepFiringFor:  all[4].GetAlert().KeepFiringForSeconds,
 			Annotations:    nil,
 			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",

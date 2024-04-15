@@ -27,7 +27,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -198,7 +198,7 @@ func TestAlertCompliance(t *testing.T) {
 		rFuture := e2ethanos.NewRulerBuilder(e, "1")
 		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{compliance.InternalEndpoint("http")},
 					Scheme:          "http",
 				},
@@ -210,13 +210,15 @@ func TestAlertCompliance(t *testing.T) {
 			WithResendDelay("1m").
 			WithEvalInterval("1m").
 			WithReplicaLabel("").
-			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
+			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []clientconfig.Config{
 				{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
-							querierBuilder.InternalEndpoint("http"),
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+							StaticAddresses: []string{
+								querierBuilder.InternalEndpoint("http"),
+							},
+							Scheme: "http",
 						},
-						Scheme: "http",
 					},
 				},
 			})
@@ -279,7 +281,7 @@ func TestAlertCompliance(t *testing.T) {
 
 		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{compliance.InternalEndpoint("http")},
 					Scheme:          "http",
 				},
@@ -292,13 +294,15 @@ func TestAlertCompliance(t *testing.T) {
 			WithEvalInterval("1m").
 			WithReplicaLabel("").
 			WithRestoreIgnoredLabels("tenant_id").
-			InitStateless(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
+			InitStateless(filepath.Join(rFuture.InternalDir(), "rules"), []clientconfig.Config{
 				{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
-							query.InternalEndpoint("http"),
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+							StaticAddresses: []string{
+								query.InternalEndpoint("http"),
+							},
+							Scheme: "http",
 						},
-						Scheme: "http",
 					},
 				},
 			}, []*config.RemoteWriteConfig{

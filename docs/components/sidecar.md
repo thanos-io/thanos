@@ -153,6 +153,10 @@ Flags:
                                  Output file for environment variable
                                  substituted config file.
       --reloader.config-file=""  Config file watched by the reloader.
+      --reloader.method=http     Method used to reload the configuration.
+      --reloader.process-name="prometheus"
+                                 Executable name used to match the process being
+                                 reloaded when using the signal method.
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
@@ -172,6 +176,8 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
+      --shipper.meta-file-name="thanos.shipper.json"
+                                 the file to store shipper metadata in
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.

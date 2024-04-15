@@ -1188,7 +1188,8 @@ func TestDownsample(t *testing.T) {
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {
-				chk, err := chunkr.Chunk(c)
+				// Ignore iterable as it should be nil.
+				chk, _, err := chunkr.ChunkOrIterable(c)
 				testutil.Ok(t, err)
 
 				m := map[AggrType][]sample{}
@@ -1312,7 +1313,8 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 
 	var got []map[AggrType][]sample
 	for _, c := range chks {
-		chk, err := chunkr.Chunk(c)
+		// Ignore iterable as it should be nil.
+		chk, _, err := chunkr.ChunkOrIterable(c)
 		testutil.Ok(t, err)
 
 		m := map[AggrType][]sample{}
@@ -1546,7 +1548,7 @@ func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 
 			var res []*histogramPair
 			for x.Next() != chunkenc.ValNone {
-				t, h := x.AtHistogram()
+				t, h := x.AtHistogram(nil)
 				res = append(res, &histogramPair{t, h})
 			}
 			testutil.Ok(t, x.Err())
@@ -1725,11 +1727,11 @@ func (it *sampleIterator) At() (t int64, v float64) {
 	return it.l[it.i].t, it.l[it.i].v
 }
 
-func (it *sampleIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (it *sampleIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (it *sampleIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (it *sampleIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
@@ -1771,11 +1773,11 @@ func (it *histogramIterator) At() (t int64, v float64) {
 	panic("not implemented")
 }
 
-func (it *histogramIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (it *histogramIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	return it.l[it.i].t, it.l[it.i].h
 }
 
-func (it *histogramIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (it *histogramIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
@@ -1876,12 +1878,12 @@ func (b *memBlock) Series(id storage.SeriesRef, builder *labels.ScratchBuilder, 
 	return nil
 }
 
-func (b *memBlock) Chunk(m chunks.Meta) (chunkenc.Chunk, error) {
+func (b *memBlock) ChunkOrIterable(m chunks.Meta) (chunkenc.Chunk, chunkenc.Iterable, error) {
 	if uint64(m.Ref) >= b.numberOfChunks {
-		return nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", m.Ref)
+		return nil, nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", m.Ref)
 	}
 
-	return b.chunks[m.Ref], nil
+	return b.chunks[m.Ref], nil, nil
 }
 
 func (b *memBlock) Symbols() index.StringIter {

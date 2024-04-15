@@ -228,20 +228,6 @@ func TestTSDBStore_Series(t *testing.T) {
 	}
 }
 
-// Regression test for https://github.com/thanos-io/thanos/issues/1038.
-func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, db.Appender(context.Background()), func() storepb.StoreServer {
-		return NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
-	})
-}
-
 type delegatorServer struct {
 	*storetestutil.SeriesServer
 
@@ -611,7 +597,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+len(extLabels))
+			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+extLabels.Len())
 			for _, l := range s.Labels {
 				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
@@ -619,13 +605,13 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
 			}
-			for _, l := range extLabels {
+			extLabels.Range(func(l labels.Label) {
 				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
 					Value: l.Value,
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
-			}
+			})
 			sort.Slice(lbls, func(i, j int) bool {
 				return lbls[i].Name < lbls[j].Name
 			})

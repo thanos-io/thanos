@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 var (
@@ -59,11 +60,25 @@ func (e *Endpoint) UnmarshalJSON(data []byte) error {
 // HashringConfig represents the configuration for a hashring
 // a Receive node knows about.
 type HashringConfig struct {
-	Hashring       string            `json:"hashring,omitempty"`
-	Tenants        []string          `json:"tenants,omitempty"`
-	Endpoints      []Endpoint        `json:"endpoints"`
-	Algorithm      HashringAlgorithm `json:"algorithm,omitempty"`
-	ExternalLabels map[string]string `json:"external_labels,omitempty"`
+	Hashring          string            `json:"hashring,omitempty"`
+	Tenants           []string          `json:"tenants,omitempty"`
+	TenantMatcherType tenantMatcher     `json:"tenant_matcher_type,omitempty"`
+	Endpoints         []Endpoint        `json:"endpoints"`
+	Algorithm         HashringAlgorithm `json:"algorithm,omitempty"`
+	ExternalLabels    labels.Labels     `json:"external_labels,omitempty"`
+}
+
+type tenantMatcher string
+
+const (
+	// TenantMatcherTypeExact matches tenants exactly. This is also the default one.
+	TenantMatcherTypeExact tenantMatcher = "exact"
+	// TenantMatcherGlob matches tenants using glob patterns.
+	TenantMatcherGlob tenantMatcher = "glob"
+)
+
+func isExactMatcher(m tenantMatcher) bool {
+	return m == TenantMatcherTypeExact || m == ""
 }
 
 // HashringConfigLoader is responsible for loading the hashring configuration. It also does runs validations on the
@@ -214,7 +229,7 @@ func hashAsMetricValue(data []byte) float64 {
 	sum := md5.Sum(data)
 	// We only want 48 bits as a float64 only has a 53 bit mantissa.
 	smallSum := sum[0:6]
-	var bytes = make([]byte, 8)
+	bytes := make([]byte, 8)
 	copy(bytes, smallSum)
 	return float64(binary.LittleEndian.Uint64(bytes))
 }

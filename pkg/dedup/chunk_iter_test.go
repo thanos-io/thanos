@@ -6,12 +6,12 @@ package dedup
 import (
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
-
-	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
@@ -132,7 +132,9 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 			),
 		},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			merged := m(tc.input...)
 			testutil.Equals(t, tc.expected.Labels(), merged.Labels())
 			actChks, actErr := storage.ExpandChunks(merged.Iterator(nil))
@@ -316,6 +318,138 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 			expChks, expErr := storage.ExpandChunks(tc.expected.Iterator(nil))
 
 			testutil.Equals(t, expErr, actErr)
+			testutil.Equals(t, expChks, actChks)
+		})
+	}
+}
+
+type histoSample struct {
+	t  int64
+	f  float64
+	h  *histogram.Histogram
+	fh *histogram.FloatHistogram
+}
+
+func (h histoSample) T() int64 {
+	return h.t
+}
+
+func (h histoSample) F() float64 {
+	return h.f
+}
+
+func (h histoSample) H() *histogram.Histogram {
+	return h.h
+}
+
+func (h histoSample) FH() *histogram.FloatHistogram {
+	return h.fh
+}
+
+func (h histoSample) Type() chunkenc.ValueType {
+	if h.fh != nil {
+		return chunkenc.ValFloatHistogram
+	}
+	if h.h != nil {
+		return chunkenc.ValHistogram
+	}
+	return chunkenc.ValFloat
+}
+
+var histogramSample = &histogram.Histogram{
+	Schema:        0,
+	Count:         20,
+	Sum:           -3.1415,
+	ZeroCount:     12,
+	ZeroThreshold: 0.001,
+	NegativeSpans: []histogram.Span{
+		{Offset: 0, Length: 4},
+		{Offset: 1, Length: 1},
+	},
+	NegativeBuckets:  []int64{1, 2, -2, 1, -1},
+	CounterResetHint: histogram.UnknownCounterReset,
+}
+
+func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
+	scrapeIntervalMilli := int64(30_000)
+
+	testCases := []struct {
+		name     string
+		input    []storage.ChunkSeries
+		expected storage.ChunkSeries
+	}{
+		{
+			name: "two overlapping - Histogram and Histogram",
+			input: []storage.ChunkSeries{
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{
+					histoSample{t: 0 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 2 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 3 * scrapeIntervalMilli, h: histogramSample},
+				}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{
+					histoSample{t: 1 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 2 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 3 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 4 * scrapeIntervalMilli, h: histogramSample},
+				}),
+			},
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{
+				histoSample{t: 0 * scrapeIntervalMilli, h: histogramSample},
+				histoSample{t: 1 * scrapeIntervalMilli, h: histogramSample},
+				histoSample{t: 2 * scrapeIntervalMilli, h: histogramSample},
+				histoSample{t: 3 * scrapeIntervalMilli, h: histogramSample},
+				histoSample{t: 4 * scrapeIntervalMilli, h: histogramSample},
+			}),
+		},
+		{
+			name: "overlapping mixed - XOR then Histogram - panic repro case",
+			input: []storage.ChunkSeries{
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{
+					histoSample{t: 1 * scrapeIntervalMilli, f: 1},
+					histoSample{t: 2 * scrapeIntervalMilli, f: 1},
+				}, []chunks.Sample{
+					histoSample{t: 5 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 6 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 7 * scrapeIntervalMilli, h: histogramSample},
+				}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{
+					histoSample{t: 1 * scrapeIntervalMilli, f: 1},
+					histoSample{t: 2 * scrapeIntervalMilli, f: 1},
+				}, []chunks.Sample{
+					histoSample{t: 5 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 6 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 7 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 8 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 9 * scrapeIntervalMilli, h: histogramSample},
+				},
+				),
+			},
+			expected: storage.NewListChunkSeriesFromSamples(
+				labels.FromStrings("bar", "baz"),
+				[]chunks.Sample{
+					histoSample{t: 1 * scrapeIntervalMilli, f: 1},
+					histoSample{t: 2 * scrapeIntervalMilli, f: 1},
+				}, []chunks.Sample{
+					histoSample{t: 5 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 6 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 7 * scrapeIntervalMilli, h: histogramSample},
+				},
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := NewChunkSeriesMerger()
+			merged := m(tc.input...)
+			testutil.Equals(t, labels.FromStrings("bar", "baz"), merged.Labels())
+			actChks, actErr := storage.ExpandChunks(merged.Iterator(nil))
+			testutil.Ok(t, actErr)
+
+			expChks, expErr := storage.ExpandChunks(tc.expected.Iterator(nil))
+			testutil.Ok(t, expErr)
 			testutil.Equals(t, expChks, actChks)
 		})
 	}

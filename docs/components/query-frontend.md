@@ -77,6 +77,13 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 0
+    open_duration: 0s
+    min_requests: 0
+    consecutive_failures: 0
+    failure_percent: 0
   expiration: 0s
 ```
 
@@ -132,6 +139,13 @@ config:
   master_name: ""
   max_async_buffer_size: 10000
   max_async_concurrency: 20
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 10
+    open_duration: 5s
+    min_requests: 50
+    consecutive_failures: 5
+    failure_percent: 0.05
   expiration: 24h0m0s
 ```
 
@@ -252,6 +266,11 @@ Flags:
       --query-frontend.downstream-url="http://localhost:9090"
                                  URL of downstream Prometheus Query compatible
                                  API.
+      --query-frontend.enable-x-functions
+                                 Enable experimental x-
+                                 functions in query-frontend.
+                                 --no-query-frontend.enable-x-functions for
+                                 disabling.
       --query-frontend.forward-header=<http-header-name> ...
                                  List of headers forwarded by the query-frontend
                                  to downstream queriers, default is empty

@@ -18,20 +18,20 @@ func TestExtendLabels(t *testing.T) {
 		labels.FromStrings("a", "1", "replica", "01", "xb", "2"),
 		ExtendSortedLabels(
 			labels.FromStrings("a", "1", "xb", "2"),
-			[]labels.Label{{Name: "replica", Value: "01"}},
+			labels.FromStrings("replica", "01"),
 		))
 
 	testutil.Equals(t,
 		labels.FromStrings("replica", "01"),
 		ExtendSortedLabels(
 			labels.EmptyLabels(),
-			[]labels.Label{{Name: "replica", Value: "01"}},
+			labels.FromStrings("replica", "01"),
 		))
 
 	testutil.Equals(t, labels.FromStrings("a", "1", "replica", "01", "xb", "2"),
 		ExtendSortedLabels(
 			labels.FromStrings("a", "1", "replica", "NOT01", "xb", "2"),
-			[]labels.Label{{Name: "replica", Value: "01"}},
+			labels.FromStrings("replica", "01"),
 		))
 
 	testInjectExtLabels(testutil.NewTB(t))
@@ -64,11 +64,11 @@ func testInjectExtLabels(tb testutil.TB) {
 		"service", "sdd-acct-mngr-metrics",
 		"support", "Self-Support", // Should be overwritten.
 	)
-	extLset := []labels.Label{
-		{Name: "replica", Value: "1"},
-		{Name: "support", Value: "Host-Support"},
-		{Name: "tenant", Value: "2342"},
-	}
+	extLset := labels.FromMap(map[string]string{
+		"replica": "1",
+		"support": "Host-Support",
+		"tenant":  "2342",
+	})
 	tb.ResetTimer()
 	for i := 0; i < tb.N(); i++ {
 		x = ExtendSortedLabels(in, extLset)

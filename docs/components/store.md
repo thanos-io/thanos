@@ -29,6 +29,15 @@ Store node giving access to blocks in a bucket provider. Now supported GCS, S3,
 Azure, Swift, Tencent COS and Aliyun OSS.
 
 Flags:
+      --block-discovery-strategy="concurrent"
+                                 One of concurrent, recursive. When set to
+                                 concurrent, stores will concurrently issue
+                                 one call per directory to discover active
+                                 blocks in the bucket. The recursive strategy
+                                 iterates through all objects in the bucket,
+                                 recursively traversing into each directory.
+                                 This avoids N+1 calls at the expense of having
+                                 slower bucket iterations.
       --block-meta-fetch-concurrency=32
                                  Number of goroutines to use when fetching block
                                  metadata from object storage.
@@ -193,6 +202,12 @@ Flags:
                                  DEPRECATED: use store.limits.request-samples.
       --store.grpc.touched-series-limit=0
                                  DEPRECATED: use store.limits.request-series.
+      --store.index-header-lazy-download-strategy=eager
+                                 Strategy of how to download index headers
+                                 lazily. Supported values: eager, lazy.
+                                 If eager, always download index header during
+                                 initial load. If lazy, download index header
+                                 during query time.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
@@ -204,7 +219,7 @@ Flags:
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --sync-block-duration=3m   Repeat interval for syncing the blocks between
+      --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
@@ -319,6 +334,13 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 0
+    open_duration: 0s
+    min_requests: 0
+    consecutive_failures: 0
+    failure_percent: 0
 enabled_items: []
 ttl: 0s
 ```
@@ -338,6 +360,13 @@ While the remaining settings are **optional**:
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
+- `set_async_circuit_breaker_config`: the configuration for the circuit breaker for asynchronous set operations.
+  - `enabled`: `true` to enable circuite breaker for asynchronous operations. The circuit breaker consists of three states: closed, half-open, and open. It begins in the closed state. When the total requests exceed `min_requests`, and either consecutive failures occur or the failure percentage is excessively high according to the configured values, the circuit breaker transitions to the open state. This results in the rejection of all asynchronous operations. After `open_duration`, the circuit breaker transitions to the half-open state, where it allows `half_open_max_requests` asynchronous operations to be processed in order to test if the conditions have improved. If they have not, the state transitions back to open; if they have, it transitions to the closed state. Following each 10 seconds interval in the closed state, the circuit breaker resets its metrics and repeats this cycle.
+  - `half_open_max_requests`: maximum number of requests allowed to pass through when the circuit breaker is half-open. If set to 0, the circuit breaker allows only 1 request.
+  - `open_duration`: the period of the open state after which the state of the circuit breaker becomes half-open. If set to 0, the circuit breaker utilizes the default value of 60 seconds.
+  - `min_requests`: minimal requests to trigger the circuit breaker, 0 signifies no requirements.
+  - `consecutive_failures`: consecutive failures based on `min_requests` to determine if the circuit breaker should open.
+  - `failure_percent`: the failure percentage, which is based on `min_requests`, to determine if the circuit breaker should open.
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 - `ttl`: ttl to store index cache items in memcached.
 
@@ -370,6 +399,13 @@ config:
   master_name: ""
   max_async_buffer_size: 10000
   max_async_concurrency: 20
+  set_async_circuit_breaker_config:
+    enabled: false
+    half_open_max_requests: 10
+    open_duration: 5s
+    min_requests: 50
+    consecutive_failures: 5
+    failure_percent: 0.05
 enabled_items: []
 ttl: 0s
 ```

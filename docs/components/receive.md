@@ -95,6 +95,39 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
+It is possible to only match certain `tenant`s inside of a hashring file. For example:
+
+```json
+[
+    {
+       "tenants": ["foobar"],
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+The specified endpoints will be used if the tenant is set to `foobar`. It is possible to use glob matching through the parameter `tenant_matcher_type`. It can have the value `glob`. In this case, the strings inside the array are taken as glob patterns and matched against the `tenant` inside of a remote-write request. For instance:
+
+```json
+[
+    {
+       "tenants": ["foo*"],
+       "tenant_matcher_type": "glob",
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+This will still match the tenant `foobar` and any other tenant which begins with the letters `foo`.
+
 ### AZ-aware Ketama hashring (experimental)
 
 In order to ensure even spread for replication over nodes in different availability-zones, you can choose to include az definition in your hashring config. If we for example have a 6 node cluster, spread over 3 different availability zones; A, B and C, we could use the following example `hashring.json`:
@@ -248,6 +281,14 @@ NOTE:
 - Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similarly to when one receiver cannot be scraped.
 - Support for different limit configuration for different tenants is planned for the future.
 
+## Asynchronous workers
+
+Instead of spawning a new goroutine each time the Receiver forwards a request to another node, it spawns a fixed number of goroutines (workers) that perform the work. This allows avoiding spawning potentially tens or even hundred thousand goroutines if someone starts sending a lot of small requests.
+
+This number of workers is controlled by `--receive.forward.async-workers=`.
+
+Please see the metric `thanos_receive_forward_delay_seconds` to see if you need to increase the number of forwarding workers.
+
 ## Flags
 
 ```$ mdox-exec="thanos receive --help"
@@ -308,6 +349,9 @@ Flags:
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
+      --receive.forward.async-workers=5
+                                 Number of concurrent workers processing
+                                 forwarding of remote-write requests.
       --receive.grpc-compression=snappy
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
@@ -427,6 +471,11 @@ Flags:
                                  ingesting a new exemplar will evict the oldest
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
+      --tsdb.max-retention-bytes=0
+                                 Maximum number of bytes that can be stored for
+                                 blocks. A unit is required, supported units: B,
+                                 KB, MB, GB, TB, PB, EB. Ex: "512MB". Based on
+                                 powers-of-2, so 1KB is 1024B.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
