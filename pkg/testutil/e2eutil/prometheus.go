@@ -516,6 +516,7 @@ func createBlockWithDelay(ctx context.Context, dir string, series []labels.Label
 	logger := log.NewNopLogger()
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
+
 	if err := m.WriteToDir(logger, path.Join(dir, blockID.String())); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
 	}
@@ -622,28 +623,29 @@ func createBlock(
 	}
 
 	files := []metadata.File{}
-	if hashFunc != metadata.NoneFunc {
-		paths := []string{}
-		if err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
-			if info.IsDir() {
-				return nil
-			}
-			paths = append(paths, path)
+	paths := []string{}
+	if err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
 			return nil
-		}); err != nil {
-			return id, errors.Wrapf(err, "walking %s", dir)
 		}
+		paths = append(paths, path)
+		return nil
+	}); err != nil {
+		return id, errors.Wrapf(err, "walking %s", dir)
+	}
 
-		for _, p := range paths {
+	for _, p := range paths {
+		f := metadata.File{
+			RelPath: strings.TrimPrefix(p, blockDir+"/"),
+		}
+		if hashFunc != metadata.NoneFunc {
 			pHash, err := metadata.CalculateHash(p, metadata.SHA256Func, log.NewNopLogger())
 			if err != nil {
 				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
 			}
-			files = append(files, metadata.File{
-				RelPath: strings.TrimPrefix(p, blockDir+"/"),
-				Hash:    &pHash,
-			})
+			f.Hash = &pHash
 		}
+		files = append(files, f)
 	}
 
 	if _, err = metadata.InjectThanos(logger, blockDir, metadata.Thanos{

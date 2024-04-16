@@ -23,11 +23,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/objstore"
-	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -106,6 +106,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var meta metadata.Meta
 					meta.Version = 1
 					meta.ULID = ULID(1)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"}, metadata.File{RelPath: "chunks/000001"})
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
@@ -189,6 +190,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var meta metadata.Meta
 					meta.Version = 1
 					meta.ULID = ULID(6)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"}, metadata.File{RelPath: "chunks/000001"})
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
@@ -224,6 +226,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var meta metadata.Meta
 					meta.Version = 20
 					meta.ULID = ULID(7)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"}, metadata.File{RelPath: "chunks/000001"})
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
@@ -232,6 +235,64 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 				expectedMetas:         ULIDs(1, 3, 6),
 				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: incomplete chunks",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(8)
+					meta.Thanos.Files = append(meta.Thanos.Files,
+						metadata.File{RelPath: "index"},
+						metadata.File{RelPath: "chunks/000001"},
+						metadata.File{RelPath: "chunks/000005"},
+					)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+				},
+
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5, 8),
+				expectedNoMeta:        ULIDs(4),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: no index",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(9)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "chunks/000001"})
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+				},
+
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5, 8, 9),
+				expectedNoMeta:        ULIDs(4),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: no chunks",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(10)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"})
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+				},
+
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5, 8, 9, 10),
 				expectedNoMeta:        ULIDs(4),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},

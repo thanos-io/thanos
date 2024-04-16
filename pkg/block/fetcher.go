@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,10 +25,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -434,6 +435,10 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v unmarshal: %v", metaFile, err)
 	}
 
+	if err := sanityCheckFilesForMeta(m.Thanos.Files); err != nil {
+		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v not sane: %v", metaFile, err)
+	}
+
 	if m.Version != metadata.TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file: %s version: %d", metaFile, m.Version)
 	}
@@ -449,6 +454,47 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		}
 	}
 	return m, nil
+}
+
+func sanityCheckFilesForMeta(files []metadata.File) error {
+	var (
+		numChunkFiles    int
+		highestChunkFile int
+		hasIndex         bool
+	)
+
+	// Old metas might not have the Thanos.Files field yet, we dont want to mess with them
+	if len(files) == 0 {
+		return nil
+	}
+
+	for _, f := range files {
+		if f.RelPath == "index" {
+			hasIndex = true
+		}
+		dir, name := path.Split(f.RelPath)
+		if dir == "chunks/" {
+			numChunkFiles++
+			idx, err := strconv.Atoi(name)
+			if err != nil {
+				return errors.Wrap(err, "unexpected chunk file name")
+			}
+			if idx > highestChunkFile {
+				highestChunkFile = idx
+			}
+		}
+	}
+
+	if !hasIndex {
+		return errors.New("no index file in meta")
+	}
+	if numChunkFiles == 0 {
+		return errors.New("no chunk files in meta")
+	}
+	if numChunkFiles != highestChunkFile {
+		return errors.New("incomplete chunk files in meta")
+	}
+	return nil
 }
 
 type response struct {
