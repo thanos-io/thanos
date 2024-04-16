@@ -291,6 +291,7 @@ func runReceive(
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
 		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, dbs); err != nil {
+			level.Error(logger).Log("msg", "failed to setup hashring", "err", err)
 			return err
 		}
 	}
@@ -461,103 +462,86 @@ func setupHashring(g *run.Group,
 	enableIngestion bool,
 	dbs *receive.MultiTSDB,
 ) error {
-	// Note: the hashring configuration watcher
-	// is the sender and thus closes the chan.
-	// In the single-node case, which has no configuration
-	// watcher, we close the chan ourselves.
-	updates := make(chan []receive.HashringConfig, 1)
 	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 
 	// The Hashrings config file path is given initializing config watcher.
-	if conf.hashringsFilePath != "" {
-		cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, conf.hashringsFilePath, *conf.refreshInterval)
+	hashringConfigLoader := receive.NewHashringConfigLoader(
+		log.With(logger, "component", "hashring-reloader"),
+		reg,
+		conf.hashringsPathContent.Path(),
+	)
+
+	hashringReadyFunc := func() {
+		// If ingestion is enabled, send a signal to TSDB to flush.
+		if enableIngestion {
+			hashringChangedChan <- struct{}{}
+		} else {
+			// If not, just signal we are ready (this is important during first hashring load)
+			statusProber.Ready()
+		}
+	}
+
+	hashringLoadFunc := func() {
+		content, err := conf.hashringsPathContent.Content()
 		if err != nil {
-			return errors.Wrap(err, "failed to initialize config watcher")
+			level.Error(logger).Log("msg", "failed to get hashring configuration content", "err", err)
+			return
 		}
 
-		// Check the hashring configuration on before running the watcher.
-		if err := cw.ValidateConfig(); err != nil {
-			cw.Stop()
-			close(updates)
-			return errors.Wrap(err, "failed to validate hashring configuration file")
+		// If the content is empty the default behavior is to start a single node hashring.
+		if len(content) == 0 {
+			webHandler.Hashring(receive.SingleNodeHashring(conf.endpoint))
+			level.Info(logger).Log("msg", "Empty hashring config. Set up single node hashring.")
+			hashringReadyFunc()
+			return
 		}
 
+		parsedConfig, err := hashringConfigLoader.ParseConfig() //nolint:ineffassign
+		if err != nil {
+			return
+		}
+
+		// nolint:ineffassign
+		hashring, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, parsedConfig) //nolint:ineffassign
+		if err != nil {
+			level.Error(logger).Log("msg", "unable to create new hashring from config", "err", err)
+			return
+		}
+		webHandler.Hashring(hashring)
+		level.Info(logger).Log("msg", "Successfully set up hashring for the given hashring config.")
+		level.Debug(logger).Log("msg", "Hashring config", "config", string(content))
+		if err := dbs.SetHashringConfig(parsedConfig); err != nil {
+			level.Error(logger).Log("msg", "failed to set hashring config in MultiTSDB", "err", err)
+			return
+		}
+		hashringReadyFunc()
+	}
+
+	if conf.hashringsPathContent.Path() != "" {
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return receive.ConfigFromWatcher(ctx, updates, cw)
-		}, func(error) {
+			if enableIngestion {
+				defer close(hashringChangedChan)
+			}
+			err := extkingpin.PathContentReloader(
+				ctx,
+				conf.hashringsPathContent,
+				logger,
+				hashringLoadFunc,
+				time.Duration(*conf.refreshInterval),
+			)
+			if err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return nil
+		}, func(err error) {
+			level.Error(logger).Log("msg", "hashring config reloader failed", "err", err)
 			cancel()
 		})
 	} else {
-		var (
-			cf  []receive.HashringConfig
-			err error
-		)
-		// The Hashrings config file content given initialize configuration from content.
-		if len(conf.hashringsFileContent) > 0 {
-			cf, err = receive.ParseConfig([]byte(conf.hashringsFileContent))
-			if err != nil {
-				close(updates)
-				return errors.Wrap(err, "failed to validate hashring configuration content")
-			}
-		}
-
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			defer close(updates)
-			updates <- cf
-			<-cancel
-			return nil
-		}, func(error) {
-			close(cancel)
-		})
+		hashringLoadFunc()
 	}
-
-	cancel := make(chan struct{})
-	g.Add(func() error {
-
-		if enableIngestion {
-			defer close(hashringChangedChan)
-		}
-
-		for {
-			select {
-			case c, ok := <-updates:
-				if !ok {
-					return nil
-				}
-
-				if c == nil {
-					webHandler.Hashring(receive.SingleNodeHashring(conf.endpoint))
-					level.Info(logger).Log("msg", "Empty hashring config. Set up single node hashring.")
-				} else {
-					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c)
-					if err != nil {
-						return errors.Wrap(err, "unable to create new hashring from config")
-					}
-					webHandler.Hashring(h)
-					level.Info(logger).Log("msg", "Set up hashring for the given hashring config.")
-				}
-
-				if err := dbs.SetHashringConfig(c); err != nil {
-					return errors.Wrap(err, "failed to set hashring config in MultiTSDB")
-				}
-
-				// If ingestion is enabled, send a signal to TSDB to flush.
-				if enableIngestion {
-					hashringChangedChan <- struct{}{}
-				} else {
-					// If not, just signal we are ready (this is important during first hashring load)
-					statusProber.Ready()
-				}
-			case <-cancel:
-				return nil
-			}
-		}
-	}, func(err error) {
-		close(cancel)
-	},
-	)
 	return nil
 }
 
@@ -575,7 +559,6 @@ func startTSDBAndUpload(g *run.Group,
 	bkt objstore.Bucket,
 	hashringAlgorithm receive.HashringAlgorithm,
 ) error {
-
 	log.With(logger, "component", "storage")
 	dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_receive_multi_db_updates_attempted_total",
@@ -790,9 +773,7 @@ type receiveConfig struct {
 	objStoreConfig *extflag.PathOrContent
 	retention      *model.Duration
 
-	hashringsFilePath    string
-	hashringsFileContent string
-	hashringsAlgorithm   string
+	hashringsAlgorithm string
 
 	refreshInterval   *model.Duration
 	endpoint          string
@@ -832,6 +813,7 @@ type receiveConfig struct {
 	relabelConfigPath *extflag.PathOrContent
 
 	writeLimitsConfig       *extflag.PathOrContent
+	hashringsPathContent    *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
 	limitsConfigReloadTimer time.Duration
 
@@ -869,16 +851,14 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables the retention policy (i.e. infinite retention). For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
 
-	cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").StringVar(&rc.hashringsFilePath)
-
-	cmd.Flag("receive.hashrings", "Alternative to 'receive.hashrings-file' flag (lower priority). Content of file that contains the hashring configuration.").PlaceHolder("<content>").StringVar(&rc.hashringsFileContent)
+	rc.hashringsPathContent = extflag.RegisterPathOrContent(cmd, "receive.hashrings", "file that represents the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.", extflag.WithEnvSubstitution())
 
 	hashringAlgorithmsHelptext := strings.Join([]string{string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama)}, ", ")
 	cmd.Flag("receive.hashrings-algorithm", "The algorithm used when distributing series in the hashrings. Must be one of "+hashringAlgorithmsHelptext+". Will be overwritten by the tenant-specific algorithm in the hashring config.").
 		Default(string(receive.AlgorithmHashmod)).
 		EnumVar(&rc.hashringsAlgorithm, string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama))
 
-	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
+	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
@@ -978,7 +958,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 // This is used to configure this Receiver's forwarding and ingesting behavior at runtime.
 func (rc *receiveConfig) determineMode() receive.ReceiverMode {
 	// Has the user provided some kind of hashring configuration?
-	hashringSpecified := rc.hashringsFileContent != "" || rc.hashringsFilePath != ""
+	content, _ := rc.hashringsPathContent.Content()
+	hashringSpecified := len(content) != 0
 	// Has the user specified the --receive.local-endpoint flag?
 	localEndpointSpecified := rc.endpoint != ""
 

@@ -8,9 +8,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pkg/errors"
-
 	"github.com/efficientgo/core/testutil"
+	"github.com/pkg/errors"
 )
 
 func TestValidateConfig(t *testing.T) {
@@ -61,11 +60,9 @@ func TestValidateConfig(t *testing.T) {
 			err = tmpfile.Close()
 			testutil.Ok(t, err)
 
-			cw, err := NewConfigWatcher(nil, nil, tmpfile.Name(), 1)
-			testutil.Ok(t, err)
-			defer cw.Stop()
+			cw := NewHashringConfigLoader(nil, nil, tmpfile.Name())
 
-			if err := cw.ValidateConfig(); err != nil && !errors.Is(err, tc.err) {
+			if _, err := cw.ParseConfig(); err != nil && !errors.Is(err, tc.err) {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
 			}
 		})
