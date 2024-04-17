@@ -23,11 +23,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/objstore"
-	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -64,6 +64,9 @@ func ULIDs(is ...int) []ulid.ULID {
 }
 
 func TestMetaFetcher_Fetch(t *testing.T) {
+	var (
+		emptyBuf bytes.Buffer
+	)
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -74,8 +77,8 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		r := prometheus.NewRegistry()
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := NewConcurrentLister(noopLogger, insBkt)
-		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
+		lister := NewRecursiveBlockValidatingLister(noopLogger, insBkt)
+		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, lister, dir, r)
 		testutil.Ok(t, err)
 
 		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{
@@ -83,14 +86,15 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		}, nil)
 
 		for i, tcase := range []struct {
-			name                  string
-			do                    func()
-			filterULID            ulid.ULID
-			expectedMetas         []ulid.ULID
-			expectedCorruptedMeta []ulid.ULID
-			expectedNoMeta        []ulid.ULID
-			expectedFiltered      int
-			expectedMetaErr       error
+			name                   string
+			do                     func()
+			filterULID             ulid.ULID
+			expectedMetas          []ulid.ULID
+			expectedCorruptedMeta  []ulid.ULID
+			expectedIncompleteMeta []ulid.ULID
+			expectedNoMeta         []ulid.ULID
+			expectedFiltered       int
+			expectedMetaErr        error
 		}{
 			{
 				name: "empty bucket",
@@ -106,18 +110,25 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var meta metadata.Meta
 					meta.Version = 1
 					meta.ULID = ULID(1)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"}, metadata.File{RelPath: "chunks/000001"})
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
 
 					meta.ULID = ULID(2)
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
 
 					meta.ULID = ULID(3)
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -174,7 +185,10 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			{
 				name: "corrupted meta.json",
 				do: func() {
-					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(5).String(), MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
+					ulid := ULID(5)
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid.String(), MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), &emptyBuf))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -189,10 +203,13 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var meta metadata.Meta
 					meta.Version = 1
 					meta.ULID = ULID(6)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"}, metadata.File{RelPath: "chunks/000001"})
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
 				},
 
 				expectedMetas:         ULIDs(1, 3, 6),
@@ -224,16 +241,85 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var meta metadata.Meta
 					meta.Version = 20
 					meta.ULID = ULID(7)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"}, metadata.File{RelPath: "chunks/000001"})
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
 				},
 
 				expectedMetas:         ULIDs(1, 3, 6),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: incomplete chunks",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(8)
+					meta.Thanos.Files = append(meta.Thanos.Files,
+						metadata.File{RelPath: "index"},
+						metadata.File{RelPath: "chunks/000001"},
+						metadata.File{RelPath: "chunks/000005"},
+					)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000005"), &emptyBuf))
+				},
+
+				expectedMetas:          ULIDs(1, 3, 6),
+				expectedCorruptedMeta:  ULIDs(5),
+				expectedNoMeta:         ULIDs(4),
+				expectedIncompleteMeta: ULIDs(8),
+				expectedMetaErr:        errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: no index",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(9)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "chunks/000001"})
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), &emptyBuf))
+				},
+
+				expectedMetas:          ULIDs(1, 3, 6),
+				expectedCorruptedMeta:  ULIDs(5),
+				expectedIncompleteMeta: ULIDs(8, 9),
+				expectedNoMeta:         ULIDs(4),
+				expectedMetaErr:        errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: no chunks",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(10)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"})
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), &emptyBuf))
+				},
+
+				expectedMetas:          ULIDs(1, 3, 6),
+				expectedCorruptedMeta:  ULIDs(5),
+				expectedNoMeta:         ULIDs(4),
+				expectedIncompleteMeta: ULIDs(8, 9, 10),
+				expectedMetaErr:        errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 		} {
 			if ok := t.Run(tcase.name, func(t *testing.T) {
@@ -271,6 +357,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					})
 					expected := append([]ulid.ULID{}, tcase.expectedCorruptedMeta...)
 					expected = append(expected, tcase.expectedNoMeta...)
+					expected = append(expected, tcase.expectedIncompleteMeta...)
 					sort.Slice(expected, func(i, j int) bool {
 						return expected[i].Compare(expected[j]) >= 0
 					})
@@ -285,11 +372,12 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				testutil.Equals(t, float64(i+1), promtest.ToFloat64(fetcher.metrics.Syncs))
 				testutil.Equals(t, float64(len(tcase.expectedMetas)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(LoadedMeta)))
 				testutil.Equals(t, float64(len(tcase.expectedNoMeta)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(NoMeta)))
+				testutil.Equals(t, float64(len(tcase.expectedIncompleteMeta)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(MetaHasIncompleteFiles)))
 				testutil.Equals(t, float64(tcase.expectedFiltered), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues("filtered")))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(labelExcludedMeta)))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(timeExcludedMeta)))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(LabelExcludedMeta)))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(TimeExcludedMeta)))
 				testutil.Equals(t, float64(expectedFailures), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(FailedMeta)))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(tooFreshMeta)))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(TooFreshMeta)))
 			}); !ok {
 				return
 			}
@@ -357,7 +445,7 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 	m := newTestFetcherMetrics()
 	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
 
-	testutil.Equals(t, 3.0, promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
+	testutil.Equals(t, 3.0, promtest.ToFloat64(m.Synced.WithLabelValues(LabelExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
 }
@@ -456,7 +544,7 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 			testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
 
 			testutil.Equals(t, expected, input)
-			testutil.Equals(t, float64(deleted), promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
+			testutil.Equals(t, float64(deleted), promtest.ToFloat64(m.Synced.WithLabelValues(LabelExcludedMeta)))
 
 		})
 
@@ -519,7 +607,7 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 	m := newTestFetcherMetrics()
 	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
 
-	testutil.Equals(t, 2.0, promtest.ToFloat64(m.Synced.WithLabelValues(timeExcludedMeta)))
+	testutil.Equals(t, 2.0, promtest.ToFloat64(m.Synced.WithLabelValues(TimeExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
 }
@@ -870,7 +958,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 			}
 			testutil.Ok(t, f.Filter(ctx, metas, m.Synced, nil))
 			compareSliceWithMapKeys(t, metas, tcase.expected)
-			testutil.Equals(t, float64(inputLen-len(tcase.expected)), promtest.ToFloat64(m.Synced.WithLabelValues(duplicateMeta)))
+			testutil.Equals(t, float64(inputLen-len(tcase.expected)), promtest.ToFloat64(m.Synced.WithLabelValues(DuplicateMeta)))
 		}); !ok {
 			return
 		}
@@ -939,7 +1027,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 		m := newTestFetcherMetrics()
 		testutil.Ok(t, tcase.replicaLabelRemover.Filter(ctx, tcase.input, nil, m.Modified))
 
-		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.Modified.WithLabelValues(replicaRemovedMeta)))
+		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.Modified.WithLabelValues(ReplicaRemovedMeta)))
 		testutil.Equals(t, tcase.expected, tcase.input)
 	}
 }
@@ -1044,7 +1132,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(m.Synced.WithLabelValues(tooFreshMeta)))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(m.Synced.WithLabelValues(TooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
 
@@ -1069,7 +1157,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
-		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.Synced.WithLabelValues(tooFreshMeta)))
+		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.Synced.WithLabelValues(TooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
 }
