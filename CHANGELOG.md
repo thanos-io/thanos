@@ -39,7 +39,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7123](https://github.com/thanos-io/thanos/pull/7123) Rule: Change default Alertmanager API version to v2.
 - [#7223](https://github.com/thanos-io/thanos/pull/7223) Automatic detection of memory limits and configure GOMEMLIMIT to match.
-- [#7282](https://github.com/thanos-io/thanos/pull/7282) Fetcher: mark metas with incomplete files as corrupted.
+- [#7282](https://github.com/thanos-io/thanos/pull/7282) Fetcher: mark metas with incomplete files as partial if configured.
 - [#7282](https://github.com/thanos-io/thanos/pull/7282) Compactor: add flag to disable cleanup of partial uploads
 
 ### Removed

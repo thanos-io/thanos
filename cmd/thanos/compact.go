@@ -419,7 +419,7 @@ func runCompact(
 	var cleanMtx sync.Mutex
 	// TODO(GiedriusS): we could also apply retention policies here but the logic would be a bit more complex.
 	cleanPartialMarked := func() error {
-		if !conf.cleanupPartialUploads {
+		if conf.disableCleanupPartialUploads {
 			level.Info(logger).Log("msg", "cleanup of partial uploads is disabled, skipping")
 			return nil
 		}
@@ -728,7 +728,7 @@ type compactConfig struct {
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
 	disableAdminOperations                         bool
-	cleanupPartialUploads                          bool
+	disableCleanupPartialUploads                   bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -842,6 +842,5 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
 
 	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&cc.disableAdminOperations)
-	cmd.Flag("compact.cleanup-partial-uploads", "Enable cleanup of partial uploads").
-		Hidden().Default("true").BoolVar(&cc.cleanupPartialUploads)
+	cmd.Flag("compact.disable-cleanup-partial-uploads", "Disable cleanup of partial uploads.").Default("false").BoolVar(&cc.disableCleanupPartialUploads)
 }

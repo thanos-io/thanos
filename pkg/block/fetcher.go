@@ -78,10 +78,10 @@ const (
 	FailedMeta    = "failed"
 
 	// Synced label values.
-	labelExcludedMeta = "label-excluded"
-	timeExcludedMeta  = "time-excluded"
-	tooFreshMeta      = "too-fresh"
-	duplicateMeta     = "duplicate"
+	LabelExcludedMeta = "label-excluded"
+	TimeExcludedMeta  = "time-excluded"
+	TooFreshMeta      = "too-fresh"
+	DuplicateMeta     = "duplicate"
 	// Blocks that are marked for deletion can be loaded as well. This is done to make sure that we load blocks that are meant to be deleted,
 	// but don't have a replacement block yet.
 	MarkedForDeletionMeta = "marked-for-deletion"
@@ -93,7 +93,10 @@ const (
 	MarkedForNoDownsampleMeta = "marked-for-no-downsample"
 
 	// Modified label values.
-	replicaRemovedMeta = "replica-label-removed"
+	ReplicaRemovedMeta = "replica-label-removed"
+
+	// Mysterious incomplete block, meta was uploaded indicating that its uploaded just fine, but at the same time it indicates that the block is incomplete
+	MetaHasIncompleteFiles = "meta-has-incomplete-files"
 )
 
 func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
@@ -155,19 +158,20 @@ func DefaultSyncedStateLabelValues() [][]string {
 		{CorruptedMeta},
 		{NoMeta},
 		{LoadedMeta},
-		{tooFreshMeta},
+		{TooFreshMeta},
 		{FailedMeta},
-		{labelExcludedMeta},
-		{timeExcludedMeta},
-		{duplicateMeta},
+		{LabelExcludedMeta},
+		{TimeExcludedMeta},
+		{DuplicateMeta},
 		{MarkedForDeletionMeta},
 		{MarkedForNoCompactionMeta},
+		{MetaHasIncompleteFiles},
 	}
 }
 
 func DefaultModifiedLabelValues() [][]string {
 	return [][]string{
-		{replicaRemovedMeta},
+		{ReplicaRemovedMeta},
 	}
 }
 
@@ -175,7 +179,7 @@ func DefaultModifiedLabelValues() [][]string {
 type Lister interface {
 	// GetActiveAndPartialBlockIDs GetActiveBlocksIDs returning it via channel (streaming) and response.
 	// Active blocks are blocks which contain meta.json, while partial blocks are blocks without meta.json
-	GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error)
+	GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]error, err error)
 }
 
 // RecursiveLister lists block IDs by recursively iterating through a bucket.
@@ -191,8 +195,8 @@ func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader
 	}
 }
 
-func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
-	partialBlocks = make(map[ulid.ULID]bool)
+func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]error, err error) {
+	partialBlocks = make(map[ulid.ULID]error)
 	err = f.bkt.Iter(ctx, "", func(name string) error {
 		parts := strings.Split(name, "/")
 		dir, file := parts[0], parts[len(parts)-1]
@@ -201,12 +205,12 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 			return nil
 		}
 		if _, ok := partialBlocks[id]; !ok {
-			partialBlocks[id] = true
+			partialBlocks[id] = errors.Wrapf(ErrorSyncMetaNotFound, "block id: %s", id)
 		}
 		if !IsBlockMetaFile(file) {
 			return nil
 		}
-		partialBlocks[id] = false
+		partialBlocks[id] = nil
 
 		select {
 		case <-ctx.Done():
@@ -216,6 +220,93 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		return nil
 	}, objstore.WithRecursiveIter)
 	return partialBlocks, err
+}
+
+// RecursiveBlockValidatingLister lists block IDs by recursively iterating through a bucket and performs several validations
+type RecursiveBlockValidatingLister struct {
+	logger log.Logger
+	bkt    objstore.InstrumentedBucketReader
+}
+
+func NewRecursiveBlockValidatingLister(logger log.Logger, bkt objstore.InstrumentedBucketReader) *RecursiveBlockValidatingLister {
+	return &RecursiveBlockValidatingLister{
+		logger: logger,
+		bkt:    bkt,
+	}
+}
+
+func (f *RecursiveBlockValidatingLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]error, err error) {
+	filesPerBlock := make(map[ulid.ULID][]string)
+	err = f.bkt.Iter(ctx, "", func(name string) error {
+		parts := strings.Split(name, "/")
+		id, ok := IsBlockDir(parts[0])
+		if !ok {
+			return nil
+		}
+		filesPerBlock[id] = append(filesPerBlock[id], strings.TrimLeft(name, parts[0]+"/"))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		return nil
+	}, objstore.WithRecursiveIter)
+
+	partialBlocks = make(map[ulid.ULID]error)
+	for id, files := range filesPerBlock {
+		if checkErr := checkForIncompleteFiles(files); checkErr != nil {
+			partialBlocks[id] = checkErr
+		} else {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case ch <- id:
+			}
+		}
+	}
+	return partialBlocks, err
+}
+
+func checkForIncompleteFiles(files []string) error {
+	var (
+		numChunkFiles     int
+		highestChunkFile  int
+		hasIndex, hasMeta bool
+	)
+
+	for _, f := range files {
+		if f == "index" {
+			hasIndex = true
+		}
+		if f == "meta.json" {
+			hasMeta = true
+		}
+		dir, name := path.Split(f)
+		if dir == "chunks/" {
+			numChunkFiles++
+			idx, err := strconv.Atoi(name)
+			if err != nil {
+				return errors.Wrap(err, "unexpected chunk file name")
+			}
+			if idx > highestChunkFile {
+				highestChunkFile = idx
+			}
+		}
+	}
+
+	if !hasMeta {
+		return ErrorSyncMetaNotFound
+	}
+	if !hasIndex {
+		return errors.Wrap(ErrorSyncMetaIncomplete, "no index file in meta")
+	}
+	if numChunkFiles == 0 {
+		return errors.Wrap(ErrorSyncMetaIncomplete, "no chunk files in meta")
+	}
+	if numChunkFiles != highestChunkFile {
+		return errors.Wrap(ErrorSyncMetaIncomplete, "incomplete chunk files in meta")
+	}
+	return nil
 }
 
 // ConcurrentLister lists block IDs by doing a top level iteration of the bucket
@@ -232,10 +323,10 @@ func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReade
 	}
 }
 
-func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
+func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]error, err error) {
 	const concurrency = 64
 
-	partialBlocks = make(map[ulid.ULID]bool)
+	partialBlocks = make(map[ulid.ULID]error)
 	var (
 		metaChan = make(chan ulid.ULID, concurrency)
 		eg, gCtx = errgroup.WithContext(ctx)
@@ -250,11 +341,11 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 				metaFile := path.Join(uid.String(), MetaFilename)
 				ok, err := f.bkt.Exists(gCtx, metaFile)
 				if err != nil {
-					return errors.Wrapf(err, "meta.json file exists: %v", uid)
+					return errors.Wrapf(err, "meta.json file exists call: %v", uid)
 				}
 				if !ok {
 					mu.Lock()
-					partialBlocks[uid] = true
+					partialBlocks[uid] = errors.Wrapf(ErrorSyncMetaNotFound, "block id: %s", uid)
 					mu.Unlock()
 					continue
 				}
@@ -383,8 +474,9 @@ func (f *BaseFetcher) NewMetaFetcherWithMetrics(fetcherMetrics *FetcherMetrics, 
 }
 
 var (
-	ErrorSyncMetaNotFound  = errors.New("meta.json not found")
-	ErrorSyncMetaCorrupted = errors.New("meta.json corrupted")
+	ErrorSyncMetaNotFound   = errors.New("meta.json not found")
+	ErrorSyncMetaCorrupted  = errors.New("meta.json corrupted")
+	ErrorSyncMetaIncomplete = errors.New("meta.json incomplete")
 )
 
 // loadMeta returns metadata from object storage or error.
@@ -435,10 +527,6 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v unmarshal: %v", metaFile, err)
 	}
 
-	if err := sanityCheckFilesForMeta(m.Thanos.Files); err != nil {
-		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v not sane: %v", metaFile, err)
-	}
-
 	if m.Version != metadata.TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file: %s version: %d", metaFile, m.Version)
 	}
@@ -456,55 +544,15 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	return m, nil
 }
 
-func sanityCheckFilesForMeta(files []metadata.File) error {
-	var (
-		numChunkFiles    int
-		highestChunkFile int
-		hasIndex         bool
-	)
-
-	// Old metas might not have the Thanos.Files field yet, we dont want to mess with them
-	if len(files) == 0 {
-		return nil
-	}
-
-	for _, f := range files {
-		if f.RelPath == "index" {
-			hasIndex = true
-		}
-		dir, name := path.Split(f.RelPath)
-		if dir == "chunks/" {
-			numChunkFiles++
-			idx, err := strconv.Atoi(name)
-			if err != nil {
-				return errors.Wrap(err, "unexpected chunk file name")
-			}
-			if idx > highestChunkFile {
-				highestChunkFile = idx
-			}
-		}
-	}
-
-	if !hasIndex {
-		return errors.New("no index file in meta")
-	}
-	if numChunkFiles == 0 {
-		return errors.New("no chunk files in meta")
-	}
-	if numChunkFiles != highestChunkFile {
-		return errors.New("incomplete chunk files in meta")
-	}
-	return nil
-}
-
 type response struct {
 	metas   map[ulid.ULID]*metadata.Meta
 	partial map[ulid.ULID]error
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
 	metaErrs errutil.MultiError
 
-	noMetas        float64
-	corruptedMetas float64
+	noMetas         float64
+	corruptedMetas  float64
+	incompleteMetas float64
 }
 
 func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
@@ -555,7 +603,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		})
 	}
 
-	var partialBlocks map[ulid.ULID]bool
+	var partialBlocks map[ulid.ULID]error
 	var err error
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
@@ -569,10 +617,15 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	}
 
 	mtx.Lock()
-	for blockULID, isPartial := range partialBlocks {
-		if isPartial {
-			resp.partial[blockULID] = errors.Errorf("block %s has no meta file", blockULID)
-			resp.noMetas++
+	for blockULID, err := range partialBlocks {
+		if err != nil {
+			switch errors.Cause(err) {
+			case ErrorSyncMetaNotFound:
+				resp.noMetas++
+			case ErrorSyncMetaIncomplete:
+				resp.incompleteMetas++
+			}
+			resp.partial[blockULID] = err
 		}
 	}
 	mtx.Unlock()
@@ -654,6 +707,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	metrics.Synced.WithLabelValues(FailedMeta).Set(float64(len(resp.metaErrs)))
 	metrics.Synced.WithLabelValues(NoMeta).Set(resp.noMetas)
 	metrics.Synced.WithLabelValues(CorruptedMeta).Set(resp.corruptedMetas)
+	metrics.Synced.WithLabelValues(MetaHasIncompleteFiles).Set(resp.incompleteMetas)
 
 	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
@@ -731,7 +785,7 @@ func (f *TimePartitionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]
 		if m.MaxTime >= f.minTime.PrometheusTimestamp() && m.MinTime <= f.maxTime.PrometheusTimestamp() {
 			continue
 		}
-		synced.WithLabelValues(timeExcludedMeta).Inc()
+		synced.WithLabelValues(TimeExcludedMeta).Inc()
 		delete(metas, id)
 	}
 	return nil
@@ -765,7 +819,7 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 		}
 
 		if processedLabels, _ := relabel.Process(b.Labels(), f.relabelConfig...); processedLabels.IsEmpty() {
-			synced.WithLabelValues(labelExcludedMeta).Inc()
+			synced.WithLabelValues(LabelExcludedMeta).Inc()
 			delete(metas, id)
 		}
 	}
@@ -861,7 +915,7 @@ childLoop:
 		if metas[duplicate] != nil {
 			f.duplicateIDs = append(f.duplicateIDs, duplicate)
 		}
-		synced.WithLabelValues(duplicateMeta).Inc()
+		synced.WithLabelValues(DuplicateMeta).Inc()
 		delete(metas, duplicate)
 	}
 	f.mu.Unlock()
@@ -919,7 +973,7 @@ func (r *ReplicaLabelRemover) Filter(_ context.Context, metas map[ulid.ULID]*met
 			if _, exists := l[replicaLabel]; exists {
 				delete(l, replicaLabel)
 				countReplicaLabelRemoved[replicaLabel] += 1
-				modified.WithLabelValues(replicaRemovedMeta).Inc()
+				modified.WithLabelValues(ReplicaRemovedMeta).Inc()
 			}
 		}
 		if len(l) == 0 {
@@ -980,7 +1034,7 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 			meta.Thanos.Source != metadata.CompactorRepairSource {
 
 			level.Debug(f.logger).Log("msg", "block is too fresh for now", "block", id)
-			synced.WithLabelValues(tooFreshMeta).Inc()
+			synced.WithLabelValues(TooFreshMeta).Inc()
 			delete(metas, id)
 		}
 	}
