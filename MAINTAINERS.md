@@ -5,7 +5,7 @@
 | Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
 | Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
 | Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
-| Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)           | Polar Signals       |
+| Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)           | Fal                 |
 | Lucas Servén Marín    | lserven@gmail.com         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
 | Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
 | Matthias Loibl        | mail@matthiasloibl.com    | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)       | Polar Signals       |

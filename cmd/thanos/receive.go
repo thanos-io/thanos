@@ -237,24 +237,27 @@ func runReceive(
 	}
 
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		TenantField:       conf.tenantField,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		RelabelConfigs:    relabelConfig,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		MaxBackoff:        time.Duration(*conf.maxBackoff),
-		TSDBStats:         dbs,
-		Limiter:           limiter,
+		Writer:               writer,
+		ListenAddress:        conf.rwAddress,
+		Registry:             reg,
+		Endpoint:             conf.endpoint,
+		TenantHeader:         conf.tenantHeader,
+		TenantField:          conf.tenantField,
+		DefaultTenantID:      conf.defaultTenantID,
+		ReplicaHeader:        conf.replicaHeader,
+		ReplicationFactor:    conf.replicationFactor,
+		RelabelConfigs:       relabelConfig,
+		ReceiverMode:         receiveMode,
+		Tracer:               tracer,
+		TLSConfig:            rwTLSConfig,
+		SplitTenantLabelName: conf.splitTenantLabelName,
+		DialOpts:             dialOpts,
+		ForwardTimeout:       time.Duration(*conf.forwardTimeout),
+		MaxBackoff:           time.Duration(*conf.maxBackoff),
+		TSDBStats:            dbs,
+		Limiter:              limiter,
+
+		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -815,9 +818,10 @@ type receiveConfig struct {
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbEnableNativeHistograms   bool
 
-	walCompression  bool
-	noLockFile      bool
-	writerInterning bool
+	walCompression       bool
+	noLockFile           bool
+	writerInterning      bool
+	splitTenantLabelName string
 
 	hashFunc string
 
@@ -884,6 +888,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
 	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(tenancy.DefaultTenant).StringVar(&rc.defaultTenantID)
+
+	cmd.Flag("receive.split-tenant-label-name", "Label name through which the request will be split into multiple tenants. This takes precedence over the HTTP header.").Default("").StringVar(&rc.splitTenantLabelName)
 
 	cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(tenancy.DefaultTenantLabel).StringVar(&rc.tenantLabelName)
 

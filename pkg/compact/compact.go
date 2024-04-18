@@ -807,14 +807,17 @@ type CompactionLifecycleCallback interface {
 type DefaultCompactionLifecycleCallback struct {
 }
 
-func (c DefaultCompactionLifecycleCallback) PreCompactionCallback(_ context.Context, _ log.Logger, _ *Group, toCompactBlocks []*metadata.Meta) error {
+func (c DefaultCompactionLifecycleCallback) PreCompactionCallback(_ context.Context, logger log.Logger, cg *Group, toCompactBlocks []*metadata.Meta) error {
 	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
 	// This is one potential source of how we could end up with duplicated chunks.
 	uniqueSources := map[ulid.ULID]struct{}{}
 	for _, m := range toCompactBlocks {
 		for _, s := range m.Compaction.Sources {
 			if _, ok := uniqueSources[s]; ok {
-				return halt(errors.Errorf("overlapping sources detected for plan %v", toCompactBlocks))
+				if !cg.enableVerticalCompaction {
+					return halt(errors.Errorf("overlapping sources detected for plan %v", toCompactBlocks))
+				}
+				level.Warn(logger).Log("msg", "overlapping sources detected for plan", "duplicated_block", s, "to_compact_blocks", fmt.Sprintf("%v", toCompactBlocks))
 			}
 			uniqueSources[s] = struct{}{}
 		}
@@ -831,13 +834,9 @@ func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context,
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
-// This is similar to tsdb.Compactor just without Plan method.
+// It is similar to tsdb.Compactor but only relevant methods are kept. Plan and Write are removed.
 // TODO(bwplotka): Split the Planner from Compactor on upstream as well, so we can import it.
 type Compactor interface {
-	// Write persists a Block into a directory.
-	// No Block is written when resulting Block has 0 samples, and returns empty ulid.ULID{}.
-	Write(dest string, b tsdb.BlockReader, mint, maxt int64, parent *tsdb.BlockMeta) (ulid.ULID, error)
-
 	// Compact runs compaction against the provided directories. Must
 	// only be called concurrently with results of Plan().
 	// Can optionally pass a list of already open blocks,

@@ -110,6 +110,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -279,18 +297,19 @@ Flags:
                                 remote storage
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
-                                flag (mutually exclusive). Content of
-                                YAML file that contains relabeling
-                                configuration that allows selecting
-                                blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
-                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+                                flag (mutually exclusive). Content of YAML
+                                file with relabeling configuration that allows
+                                selecting blocks to act on based on their
+                                external labels. It follows thanos sharding
+                                relabel-config syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
       --selector.relabel-config-file=<file-path>
-                                Path to YAML file that contains relabeling
-                                configuration that allows selecting
-                                blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
-                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+                                Path to YAML file with relabeling
+                                configuration that allows selecting blocks
+                                to act on based on their external labels.
+                                It follows thanos sharding relabel-config
+                                syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
       --timeout=5m              Timeout to download metadata from remote storage
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
@@ -661,6 +680,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -745,6 +782,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 

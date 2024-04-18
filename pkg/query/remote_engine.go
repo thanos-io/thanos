@@ -181,7 +181,7 @@ func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 	return infos
 }
 
-func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan parser.Expr, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan api.RemoteQuery, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
@@ -194,7 +194,7 @@ func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan
 	}, nil
 }
 
-func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, plan parser.Expr, ts time.Time) (promql.Query, error) {
+func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, plan api.RemoteQuery, ts time.Time) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
@@ -212,7 +212,7 @@ type remoteQuery struct {
 	client Client
 	opts   Opts
 
-	plan     parser.Expr
+	plan     api.RemoteQuery
 	start    time.Time
 	end      time.Time
 	interval time.Duration
@@ -231,11 +231,16 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	if r.opts.AutoDownsample {
 		maxResolution = int64(r.interval.Seconds() / 5)
 	}
+	plan, err := querypb.NewJSONEncodedPlan(r.plan)
+	if err != nil {
+		level.Warn(r.logger).Log("msg", "Failed to encode query plan", "err", err)
+	}
 
 	// Instant query.
 	if r.start == r.end {
 		request := &querypb.QueryRequest{
 			Query:                 r.plan.String(),
+			QueryPlan:             plan,
 			TimeSeconds:           r.start.Unix(),
 			TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
 			EnablePartialResponse: r.opts.EnablePartialResponse,
@@ -251,8 +256,9 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			return &promql.Result{Err: err}
 		}
 		var (
-			result  = make(promql.Vector, 0)
-			builder = labels.NewScratchBuilder(8)
+			result   = make(promql.Vector, 0)
+			warnings annotations.Annotations
+			builder  = labels.NewScratchBuilder(8)
 		)
 		for {
 			msg, err := qry.Recv()
@@ -264,7 +270,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 
 			if warn := msg.GetWarnings(); warn != "" {
-				return &promql.Result{Err: errors.New(warn)}
+				warnings.Add(errors.New(warn))
+				continue
 			}
 
 			ts := msg.GetTimeseries()
@@ -282,11 +289,15 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 		}
 
-		return &promql.Result{Value: result}
+		return &promql.Result{
+			Value:    result,
+			Warnings: warnings,
+		}
 	}
 
 	request := &querypb.QueryRangeRequest{
 		Query:                 r.plan.String(),
+		QueryPlan:             plan,
 		StartTimeSeconds:      r.start.Unix(),
 		EndTimeSeconds:        r.end.Unix(),
 		IntervalSeconds:       int64(r.interval.Seconds()),
@@ -349,7 +360,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	level.Debug(r.logger).Log("msg", "Executed query", "query", r.plan, "time", time.Since(start))
+	level.Debug(r.logger).Log("msg", "Executed query", "query", r.plan.String(), "time", time.Since(start))
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }
@@ -360,10 +371,10 @@ func (r *remoteQuery) Statement() parser.Statement { return nil }
 
 func (r *remoteQuery) Stats() *stats.Statistics { return nil }
 
-func (r *remoteQuery) String() string { return r.plan.String() }
-
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {
 		r.cancel()
 	}
 }
+
+func (r *remoteQuery) String() string { return r.plan.String() }

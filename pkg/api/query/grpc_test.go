@@ -13,15 +13,63 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
-	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"github.com/thanos-io/promql-engine/logicalplan"
+	equery "github.com/thanos-io/promql-engine/query"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store"
 )
+
+func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
+	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
+	engineFactory := &QueryEngineFactory{
+		thanosEngine: &engineStub{},
+	}
+	api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+
+	expr, err := parser.ParseExpr("metric")
+	testutil.Ok(t, err)
+	lplan := logicalplan.NewFromAST(expr, &equery.Options{}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
+	// Create a mock query plan.
+	planBytes, err := logicalplan.Marshal(lplan.Root())
+	testutil.Ok(t, err)
+
+	rangeRequest := &querypb.QueryRangeRequest{
+		Query:            "metric",
+		StartTimeSeconds: 0,
+		IntervalSeconds:  10,
+		EndTimeSeconds:   300,
+		QueryPlan:        &querypb.QueryPlan{Encoding: &querypb.QueryPlan_Json{Json: planBytes}},
+	}
+
+	srv := newQueryRangeServer(context.Background())
+	err = api.QueryRange(rangeRequest, srv)
+	testutil.Ok(t, err)
+
+	// must also handle without query plan.
+	rangeRequest.QueryPlan = nil
+	err = api.QueryRange(rangeRequest, srv)
+	testutil.Ok(t, err)
+
+	instantRequest := &querypb.QueryRequest{
+		Query:          "metric",
+		TimeoutSeconds: 60,
+		QueryPlan:      &querypb.QueryPlan{Encoding: &querypb.QueryPlan_Json{Json: planBytes}},
+	}
+	instSrv := newQueryServer(context.Background())
+	err = api.Query(instantRequest, instSrv)
+	testutil.Ok(t, err)
+}
 
 func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	logger := log.NewNopLogger()
@@ -96,7 +144,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 }
 
 type engineStub struct {
-	v1.QueryEngine
+	promql.QueryEngine
 	err   error
 	warns annotations.Annotations
 }
@@ -106,6 +154,14 @@ func (e engineStub) NewInstantQuery(_ context.Context, q storage.Queryable, opts
 }
 
 func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+	return &queryStub{err: e.err, warns: e.warns}, nil
+}
+
+func (e engineStub) NewInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error) {
+	return &queryStub{err: e.err, warns: e.warns}, nil
+}
+
+func (e engineStub) NewRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, root logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
