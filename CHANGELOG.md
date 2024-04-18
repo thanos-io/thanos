@@ -153,6 +153,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6692](https://github.com/thanos-io/thanos/pull/6692) Store: Fix matching bug when using empty alternative in regex matcher, for example (a||b).
 - [#6679](https://github.com/thanos-io/thanos/pull/6697) Store: Fix block deduplication
 - [#6706](https://github.com/thanos-io/thanos/pull/6706) Store: Series responses should always be sorted
+- [#7286](https://github.com/thanos-io/thanos/pull/7286) Query: Propagate instant query warnings in distributed execution mode.
 
 ### Added
 
