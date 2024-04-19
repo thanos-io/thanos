@@ -270,6 +270,8 @@ replace (
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 
+	github.com/prometheus/prometheus => github.com/vinted/prometheus v1.8.2-0.20240419110424-62c5d536d12f
+
 	github.com/thanos-io/promql-engine => github.com/vinted/promql-engine v0.0.0-20240108124057-87f4e6878c22
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
