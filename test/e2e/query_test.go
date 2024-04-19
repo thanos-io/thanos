@@ -235,6 +235,39 @@ func TestSidecarNotReady(t *testing.T) {
 	}))
 }
 
+func TestSidecarNotReadyNoPrometheus(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("sidecar-noProm")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// Start sidecar without ever starting Prometheus.
+	_, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, sidecar.Start())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Sidecar should not be ready if there was never a ready Prometheus.
+	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() (rerr error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+sidecar.Endpoint("http")+"/-/ready", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithErrCapture(&rerr, resp.Body, "closing resp body")
+
+		if resp.StatusCode == 200 {
+			return fmt.Errorf("got status code %d", resp.StatusCode)
+		}
+		return nil
+	}))
+}
+
 func TestQuery(t *testing.T) {
 	t.Parallel()
 
