@@ -189,6 +189,8 @@ func runSidecar(
 						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
 						"err", err,
 					)
+					promUp.Set(0)
+					statusProber.NotReady(err)
 					return err
 				}
 
