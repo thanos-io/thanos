@@ -91,6 +91,7 @@ var (
 				},
 			},
 		},
+		Warnings: []string{"test-warn"},
 	}
 	parsedHistogramResponse = &PrometheusResponse{
 		Status: "success",
