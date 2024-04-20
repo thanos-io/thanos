@@ -251,7 +251,14 @@ Generally there two scalability directions:
 
 1. Too many producers/sources (e.g Prometheus-es) are uploading to same object storage. Too many "streams" of work for Compactor. Compactor has to scale with the number of producers in the bucket.
 
-You should horizontally scale Compactor to cope with this using [label sharding](../sharding.md#compactor). This allows to assign multiple streams to each instance of compactor.
+You can horizontally scale Compactor to cope with this via
+- [label sharding](../sharding.md#compactor): This allows to assign multiple streams to each instance of compactor.
+- [time sharding](../sharding.md#compactor): This allows for compactors to only handle blocks that fall within a given time range
+
+For example, to have an instance of compactor only working on blocks that fall within the time range of 14 days ago to 7 days ago, the flags would be
+`--min-time=-14d --max-time=-7d`
+
+Absolute times can be specified as well.
 
 2. TSDB blocks from single stream is too big, it takes too much time or resources.
 
