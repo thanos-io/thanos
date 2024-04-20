@@ -613,6 +613,8 @@ func NewTimePartitionMetaFilter(MinTime, MaxTime model.TimeOrDurationValue) *Tim
 // Filter filters out blocks that are outside of specified time range.
 func (f *TimePartitionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	for id, m := range metas {
+		// maxTime = -15d (Apr 5) & minTime = -20d (Apr 1)
+		// block is Apr 3 - 3
 		if m.MaxTime >= f.minTime.PrometheusTimestamp() && m.MinTime <= f.maxTime.PrometheusTimestamp() {
 			continue
 		}

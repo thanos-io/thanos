@@ -228,6 +228,10 @@ func runCompact(
 		}
 	}()
 
+	if err := validateFilterConf(conf.filterConf); err != nil {
+		return fmt.Errorf("invalid time filters: %s", err.Error())
+	}
+
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
@@ -678,6 +682,31 @@ func runCompact(
 
 	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
+	return nil
+}
+
+func validateFilterConf(filterConf *store.FilterConfig) error {
+	if filterConf.MinTime.PrometheusTimestamp() > filterConf.MaxTime.PrometheusTimestamp() {
+		return errors.New("max time must be a time or duration after min time")
+	}
+
+	if err := checkIfDurInFuture(filterConf.MinTime.Dur); err != nil {
+		return fmt.Errorf("min time: %s", err.Error())
+	}
+
+	if err := checkIfDurInFuture(filterConf.MaxTime.Dur); err != nil {
+		return fmt.Errorf("max time: %s", err.Error())
+	}
+	return nil
+}
+
+func checkIfDurInFuture(dur *model.Duration) error {
+	if dur == nil {
+		return nil
+	}
+	if !strings.HasPrefix("-", dur.String()) {
+		return errors.New("duration cannot be in the future")
+	}
 	return nil
 }
 
