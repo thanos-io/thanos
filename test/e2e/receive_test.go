@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -16,13 +18,23 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/matchers"
+	logkit "github.com/go-kit/log"
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 	"github.com/prometheus/common/model"
+
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage/remote"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
+	config_util "github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -966,5 +978,175 @@ test_metric{a="2", b="2"} 1`)
 				Value: model.SampleValue(3),
 			},
 		})
+	})
+}
+
+func TestReceiveGlob(t *testing.T) {
+	e, err := e2e.NewDockerEnvironment("receive-glob")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	h := receive.HashringConfig{
+		TenantMatcherType: "glob",
+		Tenants: []string{
+			"default*",
+		},
+		Endpoints: []receive.Endpoint{
+			{Address: i.InternalEndpoint("grpc")},
+		},
+	}
+
+	r := e2ethanos.NewReceiveBuilder(e, "router").WithRouting(1, h).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "aa", Value: "bb"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+}
+
+func TestReceiveExtractsTenant(t *testing.T) {
+	const tenantLabelName = "thanos_tenant_id"
+
+	e, err := e2e.NewDockerEnvironment("receive-extract")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	h := receive.HashringConfig{
+		Endpoints: []receive.Endpoint{
+			{Address: i.InternalEndpoint("grpc")},
+		},
+	}
+
+	r := e2ethanos.NewReceiveBuilder(e, "router").WithRouting(1, h).WithTenantSplitLabel(tenantLabelName).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	t.Run("tenant label is extracted", func(t *testing.T) {
+		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []prompb.Label{
+							{Name: tenantLabelName, Value: "tenant-1"},
+							{Name: "aa", Value: "bb"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: time.Now().UnixMilli()},
+						},
+					},
+				},
+			})
+		}))
+
+		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "tenant-1")), e2emon.WaitMissingMetrics()))
+	})
+
+	t.Run("tenant label is extracted from one series, default is used for the other one", func(t *testing.T) {
+		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []prompb.Label{
+							{Name: tenantLabelName, Value: "tenant-2"},
+							{Name: "aa", Value: "bb"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: time.Now().UnixMilli()},
+						},
+					},
+					{
+						Labels: []prompb.Label{
+							{Name: "aa", Value: "bb"},
+							{Name: "foo", Value: "bar"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: time.Now().UnixMilli()},
+						},
+					},
+				},
+			})
+		}))
+
+		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+	})
+
+	t.Run("tenant label is extracted from one series, HTTP header is used for the other one", func(t *testing.T) {
+		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+			req := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []prompb.Label{
+							{Name: tenantLabelName, Value: "tenant-3"},
+							{Name: "aa", Value: "bb"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: time.Now().UnixMilli()},
+						},
+					},
+					{
+						Labels: []prompb.Label{
+							{Name: "aa", Value: "bb"},
+							{Name: "foo", Value: "bar"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: time.Now().UnixMilli()},
+						},
+					},
+				},
+			}
+
+			remoteWriteURL, err := url.Parse("http://" + r.Endpoint("remote-write") + "/api/v1/receive")
+			if err != nil {
+				return err
+			}
+
+			client, err := remote.NewWriteClient("remote-write-client", &remote.ClientConfig{
+				URL:     &config_util.URL{URL: remoteWriteURL},
+				Timeout: model.Duration(30 * time.Second),
+				Headers: map[string]string{
+					"THANOS-TENANT": "http-tenant",
+				},
+			})
+			if err != nil {
+				return err
+			}
+
+			var buf []byte
+			pBuf := proto.NewBuffer(nil)
+			if err := pBuf.Marshal(req); err != nil {
+				return err
+			}
+
+			compressed := snappy.Encode(buf, pBuf.Bytes())
+			return client.Store(context.Background(), compressed, 0)
+		}))
+
+		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "http-tenant")), e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "tenant-3")), e2emon.WaitMissingMetrics()))
+
 	})
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -156,8 +157,8 @@ func TestRegression4960_Deadlock(t *testing.T) {
 	testutil.Ok(t, err)
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
-	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.ResolutionString())))
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
 	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
@@ -196,15 +197,15 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 	testutil.Ok(t, err)
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
-	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, bkt)
+	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.ResolutionString())))
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
 	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, baseBlockIDsFetcher, "", nil, nil)
 	testutil.Ok(t, err)
 
 	metas, _, err := metaFetcher.Fetch(ctx)
 	testutil.Ok(t, err)
 	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metas, dir, 1, 1, metadata.NoneFunc, false))
-	testutil.Equals(t, 1.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
+	testutil.Equals(t, 1.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.ResolutionString())))
 
 	_, err = os.Stat(dir)
 	testutil.Assert(t, os.IsNotExist(err), "index cache dir should not exist at the end of execution")

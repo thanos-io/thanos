@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -883,7 +884,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 
 			rec := &recorder{Bucket: bkt}
 			insBkt := objstore.WithNoopInstr(bkt)
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 			metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, dir, nil, []block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConf),
@@ -1441,7 +1442,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 	}
 
 	ibkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, ibkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, ibkt)
 	f, err := block.NewRawMetaFetcher(logger, ibkt, baseBlockIDsFetcher)
 	testutil.Ok(t, err)
 
@@ -1891,7 +1892,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	)
 
 	// Instance a real bucket store we'll use to query the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -1983,7 +1984,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
 
 	// Instance a real bucket store we'll use to query the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -2142,7 +2143,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 			}
 
 			// Instance a real bucket store we'll use to query the series.
-			baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+			baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 			fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 			testutil.Ok(tb, err)
 
@@ -2329,7 +2330,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	}
 
 	// Instance a real bucket store we'll use to query back the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -2546,7 +2547,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
 
 	// Instance a real bucket store we'll use to query the series.
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, instrBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
 	testutil.Ok(tb, err)
 
@@ -2864,6 +2865,23 @@ func TestExpandPostingsWithContextCancel(t *testing.T) {
 	testutil.NotOk(t, err)
 	testutil.Equals(t, context.Canceled, err)
 	testutil.Equals(t, []storage.SeriesRef(nil), res)
+}
+
+func samePostingGroup(a, b *postingGroup) bool {
+	if a.name != b.name || a.lazy != b.lazy || a.addAll != b.addAll || a.cardinality != b.cardinality || len(a.matchers) != len(b.matchers) {
+		return false
+	}
+
+	if !reflect.DeepEqual(a.addKeys, b.addKeys) || !reflect.DeepEqual(a.removeKeys, b.removeKeys) {
+		return false
+	}
+
+	for i := 0; i < len(a.matchers); i++ {
+		if a.matchers[i].String() != b.matchers[i].String() {
+			return false
+		}
+	}
+	return true
 }
 
 func TestMatchersToPostingGroup(t *testing.T) {
@@ -3213,7 +3231,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 				return tc.labelValues[name], nil
 			}, tc.matchers)
 			testutil.Ok(t, err)
-			testutil.Equals(t, tc.expected, actual)
+			testutil.Equals(t, len(tc.expected), len(actual))
+			for i := 0; i < len(tc.expected); i++ {
+				testutil.Assert(t, samePostingGroup(tc.expected[i], actual[i]))
+			}
 		})
 	}
 }
@@ -3522,7 +3543,7 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 	testutil.Ok(t, err)
 
 	insBkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 	})
@@ -3738,7 +3759,7 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	testutil.Ok(t, err)
 
 	insBkt := objstore.WithNoopInstr(bkt)
-	baseBlockIDsFetcher := block.NewBaseBlockIDsFetcher(logger, insBkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 	})

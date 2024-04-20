@@ -89,12 +89,8 @@ func TestRewrite(t *testing.T) {
 
 func TestGatherIndexHealthStatsReturnsOutOfOrderChunksErr(t *testing.T) {
 	ctx := context.Background()
-	blockDir := t.TempDir()
 
-	err := e2eutil.PutOutOfOrderIndex(blockDir, 0, math.MaxInt64)
-	testutil.Ok(t, err)
-
-	stats, err := GatherIndexHealthStats(ctx, log.NewLogfmtLogger(os.Stderr), blockDir+"/"+IndexFilename, 0, math.MaxInt64)
+	stats, err := GatherIndexHealthStats(ctx, log.NewLogfmtLogger(os.Stderr), "testdata/out_of_order_chunks/index", 0, math.MaxInt64)
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, stats.OutOfOrderChunks)

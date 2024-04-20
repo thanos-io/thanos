@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Block, BlocksPool } from './block';
 import { BlockSpan } from './BlockSpan';
 import styles from './blocks.module.css';
-import { getBlockByUlid, getBlocksByCompactionLevel } from './helpers';
+import { getBlockByUlid, getBlocksByCompactionLevel, humanizeBytes, sumBlockSizeStats } from './helpers';
 
 export const BlocksRow: FC<{
   blocks: Block[];
@@ -43,11 +43,13 @@ export const SourceView: FC<SourceViewProps> = ({
   blockSearch,
   compactionLevel,
 }) => {
+  const blockSizeStats = sumBlockSizeStats(data, compactionLevel);
   return (
     <>
       <div className={styles.source}>
         <div className={styles.title} title={title}>
           <span>{title}</span>
+          <span title={blockSizeStats.totalBytes + ' Bytes'}>{humanizeBytes(blockSizeStats.totalBytes)}</span>
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map((k) => (

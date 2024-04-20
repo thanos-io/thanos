@@ -181,26 +181,26 @@ func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 	return infos
 }
 
-func (r *remoteEngine) NewRangeQuery(_ context.Context, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan api.RemoteQuery, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
 		opts:   r.opts,
 
-		qs:       qs,
+		plan:     plan,
 		start:    start,
 		end:      end,
 		interval: interval,
 	}, nil
 }
 
-func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, plan api.RemoteQuery, ts time.Time) (promql.Query, error) {
 	return &remoteQuery{
 		logger: r.logger,
 		client: r.client,
 		opts:   r.opts,
 
-		qs:       qs,
+		plan:     plan,
 		start:    ts,
 		end:      ts,
 		interval: 0,
@@ -212,7 +212,7 @@ type remoteQuery struct {
 	client Client
 	opts   Opts
 
-	qs       string
+	plan     api.RemoteQuery
 	start    time.Time
 	end      time.Time
 	interval time.Duration
@@ -231,11 +231,16 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	if r.opts.AutoDownsample {
 		maxResolution = int64(r.interval.Seconds() / 5)
 	}
+	plan, err := querypb.NewJSONEncodedPlan(r.plan)
+	if err != nil {
+		level.Warn(r.logger).Log("msg", "Failed to encode query plan", "err", err)
+	}
 
 	// Instant query.
 	if r.start == r.end {
 		request := &querypb.QueryRequest{
-			Query:                 r.qs,
+			Query:                 r.plan.String(),
+			QueryPlan:             plan,
 			TimeSeconds:           r.start.Unix(),
 			TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
 			EnablePartialResponse: r.opts.EnablePartialResponse,
@@ -250,8 +255,11 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		if err != nil {
 			return &promql.Result{Err: err}
 		}
-		result := make(promql.Vector, 0)
-
+		var (
+			result   = make(promql.Vector, 0)
+			warnings annotations.Annotations
+			builder  = labels.NewScratchBuilder(8)
+		)
 		for {
 			msg, err := qry.Recv()
 			if err == io.EOF {
@@ -262,26 +270,34 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 
 			if warn := msg.GetWarnings(); warn != "" {
-				return &promql.Result{Err: errors.New(warn)}
+				warnings.Add(errors.New(warn))
+				continue
 			}
 
 			ts := msg.GetTimeseries()
-
+			builder.Reset()
+			for _, l := range ts.Labels {
+				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+			}
 			// Point might have a different timestamp, force it to the evaluation
 			// timestamp as that is when we ran the evaluation.
 			// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
 			if len(ts.Histograms) > 0 {
-				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
+				result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
 			} else {
-				result = append(result, promql.Sample{Metric: labelpb.ZLabelsToPromLabels(ts.Labels), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
+				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
 		}
 
-		return &promql.Result{Value: result}
+		return &promql.Result{
+			Value:    result,
+			Warnings: warnings,
+		}
 	}
 
 	request := &querypb.QueryRangeRequest{
-		Query:                 r.qs,
+		Query:                 r.plan.String(),
+		QueryPlan:             plan,
 		StartTimeSeconds:      r.start.Unix(),
 		EndTimeSeconds:        r.end.Unix(),
 		IntervalSeconds:       int64(r.interval.Seconds()),
@@ -301,8 +317,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	var (
 		result   = make(promql.Matrix, 0)
 		warnings annotations.Annotations
+		builder  = labels.NewScratchBuilder(8)
 	)
-
 	for {
 		msg, err := qry.Recv()
 		if err == io.EOF {
@@ -321,12 +337,12 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		if ts == nil {
 			continue
 		}
-		lbls := labels.NewScratchBuilder(len(ts.Labels))
+		builder.Reset()
 		for _, l := range ts.Labels {
-			lbls.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+			builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
 		}
 		series := promql.Series{
-			Metric:     lbls.Labels(),
+			Metric:     builder.Labels(),
 			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
 			Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
 		}
@@ -344,7 +360,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	level.Debug(r.logger).Log("msg", "Executed query", "query", r.qs, "time", time.Since(start))
+	level.Debug(r.logger).Log("msg", "Executed query", "query", r.plan.String(), "time", time.Since(start))
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }
@@ -355,10 +371,10 @@ func (r *remoteQuery) Statement() parser.Statement { return nil }
 
 func (r *remoteQuery) Stats() *stats.Statistics { return nil }
 
-func (r *remoteQuery) String() string { return r.qs }
-
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {
 		r.cancel()
 	}
 }
+
+func (r *remoteQuery) String() string { return r.plan.String() }

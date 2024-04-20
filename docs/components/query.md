@@ -274,6 +274,14 @@ In case of nested Thanos Query components, it's important to note that tenancy e
 
 Further, note that there are no authentication mechanisms in Thanos, so anyone can set an arbitrary tenant in the HTTP header. It is recommended to use a proxy in front of the querier in case an authentication mechanism is needed. The Query UI also includes an option to set an arbitrary tenant, and should therefore not be exposed to end-users if users should not be able to see each others data.
 
+### Distributed execution mode
+
+The distributed execution mode can be enabled using `--query.mode=distributed`. When this mode is enabled, the Querier will break down each query into independent fragments and delegate them to components which implement the Query API.
+
+This mode is particularly useful in architectures where multiple independent Queriers are deployed in separate environments (different regions or different Kubernetes clusters) and are federated through a separate central Querier. A Querier running in the distributed mode will only talk to Queriers, or other components which implement the Query API. Endpoints which only act as Stores (e.g. Store Gateways or Rulers), and are directly connected to a distributed Querier, will not be included in the execution of a distributed query. This constraint should help with keeping the distributed query execution simple and efficient, but could be removed in the future if there are good use cases for it.
+
+For further details on the design and use cases of this feature, see the [official design document](https://thanos.io/tip/proposals-done/202301-distributed-query-execution.md/).
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
@@ -286,6 +294,11 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field.
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
@@ -406,6 +419,7 @@ Flags:
                                  when the range parameters are not specified.
                                  The zero value means range covers the time
                                  since the beginning.
+      --query.mode=local         PromQL query mode. One of: local, distributed.
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
@@ -451,6 +465,21 @@ Flags:
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
+      --selector.relabel-config=<content>
+                                 Alternative to 'selector.relabel-config-file'
+                                 flag (mutually exclusive). Content of YAML
+                                 file with relabeling configuration that allows
+                                 selecting blocks to query based on their
+                                 external labels. It follows the Thanos sharding
+                                 relabel-config syntax. For format details see:
+                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
+      --selector.relabel-config-file=<file-path>
+                                 Path to YAML file with relabeling
+                                 configuration that allows selecting blocks
+                                 to query based on their external labels.
+                                 It follows the Thanos sharding relabel-config
+                                 syntax. For format details see:
+                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
       --store=<store> ...        Deprecation Warning - This flag is deprecated
                                  and replaced with `endpoint`. Addresses of
                                  statically configured store API servers

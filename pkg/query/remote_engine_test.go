@@ -14,6 +14,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/promql-engine/logicalplan"
+	"github.com/thanos-io/promql-engine/query"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -22,21 +25,39 @@ import (
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
-	client := NewClient(&queryWarnClient{}, "", nil)
+	client := NewClient(&warnClient{}, "", nil)
 	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
 	})
 	var (
-		query = "up"
 		start = time.Unix(0, 0)
 		end   = time.Unix(120, 0)
 		step  = 30 * time.Second
 	)
-	qry, err := engine.NewRangeQuery(context.Background(), nil, query, start, end, step)
+	qryExpr, err := parser.ParseExpr("up")
 	testutil.Ok(t, err)
-	res := qry.Exec(context.Background())
-	testutil.Ok(t, res.Err)
-	testutil.Equals(t, 1, len(res.Warnings))
+
+	plan := logicalplan.NewFromAST(qryExpr, &query.Options{
+		Start: time.Now(),
+		End:   time.Now().Add(2 * time.Hour),
+	}, logicalplan.PlanOptions{})
+
+	t.Run("instant_query", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)
+		testutil.Ok(t, err)
+		res := qry.Exec(context.Background())
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, 1, len(res.Warnings))
+	})
+
+	t.Run("range_query", func(t *testing.T) {
+		qry, err := engine.NewRangeQuery(context.Background(), nil, plan.Root(), start, end, step)
+		testutil.Ok(t, err)
+		res := qry.Exec(context.Background())
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, 1, len(res.Warnings))
+	})
+
 }
 
 func TestRemoteEngine_LabelSets(t *testing.T) {
@@ -189,11 +210,15 @@ func zLabelSetFromStrings(ss ...string) labelpb.ZLabelSet {
 	}
 }
 
-type queryWarnClient struct {
+type warnClient struct {
 	querypb.QueryClient
 }
 
-func (m queryWarnClient) QueryRange(ctx context.Context, in *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
+func (m warnClient) Query(ctx context.Context, in *querypb.QueryRequest, opts ...grpc.CallOption) (querypb.Query_QueryClient, error) {
+	return &queryWarnClient{}, nil
+}
+
+func (m warnClient) QueryRange(ctx context.Context, in *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
 	return &queryRangeWarnClient{}, nil
 }
 
@@ -208,4 +233,17 @@ func (m *queryRangeWarnClient) Recv() (*querypb.QueryRangeResponse, error) {
 	}
 	m.warnSent = true
 	return querypb.NewQueryRangeWarningsResponse(errors.New("warning")), nil
+}
+
+type queryWarnClient struct {
+	querypb.Query_QueryClient
+	warnSent bool
+}
+
+func (m *queryWarnClient) Recv() (*querypb.QueryResponse, error) {
+	if m.warnSent {
+		return nil, io.EOF
+	}
+	m.warnSent = true
+	return querypb.NewQueryWarningsResponse(errors.New("warning")), nil
 }

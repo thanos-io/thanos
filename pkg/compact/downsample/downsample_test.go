@@ -29,6 +29,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil/testiters"
 )
 
 func TestMain(m *testing.M) {
@@ -1511,26 +1512,26 @@ func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 
 	histograms := tsdbutil.GenerateTestHistograms(lenChunks * lenChunk)
 
-	var chunks [][]*histogramPair
+	var chunks [][]*testiters.HistogramPair
 	for i := 0; i < lenChunks; i++ {
-		var chunk []*histogramPair
+		var chunk []*testiters.HistogramPair
 		for j := 0; j < lenChunk; j++ {
-			chunk = append(chunk, &histogramPair{t: int64(i*lenChunk+j) * 100, h: histograms[i*lenChunk+j]})
+			chunk = append(chunk, &testiters.HistogramPair{T: int64(i*lenChunk+j) * 100, H: histograms[i*lenChunk+j]})
 		}
 		chunks = append(chunks, chunk)
 	}
 
-	var expected []*histogramPair
+	var expected []*testiters.HistogramPair
 	for i, h := range histograms {
-		expected = append(expected, &histogramPair{t: int64(i * 100), h: h})
+		expected = append(expected, &testiters.HistogramPair{T: int64(i * 100), H: h})
 	}
 
 	for _, tcase := range []struct {
 		name string
 
-		chunks [][]*histogramPair
+		chunks [][]*testiters.HistogramPair
 
-		expected []*histogramPair
+		expected []*testiters.HistogramPair
 	}{
 		{
 			name:     "histogram series",
@@ -1541,21 +1542,21 @@ func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			var its []chunkenc.Iterator
 			for _, c := range tcase.chunks {
-				its = append(its, newHistogramIterator(c))
+				its = append(its, testiters.NewHistogramIterator(c))
 			}
 
 			x := NewApplyCounterResetsIterator(its...)
 
-			var res []*histogramPair
+			var res []*testiters.HistogramPair
 			for x.Next() != chunkenc.ValNone {
 				t, h := x.AtHistogram(nil)
-				res = append(res, &histogramPair{t, h})
+				res = append(res, &testiters.HistogramPair{T: t, H: h})
 			}
 			testutil.Ok(t, x.Err())
 			testutil.Equals(t, tcase.expected, res)
 
 			for i := range res[1:] {
-				testutil.Assert(t, res[i+1].t >= res[i].t, "sample time %v is not monotonically increasing. previous sample %v is older", res[i+1], res[i])
+				testutil.Assert(t, res[i+1].T >= res[i].T, "sample time %v is not monotonically increasing. previous sample %v is older", res[i+1], res[i])
 			}
 		})
 	}
@@ -1736,52 +1737,6 @@ func (it *sampleIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *h
 }
 
 func (it *sampleIterator) AtT() int64 {
-	return it.l[it.i].t
-}
-
-type histogramPair struct {
-	t int64
-	h *histogram.Histogram
-}
-
-type histogramIterator struct {
-	l []*histogramPair
-	i int
-}
-
-func newHistogramIterator(l []*histogramPair) *histogramIterator {
-	return &histogramIterator{l: l, i: -1}
-}
-
-func (it *histogramIterator) Err() error {
-	return nil
-}
-
-func (it *histogramIterator) Next() chunkenc.ValueType {
-	if it.i >= len(it.l)-1 {
-		return chunkenc.ValNone
-	}
-	it.i++
-	return chunkenc.ValHistogram
-}
-
-func (it *histogramIterator) Seek(int64) chunkenc.ValueType {
-	panic("unexpected")
-}
-
-func (it *histogramIterator) At() (t int64, v float64) {
-	panic("not implemented")
-}
-
-func (it *histogramIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
-	return it.l[it.i].t, it.l[it.i].h
-}
-
-func (it *histogramIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
-}
-
-func (it *histogramIterator) AtT() int64 {
 	return it.l[it.i].t
 }
 

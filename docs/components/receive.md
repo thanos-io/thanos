@@ -76,6 +76,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -94,6 +112,39 @@ The example content of `hashring.json`:
 ```
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
+
+It is possible to only match certain `tenant`s inside of a hashring file. For example:
+
+```json
+[
+    {
+       "tenants": ["foobar"],
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+The specified endpoints will be used if the tenant is set to `foobar`. It is possible to use glob matching through the parameter `tenant_matcher_type`. It can have the value `glob`. In this case, the strings inside the array are taken as glob patterns and matched against the `tenant` inside of a remote-write request. For instance:
+
+```json
+[
+    {
+       "tenants": ["foo*"],
+       "tenant_matcher_type": "glob",
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+This will still match the tenant `foobar` and any other tenant which begins with the letters `foo`.
 
 ### AZ-aware Ketama hashring (experimental)
 
@@ -148,7 +199,7 @@ To configure the gates and limits you can use one of the two options:
 - `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file. Any modification to the indicated file will trigger a configuration reload. If the updated configuration is invalid an error will be logged and it won't replace the previous valid configuration.
 - `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
 
-By default all the limits and gates are **disabled**.
+By default all the limits and gates are **disabled**. These options should be added to the routing-receivers when using the [Routing Receive and Ingesting Receive](https://thanos.io/tip/proposals-accepted/202012-receive-split.md/).
 
 ### Understanding the configuration file
 
@@ -264,6 +315,11 @@ usage: thanos receive [<flags>]
 Accept Prometheus remote write API requests and write to local tsdb.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -359,6 +415,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.split-tenant-label-name=""
+                                 Label name through which the request will
+                                 be split into multiple tenants. This takes
+                                 precedence over the HTTP header.
       --receive.tenant-certificate-field=
                                  Use TLS client's certificate field to
                                  determine tenant for write requests.

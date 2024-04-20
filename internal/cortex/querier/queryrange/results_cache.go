@@ -94,10 +94,10 @@ func (PrometheusResponseExtractor) Extract(start, end int64, from Response) Resp
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType:  promRes.Data.ResultType,
-			Result:      extractMatrix(start, end, promRes.Data.Result),
-			Stats:       extractStats(start, end, promRes.Data.Stats),
-			Explanation: promRes.Data.Explanation,
+			ResultType: promRes.Data.ResultType,
+			Result:     extractMatrix(start, end, promRes.Data.Result),
+			Stats:      extractStats(start, end, promRes.Data.Stats),
+			Analysis:   promRes.Data.Analysis,
 		},
 		Headers: promRes.Headers,
 	}
@@ -110,10 +110,10 @@ func (PrometheusResponseExtractor) ResponseWithoutHeaders(resp Response) Respons
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType:  promRes.Data.ResultType,
-			Result:      promRes.Data.Result,
-			Stats:       promRes.Data.Stats,
-			Explanation: promRes.Data.Explanation,
+			ResultType: promRes.Data.ResultType,
+			Result:     promRes.Data.Result,
+			Stats:      promRes.Data.Stats,
+			Analysis:   promRes.Data.Analysis,
 		},
 	}
 }
@@ -124,9 +124,9 @@ func (PrometheusResponseExtractor) ResponseWithoutStats(resp Response) Response 
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType:  promRes.Data.ResultType,
-			Result:      promRes.Data.Result,
-			Explanation: promRes.Data.Explanation,
+			ResultType: promRes.Data.ResultType,
+			Result:     promRes.Data.Result,
+			Analysis:   promRes.Data.Analysis,
 		},
 		Headers: promRes.Headers,
 	}

@@ -85,6 +85,7 @@ type ProxyStore struct {
 	metrics           *proxyStoreMetrics
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
+	tsdbSelector      *TSDBSelector
 }
 
 type proxyStoreMetrics struct {
@@ -111,10 +112,17 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 // BucketStoreOption are functions that configure BucketStore.
 type ProxyStoreOption func(s *ProxyStore)
 
-// WithProxyStoreDebugLogging enables debug logging.
-func WithProxyStoreDebugLogging() ProxyStoreOption {
+// WithProxyStoreDebugLogging toggles debug logging.
+func WithProxyStoreDebugLogging(enable bool) ProxyStoreOption {
 	return func(s *ProxyStore) {
-		s.debugLogging = true
+		s.debugLogging = enable
+	}
+}
+
+// WithTSDBSelector sets the TSDB selector for the proxy.
+func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.tsdbSelector = selector
 	}
 }
 
@@ -147,6 +155,7 @@ func NewProxyStore(
 		responseTimeout:   responseTimeout,
 		metrics:           metrics,
 		retrievalStrategy: retrievalStrategy,
+		tsdbSelector:      DefaultSelector,
 	}
 
 	for _, option := range options {
@@ -316,7 +325,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
-	stores := []Client{}
+	var (
+		stores         []Client
+		storeLabelSets []labels.Labels
+	)
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
@@ -326,13 +338,19 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
+		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			continue
+		}
+		storeLabelSets = append(storeLabelSets, extraMatchers...)
+
 		stores = append(stores, st)
 	}
-
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
 	}
+	r.Matchers = append(r.Matchers, MatchersForLabelSets(storeLabelSets)...)
 
 	storeResponses := make([]respSet, 0, len(stores))
 

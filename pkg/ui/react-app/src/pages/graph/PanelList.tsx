@@ -31,6 +31,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   enableLinter: boolean;
   defaultStep: string;
   defaultEngine: string;
+  queryMode: string;
   usePartialResponse: boolean;
 }
 
@@ -45,6 +46,7 @@ export const PanelListContent: FC<PanelListProps> = ({
   enableLinter,
   defaultStep,
   defaultEngine,
+  queryMode,
   usePartialResponse,
   ...rest
 }) => {
@@ -131,6 +133,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           enableAutocomplete={enableAutocomplete}
           enableHighlighting={enableHighlighting}
           defaultEngine={defaultEngine}
+          queryMode={queryMode}
           enableLinter={enableLinter}
           defaultStep={defaultStep}
           usePartialResponse={usePartialResponse}
@@ -167,7 +170,8 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
     isLoading: flagsLoading,
   } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
   const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
-  const defaultEngine = flagsRes?.data?.['query.promql-engine'];
+  const queryMode = flagsRes?.data?.['query.mode'];
+  const defaultEngine = queryMode == 'distributed' ? 'thanos' : flagsRes?.data?.['query.promql-engine'];
   const usePartialResponse = flagsRes?.data?.['query.partial-response'] || true;
 
   const browserTime = new Date().getTime() / 1000;
@@ -279,6 +283,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         enableLinter={enableLinter}
         defaultStep={defaultStep}
         defaultEngine={defaultEngine}
+        queryMode={queryMode}
         queryHistoryEnabled={enableQueryHistory}
         usePartialResponse={!!usePartialResponse}
         isLoading={storesLoading || flagsLoading}

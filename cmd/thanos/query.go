@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"google.golang.org/grpc"
 
 	"github.com/go-kit/log"
@@ -32,6 +33,7 @@ import (
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -105,7 +107,6 @@ func registerQuery(app *extkingpin.App) {
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
 	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
-		Hidden().
 		Default(string(queryModeLocal)).
 		Enum(string(queryModeLocal), string(queryModeDistributed))
 
@@ -209,6 +210,14 @@ func registerQuery(app *extkingpin.App) {
 		Default("1s"))
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+
+	storeSelectorRelabelConf := *extflag.RegisterPathOrContent(
+		cmd,
+		"selector.relabel-config",
+		"YAML file with relabeling configuration that allows selecting blocks to query based on their external labels. It follows the Thanos sharding relabel-config syntax. For format details see: https://thanos.io/tip/thanos/sharding.md/#relabelling ",
+		extflag.WithEnvSubstitution(),
+	)
+
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
@@ -273,6 +282,15 @@ func registerQuery(app *extkingpin.App) {
 
 		if *webRoutePrefix != *webExternalPrefix {
 			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
+		}
+
+		tsdbRelabelConfig, err := storeSelectorRelabelConf.Content()
+		if err != nil {
+			return errors.Wrap(err, "error while parsing tsdb selector configuration")
+		}
+		tsdbSelector, err := block.ParseRelabelConfig(tsdbRelabelConfig, block.SelectorSupportedRelabelActions)
+		if err != nil {
+			return err
 		}
 
 		return runQuery(
@@ -344,6 +362,7 @@ func registerQuery(app *extkingpin.App) {
 			*defaultEngine,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
+			store.NewTSDBSelector(tsdbSelector),
 			queryMode(*promqlQueryMode),
 			*tenantHeader,
 			*defaultTenant,
@@ -425,6 +444,7 @@ func runQuery(
 	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
+	tsdbSelector *store.TSDBSelector,
 	queryMode queryMode,
 	tenantHeader string,
 	defaultTenant string,
@@ -502,9 +522,9 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
-	options := []store.ProxyStoreOption{}
-	if debugLogging {
-		options = append(options, store.WithProxyStoreDebugLogging())
+	options := []store.ProxyStoreOption{
+		store.WithTSDBSelector(tsdbSelector),
+		store.WithProxyStoreDebugLogging(debugLogging),
 	}
 
 	var (
@@ -647,6 +667,8 @@ func runQuery(
 
 	var remoteEngineEndpoints api.RemoteEndpoints
 	if queryMode != queryModeLocal {
+		level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
+		defaultEngine = string(apiv1.PromqlEngineThanos)
 		remoteEngineEndpoints = query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
 			AutoDownsample:        enableAutodownsampling,
 			ReplicaLabels:         queryReplicaLabels,
@@ -686,7 +708,7 @@ func runQuery(
 
 		ins := extpromhttp.NewTenantInstrumentationMiddleware(tenantHeader, defaultTenant, reg, nil)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL).Register(router, ins)
+		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL, tenantHeader, defaultTenant, enforceTenancy).Register(router, ins)
 
 		api := apiv1.NewQueryAPI(
 			logger,

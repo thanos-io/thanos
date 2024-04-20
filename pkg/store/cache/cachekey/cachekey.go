@@ -29,15 +29,21 @@ const (
 )
 
 type BucketCacheKey struct {
-	Verb  VerbType
-	Name  string
-	Start int64
-	End   int64
+	Verb                    VerbType
+	Name                    string
+	Start                   int64
+	End                     int64
+	ObjectStorageConfigHash string
 }
 
 // String returns the string representation of BucketCacheKey.
 func (ck BucketCacheKey) String() string {
 	if ck.Start == 0 && ck.End == 0 {
+		// Let's add object storage configuration hash to the iter verbs
+		// so that it would be possible to re-use the same cache storage.
+		if ck.Verb == IterVerb || ck.Verb == IterRecursiveVerb {
+			return string(ck.Verb) + ":" + ck.Name + ":" + ck.ObjectStorageConfigHash
+		}
 		return string(ck.Verb) + ":" + ck.Name
 	}
 
@@ -72,7 +78,8 @@ func ParseBucketCacheKey(key string) (BucketCacheKey, error) {
 		return BucketCacheKey{}, ErrInvalidBucketCacheKeyVerb
 	}
 
-	if verb == SubrangeVerb {
+	switch verb {
+	case SubrangeVerb:
 		if len(slice) != 4 {
 			return BucketCacheKey{}, ErrInvalidBucketCacheKeyFormat
 		}
@@ -89,7 +96,14 @@ func ParseBucketCacheKey(key string) (BucketCacheKey, error) {
 
 		ck.Start = start
 		ck.End = end
-	} else {
+	case IterRecursiveVerb, IterVerb:
+		if len(slice) == 3 {
+			ck.ObjectStorageConfigHash = slice[2]
+		}
+		if len(slice) > 3 {
+			return BucketCacheKey{}, ErrInvalidBucketCacheKeyFormat
+		}
+	default:
 		if len(slice) != 2 {
 			return BucketCacheKey{}, ErrInvalidBucketCacheKeyFormat
 		}
