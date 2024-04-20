@@ -693,10 +693,6 @@ func validateFilterConf(filterConf *store.FilterConfig) error {
 	if err := checkIfDurInFuture(filterConf.MinTime.Dur); err != nil {
 		return fmt.Errorf("min time: %s", err.Error())
 	}
-
-	if err := checkIfDurInFuture(filterConf.MaxTime.Dur); err != nil {
-		return fmt.Errorf("max time: %s", err.Error())
-	}
 	return nil
 }
 
@@ -840,9 +836,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("").EnumVar(&cc.hashFunc, "SHA256", "")
 
 	cc.filterConf = &store.FilterConfig{}
-	cmd.Flag("min-time", "Start of time range limit to compact. Thanos Compactor will compact only blocks, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	cmd.Flag("min-time", "Start of time range limit to compact. Thanos Compactor will only compact blocks whose max time is at a date more recent than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or -2h45m. Durations must be negative, and valid units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&cc.filterConf.MinTime)
-	cmd.Flag("max-time", "End of time range limit to compact. Thanos Compactor will compact only blocks, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	cmd.Flag("max-time", "End of time range limit to compact. Thanos Compactor will only compact blocks whose min time is at a date less recent this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or -2h45m. Valid units for duration are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z").SetValue(&cc.filterConf.MaxTime)
 
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&cc.disableWeb)
