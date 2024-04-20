@@ -18,7 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#<PR-id>](PR-URL) Compact: Add validation to --min-time and --max-time flags
+- [#7293](https://github.com/thanos-io/thanos/pull/7293) Compact: Add validation to --min-time and --max-time flags
 
 ### Changed
 
