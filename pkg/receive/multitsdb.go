@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -440,11 +439,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, err
 	}
 
-	var tenantMinTimeMillis int64 = math.MaxInt64
-	for _, b := range tdb.Blocks() {
-		tenantMinTimeMillis = min(b.MinTime(), tenantMinTimeMillis)
-	}
-	if time.Since(time.UnixMilli(tenantMinTimeMillis)).Milliseconds() <= t.tsdbOpts.RetentionDuration {
+	if sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration {
 		return false, nil
 	}
 
