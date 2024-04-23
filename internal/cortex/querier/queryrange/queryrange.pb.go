@@ -259,6 +259,7 @@ type PrometheusResponse struct {
 	ErrorType            string                      `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
 	Error                string                      `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
 	Headers              []*PrometheusResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
+	Warnings             []string                    `protobuf:"bytes,6,rep,name=Warnings,proto3" json:"warnings,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
 	XXX_unrecognized     []byte                      `json:"-"`
 	XXX_sizecache        int32                       `json:"-"`
@@ -328,6 +329,13 @@ func (m *PrometheusResponse) GetError() string {
 func (m *PrometheusResponse) GetHeaders() []*PrometheusResponseHeader {
 	if m != nil {
 		return m.Headers
+	}
+	return nil
+}
+
+func (m *PrometheusResponse) GetWarnings() []string {
+	if m != nil {
+		return m.Warnings
 	}
 	return nil
 }
@@ -417,6 +425,7 @@ type PrometheusInstantQueryResponse struct {
 	ErrorType            string                      `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
 	Error                string                      `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
 	Headers              []*PrometheusResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
+	Warnings             []string                    `protobuf:"bytes,6,rep,name=Warnings,proto3" json:"warnings,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
 	XXX_unrecognized     []byte                      `json:"-"`
 	XXX_sizecache        int32                       `json:"-"`
@@ -486,6 +495,13 @@ func (m *PrometheusInstantQueryResponse) GetError() string {
 func (m *PrometheusInstantQueryResponse) GetHeaders() []*PrometheusResponseHeader {
 	if m != nil {
 		return m.Headers
+	}
+	return nil
+}
+
+func (m *PrometheusInstantQueryResponse) GetWarnings() []string {
+	if m != nil {
+		return m.Warnings
 	}
 	return nil
 }
@@ -1999,6 +2015,15 @@ func (m *PrometheusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
+	if len(m.Warnings) > 0 {
+		for iNdEx := len(m.Warnings) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Warnings[iNdEx])
+			copy(dAtA[i:], m.Warnings[iNdEx])
+			i = encodeVarintQueryrange(dAtA, i, uint64(len(m.Warnings[iNdEx])))
+			i--
+			dAtA[i] = 0x32
+		}
+	}
 	if len(m.Headers) > 0 {
 		for iNdEx := len(m.Headers) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -2154,6 +2179,15 @@ func (m *PrometheusInstantQueryResponse) MarshalToSizedBuffer(dAtA []byte) (int,
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Warnings) > 0 {
+		for iNdEx := len(m.Warnings) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Warnings[iNdEx])
+			copy(dAtA[i:], m.Warnings[iNdEx])
+			i = encodeVarintQueryrange(dAtA, i, uint64(len(m.Warnings[iNdEx])))
+			i--
+			dAtA[i] = 0x32
+		}
 	}
 	if len(m.Headers) > 0 {
 		for iNdEx := len(m.Headers) - 1; iNdEx >= 0; iNdEx-- {
@@ -3342,6 +3376,12 @@ func (m *PrometheusResponse) Size() (n int) {
 			n += 1 + l + sovQueryrange(uint64(l))
 		}
 	}
+	if len(m.Warnings) > 0 {
+		for _, s := range m.Warnings {
+			l = len(s)
+			n += 1 + l + sovQueryrange(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3405,6 +3445,12 @@ func (m *PrometheusInstantQueryResponse) Size() (n int) {
 	if len(m.Headers) > 0 {
 		for _, e := range m.Headers {
 			l = e.Size()
+			n += 1 + l + sovQueryrange(uint64(l))
+		}
+	}
+	if len(m.Warnings) > 0 {
+		for _, s := range m.Warnings {
+			l = len(s)
 			n += 1 + l + sovQueryrange(uint64(l))
 		}
 	}
@@ -4605,6 +4651,38 @@ func (m *PrometheusResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Warnings", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Warnings = append(m.Warnings, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipQueryrange(dAtA[iNdEx:])
@@ -5043,6 +5121,38 @@ func (m *PrometheusInstantQueryResponse) Unmarshal(dAtA []byte) error {
 			if err := m.Headers[len(m.Headers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Warnings", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Warnings = append(m.Warnings, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
