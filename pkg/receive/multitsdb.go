@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -334,6 +336,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 	if t.tsdbOpts.RetentionDuration == 0 {
 		return nil
 	}
+	level.Info(t.logger).Log("msg", "Running pruning job")
 
 	var (
 		wg   sync.WaitGroup
@@ -342,7 +345,6 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		prunedTenants []string
 		pmtx          sync.Mutex
 	)
-
 	t.mtx.RLock()
 	for tenantID, tenantInstance := range t.tenants {
 		wg.Add(1)
@@ -438,7 +440,11 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, err
 	}
 
-	if sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration {
+	var tenantMinTimeMillis int64 = math.MaxInt64
+	for _, b := range tdb.Blocks() {
+		tenantMinTimeMillis = min(b.MinTime(), tenantMinTimeMillis)
+	}
+	if time.Since(time.UnixMilli(tenantMinTimeMillis)).Milliseconds() <= t.tsdbOpts.RetentionDuration {
 		return false, nil
 	}
 
