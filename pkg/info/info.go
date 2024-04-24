@@ -6,9 +6,10 @@ package info
 import (
 	"context"
 
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"google.golang.org/grpc"
 )
 
 // InfoServer implements the corresponding protobuf interface
@@ -20,7 +21,7 @@ type InfoServer struct {
 	component string
 
 	getLabelSet           func() []labelpb.ZLabelSet
-	getStoreInfo          func() *infopb.StoreInfo
+	getStoreInfo          func() (*infopb.StoreInfo, error)
 	getExemplarsInfo      func() *infopb.ExemplarsInfo
 	getRulesInfo          func() *infopb.RulesInfo
 	getTargetsInfo        func() *infopb.TargetsInfo
@@ -38,7 +39,7 @@ func NewInfoServer(
 		component: component,
 		// By default, do not return info for any API.
 		getLabelSet:           func() []labelpb.ZLabelSet { return nil },
-		getStoreInfo:          func() *infopb.StoreInfo { return nil },
+		getStoreInfo:          func() (*infopb.StoreInfo, error) { return nil, nil },
 		getExemplarsInfo:      func() *infopb.ExemplarsInfo { return nil },
 		getRulesInfo:          func() *infopb.RulesInfo { return nil },
 		getTargetsInfo:        func() *infopb.TargetsInfo { return nil },
@@ -74,10 +75,10 @@ func WithLabelSetFunc(getLabelSet ...func() []labelpb.ZLabelSet) ServerOptionFun
 // WithStoreInfoFunc determines the function that should be executed to obtain
 // the store information. If no function is provided, the default empty
 // store info is returned. Only the first function from the list is considered.
-func WithStoreInfoFunc(getStoreInfo ...func() *infopb.StoreInfo) ServerOptionFunc {
+func WithStoreInfoFunc(getStoreInfo ...func() (*infopb.StoreInfo, error)) ServerOptionFunc {
 	if len(getStoreInfo) == 0 {
 		return func(s *InfoServer) {
-			s.getStoreInfo = func() *infopb.StoreInfo { return &infopb.StoreInfo{} }
+			s.getStoreInfo = func() (*infopb.StoreInfo, error) { return &infopb.StoreInfo{}, nil }
 		}
 	}
 
@@ -170,10 +171,14 @@ func RegisterInfoServer(infoSrv infopb.InfoServer) func(*grpc.Server) {
 
 // Info returns the information about label set and available APIs exposed by the component.
 func (srv *InfoServer) Info(ctx context.Context, req *infopb.InfoRequest) (*infopb.InfoResponse, error) {
+	storeInfo, err := srv.getStoreInfo()
+	if err != nil {
+		return nil, err
+	}
 	return &infopb.InfoResponse{
 		LabelSets:      srv.getLabelSet(),
 		ComponentType:  srv.component,
-		Store:          srv.getStoreInfo(),
+		Store:          storeInfo,
 		Exemplars:      srv.getExemplarsInfo(),
 		Rules:          srv.getRulesInfo(),
 		Targets:        srv.getTargetsInfo(),
