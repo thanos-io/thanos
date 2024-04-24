@@ -740,7 +740,7 @@ func runRule(
 			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 				return tsdbStore.LabelSet()
 			}),
-			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					mint, maxt := tsdbStore.TimeRange()
 					return &infopb.StoreInfo{
@@ -749,9 +749,9 @@ func runRule(
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
 						TsdbInfos:                    tsdbStore.TSDBInfos(),
-					}
+					}, nil
 				}
-				return nil
+				return nil, errors.New("Not ready")
 			}),
 		)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)

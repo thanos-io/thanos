@@ -13,15 +13,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/thanos-io/thanos/pkg/api/query/querypb"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -74,7 +75,11 @@ func (es *GRPCEndpointSpec) Addr() string {
 func (es *endpointRef) Metadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
 	if infoClient != nil {
 		resp, err := infoClient.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
-		if err == nil {
+		if err != nil {
+			if status.Convert(err).Code() != codes.Unimplemented {
+				return nil, err
+			}
+		} else {
 			return &endpointMetadata{resp}, nil
 		}
 	}
