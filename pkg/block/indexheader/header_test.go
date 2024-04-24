@@ -572,6 +572,7 @@ func TestReaderPostingsOffsets(t *testing.T) {
 		if _, ok := valueSet[idx]; ok {
 			continue
 		}
+		valueSet[idx] = struct{}{}
 		clusterLbls = append(clusterLbls, []labels.Label{
 			{Name: "cluster", Value: totalValues[idx]},
 		})
@@ -614,7 +615,7 @@ func TestReaderPostingsOffsets(t *testing.T) {
 		sort.Strings(vals)
 		rngs, err := br.PostingsOffsets("cluster", vals...)
 		require.NoError(t, err)
-		rngs2 := make([]index.Range, 0, 10)
+		rngs2 := make([]index.Range, 0)
 		for _, val := range vals {
 			rng2, err2 := br.PostingsOffset("cluster", val)
 			if err2 == NotFoundRangeErr {
