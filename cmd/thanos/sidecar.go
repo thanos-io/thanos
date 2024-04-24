@@ -6,6 +6,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/common/route"
+	sidecarAPI "github.com/thanos-io/thanos/pkg/api/sidecar"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"math"
 	"net/http"
 	"net/url"
@@ -148,11 +151,25 @@ func runSidecar(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
+	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+	// Configure Request Logging for HTTP calls.
+	opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
+		return logging.NoLogCall
+	})}
+	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+	router := route.New()
+
+	api := sidecarAPI.NewSidecarAPI(logger, reg, true, nil)
+
+	api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+
 	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
+
+	srv.Handle("/", router)
 
 	g.Add(func() error {
 		statusProber.Healthy()
