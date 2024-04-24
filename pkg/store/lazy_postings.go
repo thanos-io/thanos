@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
@@ -57,6 +58,10 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 		for _, r := range rngs {
 			if r == indexheader.NotFoundRange {
 				continue
+			}
+			if r.End <= r.Start {
+				level.Error(r.block.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
+				return postingGroups, false, nil
 			}
 			// Each range starts from the #entries field which is 4 bytes.
 			// Need to subtract it when calculating number of postings.
