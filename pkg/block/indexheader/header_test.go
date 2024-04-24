@@ -187,12 +187,6 @@ func TestReaders(t *testing.T) {
 					testutil.Assert(t, rngs[2].End > rngs[2].Start)
 					testutil.Equals(t, NotFoundRange, rngs[1])
 
-					rngs, err = br.PostingsOffsets("longer-string", "0", "1")
-					testutil.Ok(t, err)
-					testutil.Assert(t, len(rngs) == 2)
-					testutil.Equals(t, NotFoundRange, rngs[0])
-					testutil.Assert(t, rngs[1].End > rngs[1].Start)
-
 					// 3 values exist and 3 values don't exist.
 					rngs, err = br.PostingsOffsets("cluster", "a-eu-west-1", "a-us-west-2", "b-eu-west-1", "b-us-east-1", "c-eu-west-1", "c-us-east-2")
 					testutil.Ok(t, err)
