@@ -36,6 +36,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7233](https://github.com/thanos-io/thanos/pull/7233): UI: Showing Block Size Stats
 - [#7280](https://github.com/thanos-io/thanos/pull/7281): Adding User-Agent to request logs
 - [#7219](https://github.com/thanos-io/thanos/pull/7219): Receive: add `--remote-write.client-tls-secure` and `--remote-write.client-tls-skip-verify` flags to stop relying on grpc server config to determine grpc client secure/skipVerify.
+- [#7302](https://github.com/thanos-io/thanos/pull/7303) Considering the `X-Forwarded-For` header for the remote address in the logs.
 
 ### Changed
 
