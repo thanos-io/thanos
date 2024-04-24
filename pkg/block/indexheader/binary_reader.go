@@ -952,7 +952,7 @@ OUTER:
 
 			if len(newSameRngs) > 0 {
 				// We added some ranges in this iteration. Use next posting offset as the end of our ranges.
-				// We know it exists as we never go further in this loop than e.offsets[i, i+1].
+				// We know it exists as we never go further in this loop than e.offsets[i, i+1).
 
 				skipNAndName(&d, &buf)
 				d.UvarintBytes() // Label value.
