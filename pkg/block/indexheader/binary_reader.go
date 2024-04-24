@@ -852,6 +852,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 	}
 
 	var newSameRngs []index.Range // The start, end offsets in the postings table in the original index file.
+OUTER:
 	for valueIndex < len(values) {
 		wantedValue := values[valueIndex]
 
@@ -916,6 +917,15 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 					break
 				}
 				wantedValue = values[valueIndex]
+				// Only do this if there is no new range added. If there is an existing
+				// range we want to continue iterating the offset table to get the end.
+				if len(newSameRngs) == 0 && i+1 < len(e.offsets) {
+					// We want to limit this loop within e.offsets[i, i+1). So when the wanted value
+					// is >= e.offsets[i+1], go out of the loop and binary search again.
+					if wantedValue >= e.offsets[i+1].value {
+						continue OUTER
+					}
+				}
 			}
 
 			if i+1 == len(e.offsets) {
