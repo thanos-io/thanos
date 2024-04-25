@@ -62,15 +62,12 @@ type InMemoryCache struct {
 
 type cacheDataWithTTLWrapper struct {
 	data []byte
-	// The objects that are over the TTL are not destroyed eagerly.
-	// When there is a hit for an item that is over the TTL, the object is removed from the cache
-	// and null is returned.
-	// There is ongoing effort to integrate TTL within the Hashicorp golang cache itself.
-	// This https://github.com/hashicorp/golang-lru/pull/41 is complete, but is hard to be used here
-	// because of the following reasons:
-	// The API of the Hashicorp LRU forces the user set the TTL on the constructor while in Thanos
-	// we set the TTL per Set()/Store() operation.
-	// https://github.com/thanos-io/thanos/blob/23d205286436291fa0c55c25c392ee08f42d5fbf/pkg/store/cache/caching_bucket.go#L167-L175
+	// Items exceeding their Time-To-Live (TTL) are not immediately removed from the cache.
+	// Instead, when an access attempt is made for an item past its TTL, the item is evicted from the cache, and a null value is returned.
+	// Efforts are underway to incorporate TTL directly into the Hashicorp golang cache.
+	// Although this pull request (https://github.com/hashicorp/golang-lru/pull/41) has been completed, it's challenging to apply here due to the following reasons:
+	// The Hashicorp LRU API requires setting the TTL during the constructor phase, whereas in Thanos, we set the TTL for each Set()/Store() operation.
+	// Refer to this link for more details: https://github.com/thanos-io/thanos/blob/23d205286436291fa0c55c25c392ee08f42d5fbf/pkg/store/cache/caching_bucket.go#L167-L175
 	expiryTime time.Time
 }
 
