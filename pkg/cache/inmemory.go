@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	lru "github.com/hashicorp/golang-lru/simplelru"
+	lru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -46,7 +46,7 @@ type InMemoryCache struct {
 
 	mtx         sync.Mutex
 	curSize     uint64
-	lru         *lru.LRU
+	lru         *lru.LRU[string, cacheDataWithTTLWrapper]
 	evicted     prometheus.Counter
 	requests    prometheus.Counter
 	hits        prometheus.Counter
@@ -176,7 +176,7 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(maxInt, c.onEvict)
+	l, err := lru.NewLRU[string, cacheDataWithTTLWrapper](maxInt, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +214,13 @@ func (c *InMemoryCache) get(key string) ([]byte, bool) {
 	}
 	// If the present time is greater than the TTL for the object from cache, the object will be
 	// removed from the cache and a nil will be returned
-	if time.Now().After(v.(cacheDataWithTTLWrapper).expiryTime) {
+	if time.Now().After(v.expiryTime) {
 		c.hitsExpired.Inc()
 		c.lru.Remove(key)
 		return nil, false
 	}
 	c.hits.Inc()
-	return v.(cacheDataWithTTLWrapper).data, true
+	return v.data, true
 }
 
 func (c *InMemoryCache) set(key string, val []byte, ttl time.Duration) {
