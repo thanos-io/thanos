@@ -66,7 +66,11 @@ type cacheDataWithTTLWrapper struct {
 	// When there is a hit for an item that is over the TTL, the object is removed from the cache
 	// and null is returned.
 	// There is ongoing effort to integrate TTL within the Hashicorp golang cache itself.
-	// This https://github.com/hashicorp/golang-lru/pull/41 can be used here once complete.
+	// This https://github.com/hashicorp/golang-lru/pull/41 is complete, but is hard to be used here
+	// because of the following reasons:
+	// The API of the Hashicorp LRU forces the user set the TTL on the constructor while in Thanos
+	// we set the TTL per Set()/Store() operation.
+	// https://github.com/thanos-io/thanos/blob/23d205286436291fa0c55c25c392ee08f42d5fbf/pkg/store/cache/caching_bucket.go#L167-L175
 	expiryTime time.Time
 }
 
