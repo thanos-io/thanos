@@ -180,7 +180,7 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU[string, cacheDataWithTTLWrapper](maxInt, nil)
+	l, err := lru.NewLRU[string, cacheDataWithTTLWrapper](maxInt, c.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -195,9 +195,9 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 	return c, nil
 }
 
-func (c *InMemoryCache) onEvict(key, val interface{}) {
-	keySize := uint64(len(key.(string)))
-	entrySize := uint64(len(val.(cacheDataWithTTLWrapper).data))
+func (c *InMemoryCache) onEvict(key string, val cacheDataWithTTLWrapper) {
+	keySize := uint64(len(key))
+	entrySize := uint64(len(val.data))
 
 	c.evicted.Inc()
 	c.current.Dec()
