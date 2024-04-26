@@ -62,6 +62,7 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	buffers          sync.Pool
 	maxBytesPerFrame int
+	matcherCache     *storepb.MatchersCache
 
 	extLset                labels.Labels
 	startStoreFilterUpdate bool
@@ -85,6 +86,20 @@ func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*gr
 type ReadWriteTSDBStore struct {
 	storepb.StoreServer
 	storepb.WriteableStoreServer
+}
+
+type tsdbStoreOpts struct {
+	cache *storepb.MatchersCache
+}
+
+var defaultTsdbStoreOpts = tsdbStoreOpts{}
+
+type TSDBStoreOption func(*tsdbStoreOpts)
+
+func WithMatcherCacheInstance(cache *storepb.MatchersCache) TSDBStoreOption {
+	return func(o *tsdbStoreOpts) {
+		o.cache = cache
+	}
 }
 
 // NewTSDBStore creates a new TSDBStore.
@@ -177,13 +192,13 @@ func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
 	return labelSets
 }
 
-func (p *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
-	labels := p.LabelSet()
+func (s *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
+	labels := s.LabelSet()
 	if len(labels) == 0 {
 		return []infopb.TSDBInfo{}
 	}
 
-	mint, maxt := p.TimeRange()
+	mint, maxt := s.TimeRange()
 	return []infopb.TSDBInfo{
 		{
 			Labels: labelpb.ZLabelSet{
@@ -247,7 +262,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		srv = fs
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -370,7 +385,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -432,7 +447,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		}
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
