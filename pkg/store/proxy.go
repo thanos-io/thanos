@@ -283,7 +283,10 @@ func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.
-	reqLogger := log.With(s.logger, "component", "proxy", "request", originalRequest.String())
+	reqLogger := log.With(s.logger, "component", "proxy")
+	if s.debugLogging {
+		reqLogger = log.With(reqLogger, "request", originalRequest.String())
+	}
 
 	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
 	if err != nil {
