@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -820,6 +821,7 @@ func initializeMultiTSDB(dir string) *MultiTSDB {
 		bucket,
 		false,
 		metadata.NoneFunc,
+		nil,
 	)
 
 	return m
