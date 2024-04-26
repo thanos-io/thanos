@@ -19,7 +19,7 @@ package querysharding
 import (
 	"fmt"
 
-	lru "github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
 )
@@ -38,14 +38,14 @@ type QueryAnalyzer struct{}
 
 type CachedQueryAnalyzer struct {
 	analyzer *QueryAnalyzer
-	cache    *lru.Cache
+	cache    *lru.Cache[string, cachedValue]
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
 func NewQueryAnalyzer() *CachedQueryAnalyzer {
 	// Ignore the error check since it throws error
 	// only if size is <= 0.
-	cache, _ := lru.New(256)
+	cache, _ := lru.New[string, cachedValue](256)
 	return &CachedQueryAnalyzer{
 		analyzer: &QueryAnalyzer{},
 		cache:    cache,
@@ -61,7 +61,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	if a.cache.Contains(query) {
 		value, ok := a.cache.Get(query)
 		if ok {
-			return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
+			return value.QueryAnalysis, value.err
 		}
 	}
 

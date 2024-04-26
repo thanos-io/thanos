@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	lru "github.com/hashicorp/golang-lru/simplelru"
+	lru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,7 +36,7 @@ type InMemoryIndexCache struct {
 	mtx sync.Mutex
 
 	logger           log.Logger
-	lru              *lru.LRU
+	lru              *lru.LRU[CacheKey, []byte]
 	maxSizeBytes     uint64
 	maxItemSizeBytes uint64
 
@@ -170,7 +170,7 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *CommonMet
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(maxInt, c.onEvict)
+	l, err := lru.NewLRU[CacheKey, []byte](maxInt, c.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -185,14 +185,14 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, commonMetrics *CommonMet
 	return c, nil
 }
 
-func (c *InMemoryIndexCache) onEvict(key, val interface{}) {
-	k := key.(CacheKey).KeyType()
-	entrySize := sliceHeaderSize + uint64(len(val.([]byte)))
+func (c *InMemoryIndexCache) onEvict(key CacheKey, val []byte) {
+	k := key.KeyType()
+	entrySize := sliceHeaderSize + uint64(len(val))
 
 	c.evicted.WithLabelValues(k).Inc()
 	c.current.WithLabelValues(k).Dec()
 	c.currentSize.WithLabelValues(k).Sub(float64(entrySize))
-	c.totalCurrentSize.WithLabelValues(k).Sub(float64(entrySize + key.(CacheKey).Size()))
+	c.totalCurrentSize.WithLabelValues(k).Sub(float64(entrySize + key.Size()))
 
 	c.curSize -= entrySize
 }
@@ -205,7 +205,7 @@ func (c *InMemoryIndexCache) get(key CacheKey) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	return v.([]byte), true
+	return v, true
 }
 
 func (c *InMemoryIndexCache) set(typ string, key CacheKey, val []byte) {

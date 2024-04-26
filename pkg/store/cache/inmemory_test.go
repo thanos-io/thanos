@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/hashicorp/golang-lru/simplelru"
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -72,7 +72,7 @@ func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	l, err := simplelru.NewLRU(math.MaxInt64, func(key, val interface{}) {
+	l, err := simplelru.NewLRU[CacheKey, []byte](math.MaxInt64, func(key CacheKey, val []byte) {
 		// Hack LRU to simulate broken accounting: evictions do not reduce current size.
 		size := cache.curSize
 		cache.onEvict(key, val)
