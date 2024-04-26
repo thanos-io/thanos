@@ -274,8 +274,12 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 
 func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
 	infos := make([]infopb.TSDBInfo, 0)
-	for _, store := range s.stores() {
-		infos = append(infos, store.TSDBInfos()...)
+	for _, st := range s.stores() {
+		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			continue
+		}
+		infos = append(infos, st.TSDBInfos()...)
 	}
 	return infos
 }
@@ -336,13 +340,15 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
 			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out: %v", st, reason))
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
 			}
 			continue
 		}
-
 		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			}
 			continue
 		}
 		storeLabelSets = append(storeLabelSets, extraMatchers...)
@@ -360,7 +366,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for _, st := range stores {
 		st := st
 		if s.debugLogging {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 		}
 
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
@@ -503,10 +509,18 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
 			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to %v", st, reason))
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
 			}
 			continue
 		}
+		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			}
+			continue
+		}
+
 		if s.debugLogging {
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 		}
@@ -516,7 +530,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 				PartialResponseDisabled: r.PartialResponseDisabled,
 				Start:                   r.Start,
 				End:                     r.End,
-				Matchers:                r.Matchers,
+				Matchers:                append(r.Matchers, MatchersForLabelSets(extraMatchers)...),
 			})
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
@@ -590,7 +604,14 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
 			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to %v", st, reason))
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
+			}
+			continue
+		}
+		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
 			}
 			continue
 		}
@@ -611,7 +632,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 				PartialResponseDisabled: r.PartialResponseDisabled,
 				Start:                   r.Start,
 				End:                     r.End,
-				Matchers:                r.Matchers,
+				Matchers:                append(r.Matchers, MatchersForLabelSets(extraMatchers)...),
 			})
 			if err != nil {
 				msg := "fetch label values from store %s"

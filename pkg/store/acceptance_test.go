@@ -18,7 +18,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -991,7 +993,7 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 	testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t, startStore)
 }
 
-func TestProxyStore_Acceptance(t *testing.T) {
+func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1002,17 +1004,24 @@ func TestProxyStore_Acceptance(t *testing.T) {
 			appendFn(db.Appender(context.Background()))
 
 			return NewTSDBStore(nil, db, component.Rule, extLset)
+
 		}
 
 		p1 := startNestedStore(tt, extLset, appendFn)
-		p2 := startNestedStore(tt, extLset, appendFn)
+		p2 := startNestedStore(tt, labels.FromStrings("some", "label"), appendFn)
 
 		clients := []Client{
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1)},
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2)},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1), ExtLset: []labels.Labels{extLset}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2), ExtLset: []labels.Labels{labels.FromStrings("some", "label")}},
 		}
 
-		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
+		relabelCfgs := []*relabel.Config{{
+			SourceLabels: model.LabelNames([]model.LabelName{"some"}),
+			Regex:        relabel.MustNewRegexp("label"),
+			Action:       relabel.Drop,
+		}}
+
+		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval), WithTSDBSelector(NewTSDBSelector(relabelCfgs)))
 	}
 
 	testStoreAPIsAcceptance(t, startStore)
