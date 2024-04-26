@@ -21,13 +21,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/thanos/pkg/losertree"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-type dedupResponseHeap struct {
-	h *ProxyResponseHeap
+type responseDeduplicator struct {
+	h *losertree.Tree[*storepb.SeriesResponse, respSet]
 
 	bufferedSameSeries []*storepb.SeriesResponse
 
@@ -38,22 +39,22 @@ type dedupResponseHeap struct {
 	ok   bool
 }
 
-// NewDedupResponseHeap returns a wrapper around ProxyResponseHeap that merged duplicated series messages into one.
+// NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
 // It also deduplicates identical chunks identified by the same checksum from each series message.
-func NewDedupResponseHeap(h *ProxyResponseHeap) *dedupResponseHeap {
+func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]) *responseDeduplicator {
 	ok := h.Next()
 	var prev *storepb.SeriesResponse
 	if ok {
 		prev = h.At()
 	}
-	return &dedupResponseHeap{
+	return &responseDeduplicator{
 		h:    h,
 		ok:   ok,
 		prev: prev,
 	}
 }
 
-func (d *dedupResponseHeap) Next() bool {
+func (d *responseDeduplicator) Next() bool {
 	if d.buffRespI+1 < len(d.bufferedResp) {
 		d.buffRespI++
 		return true
@@ -153,7 +154,7 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 	})
 }
 
-func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
+func (d *responseDeduplicator) At() *storepb.SeriesResponse {
 	return d.bufferedResp[d.buffRespI]
 }
 
@@ -220,62 +221,36 @@ type ProxyResponseHeapNode struct {
 
 // NewProxyResponseHeap returns heap that k-way merge series together.
 // It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
-func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
-	ret := ProxyResponseHeap{
-		nodes: make([]ProxyResponseHeapNode, 0, len(seriesSets)),
-	}
+func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.SeriesResponse, respSet] {
+	var maxVal *storepb.SeriesResponse = storepb.NewSeriesResponse(nil)
 
-	for _, ss := range seriesSets {
-		if ss.Empty() {
-			continue
+	less := func(a, b *storepb.SeriesResponse) bool {
+		if a == maxVal && b != maxVal {
+			return false
 		}
-		ss := ss
-		ret.Push(ProxyResponseHeapNode{rs: ss})
-	}
-
-	heap.Init(&ret)
-
-	return &ret
-}
-
-func NewProxyResponseHeapWithKeys(seriesSets []respSet, groupKeys, replicaKeys []string) *ProxyResponseHeap {
-	ret := ProxyResponseHeap{
-		nodes: make([]ProxyResponseHeapNode, 0, len(seriesSets)),
-	}
-
-	for i, ss := range seriesSets {
-		if ss.Empty() {
-			continue
+		if a != maxVal && b == maxVal {
+			return true
 		}
-		ss := ss
-		ret.Push(ProxyResponseHeapNode{
-			rs:         ss,
-			groupKey:   groupKeys[i],
-			replicaKey: replicaKeys[i],
-		})
+		if a == maxVal && b == maxVal {
+			return true
+		}
+		if a.GetSeries() != nil && b.GetSeries() != nil {
+			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
+			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
+			return labels.Compare(iLbls, jLbls) < 0
+		} else if a.GetSeries() == nil && b.GetSeries() != nil {
+			return true
+		} else if a.GetSeries() != nil && b.GetSeries() == nil {
+			return false
+		}
+		return false
 	}
 
-	heap.Init(&ret)
-
-	return &ret
-}
-
-func (h *ProxyResponseHeap) Next() bool {
-	return !h.Empty()
-}
-
-func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
-	min := h.Min().rs
-
-	atResp := min.At()
-
-	if min.Next() {
-		heap.Fix(h, 0)
-	} else {
-		heap.Remove(h, 0)
-	}
-
-	return atResp
+	return losertree.New[*storepb.SeriesResponse, respSet](seriesSets, maxVal, func(s respSet) *storepb.SeriesResponse {
+		return s.At()
+	}, less, func(s respSet) {
+		s.Close()
+	})
 }
 
 func (h *ProxyResponseHeap) AtWithKeys() (*storepb.SeriesResponse, string, string) {
@@ -359,6 +334,8 @@ func (l *lazyRespSet) Next() bool {
 	l.bufferedResponsesMtx.Lock()
 	defer l.bufferedResponsesMtx.Unlock()
 
+	l.initialized = true
+
 	if l.noMoreData && len(l.bufferedResponses) == 0 {
 		l.lastResp = nil
 
@@ -374,7 +351,9 @@ func (l *lazyRespSet) Next() bool {
 
 	if len(l.bufferedResponses) > 0 {
 		l.lastResp = l.bufferedResponses[0]
-		l.bufferedResponses = l.bufferedResponses[1:]
+		if l.initialized {
+			l.bufferedResponses = l.bufferedResponses[1:]
+		}
 		return true
 	}
 
@@ -383,14 +362,10 @@ func (l *lazyRespSet) Next() bool {
 }
 
 func (l *lazyRespSet) At() *storepb.SeriesResponse {
-	// We need to wait for at least one response so that we would be able to properly build the heap.
 	if !l.initialized {
-		l.Next()
-		l.initialized = true
-		return l.lastResp
+		panic("please call Next before At")
 	}
 
-	// Next() was called previously.
 	return l.lastResp
 }
 
@@ -834,7 +809,9 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 }
 
 func (l *eagerRespSet) Close() {
-	l.closeSeries()
+	if l.closeSeries != nil {
+		l.closeSeries()
+	}
 	l.shardMatcher.Close()
 }
 
@@ -845,7 +822,7 @@ func (l *eagerRespSet) At() *storepb.SeriesResponse {
 		return nil
 	}
 
-	return l.bufferedResponses[l.i]
+	return l.bufferedResponses[l.i-1]
 }
 
 func (l *eagerRespSet) Next() bool {
@@ -853,7 +830,7 @@ func (l *eagerRespSet) Next() bool {
 
 	l.i++
 
-	return l.i < len(l.bufferedResponses)
+	return l.i <= len(l.bufferedResponses)
 }
 
 func (l *eagerRespSet) Empty() bool {

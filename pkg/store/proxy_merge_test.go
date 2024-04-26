@@ -4,6 +4,7 @@
 package store
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestRmLabelsCornerCases(t *testing.T) {
 	}), labels.Labels{})
 }
 
-func TestProxyResponseHeapSort(t *testing.T) {
+func TestProxyResponseTreeSort(t *testing.T) {
 	for _, tcase := range []struct {
 		title string
 		input []respSet
@@ -33,14 +34,16 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			title: "merge sets with different series and common labels",
 			input: []respSet{
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
 					},
 				},
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
@@ -58,7 +61,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			title: "merge sets with different series and labels",
 			input: []respSet{
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
@@ -66,7 +70,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 					},
 				},
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
 						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5", "f", "6")),
@@ -85,7 +90,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			title: "merge repeated series in stores with different external labels",
 			input: []respSet{
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
@@ -93,7 +99,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 					storeLabels: map[string]struct{}{"ext2": {}},
 				},
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
@@ -112,7 +119,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			title: "merge series with external labels at beginning of series",
 			input: []respSet{
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "2")),
@@ -120,7 +128,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 					storeLabels: map[string]struct{}{"a": {}},
 				},
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "1", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
@@ -139,7 +148,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			title: "merge series in stores with external labels not present in series (e.g. stripped during dedup)",
 			input: []respSet{
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
@@ -147,7 +157,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 					storeLabels: map[string]struct{}{"ext2": {}, "replica": {}},
 				},
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
@@ -166,7 +177,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			title: "test",
 			input: []respSet{
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
 						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.5.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
@@ -175,7 +187,8 @@ func TestProxyResponseHeapSort(t *testing.T) {
 					storeLabels: map[string]struct{}{"receive": {}, "tenant_id": {}, "thanos_replica": {}},
 				},
 				&eagerRespSet{
-					wg: &sync.WaitGroup{},
+					closeSeries: func() {},
+					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
 						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.5.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
@@ -195,14 +208,13 @@ func TestProxyResponseHeapSort(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.title, func(t *testing.T) {
-			h := NewProxyResponseHeap(tcase.input...)
-			if !h.Empty() {
-				got := []*storepb.SeriesResponse{h.At()}
-				for h.Next() {
-					got = append(got, h.At())
-				}
-				testutil.Equals(t, tcase.exp, got)
+			h := NewProxyResponseLoserTree(tcase.input...)
+			got := []*storepb.SeriesResponse{}
+			for h.Next() {
+				r := h.At()
+				got = append(got, r)
 			}
+			testutil.Equals(t, tcase.exp, got)
 		})
 	}
 }
@@ -320,5 +332,31 @@ func BenchmarkSortWithoutLabels(b *testing.B) {
 		}
 		b.StartTimer()
 		sortWithoutLabels(resps, labelsToRemove)
+	}
+}
+
+func BenchmarkKWayMerge(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		respSets := []respSet{}
+		for j := 0; j < 1000; j++ {
+			respSets = append(respSets, &eagerRespSet{
+				closeSeries: func() {},
+				wg:          &sync.WaitGroup{},
+				bufferedResponses: []*storepb.SeriesResponse{
+					storeSeriesResponse(b, labelsFromStrings("a", "1", "b", fmt.Sprintf("replica-%d", j), "c", "3")),
+					storeSeriesResponse(b, labelsFromStrings("a", "1", "b", fmt.Sprintf("replica-%d", j), "c", "3", "d", "4")),
+					storeSeriesResponse(b, labelsFromStrings("a", "1", "b", fmt.Sprintf("replica-%d", j), "c", "4")),
+				},
+			})
+		}
+		lt := NewProxyResponseLoserTree(respSets...)
+
+		got := []*storepb.SeriesResponse{}
+		for lt.Next() {
+			r := lt.At()
+			got = append(got, r)
+		}
+
+		var _ = got
 	}
 }
