@@ -64,6 +64,8 @@ type MultiTSDB struct {
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
+	cache *storepb.MatchersCache
+
 	tsdbClients     []store.Client
 	exemplarClients map[string]*exemplars.TSDB
 
@@ -92,6 +94,12 @@ func WithHeadExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
 func WithBlockExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.blockExpandedPostingsCacheSize = size
+	}
+}
+
+func WithMatchersCache(cache *storepb.MatchersCache) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.cache = cache
 	}
 }
 
@@ -755,9 +763,12 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	options := []store.TSDBStoreOption{}
+	var options []store.TSDBStoreOption
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
+	}
+	if t.cache != nil {
+		options = append(options, store.WithMatcherCacheInstance(t.cache))
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
