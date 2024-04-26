@@ -1260,8 +1260,8 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 	})
 
 	// Use greater or equal to handle flakiness.
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.GreaterOrEqual(1), "thanos_bucket_store_lazy_expanded_postings_total"), e2emon.WaitMissingMetrics())
-	testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_lazy_expanded_postings_total"), e2emon.WaitMissingMetrics())
+	testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"thanos_bucket_store_lazy_expanded_postings_total"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, s2.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_bucket_store_lazy_expanded_postings_total"}, e2emon.WaitMissingMetrics()))
 }
 
 var labelSetsComparer = cmp.Comparer(func(x, y []map[string]string) bool {
