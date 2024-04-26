@@ -89,6 +89,7 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
+	matcherCache      *storepb.MatchersCache
 	enableDedup       bool
 }
 
@@ -113,7 +114,7 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 	}
 }
 
-// BucketStoreOption are functions that configure BucketStore.
+// ProxyStoreOption are functions that configure the ProxyStore.
 type ProxyStoreOption func(s *ProxyStore)
 
 // WithProxyStoreDebugLogging toggles debug logging.
@@ -134,6 +135,13 @@ func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
 func WithoutDedup() ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.enableDedup = false
+	}
+}
+
+// WithMatcherCache sets the matcher cache instance for the proxy.
+func WithMatcherCache(cache *storepb.MatchersCache) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.matcherCache = cache
 	}
 }
 
@@ -248,7 +256,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
 
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
