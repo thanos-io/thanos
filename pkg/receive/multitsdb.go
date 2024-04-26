@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -59,6 +60,7 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
+	cache                 *storepb.MatchersCache
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -73,6 +75,7 @@ func NewMultiTSDB(
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
+	cache *storepb.MatchersCache,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
@@ -90,6 +93,7 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
+		cache:                 cache,
 	}
 }
 
@@ -654,7 +658,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, store.WithMatcherCacheInstance(t.cache)), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

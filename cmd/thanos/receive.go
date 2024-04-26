@@ -50,6 +50,7 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -204,6 +205,14 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
+	var cache *storepb.MatchersCache
+	if conf.matcherCacheSize > 0 {
+		cache, err = storepb.NewMatchersCache(storepb.WithSize(conf.matcherCacheSize), storepb.WithPromRegistry(reg))
+		if err != nil {
+			return errors.Wrap(err, "create matchers cache")
+		}
+	}
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -214,6 +223,7 @@ func runReceive(
 		bkt,
 		conf.allowOutOfOrderUpload,
 		hashFunc,
+		cache,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,
@@ -322,6 +332,7 @@ func runReceive(
 
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
+			store.WithMatcherCache(cache),
 		}
 
 		proxy := store.NewProxyStore(
@@ -838,6 +849,8 @@ type receiveConfig struct {
 	limitsConfigReloadTimer time.Duration
 
 	asyncForwardWorkerCount uint
+
+	matcherCacheSize int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -972,6 +985,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
+
+	cmd.Flag("matcher-cache-size", "The size of the cache used for matching against external labels. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
