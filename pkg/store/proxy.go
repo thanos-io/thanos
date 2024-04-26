@@ -442,9 +442,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
 	respHeap := NewResponseDeduplicator(NewProxyResponseLoserTree(storeResponses...))
-	if s.quorumChunkDedup {
-		respHeap.quorumChunkDedup = true
-	}
+    respHeap.quorumChunkDedup = s.quorumChunkDedup
 	for respHeap.Next() {
 		resp := respHeap.At()
 
