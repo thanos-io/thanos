@@ -109,6 +109,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			},
 			labelValuesCalls: []labelValuesCallCase{
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "foo", expectedValues: []string{"foovalue1"}},
+				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "replica"},
 			},
 		},
 		{
@@ -740,7 +741,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				})
 			}
 			for _, c := range tc.labelValuesCalls {
-				t.Run("label_name_values", func(t *testing.T) {
+				t.Run("label_values", func(t *testing.T) {
 					resp, err := store.LabelValues(context.Background(), &storepb.LabelValuesRequest{
 						Start:    c.start,
 						End:      c.end,
@@ -764,10 +765,11 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				t.Run("series", func(t *testing.T) {
 					srv := newStoreSeriesServer(context.Background())
 					err := store.Series(&storepb.SeriesRequest{
-						MinTime:    c.start,
-						MaxTime:    c.end,
-						Matchers:   c.matchers,
-						SkipChunks: c.skipChunks,
+						MinTime:              c.start,
+						MaxTime:              c.end,
+						Matchers:             c.matchers,
+						SkipChunks:           c.skipChunks,
+						WithoutReplicaLabels: []string{"replica"},
 					}, srv)
 					if c.expectErr != nil {
 						testutil.NotOk(t, err)
@@ -1022,6 +1024,37 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 		}}
 
 		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval), WithTSDBSelector(NewTSDBSelector(relabelCfgs)))
+	}
+
+	testStoreAPIsAcceptance(t, startStore)
+}
+
+func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
+	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			db, err := e2eutil.NewTSDB()
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+			appendFn(db.Appender(context.Background()))
+
+			return NewTSDBStore(nil, db, component.Rule, extLset)
+
+		}
+
+		extLset1 := labels.NewBuilder(extLset).Set("replica", "r1").Labels()
+		extLset2 := labels.NewBuilder(extLset).Set("replica", "r2").Labels()
+
+		p1 := startNestedStore(tt, extLset1, appendFn)
+		p2 := startNestedStore(tt, extLset2, appendFn)
+
+		clients := []Client{
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1), ExtLset: []labels.Labels{extLset1}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2), ExtLset: []labels.Labels{extLset2}},
+		}
+
+		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
 	}
 
 	testStoreAPIsAcceptance(t, startStore)
