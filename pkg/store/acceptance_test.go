@@ -723,9 +723,10 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			for _, c := range tc.labelNameCalls {
 				t.Run("label_names", func(t *testing.T) {
 					resp, err := store.LabelNames(context.Background(), &storepb.LabelNamesRequest{
-						Start:    c.start,
-						End:      c.end,
-						Matchers: c.matchers,
+						Start:                c.start,
+						End:                  c.end,
+						Matchers:             c.matchers,
+						WithoutReplicaLabels: []string{"replica"},
 					})
 					if c.expectErr != nil {
 						testutil.NotOk(t, err)
@@ -743,10 +744,11 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			for _, c := range tc.labelValuesCalls {
 				t.Run("label_values", func(t *testing.T) {
 					resp, err := store.LabelValues(context.Background(), &storepb.LabelValuesRequest{
-						Start:    c.start,
-						End:      c.end,
-						Label:    c.label,
-						Matchers: c.matchers,
+						Start:                c.start,
+						End:                  c.end,
+						Label:                c.label,
+						Matchers:             c.matchers,
+						WithoutReplicaLabels: []string{"replica"},
 					})
 					if c.expectErr != nil {
 						testutil.NotOk(t, err)
@@ -884,23 +886,24 @@ func TestBucketStore_Acceptance(t *testing.T) {
 				tt.Skip("Bucket Store cannot handle empty HEAD")
 			}
 
-			id := createBlockFromHead(tt, auxDir, h)
+			for _, replica := range []string{"r1", "r2"} {
+				id := createBlockFromHead(tt, auxDir, h)
 
-			auxBlockDir := filepath.Join(auxDir, id.String())
-			meta, err := metadata.ReadFromDir(auxBlockDir)
-			testutil.Ok(t, err)
-			stats, err := block.GatherIndexHealthStats(ctx, logger, filepath.Join(auxBlockDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
-			testutil.Ok(t, err)
-			_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
-				Labels:     extLset.Map(),
-				Downsample: metadata.ThanosDownsample{Resolution: 0},
-				Source:     metadata.TestSource,
-				IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
-			}, nil)
-			testutil.Ok(tt, err)
+				auxBlockDir := filepath.Join(auxDir, id.String())
+				meta, err := metadata.ReadFromDir(auxBlockDir)
+				testutil.Ok(t, err)
+				stats, err := block.GatherIndexHealthStats(ctx, logger, filepath.Join(auxBlockDir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+				testutil.Ok(t, err)
+				_, err = metadata.InjectThanos(log.NewNopLogger(), auxBlockDir, metadata.Thanos{
+					Labels:     labels.NewBuilder(extLset).Set("replica", replica).Labels().Map(),
+					Downsample: metadata.ThanosDownsample{Resolution: 0},
+					Source:     metadata.TestSource,
+					IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
+				}, nil)
+				testutil.Ok(tt, err)
 
-			testutil.Ok(tt, block.Upload(ctx, logger, bkt, auxBlockDir, metadata.NoneFunc))
-			testutil.Ok(tt, block.Upload(ctx, logger, bkt, auxBlockDir, metadata.NoneFunc))
+				testutil.Ok(tt, block.Upload(ctx, logger, bkt, auxBlockDir, metadata.NoneFunc))
+			}
 
 			chunkPool, err := NewDefaultChunkBytesPool(2e5)
 			testutil.Ok(tt, err)
