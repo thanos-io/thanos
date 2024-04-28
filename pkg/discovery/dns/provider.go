@@ -164,3 +164,14 @@ func (p *Provider) Addresses() []string {
 	}
 	return result
 }
+
+func (p *Provider) AddressesWithDNS() map[string][]string {
+	p.RLock()
+	defer p.RUnlock()
+
+	result := make(map[string][]string, len(p.resolved))
+	for dns, addrs := range p.resolved {
+		result[dns] = addrs
+	}
+	return result
+}

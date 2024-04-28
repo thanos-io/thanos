@@ -104,6 +104,14 @@ func newLocalClient(c storepb.StoreClient, store *store.TSDBStore) *localClient 
 	}
 }
 
+func (l *localClient) GroupKey() string {
+	return ""
+}
+
+func (l *localClient) ReplicaKey() string {
+	return ""
+}
+
 func (l *localClient) LabelSets() []labels.Labels {
 	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
 }

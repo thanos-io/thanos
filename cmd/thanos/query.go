@@ -67,6 +67,7 @@ const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
 	queryPushdown        = "query-pushdown"
+	dnsPrefix            = "dnssrv+"
 )
 
 type queryMode string
@@ -179,6 +180,8 @@ func registerQuery(app *extkingpin.App) {
 		Default(string(dns.MiekgdnsResolverType)).Hidden().String()
 
 	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+	ignoreStoreErrors := cmd.Flag("store.ignore-errors", "Ignore errors from store endpoints. This is for qeury result completeness.").
+		Default("false").Bool()
 
 	endpointInfoTimeout := extkingpin.ModelDuration(cmd.Flag("endpoint.info-timeout", "Timeout of gRPC Info requests.").Default("5s").Hidden())
 
@@ -369,6 +372,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantCertField,
 			*enforceTenancy,
 			*tenantLabel,
+			*ignoreStoreErrors,
 		)
 	})
 }
@@ -451,6 +455,7 @@ func runQuery(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	ignoreStoreErrors bool,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -548,6 +553,7 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
+			ignoreStoreErrors,
 			queryConnMetricLabels...,
 		)
 
@@ -863,6 +869,7 @@ func prepareEndpointSet(
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	ignoreStoreErrors bool,
 	queryConnMetricLabels ...string,
 ) *query.EndpointSet {
 	endpointSet := query.NewEndpointSet(
@@ -881,9 +888,13 @@ func prepareEndpointSet(
 
 			for _, dnsProvider := range dnsProviders {
 				var tmpSpecs []*query.GRPCEndpointSpec
-
-				for _, addr := range dnsProvider.Addresses() {
-					tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+				for dnsName, addrs := range dnsProvider.AddressesWithDNS() {
+					// The dns name is like "dnssrv+pantheon-db-rep0:10901" whose replica key is "pantheon-db-rep0".
+					// TODO: have a more robust protocol to extract the replica key.
+					replicaKey := strings.Split(strings.TrimPrefix(dnsName, dnsPrefix), ":")[0]
+					for _, addr := range addrs {
+						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpecWithReplicaKey(replicaKey, addr, false, ignoreStoreErrors))
+					}
 				}
 				tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
 				specs = append(specs, tmpSpecs...)

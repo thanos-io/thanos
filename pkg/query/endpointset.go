@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -44,12 +46,25 @@ type queryConnMetricLabel string
 const (
 	ExternalLabels queryConnMetricLabel = "external_labels"
 	StoreType      queryConnMetricLabel = "store_type"
+	GroupKey       queryConnMetricLabel = "group_key"
+	ReplicaKey     queryConnMetricLabel = "replica_key"
 )
+
+var gReplicaKeySuffixRegex *regexp.Regexp
+
+func init() {
+	gReplicaKeySuffixRegex = regexp.MustCompile(`-rep[0-9]$`)
+}
 
 type GRPCEndpointSpec struct {
 	addr           string
 	isStrictStatic bool
 	dialOpts       []grpc.DialOption
+	groupKey       string
+	replicaKey     string
+	// If true, ignore the latest error when fetching metadata.
+	// If false, the endpoint is considered non-queriable for a period of time.
+	ignoreError bool
 }
 
 const externalLabelLimit = 1000
@@ -64,9 +79,28 @@ func NewGRPCEndpointSpec(addr string, isStrictStatic bool, dialOpts ...grpc.Dial
 	}
 }
 
+func NewGRPCEndpointSpecWithReplicaKey(replicaKey, addr string, isStrictStatic, ignoreStoreErrors bool, dialOpts ...grpc.DialOption) *GRPCEndpointSpec {
+	spec := NewGRPCEndpointSpec(addr, isStrictStatic, dialOpts...)
+	spec.replicaKey = replicaKey
+	// A replica key is like "pantheon-db-rep1", we need to extract the group key "pantheon-db" by matching regex suffix "-rep[0-9]".
+	// TODO: have a robust protocol to extract the group key from the replica key.
+	spec.groupKey = gReplicaKeySuffixRegex.ReplaceAllString(replicaKey, "")
+	// This is for query completeness enforcement. Even if an endpoint has errors, we still consider it for query completeness.
+	spec.ignoreError = ignoreStoreErrors
+	return spec
+}
+
 func (es *GRPCEndpointSpec) Addr() string {
 	// API address should not change between state changes.
 	return es.addr
+}
+
+func (es *GRPCEndpointSpec) GroupKey() string {
+	return es.groupKey
+}
+
+func (es *GRPCEndpointSpec) ReplicaKey() string {
+	return es.replicaKey
 }
 
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
@@ -196,23 +230,38 @@ type endpointSetNodeCollector struct {
 	mtx             sync.Mutex
 	storeNodes      map[component.Component]map[string]int
 	storePerExtLset map[string]int
+	storeNodesAddr  map[string]map[string]int
+	storeNodesKeys  map[string]map[string]int
 
-	connectionsDesc *prometheus.Desc
-	labels          []string
+	connectionsDesc     *prometheus.Desc
+	labels              []string
+	connectionsWithAddr *prometheus.Desc
+	connectionsWithKeys *prometheus.Desc
 }
 
 func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 	if len(labels) == 0 {
 		labels = []string{string(ExternalLabels), string(StoreType)}
 	}
+	desc := "Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier."
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
-			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
+			desc,
 			labels, nil,
 		),
 		labels: labels,
+		connectionsWithAddr: prometheus.NewDesc(
+			"thanos_store_nodes_grpc_connections_addr",
+			desc,
+			[]string{string(ReplicaKey), "addr"}, nil,
+		),
+		connectionsWithKeys: prometheus.NewDesc(
+			"thanos_store_nodes_grpc_connections_keys",
+			desc,
+			[]string{string(GroupKey), string(ReplicaKey)}, nil,
+		),
 	}
 }
 
@@ -229,7 +278,11 @@ func truncateExtLabels(s string, threshold int) string {
 	}
 	return s
 }
-func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
+func (c *endpointSetNodeCollector) Update(
+	nodes map[component.Component]map[string]int,
+	nodesAddr map[string]map[string]int,
+	nodesKeys map[string]map[string]int,
+) {
 	storeNodes := make(map[component.Component]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
@@ -246,10 +299,14 @@ func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[stri
 	defer c.mtx.Unlock()
 	c.storeNodes = storeNodes
 	c.storePerExtLset = storePerExtLset
+	c.storeNodesAddr = nodesAddr
+	c.storeNodesKeys = nodesKeys
 }
 
 func (c *endpointSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.connectionsDesc
+	ch <- c.connectionsWithAddr
+	ch <- c.connectionsWithKeys
 }
 
 func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
@@ -273,6 +330,22 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 				}
 			}
 			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...)
+		}
+	}
+	for replicaKey, occurrencesPerAddr := range c.storeNodesAddr {
+		for addr, occurrences := range occurrencesPerAddr {
+			ch <- prometheus.MustNewConstMetric(
+				c.connectionsWithAddr, prometheus.GaugeValue,
+				float64(occurrences),
+				replicaKey, addr)
+		}
+	}
+	for groupKey, occurrencesPerReplicaKey := range c.storeNodesKeys {
+		for replicaKeys, occurrences := range occurrencesPerReplicaKey {
+			ch <- prometheus.MustNewConstMetric(
+				c.connectionsWithKeys, prometheus.GaugeValue,
+				float64(occurrences),
+				groupKey, replicaKeys)
 		}
 	}
 }
@@ -414,6 +487,10 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		_, isTimedOut := timedOutRefs[addr]
 		if !isNew && !isExisting || isTimedOut {
 			staleRefs[addr] = er
+			level.Error(e.logger).Log("msg", "Found a stale endpoint",
+				"isNew", isNew, "isExisting", isExisting, "isTimedOut", isTimedOut,
+				"group_key", er.groupKey, "replica_key", er.replicaKey,
+				"address", addr)
 		}
 	}
 	e.endpointsMtx.RUnlock()
@@ -421,12 +498,14 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	e.endpointsMtx.Lock()
 	defer e.endpointsMtx.Unlock()
 	for addr, er := range newRefs {
-		extLset := labelpb.PromLabelSetsToString(er.LabelSets())
-		level.Info(e.logger).Log("msg", fmt.Sprintf("adding new %v with %+v", er.ComponentType(), er.apisPresent()), "address", addr, "extLset", extLset)
+		level.Info(e.logger).Log("msg", fmt.Sprintf("adding new %v with %+v", er.ComponentType(), er.apisPresent()),
+			"group_key", er.groupKey, "replica_key", er.replicaKey,
+			"address", addr)
 		e.endpoints[addr] = er
 	}
 	for addr, er := range staleRefs {
-		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.addr, "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
+		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.addr,
+			"group_key", er.groupKey, "replica_key", er.replicaKey)
 		er.Close()
 		delete(e.endpoints, addr)
 	}
@@ -434,6 +513,14 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 	// Update stats.
 	stats := newEndpointAPIStats()
+	statsAddr := make(map[string]map[string]int)
+	statsKeys := make(map[string]map[string]int)
+	bumpCounter := func(key1, key2 string, mp map[string]map[string]int) {
+		if _, ok := mp[key1]; !ok {
+			mp[key1] = make(map[string]int)
+		}
+		mp[key1][key2]++
+	}
 	for addr, er := range e.endpoints {
 		if !er.isQueryable() {
 			continue
@@ -449,9 +536,11 @@ func (e *EndpointSet) Update(ctx context.Context) {
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar][extLset]+stats[component.Rule][extLset]+1))
 		}
 		stats[er.ComponentType()][extLset]++
+		bumpCounter(er.replicaKey, strings.Split(addr, ":")[0], statsAddr)
+		bumpCounter(er.groupKey, er.replicaKey, statsKeys)
 	}
 
-	e.endpointsMetric.Update(stats)
+	e.endpointsMetric.Update(stats, statsAddr, statsKeys)
 }
 
 func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec, er *endpointRef) {
@@ -639,7 +728,19 @@ type endpointRef struct {
 	metadata *endpointMetadata
 	status   *EndpointStatus
 
+	groupKey    string
+	replicaKey  string
+	ignoreError bool
+
 	logger log.Logger
+}
+
+func (er *endpointRef) GroupKey() string {
+	return er.groupKey
+}
+
+func (er *endpointRef) ReplicaKey() string {
+	return er.replicaKey
 }
 
 // newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
@@ -660,11 +761,14 @@ func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec
 	}
 
 	return &endpointRef{
-		logger:   e.logger,
-		created:  e.now(),
-		addr:     spec.Addr(),
-		isStrict: spec.isStrictStatic,
-		cc:       conn,
+		logger:      e.logger,
+		created:     e.now(),
+		addr:        spec.Addr(),
+		isStrict:    spec.isStrictStatic,
+		cc:          conn,
+		groupKey:    spec.groupKey,
+		replicaKey:  spec.replicaKey,
+		ignoreError: spec.ignoreError,
 	}, nil
 }
 
@@ -716,7 +820,7 @@ func (er *endpointRef) isQueryable() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.isStrict || er.status.LastError == nil
+	return er.isStrict || er.ignoreError || er.status.LastError == nil
 }
 
 func (er *endpointRef) ComponentType() component.Component {

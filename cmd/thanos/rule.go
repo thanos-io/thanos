@@ -439,6 +439,7 @@ func runRule(
 			dialOpts,
 			5*time.Minute,
 			5*time.Second,
+			false,
 		)
 
 		// Periodically update the GRPC addresses from query config by resolving them using DNS SD if necessary.

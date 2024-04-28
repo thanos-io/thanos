@@ -161,7 +161,7 @@ func newQuerier(
 		rl[replicaLabel] = struct{}{}
 	}
 
-	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
+	partialResponseStrategy := storepb.PartialResponseStrategy_GROUP_REPLICA
 	if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN
 	}
