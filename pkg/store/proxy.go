@@ -531,6 +531,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 				Start:                   r.Start,
 				End:                     r.End,
 				Matchers:                append(r.Matchers, MatchersForLabelSets(extraMatchers)...),
+				WithoutReplicaLabels:    r.WithoutReplicaLabels,
 			})
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
@@ -633,6 +634,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 				Start:                   r.Start,
 				End:                     r.End,
 				Matchers:                append(r.Matchers, MatchersForLabelSets(extraMatchers)...),
+				WithoutReplicaLabels:    r.WithoutReplicaLabels,
 			})
 			if err != nil {
 				msg := "fetch label values from store %s"
