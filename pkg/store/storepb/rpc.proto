@@ -232,6 +232,9 @@ message LabelNamesRequest {
   google.protobuf.Any hints = 5;
 
   repeated LabelMatcher matchers = 6 [(gogoproto.nullable) = false];
+
+  // same as in series request.
+  repeated string without_replica_labels = 7;
 }
 
 message LabelNamesResponse {
@@ -262,6 +265,9 @@ message LabelValuesRequest {
   google.protobuf.Any hints = 6;
 
   repeated LabelMatcher matchers = 7 [(gogoproto.nullable) = false];
+
+  // same as in series request.
+  repeated string without_replica_labels = 8;
 }
 
 message LabelValuesResponse {
