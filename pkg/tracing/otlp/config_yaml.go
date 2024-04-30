@@ -22,6 +22,7 @@ type retryConfig struct {
 type Config struct {
 	ClientType         string            `yaml:"client_type"`
 	ServiceName        string            `yaml:"service_name"`
+	ResourceAttributes map[string]string `yaml:"resource_attributes"`
 	ReconnectionPeriod time.Duration     `yaml:"reconnection_period"`
 	Compression        string            `yaml:"compression"`
 	Insecure           bool              `yaml:"insecure"`
