@@ -79,6 +79,7 @@ type: OTLP
 config:
   client_type: ""
   service_name: ""
+  resource_attributes: {}
   reconnection_period: 0s
   compression: ""
   insecure: false
