@@ -39,6 +39,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#7293](https://github.com/thanos-io/thanos/pull/7293) Compact: Add validation to --min-time and --max-time flags
 - [#7231](https://github.com/thanos-io/thanos/pull/7231) Tracing: added missing sampler types
 - [#7194](https://github.com/thanos-io/thanos/pull/7194) Downsample: retry objstore related errors
 - [#7105](https://github.com/thanos-io/thanos/pull/7105) Rule: add flag `--query.enable-x-functions` to allow usage of extended promql functions (xrate, xincrease, xdelta) in loaded rules

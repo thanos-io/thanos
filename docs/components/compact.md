@@ -251,7 +251,13 @@ Generally there two scalability directions:
 
 1. Too many producers/sources (e.g Prometheus-es) are uploading to same object storage. Too many "streams" of work for Compactor. Compactor has to scale with the number of producers in the bucket.
 
-You should horizontally scale Compactor to cope with this using [label sharding](../sharding.md#compactor). This allows to assign multiple streams to each instance of compactor.
+You can horizontally scale Compactor to cope with this via
+- [label sharding](../sharding.md#compactor): This allows to assign multiple streams to each instance of compactor.
+- [time sharding](../sharding.md#compactor): This allows for compactors to only handle blocks that fall within a given time range
+
+For example, to have an instance of compactor only working on blocks that fall within the time range of 14 days ago to 7 days ago, the flags would be `--min-time=-14d --max-time=-7d`
+
+Absolute times can be specified as well.
 
 2. TSDB blocks from single stream is too big, it takes too much time or resources.
 
@@ -399,20 +405,21 @@ Flags:
                                 json.
       --log.level=info          Log filtering level.
       --max-time=9999-12-31T23:59:59Z
-                                End of time range limit to compact.
-                                Thanos Compactor will compact only blocks,
-                                which happened earlier than this value. Option
+                                End of time range limit to compact. Thanos
+                                Compactor will only compact blocks whose min
+                                time is at a date less recent this value. Option
                                 can be a constant time in RFC3339 format or time
                                 duration relative to current time, such as -1d
-                                or 2h45m. Valid duration units are ms, s, m, h,
-                                d, w, y.
+                                or -2h45m. Valid units for duration are ms, s,
+                                m, h, d, w, y.
       --min-time=0000-01-01T00:00:00Z
-                                Start of time range limit to compact.
-                                Thanos Compactor will compact only blocks, which
-                                happened later than this value. Option can be a
-                                constant time in RFC3339 format or time duration
-                                relative to current time, such as -1d or 2h45m.
-                                Valid duration units are ms, s, m, h, d, w, y.
+                                Start of time range limit to compact. Thanos
+                                Compactor will only compact blocks whose max
+                                time is at a date more recent than this value.
+                                Option can be a constant time in RFC3339 format
+                                or time duration relative to current time, such
+                                as -1d or -2h45m. Durations must be negative,
+                                and valid units are ms, s, m, h, d, w, y.
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file'
                                 flag (mutually exclusive). Content of
