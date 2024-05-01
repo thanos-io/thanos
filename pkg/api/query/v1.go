@@ -46,6 +46,7 @@ import (
 	"github.com/prometheus/prometheus/util/stats"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
+	"github.com/thanos-io/promql-engine/logicalplan"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -89,6 +90,12 @@ const (
 	PromqlEngineThanos     PromqlEngineType = "thanos"
 )
 
+type ThanosEngine interface {
+	promql.QueryEngine
+	NewInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error)
+	NewRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, root logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error)
+}
+
 type QueryEngineFactory struct {
 	engineOpts            promql.EngineOpts
 	remoteEngineEndpoints promqlapi.RemoteEndpoints
@@ -97,7 +104,7 @@ type QueryEngineFactory struct {
 	prometheusEngine       promql.QueryEngine
 
 	createThanosEngine sync.Once
-	thanosEngine       promql.QueryEngine
+	thanosEngine       ThanosEngine
 	enableXFunctions   bool
 }
 
@@ -112,7 +119,7 @@ func (f *QueryEngineFactory) GetPrometheusEngine() promql.QueryEngine {
 	return f.prometheusEngine
 }
 
-func (f *QueryEngineFactory) GetThanosEngine() promql.QueryEngine {
+func (f *QueryEngineFactory) GetThanosEngine() ThanosEngine {
 	f.createThanosEngine.Do(func() {
 		if f.thanosEngine != nil {
 			return
@@ -304,6 +311,8 @@ type queryTelemetry struct {
 	// TODO(saswatamcode): Add aggregate fields to enrich data.
 	OperatorName string           `json:"name,omitempty"`
 	Execution    string           `json:"executionTime,omitempty"`
+	PeakSamples  int64            `json:"peakSamples,omitempty"`
+	TotalSamples int64            `json:"totalSamples,omitempty"`
 	Children     []queryTelemetry `json:"children,omitempty"`
 }
 
@@ -472,6 +481,8 @@ func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	var analysis queryTelemetry
 	analysis.OperatorName = a.OperatorTelemetry.String()
 	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken().String()
+	analysis.PeakSamples = a.PeakSamples()
+	analysis.TotalSamples = a.TotalSamples()
 	for _, c := range a.Children {
 		analysis.Children = append(analysis.Children, processAnalysis(&c))
 	}

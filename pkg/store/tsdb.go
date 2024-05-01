@@ -307,10 +307,16 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	extLsetToRemove := map[string]struct{}{}
+	for _, lbl := range r.WithoutReplicaLabels {
+		extLsetToRemove[lbl] = struct{}{}
+	}
 
 	if len(res) > 0 {
 		s.getExtLset().Range(func(l labels.Label) {
-			res = append(res, l.Name)
+			if _, ok := extLsetToRemove[l.Name]; !ok {
+				res = append(res, l.Name)
+			}
 		})
 		sort.Strings(res)
 	}
@@ -333,6 +339,12 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 ) {
 	if r.Label == "" {
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
+
+	for i := range r.WithoutReplicaLabels {
+		if r.Label == r.WithoutReplicaLabels[i] {
+			return &storepb.LabelValuesResponse{}, nil
+		}
 	}
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())

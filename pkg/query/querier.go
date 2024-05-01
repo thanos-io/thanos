@@ -399,14 +399,19 @@ func (q *querier) LabelValues(ctx context.Context, name string, matchers ...*lab
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
-
-	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+	req := &storepb.LabelValuesRequest{
 		Label:                   name,
 		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
-	})
+	}
+
+	if q.isDedupEnabled() {
+		req.WithoutReplicaLabels = q.replicaLabels
+	}
+
+	resp, err := q.proxy.LabelValues(ctx, req)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
 	}
@@ -433,12 +438,18 @@ func (q *querier) LabelNames(ctx context.Context, matchers ...*labels.Matcher) (
 		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
 
-	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+	req := &storepb.LabelNamesRequest{
 		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
-	})
+	}
+
+	if q.isDedupEnabled() {
+		req.WithoutReplicaLabels = q.replicaLabels
+	}
+
+	resp, err := q.proxy.LabelNames(ctx, req)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelNames()")
 	}

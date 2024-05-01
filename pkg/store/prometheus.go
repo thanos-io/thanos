@@ -606,9 +606,16 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 		}
 	}
 
+	extLsetToRemove := map[string]struct{}{}
+	for _, lbl := range r.WithoutReplicaLabels {
+		extLsetToRemove[lbl] = struct{}{}
+	}
+
 	if len(lbls) > 0 {
 		extLset.Range(func(l labels.Label) {
-			lbls = append(lbls, l.Name)
+			if _, ok := extLsetToRemove[l.Name]; !ok {
+				lbls = append(lbls, l.Name)
+			}
 		})
 		sort.Strings(lbls)
 	}
@@ -620,6 +627,11 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
 	if r.Label == "" {
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
+	for i := range r.WithoutReplicaLabels {
+		if r.Label == r.WithoutReplicaLabels[i] {
+			return &storepb.LabelValuesResponse{}, nil
+		}
 	}
 
 	extLset := p.externalLabelsFn()

@@ -2,9 +2,9 @@
 
 # Background
 
-Currently, all components that read from object store assume that all the operations and functionality should be done based on **all** the available blocks that are present in the certain bucket's root directory.
+By default, all components that read from object store assume that all the operations and functionality should be done based on **all** the available blocks that are present in the given bucket's root directory.
 
-This is in most cases totally fine, however with time and allowance of storing blocks from multiple `Sources` into the same bucket, the number of objects in a bucket can grow drastically.
+This is in most cases totally fine, however when storing blocks from many `Sources` over long durations in the same bucket the number of objects in a bucket can grow drastically.
 
 This means that with time you might want to scale out certain components e.g:
 
@@ -18,35 +18,28 @@ Queries against store gateway which are touching large number of blocks (no matt
 
 # Relabelling
 
-Similar to [promtail](https://grafana.com/docs/loki/latest/clients/promtail/configuration/#relabel_configs) this config will follow native [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
+Similar to [promtail](https://grafana.com/docs/loki/latest/clients/promtail/configuration/#relabel_configs) this config follows native [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
 
-Now, thanos only support following relabel actions:
+Currently, thanos only supports the following relabel actions:
 
 * keep
 
 * drop
 
 * hashmod
-  * `external labels` for all components
+  * on `external labels` for all components
 
-  * `__block_id` for store gateway, see this [example](https://github.com/observatorium/configuration/blob/bf1304b0d7bce2ae3fefa80412bb358f9aa176fb/environments/openshift/manifests/observatorium-template.yaml#L1514-L1521)
+  * on `__block_id` for store gateway, see this [example](https://github.com/observatorium/configuration/blob/bf1304b0d7bce2ae3fefa80412bb358f9aa176fb/environments/openshift/manifests/observatorium-template.yaml#L1514-L1521)
 
-The relabel config defines filtering process done on **every** synchronization with object storage.
+The relabel config is used to filter the relevant blocks every time a Thanos component synchronizes with object storage. If a block is dropped, this means it will be ignored by the component.
 
-We will allow potentially manipulating with several of inputs:
+Currently, only external labels are allowed as sources. The block will be dropped if the output is an empty label set.
 
-* External labels:
-  * `<name>`
+If no relabel-config is given, all external labels will be kept.
 
-Output:
+Example usages:
 
-* If output is empty, drop block.
-
-By default, on empty relabel-config, all external labels are assumed.
-
-Example usages would be:
-
-* Drop blocks which contains external labels cluster=A
+* Ignore blocks which contain the external labels `cluster=A`
 
 ```yaml
 - action: drop
@@ -55,7 +48,7 @@ Example usages would be:
   - cluster
 ```
 
-* Keep only blocks which contains external labels cluster=A
+* Keep only blocks which contain the external labels `cluster=A`
 
 ```yaml
 - action: keep
