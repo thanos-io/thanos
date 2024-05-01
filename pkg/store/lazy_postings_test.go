@@ -208,7 +208,10 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			keys, matchers := keysToFetchFromPostingGroups(tc.pgs)
 			testutil.Equals(t, tc.expectedLabels, keys)
-			testutil.Equals(t, tc.expectedMatchers, matchers)
+			testutil.Assert(t, len(tc.expectedMatchers) == len(matchers))
+			for i := 0; i < len(tc.expectedMatchers); i++ {
+				testutil.Equals(t, tc.expectedMatchers[i].String(), matchers[i].String())
+			}
 		})
 	}
 }
@@ -308,7 +311,19 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			expectedError:         "postings offsets for foo: random",
 		},
 		{
-			name: "posting offsets empty",
+			name:             "posting offsets empty with add keys, expect empty posting",
+			inputPostings:    map[string]map[string]index.Range{},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+			},
+			expectedPostingGroups: nil,
+			expectedEmptyPosting:  true,
+		},
+		{
+			name: "posting group label with add keys doesn't exist, return empty postings",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
 			},
@@ -322,9 +337,26 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			expectedEmptyPosting:  true,
 		},
 		{
-			name: "posting group label doesn't exist",
+			name: "posting group label with remove keys doesn't exist, noop",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", removeKeys: []string{"foo"}, addAll: true},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{name: "bar", removeKeys: []string{"foo"}, cardinality: 0, addAll: true},
+				{name: "foo", addKeys: []string{"bar"}, cardinality: 1},
+			},
+		},
+		{
+			name: "posting group label with add keys exist but no matching value, expect empty posting",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 8}},
+				"bar": {"baz": index.Range{Start: 8, End: 16}},
 			},
 			seriesMaxSize:    1000,
 			seriesMatchRatio: 0.5,
@@ -334,6 +366,23 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			},
 			expectedPostingGroups: nil,
 			expectedEmptyPosting:  true,
+		},
+		{
+			name: "posting group label with remove keys exist but no matching value, noop",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 8}},
+				"bar": {"baz": index.Range{Start: 8, End: 16}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", removeKeys: []string{"foo"}, addAll: true},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{name: "bar", removeKeys: []string{"foo"}, cardinality: 0, addAll: true},
+				{name: "foo", addKeys: []string{"bar"}, cardinality: 1},
+			},
 		},
 		{
 			name: "posting group keys partial exist",

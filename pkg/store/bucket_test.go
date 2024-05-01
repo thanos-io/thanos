@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -47,13 +48,13 @@ import (
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/pool"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
@@ -633,6 +634,83 @@ func TestBucketStoreConfig_validate(t *testing.T) {
 			testutil.Equals(t, testData.expected, testData.config.validate())
 		})
 	}
+}
+
+func TestBucketStore_TSDBInfo(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewNopLogger()
+	dir := t.TempDir()
+
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
+
+	for _, tt := range []struct {
+		mint, maxt int64
+		extLabels  labels.Labels
+	}{
+		{mint: 0, maxt: 1000, extLabels: labels.FromStrings("a", "b")},
+		{mint: 1000, maxt: 2000, extLabels: labels.FromStrings("a", "b")},
+		{mint: 3000, maxt: 4000, extLabels: labels.FromStrings("a", "b")},
+		{mint: 3500, maxt: 5000, extLabels: labels.FromStrings("a", "b")},
+		{mint: 0, maxt: 1000, extLabels: labels.FromStrings("a", "c")},
+		{mint: 500, maxt: 2000, extLabels: labels.FromStrings("a", "c")},
+	} {
+		id1, err := e2eutil.CreateBlock(ctx, dir, series, 10, tt.mint, tt.maxt, tt.extLabels, 0, metadata.NoneFunc)
+		testutil.Ok(t, err)
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id1.String()), metadata.NoneFunc))
+	}
+
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, bkt, baseBlockIDsFetcher, dir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	chunkPool, err := NewDefaultChunkBytesPool(2e5)
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(
+		objstore.WithNoopInstr(bkt),
+		metaFetcher,
+		dir,
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		0,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bucketStore.Close()) }()
+
+	testutil.Ok(t, bucketStore.SyncBlocks(ctx))
+	testutil.Equals(t, bucketStore.TSDBInfos(), []infopb.TSDBInfo{
+		{
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}},
+			MinTime: 0,
+			MaxTime: 2000,
+		},
+		{
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}},
+			MinTime: 3000,
+			MaxTime: 5000,
+		},
+		{
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}}},
+			MinTime: 0,
+			MaxTime: 2000,
+		},
+	})
 }
 
 func TestBucketStore_Info(t *testing.T) {
@@ -2866,6 +2944,23 @@ func TestExpandPostingsWithContextCancel(t *testing.T) {
 	testutil.Equals(t, []storage.SeriesRef(nil), res)
 }
 
+func samePostingGroup(a, b *postingGroup) bool {
+	if a.name != b.name || a.lazy != b.lazy || a.addAll != b.addAll || a.cardinality != b.cardinality || len(a.matchers) != len(b.matchers) {
+		return false
+	}
+
+	if !reflect.DeepEqual(a.addKeys, b.addKeys) || !reflect.DeepEqual(a.removeKeys, b.removeKeys) {
+		return false
+	}
+
+	for i := 0; i < len(a.matchers); i++ {
+		if a.matchers[i].String() != b.matchers[i].String() {
+			return false
+		}
+	}
+	return true
+}
+
 func TestMatchersToPostingGroup(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
@@ -3213,7 +3308,10 @@ func TestMatchersToPostingGroup(t *testing.T) {
 				return tc.labelValues[name], nil
 			}, tc.matchers)
 			testutil.Ok(t, err)
-			testutil.Equals(t, tc.expected, actual)
+			testutil.Equals(t, len(tc.expected), len(actual))
+			for i := 0; i < len(tc.expected); i++ {
+				testutil.Assert(t, samePostingGroup(tc.expected[i], actual[i]))
+			}
 		})
 	}
 }

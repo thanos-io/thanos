@@ -684,7 +684,12 @@ func TestQueryExplainEndpoints(t *testing.T) {
 				"engine": []string{"thanos"},
 			},
 			response: &engine.ExplainOutputNode{
-				OperatorName: "[noArgFunction] time()",
+				OperatorName: "[duplicateLabelCheck]",
+				Children: []engine.ExplainOutputNode{
+					{
+						OperatorName: "[noArgFunction]",
+					},
+				},
 			},
 		},
 	}

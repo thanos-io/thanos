@@ -192,18 +192,19 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --selector.relabel-config=<content>
                                  Alternative to 'selector.relabel-config-file'
-                                 flag (mutually exclusive). Content of
-                                 YAML file that contains relabeling
-                                 configuration that allows selecting
-                                 blocks. It follows native Prometheus
-                                 relabel-config syntax. See format details:
-                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+                                 flag (mutually exclusive). Content of YAML
+                                 file with relabeling configuration that allows
+                                 selecting blocks to act on based on their
+                                 external labels. It follows thanos sharding
+                                 relabel-config syntax. For format details see:
+                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
       --selector.relabel-config-file=<file-path>
-                                 Path to YAML file that contains relabeling
-                                 configuration that allows selecting
-                                 blocks. It follows native Prometheus
-                                 relabel-config syntax. See format details:
-                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+                                 Path to YAML file with relabeling
+                                 configuration that allows selecting blocks
+                                 to act on based on their external labels.
+                                 It follows thanos sharding relabel-config
+                                 syntax. For format details see:
+                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
       --store.enable-index-header-lazy-reader
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by

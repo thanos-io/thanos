@@ -199,7 +199,7 @@ To configure the gates and limits you can use one of the two options:
 - `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file. Any modification to the indicated file will trigger a configuration reload. If the updated configuration is invalid an error will be logged and it won't replace the previous valid configuration.
 - `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
 
-By default all the limits and gates are **disabled**.
+By default all the limits and gates are **disabled**. These options should be added to the routing-receivers when using the [Routing Receive and Ingesting Receive](https://thanos.io/tip/proposals-accepted/202012-receive-split.md/).
 
 ### Understanding the configuration file
 
@@ -415,6 +415,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.split-tenant-label-name=""
+                                 Label name through which the request will
+                                 be split into multiple tenants. This takes
+                                 precedence over the HTTP header.
       --receive.tenant-certificate-field=
                                  Use TLS client's certificate field to
                                  determine tenant for write requests.
@@ -440,6 +444,12 @@ Flags:
                                  to the server.
       --remote-write.client-tls-key=""
                                  TLS Key for the client's certificate.
+      --remote-write.client-tls-secure
+                                 Use TLS when talking to the other receivers.
+      --remote-write.client-tls-skip-verify
+                                 Disable TLS certificate verification when
+                                 talking to the other receivers i.e self signed,
+                                 signed by fake CA.
       --remote-write.server-tls-cert=""
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.

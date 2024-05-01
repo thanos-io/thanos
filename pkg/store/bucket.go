@@ -42,7 +42,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/objstore"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -874,18 +873,39 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	infos := make([]infopb.TSDBInfo, 0, len(s.blocks))
+	infoMap := make(map[uint64][]infopb.TSDBInfo, len(s.blocks))
 	for _, b := range s.blocks {
-		infos = append(infos, infopb.TSDBInfo{
+		lbls := labels.FromMap(b.meta.Thanos.Labels)
+		hash := lbls.Hash()
+		infoMap[hash] = append(infoMap[hash], infopb.TSDBInfo{
 			Labels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(b.meta.Thanos.Labels)),
+				Labels: labelpb.ZLabelsFromPromLabels(lbls),
 			},
 			MinTime: b.meta.MinTime,
 			MaxTime: b.meta.MaxTime,
 		})
 	}
 
-	return infos
+	// join adjacent blocks so we emit less TSDBInfos
+	res := make([]infopb.TSDBInfo, 0, len(s.blocks))
+	for _, infos := range infoMap {
+		sort.Slice(infos, func(i, j int) bool { return infos[i].MinTime < infos[j].MinTime })
+
+		cur := infos[0]
+		for i, info := range infos {
+			if info.MinTime > cur.MaxTime {
+				res = append(res, cur)
+				cur = info
+				continue
+			}
+			cur.MaxTime = info.MaxTime
+			if i == len(infos)-1 {
+				res = append(res, cur)
+			}
+		}
+	}
+
+	return res
 }
 
 func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
@@ -1159,10 +1179,11 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 	}
 	b.i = end
 
+	lazyExpandedPosting := b.lazyPostings.lazyExpanded()
 	postingsBatch := b.lazyPostings.postings[start:end]
 	if len(postingsBatch) == 0 {
 		b.hasMorePostings = false
-		if b.lazyPostings.lazyExpanded() {
+		if lazyExpandedPosting {
 			// No need to fetch index version again if lazy posting has 0 length.
 			if len(b.lazyPostings.postings) > 0 {
 				v, err := b.indexr.IndexVersion()
@@ -1196,11 +1217,13 @@ OUTER:
 		if err := b.ctx.Err(); err != nil {
 			return err
 		}
-		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
+		hasMatchedChunks, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			return errors.Wrap(err, "read series")
 		}
-		if !ok {
+		// Skip getting series symbols if we know there is no matched chunks
+		// and lazy expanded posting not enabled.
+		if !lazyExpandedPosting && !hasMatchedChunks {
 			continue
 		}
 
@@ -1218,8 +1241,14 @@ OUTER:
 				continue OUTER
 			}
 		}
-		if b.lazyPostings.lazyExpanded() {
+		if lazyExpandedPosting {
 			b.expandedPostings = append(b.expandedPostings, postingsBatch[i])
+		}
+		// If lazy expanded postings enabled, due to expanded postings cache, we need to
+		// make sure we check lazy posting matchers and update expanded postings before
+		// going to next series.
+		if !hasMatchedChunks {
+			continue
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
@@ -1261,7 +1290,7 @@ OUTER:
 		b.entries = append(b.entries, s)
 	}
 
-	if b.lazyPostings.lazyExpanded() {
+	if lazyExpandedPosting {
 		// Apply series limit before fetching chunks, for actual series matched.
 		if err := b.seriesLimiter.Reserve(uint64(seriesMatched)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
@@ -1631,13 +1660,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
-		defer func() {
-			for _, resp := range respSets {
-				resp.Close()
-			}
-		}()
 		begin := time.Now()
-		set := NewDedupResponseHeap(NewProxyResponseHeap(respSets...))
+		set := NewResponseDeduplicator(NewProxyResponseLoserTree(respSets...))
 		for set.Next() {
 			at := set.At()
 			warn := at.GetWarning()
@@ -1725,6 +1749,12 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
 	}
+	extLsetToRemove := make(map[string]struct{})
+	if len(req.WithoutReplicaLabels) > 0 {
+		for _, l := range req.WithoutReplicaLabels {
+			extLsetToRemove[l] = struct{}{}
+		}
+	}
 
 	g, gctx := errgroup.WithContext(ctx)
 
@@ -1781,15 +1811,18 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				// b.extLset is already sorted by label name, no need to sort it again.
 				extRes := make([]string, 0, b.extLset.Len())
 				b.extLset.Range(func(l labels.Label) {
-					extRes = append(extRes, l.Name)
+					if _, ok := extLsetToRemove[l.Name]; !ok {
+						extRes = append(extRes, l.Name)
+					}
 				})
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
 				seriesReq := &storepb.SeriesRequest{
-					MinTime:    req.Start,
-					MaxTime:    req.End,
-					SkipChunks: true,
+					MinTime:              req.Start,
+					MaxTime:              req.End,
+					SkipChunks:           true,
+					WithoutReplicaLabels: req.WithoutReplicaLabels,
 				}
 				blockClient := newBlockSeriesClient(
 					newCtx,
@@ -1806,7 +1839,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					s.metrics.seriesFetchDurationSum,
 					nil,
 					nil,
-					nil,
+					extLsetToRemove,
 					s.enabledLazyExpandedPostings,
 					s.metrics.lazyExpandedPostingsCount,
 					s.metrics.lazyExpandedPostingSizeBytes,
@@ -1908,6 +1941,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
+	for i := range req.WithoutReplicaLabels {
+		if req.Label == req.WithoutReplicaLabels[i] {
+			return &storepb.LabelValuesResponse{}, nil
+		}
+	}
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
 
@@ -1992,9 +2030,10 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				result = res
 			} else {
 				seriesReq := &storepb.SeriesRequest{
-					MinTime:    req.Start,
-					MaxTime:    req.End,
-					SkipChunks: true,
+					MinTime:              req.Start,
+					MaxTime:              req.End,
+					SkipChunks:           true,
+					WithoutReplicaLabels: req.WithoutReplicaLabels,
 				}
 				blockClient := newBlockSeriesClient(
 					newCtx,
@@ -2742,7 +2781,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
 		// Fast-path for set matching.
 		if m.Type == labels.MatchNotRegexp {
-			if vals := findSetMatches(m.Value); len(vals) > 0 {
+			if vals := m.SetMatches(); len(vals) > 0 {
 				sort.Strings(vals)
 				return newPostingGroup(true, m.Name, nil, vals), nil, nil
 			}
@@ -2771,7 +2810,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
 	}
 	if m.Type == labels.MatchRegexp {
-		if vals := findSetMatches(m.Value); len(vals) > 0 {
+		if vals := m.SetMatches(); len(vals) > 0 {
 			sort.Strings(vals)
 			return newPostingGroup(false, m.Name, vals, nil), nil, nil
 		}
