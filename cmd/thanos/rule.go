@@ -59,6 +59,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -951,7 +952,7 @@ func queryFuncCreator(
 				queryAPIClients := grpcEndpointSet.GetQueryAPIClients()
 				for _, i := range rand.Perm(len(queryAPIClients)) {
 					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{})
-					expr, err := parser.ParseExpr(qs)
+					expr, err := extpromql.ParserExpr(qs)
 					if err != nil {
 						level.Error(logger).Log("err", err, "query", qs)
 						continue

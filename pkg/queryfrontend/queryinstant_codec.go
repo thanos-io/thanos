@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"io"
 	"net/http"
 	"net/url"
@@ -370,7 +371,7 @@ const (
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
-	expr, err := parser.ParseExpr(q)
+	expr, err := extpromql.ParserExpr(q)
 	if err != nil {
 		return 0, err
 	}

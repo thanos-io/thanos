@@ -18,6 +18,7 @@ package querysharding
 
 import (
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/common/model"
@@ -88,7 +89,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
-	expr, err := parser.ParseExpr(query)
+	expr, err := extpromql.ParserExpr(query)
 	if err != nil {
 		return nonShardableQuery(), err
 	}

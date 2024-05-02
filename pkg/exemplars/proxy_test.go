@@ -6,6 +6,7 @@ package exemplars
 import (
 	"context"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"io"
 	"os"
 	"reflect"
@@ -54,7 +55,7 @@ func (t *testExemplarClient) Recv() (*exemplarspb.ExemplarsResponse, error) {
 }
 
 func (t *testExemplarClient) Exemplars(ctx context.Context, in *exemplarspb.ExemplarsRequest, opts ...grpc.CallOption) (exemplarspb.Exemplars_ExemplarsClient, error) {
-	expr, err := parser.ParseExpr(in.Query)
+	expr, err := extpromql.ParserExpr(in.Query)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
