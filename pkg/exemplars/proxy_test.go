@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -232,6 +233,32 @@ func TestProxy(t *testing.T) {
 						}),
 					},
 					LabelSets: []labels.Labels{labels.FromMap(map[string]string{"cluster": "A"})},
+				},
+			},
+			selectorLabels: labels.FromMap(map[string]string{"query": "foo"}),
+			server:         &testExemplarServer{},
+			wantResponses: []*exemplarspb.ExemplarsResponse{
+				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+				}),
+			},
+		},
+		{
+			name: "one external label matches one of the selector labels",
+			request: &exemplarspb.ExemplarsRequest{
+				Query:                   `http_request_duration_bucket{cluster="A"}`,
+				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+			},
+			clients: []*exemplarspb.ExemplarStore{
+				{
+					ExemplarsClient: &testExemplarClient{
+						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+						}),
+					},
+					LabelSets: []labels.Labels{labels.FromMap(map[string]string{"cluster": "non-matching"}), labels.FromMap(map[string]string{"cluster": "A"})},
 				},
 			},
 			selectorLabels: labels.FromMap(map[string]string{"query": "foo"}),
