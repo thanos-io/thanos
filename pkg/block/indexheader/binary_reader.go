@@ -875,6 +875,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 
 		// Iterate on the offset table.
 		newSameRngs = newSameRngs[:0]
+	Iter:
 		for d.Err() == nil {
 			// Posting format entry is as follows:
 			// │ ┌────────────────────────────────────────┐ │
@@ -916,6 +917,15 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 					break
 				}
 				wantedValue = values[valueIndex]
+				// Only do this if there is no new range added. If there is an existing
+				// range we want to continue iterating the offset table to get the end.
+				if len(newSameRngs) == 0 && i+1 < len(e.offsets) {
+					// We want to limit this loop within e.offsets[i, i+1). So when the wanted value
+					// is >= e.offsets[i+1], go out of the loop and binary search again.
+					if wantedValue >= e.offsets[i+1].value {
+						break Iter
+					}
+				}
 			}
 
 			if i+1 == len(e.offsets) {
@@ -942,7 +952,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 
 			if len(newSameRngs) > 0 {
 				// We added some ranges in this iteration. Use next posting offset as the end of our ranges.
-				// We know it exists as we never go further in this loop than e.offsets[i, i+1].
+				// We know it exists as we never go further in this loop than e.offsets[i, i+1).
 
 				skipNAndName(&d, &buf)
 				d.UvarintBytes() // Label value.

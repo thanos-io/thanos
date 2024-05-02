@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
@@ -54,14 +55,18 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			return nil, false, errors.Wrapf(err, "postings offsets for %s", pg.name)
 		}
 
-		for _, r := range rngs {
-			if r == indexheader.NotFoundRange {
+		for _, rng := range rngs {
+			if rng == indexheader.NotFoundRange {
 				continue
+			}
+			if rng.End <= rng.Start {
+				level.Error(r.block.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
+				return postingGroups, false, nil
 			}
 			// Each range starts from the #entries field which is 4 bytes.
 			// Need to subtract it when calculating number of postings.
 			// https://github.com/prometheus/prometheus/blob/v2.46.0/tsdb/docs/format/index.md.
-			pg.cardinality += (r.End - r.Start - 4) / 4
+			pg.cardinality += (rng.End - rng.Start - 4) / 4
 		}
 		// If the posting group adds keys, 0 cardinality means the posting doesn't exist.
 		// If the posting group removes keys, no posting ranges found is fine as it is a noop.
