@@ -261,8 +261,7 @@ func TestProxy(t *testing.T) {
 					LabelSets: []labels.Labels{labels.FromMap(map[string]string{"cluster": "non-matching"}), labels.FromMap(map[string]string{"cluster": "A"})},
 				},
 			},
-			selectorLabels: labels.FromMap(map[string]string{"query": "foo"}),
-			server:         &testExemplarServer{},
+			server: &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
 					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
@@ -368,12 +367,13 @@ func TestProxy(t *testing.T) {
 			// for matched response for simplicity.
 		Outer:
 			for _, exp := range tc.wantResponses {
+				var lres *exemplarspb.ExemplarsResponse
 				for _, res := range tc.server.responses {
 					if reflect.DeepEqual(exp, res) {
 						continue Outer
 					}
 				}
-				t.Errorf("miss expected response %v", exp)
+				t.Errorf("miss expected response %v. got: %v", exp, lres)
 			}
 		})
 	}

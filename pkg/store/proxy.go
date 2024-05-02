@@ -427,7 +427,7 @@ func storeMatches(ctx context.Context, s Client, debugLogging bool, mint, maxt i
 	}
 
 	extLset := s.LabelSets()
-	if !labelSetsMatch(matchers, extLset...) {
+	if !LabelSetsMatch(matchers, extLset...) {
 		if debugLogging {
 			reason = fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 		}
@@ -449,7 +449,7 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 
 	match := false
 	for _, sm := range storeDebugMatchers {
-		match = match || labelSetsMatch(sm, labels.FromStrings("__address__", addr))
+		match = match || LabelSetsMatch(sm, labels.FromStrings("__address__", addr))
 	}
 	if !match {
 		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
@@ -457,8 +457,8 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 	return true, ""
 }
 
-// labelSetsMatch returns false if all label-set do not match the matchers (aka: OR is between all label-sets).
-func labelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
+// LabelSetsMatch returns false if all label-set do not match the matchers (aka: OR is between all label-sets).
+func LabelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
 	if len(lset) == 0 {
 		return true
 	}
