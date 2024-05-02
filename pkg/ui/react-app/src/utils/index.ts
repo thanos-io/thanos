@@ -286,8 +286,10 @@ export const encodePanelOptionsToQueryString = (panels: PanelMeta[]): string => 
   return `?${panels.map(toQueryString).join('&')}`;
 };
 
+const alertSourceTemplate = "/graph?g0.expr={{.Expr}}&g0.tab=1";
+
 export const createExpressionLink = (expr: string): string => {
-  return `../graph?g0.expr=${encodeURIComponent(expr)}&g0.tab=1&g0.stacked=0&g0.range_input=1h`;
+  return `${alertSourceTemplate.replace('{{.Expr}}', encodeURIComponent(expr))}&g0.stacked=0&g0.range_input=1h`;
 };
 
 export const createExternalExpressionLink = (expr: string): string => {
