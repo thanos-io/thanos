@@ -5,6 +5,7 @@ package tenancy
 
 import (
 	"context"
+	"github.com/thanos-io/promql-engine/execution/function"
 	"net/http"
 	"path"
 
@@ -148,7 +149,9 @@ func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (strin
 
 	e := injectproxy.NewEnforcer(false, labelMatcher)
 
-	expr, err := parser.ParseExpr(query)
+	promParser := parser.NewParser(query, parser.WithFunctions(function.XFunctions))
+	defer promParser.Close()
+	expr, err := promParser.ParseExpr()
 	if err != nil {
 		return "", errors.Wrap(err, "error parsing query string, when enforcing tenenacy")
 	}

@@ -5,6 +5,7 @@ package tenancy_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -195,4 +196,55 @@ func TestTenantProxyPassing(t *testing.T) {
 
 		_ = q.Series(&storepb.SeriesRequest{Matchers: seriesMatchers}, &storeSeriesServer{ctx: ctx})
 	})
+}
+
+func TestGetTenantFromHTTP(t *testing.T) {
+	t.Run("tenant-from-header", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		req.Header.Add("THANOS-TENANT", "test-tenant")
+		tenant, err := tenancy.GetTenantFromHTTP(req, "THANOS-TENANT", "default-tenant", "")
+		testutil.Ok(t, err)
+		testutil.Equals(t, "test-tenant", tenant)
+	})
+
+	t.Run("default-tenant", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "http://example.com", nil)
+		tenant, err := tenancy.GetTenantFromHTTP(req, "THANOS-TENANT", "default-tenant", "")
+		testutil.Ok(t, err)
+		testutil.Equals(t, "default-tenant", tenant)
+	})
+}
+
+func TestEnforceQueryTenancy(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenantLabel   string
+		tenant        string
+		query         string
+		expectedQuery string
+	}{
+		{
+			name:          "vector selector query",
+			tenantLabel:   "tenant_id",
+			tenant:        "test-tenant",
+			query:         `{__name__="test_metric", job="test_job"}`,
+			expectedQuery: `{__name__="test_metric",job="test_job",tenant_id="test-tenant"}`,
+		},
+		{
+			name:          "with aggregation and extended functions",
+			tenantLabel:   "tenant_id",
+			tenant:        "test-tenant",
+			query:         `sum(xrate(test_metric{job="test_job"}[5m])) by (job)`,
+			expectedQuery: `sum(xrate(test_metric{job="test_job", tenant_id="test-tenant"}[5m])) by (job, tenant_id)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resultQuery, err := tenancy.EnforceQueryTenancy(tt.tenantLabel, tt.tenant, tt.query)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tt.expectedQuery, resultQuery)
+		})
+	}
 }
