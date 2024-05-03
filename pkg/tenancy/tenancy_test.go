@@ -232,8 +232,8 @@ func TestEnforceQueryTenancy(t *testing.T) {
 			name:          "with aggregation and extended functions",
 			tenantLabel:   "tenant_id",
 			tenant:        "test-tenant",
-			query:         `sum(xrate(test_metric{job="test_job"}[5m])) by (job)`,
-			expectedQuery: `sum(xrate(test_metric{job="test_job", tenant_id="test-tenant"}[5m])) by (job, tenant_id)`,
+			query:         `sum by (job) (xrate(test_metric{job="test_job"}[5m]))`,
+			expectedQuery: `sum by (job) (xrate(test_metric{job="test_job",tenant_id="test-tenant"}[5m]))`,
 		},
 	}
 
