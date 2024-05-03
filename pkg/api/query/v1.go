@@ -121,21 +121,19 @@ func (f *QueryEngineFactory) GetPrometheusEngine() promql.QueryEngine {
 
 func (f *QueryEngineFactory) GetThanosEngine() ThanosEngine {
 	f.createThanosEngine.Do(func() {
+		opts := engine.Opts{
+			EngineOpts:       f.engineOpts,
+			Engine:           f.GetPrometheusEngine(),
+			EnableAnalysis:   true,
+			EnableXFunctions: f.enableXFunctions,
+		}
 		if f.thanosEngine != nil {
 			return
 		}
 		if f.remoteEngineEndpoints == nil {
-			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
+			f.thanosEngine = engine.New(opts)
 		} else {
-			f.thanosEngine = engine.NewDistributedEngine(
-				engine.Opts{
-					EngineOpts:       f.engineOpts,
-					Engine:           f.GetPrometheusEngine(),
-					EnableAnalysis:   true,
-					EnableXFunctions: f.enableXFunctions,
-				},
-				f.remoteEngineEndpoints,
-			)
+			f.thanosEngine = engine.NewDistributedEngine(opts, f.remoteEngineEndpoints)
 		}
 	})
 
