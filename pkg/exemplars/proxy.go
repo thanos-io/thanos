@@ -94,7 +94,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 
 			labelMatchers = labelMatchers[:0]
 			for _, m := range matcherSet {
-				if isExternalLabel(m.Name, extLbls) {
+				if containsLabelName(m.Name, extLbls) {
 					// If the current matcher matches one external label,
 					// we don't add it to the current metric selector
 					// as Prometheus' Exemplars API cannot handle external labels.
@@ -158,7 +158,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	return nil
 }
 
-func isExternalLabel(name string, sets []labels.Labels) bool {
+func containsLabelName(name string, sets []labels.Labels) bool {
 	for _, ls := range sets {
 		if ls.Get(name) != "" {
 			return true
