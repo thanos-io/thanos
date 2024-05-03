@@ -127,7 +127,15 @@ func (f *QueryEngineFactory) GetThanosEngine() ThanosEngine {
 		if f.remoteEngineEndpoints == nil {
 			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
 		} else {
-			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
+			f.thanosEngine = engine.NewDistributedEngine(
+				engine.Opts{
+					EngineOpts:       f.engineOpts,
+					Engine:           f.GetPrometheusEngine(),
+					EnableAnalysis:   true,
+					EnableXFunctions: f.enableXFunctions,
+				},
+				f.remoteEngineEndpoints,
+			)
 		}
 	})
 

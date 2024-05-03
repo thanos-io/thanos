@@ -2522,5 +2522,5 @@ func TestDistributedEngineWithExtendedFunctions(t *testing.T) {
 	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(xrate(up[3m]))"
 	}, time.Now, promclient.QueryOptions{}, 1)
-	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
+	testutil.Equals(t, model.SampleValue(0), result[0].Value)
 }
