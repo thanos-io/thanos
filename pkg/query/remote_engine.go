@@ -226,7 +226,7 @@ type remoteQuery struct {
 
 func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	start := time.Now()
-	
+
 	qctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	defer cancel()
