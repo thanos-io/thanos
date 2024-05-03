@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -187,10 +188,11 @@ func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan
 		client: r.client,
 		opts:   r.opts,
 
-		plan:     plan,
-		start:    start,
-		end:      end,
-		interval: interval,
+		plan:       plan,
+		start:      start,
+		end:        end,
+		interval:   interval,
+		remoteAddr: r.client.GetAddress(),
 	}, nil
 }
 
@@ -200,10 +202,11 @@ func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, pl
 		client: r.client,
 		opts:   r.opts,
 
-		plan:     plan,
-		start:    ts,
-		end:      ts,
-		interval: 0,
+		plan:       plan,
+		start:      ts,
+		end:        ts,
+		interval:   0,
+		remoteAddr: r.client.GetAddress(),
 	}, nil
 }
 
@@ -212,10 +215,11 @@ type remoteQuery struct {
 	client Client
 	opts   Opts
 
-	plan     api.RemoteQuery
-	start    time.Time
-	end      time.Time
-	interval time.Duration
+	plan       api.RemoteQuery
+	start      time.Time
+	end        time.Time
+	interval   time.Duration
+	remoteAddr string
 
 	cancel context.CancelFunc
 }
@@ -226,6 +230,18 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	qctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	defer cancel()
+
+	queryRange := r.end.Sub(r.start)
+	span, qctx := opentracing.StartSpanFromContext(qctx, "remote_query_exec", opentracing.Tags{
+		"query":            r.plan.String(),
+		"remote_address":   r.remoteAddr,
+		"start":            r.start.UTC().String(),
+		"end":              r.end.UTC().String(),
+		"interval_seconds": r.interval.Seconds(),
+		"range_seconds":    queryRange.Seconds(),
+		"range_human":      queryRange,
+	})
+	defer span.Finish()
 
 	var maxResolution int64
 	if r.opts.AutoDownsample {
