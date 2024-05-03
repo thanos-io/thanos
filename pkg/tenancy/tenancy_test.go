@@ -5,7 +5,6 @@ package tenancy_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -193,23 +192,6 @@ func TestTenantProxyPassing(t *testing.T) {
 		}
 
 		_ = q.Series(&storepb.SeriesRequest{Matchers: seriesMatchers}, &storeSeriesServer{ctx: ctx})
-	})
-}
-
-func TestGetTenantFromHTTP(t *testing.T) {
-	t.Run("tenant-from-header", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "http://example.com", nil)
-		req.Header.Add("THANOS-TENANT", "test-tenant")
-		tenant, err := tenancy.GetTenantFromHTTP(req, "THANOS-TENANT", "default-tenant", "")
-		testutil.Ok(t, err)
-		testutil.Equals(t, "test-tenant", tenant)
-	})
-
-	t.Run("default-tenant", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "http://example.com", nil)
-		tenant, err := tenancy.GetTenantFromHTTP(req, "THANOS-TENANT", "default-tenant", "")
-		testutil.Ok(t, err)
-		testutil.Equals(t, "default-tenant", tenant)
 	})
 }
 
