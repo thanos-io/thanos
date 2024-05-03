@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"io"
 	"math/rand"
 	"net/http"
@@ -2489,4 +2490,37 @@ func TestQuerySelectWithRelabel(t *testing.T) {
 			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{}, tc.result)
 		})
 	}
+}
+
+func TestDistributedEngineWithExtendedFunctions(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("dist-eng-xfunc"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
+
+	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).
+		WithProxyStrategy("lazy").
+		WithDisablePartialResponses(true).
+		WithEngine(v1.PromqlEngineThanos).
+		WithEnableXFunctions().
+		Init()
+	querier2 := e2ethanos.NewQuerierBuilder(e, "2", querier1.InternalEndpoint("grpc")).
+		WithProxyStrategy("lazy").
+		WithDisablePartialResponses(true).
+		WithEngine(v1.PromqlEngineThanos).
+		WithQueryMode("distributed").
+		WithEnableXFunctions().
+		Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+		return "sum(xrate(up[3m]))"
+	}, time.Now, promclient.QueryOptions{}, 1)
+	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
 }
