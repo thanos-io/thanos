@@ -5,7 +5,6 @@ package tenancy
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
 	"path"
 
@@ -14,6 +13,8 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 type contextKey int
