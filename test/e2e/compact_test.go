@@ -984,7 +984,7 @@ func TestCompactorIssue6775(t *testing.T) {
 			return fmt.Errorf("reading metrics: %w", err)
 		}
 
-		if !bytes.Contains(b, []byte(`thanos_compact_downsample_duration_seconds_count{resolution="0"} 2`)) {
+		if !bytes.Contains(b, []byte(`thanos_compact_downsample_duration_seconds_count{group="0@14846485652960182170"} 2`)) {
 			return fmt.Errorf("failed to find the right downsampling metric")
 		}
 
@@ -998,6 +998,6 @@ func TestCompactorIssue6775(t *testing.T) {
 		Type:   client.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
 	}, nil, "--compact.enable-vertical-compaction")
-	testutil.NotOk(t, e2e.StartAndWaitReady(c))
-	testutil.NotOk(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, e2e.StartAndWaitReady(c))
+	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
 }
