@@ -510,6 +510,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.enableXFunctions {
 		args = append(args, "--query.enable-x-functions")
 	}
+	if q.queryMode != "" {
+		args = append(args, "--query.mode="+q.queryMode)
+	}
 	if q.engine != "" {
 		args = append(args, "--query.promql-engine="+string(q.engine))
 	}
