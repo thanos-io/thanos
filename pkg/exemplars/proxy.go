@@ -5,7 +5,6 @@ package exemplars
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"io"
 	"strings"
 
@@ -20,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"

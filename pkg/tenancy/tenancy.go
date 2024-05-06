@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
@@ -180,7 +179,7 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 	}
 
 	for _, s := range formMatchers {
-		matchers, err := parser.ParseMetricSelector(s)
+		matchers, err := extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, err
 		}

@@ -1,13 +1,17 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package extpromql_test
 
 import (
 	"fmt"
-	"github.com/efficientgo/core/testutil"
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 func TestParseMetricSelector(t *testing.T) {
@@ -39,13 +43,13 @@ func TestParseMetricSelector(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Call your implementation of ParseMetricSelector
-			got, err := extpromql.ParseMetricSelector(tc.input)
+			//lint:ignore faillint Testing against prometheus parser.
+			want, err := parser.ParseMetricSelector(tc.input)
 			if err != nil {
-				t.Fatalf("ParseMetricSelector failed: %v", err)
+				t.Fatalf("Prometheus ParseMetricSelector failed: %v", err)
 			}
 
-			want, err := parser.ParseMetricSelector(tc.input)
+			got, err := extpromql.ParseMetricSelector(tc.input)
 			if err != nil {
 				t.Fatalf("ParseMetricSelector failed: %v", err)
 			}

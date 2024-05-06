@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,14 +17,15 @@ import (
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
 	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 // queryInstantCodec is used to encode/decode Thanos instant query requests and responses.

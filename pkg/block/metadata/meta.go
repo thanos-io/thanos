@@ -20,12 +20,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"gopkg.in/yaml.v3"
 
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -136,7 +136,7 @@ type Rewrite struct {
 type Matchers []*labels.Matcher
 
 func (m *Matchers) UnmarshalYAML(value *yaml.Node) (err error) {
-	*m, err = parser.ParseMetricSelector(value.Value)
+	*m, err = extpromql.ParseMetricSelector(value.Value)
 	if err != nil {
 		return errors.Wrapf(err, "parse metric selector %v", value.Value)
 	}

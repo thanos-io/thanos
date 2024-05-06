@@ -12,10 +12,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -520,7 +520,7 @@ func TestMatchersToString_Translate(t *testing.T) {
 			testutil.Equals(t, c.expected, MatchersToString(ms...))
 
 			// Is this parsable?
-			promMsParsed, err := parser.ParseMetricSelector(c.expected)
+			promMsParsed, err := extpromql.ParseMetricSelector(c.expected)
 			testutil.Ok(t, err)
 			testutil.Assert(t, len(promMs) == len(promMsParsed))
 			for i := 0; i < len(promMs); i++ {

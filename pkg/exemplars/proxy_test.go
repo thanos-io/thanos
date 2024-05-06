@@ -6,13 +6,13 @@ package exemplars
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"io"
 	"os"
 	"reflect"
 	"sync"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -22,9 +22,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/efficientgo/core/testutil"
-
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )

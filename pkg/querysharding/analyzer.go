@@ -18,11 +18,12 @@ package querysharding
 
 import (
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 var (
