@@ -244,12 +244,13 @@ type endpointSetNodeCollector struct {
 	connectionsWithKeys *prometheus.Desc
 }
 
-func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
+func newEndpointSetNodeCollector(logger log.Logger, labels ...string) *endpointSetNodeCollector {
 	if len(labels) == 0 {
 		labels = []string{string(ExternalLabels), string(StoreType)}
 	}
 	desc := "Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier."
 	return &endpointSetNodeCollector{
+		logger:     logger,
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
@@ -334,7 +335,28 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 					lbls = append(lbls, storeTypeStr)
 				}
 			}
-			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...)
+			select {
+			case ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...):
+			case <-time.After(1 * time.Second):
+				level.Warn(c.logger).Log("msg", "failed to collect endpointset metrics", "timeout", 1*time.Second)
+				return
+			}
+		}
+	}
+	for replicaKey, occurrencesPerAddr := range c.storeNodesAddr {
+		for addr, occurrences := range occurrencesPerAddr {
+			ch <- prometheus.MustNewConstMetric(
+				c.connectionsWithAddr, prometheus.GaugeValue,
+				float64(occurrences),
+				replicaKey, addr)
+		}
+	}
+	for groupKey, occurrencesPerReplicaKey := range c.storeNodesKeys {
+		for replicaKeys, occurrences := range occurrencesPerReplicaKey {
+			ch <- prometheus.MustNewConstMetric(
+				c.connectionsWithKeys, prometheus.GaugeValue,
+				float64(occurrences),
+				groupKey, replicaKeys)
 		}
 	}
 	for replicaKey, occurrencesPerAddr := range c.storeNodesAddr {
@@ -392,7 +414,7 @@ func NewEndpointSet(
 	endpointInfoTimeout time.Duration,
 	endpointMetricLabels ...string,
 ) *EndpointSet {
-	endpointsMetric := newEndpointSetNodeCollector(endpointMetricLabels...)
+	endpointsMetric := newEndpointSetNodeCollector(logger, endpointMetricLabels...)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
