@@ -238,11 +238,11 @@ type endpointSetNodeCollector struct {
 	storeNodesAddr  map[string]map[string]int
 	storeNodesKeys  map[string]map[string]int
 
+    logger              log.Logger
 	connectionsDesc     *prometheus.Desc
 	labels              []string
 	connectionsWithAddr *prometheus.Desc
 	connectionsWithKeys *prometheus.Desc
-	logger              log.Logger
 }
 
 func newEndpointSetNodeCollector(logger log.Logger, labels ...string) *endpointSetNodeCollector {
