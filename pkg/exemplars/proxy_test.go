@@ -55,7 +55,7 @@ func (t *testExemplarClient) Recv() (*exemplarspb.ExemplarsResponse, error) {
 }
 
 func (t *testExemplarClient) Exemplars(ctx context.Context, in *exemplarspb.ExemplarsRequest, opts ...grpc.CallOption) (exemplarspb.Exemplars_ExemplarsClient, error) {
-	expr, err := extpromql.ParserExpr(in.Query)
+	expr, err := extpromql.ParseExpr(in.Query)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

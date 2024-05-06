@@ -150,7 +150,7 @@ func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (strin
 
 	e := injectproxy.NewEnforcer(false, labelMatcher)
 
-	expr, err := extpromql.ParserExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		return "", errors.Wrap(err, "error parsing query string, when enforcing tenenacy")
 	}

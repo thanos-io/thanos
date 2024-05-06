@@ -89,7 +89,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
-	expr, err := extpromql.ParserExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		return nonShardableQuery(), err
 	}

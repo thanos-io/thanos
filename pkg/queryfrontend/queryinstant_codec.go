@@ -371,7 +371,7 @@ const (
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
-	expr, err := extpromql.ParserExpr(q)
+	expr, err := extpromql.ParseExpr(q)
 	if err != nil {
 		return 0, err
 	}

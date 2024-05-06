@@ -395,7 +395,7 @@ func Test_evaluateAtModifier(t *testing.T) {
 				require.Equal(t, tt.expectedErrorCode, int(httpResp.Code))
 			} else {
 				require.NoError(t, err)
-				expectedExpr, err := extpromql.ParserExpr(tt.expected)
+				expectedExpr, err := extpromql.ParseExpr(tt.expected)
 				require.NoError(t, err)
 				require.Equal(t, expectedExpr.String(), out)
 			}

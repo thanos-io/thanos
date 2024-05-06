@@ -60,7 +60,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
 	defer span.Finish()
 
-	expr, err := extpromql.ParserExpr(req.Query)
+	expr, err := extpromql.ParseExpr(req.Query)
 	if err != nil {
 		return err
 	}

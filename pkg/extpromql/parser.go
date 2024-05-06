@@ -10,8 +10,8 @@ import (
 	"github.com/thanos-io/promql-engine/execution/function"
 )
 
-// ParserExpr parses the input PromQL expression and returns the parsed representation.
-func ParserExpr(input string) (parser.Expr, error) {
+// ParseExpr parses the input PromQL expression and returns the parsed representation.
+func ParseExpr(input string) (parser.Expr, error) {
 	p := parser.NewParser(input, parser.WithFunctions(function.XFunctions))
 	defer p.Close()
 	return p.ParseExpr()
@@ -21,7 +21,7 @@ func ParserExpr(input string) (parser.Expr, error) {
 // label matchers.
 func ParseMetricSelector(input string) ([]*labels.Matcher, error) {
 	// Parse the input string as a PromQL expression.
-	expr, err := parser.ParseExpr(input)
+	expr, err := ParseExpr(input)
 	if err != nil {
 		return nil, err
 	}

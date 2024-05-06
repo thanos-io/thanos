@@ -326,7 +326,7 @@ func (s resultsCache) isAtModifierCachable(r Request, maxCacheTime int64) bool {
 	if !strings.Contains(query, "@") {
 		return true
 	}
-	expr, err := extpromql.ParserExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		// We are being pessimistic in such cases.
 		level.Warn(s.logger).Log("msg", "failed to parse query, considering @ modifier as not cachable", "query", query, "err", err)
@@ -371,7 +371,7 @@ func (s resultsCache) isOffsetCachable(r Request) bool {
 	if !strings.Contains(query, "offset") {
 		return true
 	}
-	expr, err := extpromql.ParserExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "failed to parse query, considering offset as not cachable", "query", query, "err", err)
 		return false

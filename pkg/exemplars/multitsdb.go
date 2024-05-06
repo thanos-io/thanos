@@ -27,7 +27,7 @@ func NewMultiTSDB(tsdbExemplarsServers func() map[string]*TSDB) *MultiTSDB {
 
 // Exemplars returns all specified exemplars from a MultiTSDB instance.
 func (m *MultiTSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplars_ExemplarsServer) error {
-	expr, err := extpromql.ParserExpr(r.Query)
+	expr, err := extpromql.ParseExpr(r.Query)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
