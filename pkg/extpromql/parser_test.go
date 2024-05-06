@@ -39,6 +39,10 @@ func TestParseMetricSelector(t *testing.T) {
 			name:  "multiple selectors with regex",
 			input: `http_requests_total{method="GET",code=~"2.*"}`,
 		},
+		{
+			name:  "selector with negative regex",
+			input: `{code!~"2.*"}`,
+		},
 	}
 
 	for _, tc := range testCases {

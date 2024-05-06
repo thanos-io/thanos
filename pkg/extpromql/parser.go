@@ -5,7 +5,9 @@ package extpromql
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 
@@ -22,27 +24,36 @@ func ParseExpr(input string) (parser.Expr, error) {
 // ParseMetricSelector parses the provided textual metric selector into a list of
 // label matchers.
 func ParseMetricSelector(input string) ([]*labels.Matcher, error) {
-	// Parse the input string as a PromQL expression.
 	expr, err := ParseExpr(input)
-	if err != nil {
+	// because of the AST checking present in the ParseExpr function,
+	// we need to ignore the error if it is just the check for empty name matcher.
+	if err != nil && !isEmptyNameMatcherErr(err) {
 		return nil, err
 	}
 
-	// The type of the expression should be *parser.VectorSelector.
 	vs, ok := expr.(*parser.VectorSelector)
 	if !ok {
 		return nil, fmt.Errorf("expected type *parser.VectorSelector, got %T", expr)
 	}
 
-	// Convert the label matchers from the vector selector to the desired type.
 	matchers := make([]*labels.Matcher, len(vs.LabelMatchers))
 	for i, lm := range vs.LabelMatchers {
 		matchers[i] = &labels.Matcher{
-			Type:  labels.MatchType(lm.Type),
+			Type:  lm.Type,
 			Name:  lm.Name,
 			Value: lm.Value,
 		}
 	}
 
 	return matchers, nil
+}
+
+func isEmptyNameMatcherErr(err error) bool {
+	var parseErrs parser.ParseErrors
+	if errors.As(err, &parseErrs) {
+		return len(parseErrs) == 1 &&
+			strings.HasSuffix(parseErrs[0].Error(), "vector selector must contain at least one non-empty matcher")
+	}
+
+	return false
 }
