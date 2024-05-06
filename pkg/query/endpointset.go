@@ -202,15 +202,17 @@ type endpointSetNodeCollector struct {
 	storeNodes      map[component.Component]map[string]int
 	storePerExtLset map[string]int
 
+	logger          log.Logger
 	connectionsDesc *prometheus.Desc
 	labels          []string
 }
 
-func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
+func newEndpointSetNodeCollector(logger log.Logger, labels ...string) *endpointSetNodeCollector {
 	if len(labels) == 0 {
 		labels = []string{string(ExternalLabels), string(StoreType)}
 	}
 	return &endpointSetNodeCollector{
+		logger:     logger,
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
@@ -277,7 +279,12 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 					lbls = append(lbls, storeTypeStr)
 				}
 			}
-			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...)
+			select {
+			case ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...):
+			case <-time.After(1 * time.Second):
+				level.Warn(c.logger).Log("msg", "failed to collect endpointset metrics", "timeout", 1*time.Second)
+				return
+			}
 		}
 	}
 }
@@ -319,7 +326,7 @@ func NewEndpointSet(
 	endpointInfoTimeout time.Duration,
 	endpointMetricLabels ...string,
 ) *EndpointSet {
-	endpointsMetric := newEndpointSetNodeCollector(endpointMetricLabels...)
+	endpointsMetric := newEndpointSetNodeCollector(logger, endpointMetricLabels...)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
