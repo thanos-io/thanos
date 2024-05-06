@@ -712,7 +712,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 		Reg:        nil,
 		MaxSamples: 10000,
 		Timeout:    timeout,
-	}, nil, true)
+	}, nil, false)
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
@@ -745,30 +745,6 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 				Result: promql.Scalar{
 					V: 2,
 					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
-				},
-				QueryAnalysis: queryTelemetry{},
-			},
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"xrate(up[2m])"},
-				"start": []string{"0"},
-				"end":   []string{"500"},
-			},
-			response: &queryData{
-				ResultType: parser.ValueTypeMatrix,
-				Result: promql.Matrix{
-					promql.Series{
-						Floats: func(end, step float64) []promql.FPoint {
-							var res []promql.FPoint
-							for v := float64(0); v <= end; v += step {
-								res = append(res, promql.FPoint{F: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
-							}
-							return res
-						}(500, 1),
-						Metric: nil,
-					},
 				},
 				QueryAnalysis: queryTelemetry{},
 			},

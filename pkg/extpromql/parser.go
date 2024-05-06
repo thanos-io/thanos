@@ -16,7 +16,14 @@ import (
 
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	p := parser.NewParser(input, parser.WithFunctions(function.XFunctions))
+	allFuncs := make(map[string]*parser.Function, len(function.XFunctions)+len(parser.Functions))
+	for k, v := range parser.Functions {
+		allFuncs[k] = v
+	}
+	for k, v := range function.XFunctions {
+		allFuncs[k] = v
+	}
+	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
 	defer p.Close()
 	return p.ParseExpr()
 }
