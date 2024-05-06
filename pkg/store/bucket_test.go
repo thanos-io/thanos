@@ -694,7 +694,11 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 	defer func() { testutil.Ok(t, bucketStore.Close()) }()
 
 	testutil.Ok(t, bucketStore.SyncBlocks(ctx))
-	testutil.Equals(t, bucketStore.TSDBInfos(), []infopb.TSDBInfo{
+	infos := bucketStore.TSDBInfos()
+	slices.SortFunc(infos, func(a, b infopb.TSDBInfo) int {
+		return strings.Compare(a.Labels.String(), b.Labels.String())
+	})
+	testutil.Equals(t, infos, []infopb.TSDBInfo{
 		{
 			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}},
 			MinTime: 0,

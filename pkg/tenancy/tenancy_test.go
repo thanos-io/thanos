@@ -8,18 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-
 	"github.com/efficientgo/core/testutil"
+	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-
-	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -195,4 +193,38 @@ func TestTenantProxyPassing(t *testing.T) {
 
 		_ = q.Series(&storepb.SeriesRequest{Matchers: seriesMatchers}, &storeSeriesServer{ctx: ctx})
 	})
+}
+
+func TestEnforceQueryTenancy(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenantLabel   string
+		tenant        string
+		query         string
+		expectedQuery string
+	}{
+		{
+			name:          "vector selector query",
+			tenantLabel:   "tenant_id",
+			tenant:        "test-tenant",
+			query:         `{__name__="test_metric", job="test_job"}`,
+			expectedQuery: `{__name__="test_metric",job="test_job",tenant_id="test-tenant"}`,
+		},
+		{
+			name:          "with aggregation and extended functions",
+			tenantLabel:   "tenant_id",
+			tenant:        "test-tenant",
+			query:         `sum by (job) (xrate(test_metric{job="test_job"}[5m]))`,
+			expectedQuery: `sum by (job) (xrate(test_metric{job="test_job",tenant_id="test-tenant"}[5m]))`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resultQuery, err := tenancy.EnforceQueryTenancy(tt.tenantLabel, tt.tenant, tt.query)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tt.expectedQuery, resultQuery)
+		})
+	}
 }
