@@ -5,6 +5,7 @@ package queryrange
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
 	"time"
 

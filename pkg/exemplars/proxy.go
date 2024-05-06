@@ -5,6 +5,7 @@ package exemplars
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"io"
 	"strings"
 
