@@ -24,6 +24,8 @@ import (
 	"github.com/prometheus/prometheus/promql/parser/posrange"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/teststorage"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 var (
@@ -261,7 +263,7 @@ func ParseStore(lines []string, i int) (int, *storeCmd, error) {
 	}
 	parts := patStore.FindStringSubmatch(lines[i])
 
-	m, err := parser.ParseMetricSelector(parts[1])
+	m, err := extpromql.ParseMetricSelector(parts[1])
 	if err != nil {
 		return i, nil, raise(i, "invalid matcher definition %q: %s", parts[1], err)
 	}
@@ -322,7 +324,7 @@ func ParseEval(lines []string, i int) (int, *evalCmd, error) {
 		at   = parts[2]
 		expr = parts[3]
 	)
-	_, err := parser.ParseExpr(expr)
+	_, err := extpromql.ParseExpr(expr)
 	if err != nil {
 		if perr, ok := err.(*parser.ParseErr); ok {
 			perr.LineOffset = i

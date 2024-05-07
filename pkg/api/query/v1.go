@@ -52,6 +52,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/metadata"
@@ -375,7 +376,7 @@ func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatche
 	}
 
 	for _, s := range r.Form[StoreMatcherParam] {
-		matchers, err := parser.ParseMetricSelector(s)
+		matchers, err := extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
