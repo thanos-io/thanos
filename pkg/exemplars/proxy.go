@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -59,7 +60,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
 	defer span.Finish()
 
-	expr, err := parser.ParseExpr(req.Query)
+	expr, err := extpromql.ParseExpr(req.Query)
 	if err != nil {
 		return err
 	}
