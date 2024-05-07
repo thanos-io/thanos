@@ -17,14 +17,15 @@ import (
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
 	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 // queryInstantCodec is used to encode/decode Thanos instant query requests and responses.
@@ -370,7 +371,7 @@ const (
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
-	expr, err := parser.ParseExpr(q)
+	expr, err := extpromql.ParseExpr(q)
 	if err != nil {
 		return 0, err
 	}

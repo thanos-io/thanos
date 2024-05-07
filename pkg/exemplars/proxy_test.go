@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -21,9 +22,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/efficientgo/core/testutil"
-
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -54,7 +54,7 @@ func (t *testExemplarClient) Recv() (*exemplarspb.ExemplarsResponse, error) {
 }
 
 func (t *testExemplarClient) Exemplars(ctx context.Context, in *exemplarspb.ExemplarsRequest, opts ...grpc.CallOption) (exemplarspb.Exemplars_ExemplarsClient, error) {
-	expr, err := parser.ParseExpr(in.Query)
+	expr, err := extpromql.ParseExpr(in.Query)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -16,13 +16,12 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
-
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -269,7 +268,7 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 func parseMatchersParam(ss url.Values, matcherParam string) ([][]*labels.Matcher, error) {
 	matchers := make([][]*labels.Matcher, 0, len(ss[matcherParam]))
 	for _, s := range ss[matcherParam] {
-		ms, err := parser.ParseMetricSelector(s)
+		ms, err := extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, matcherParam)
 		}
