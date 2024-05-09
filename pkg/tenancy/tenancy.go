@@ -11,8 +11,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 type contextKey int
@@ -148,7 +149,7 @@ func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (strin
 
 	e := injectproxy.NewEnforcer(false, labelMatcher)
 
-	expr, err := parser.ParseExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		return "", errors.Wrap(err, "error parsing query string, when enforcing tenenacy")
 	}
@@ -178,7 +179,7 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 	}
 
 	for _, s := range formMatchers {
-		matchers, err := parser.ParseMetricSelector(s)
+		matchers, err := extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, err
 		}

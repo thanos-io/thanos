@@ -6,6 +6,7 @@ package exemplars
 import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -26,7 +27,7 @@ func NewMultiTSDB(tsdbExemplarsServers func() map[string]*TSDB) *MultiTSDB {
 
 // Exemplars returns all specified exemplars from a MultiTSDB instance.
 func (m *MultiTSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplars_ExemplarsServer) error {
-	expr, err := parser.ParseExpr(r.Query)
+	expr, err := extpromql.ParseExpr(r.Query)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}

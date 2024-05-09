@@ -70,7 +70,7 @@ func (c *RedisCache) Fetch(ctx context.Context, keys []string) (found []string, 
 		items, err = c.redis.MGet(ctx, keys)
 		if err != nil {
 			log.Error(err)
-			level.Error(c.logger).Log("msg", "failed to get from redis", "name", c.name, "err", err)
+			level.Debug(c.logger).Log("msg", "failed to get from redis", "name", c.name, "err", err)
 			return err
 		}
 

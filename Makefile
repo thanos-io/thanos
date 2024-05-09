@@ -404,6 +404,7 @@ NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/cl
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
 github.com/NYTimes/gziphandler.{GzipHandler}=github.com/klauspost/compress/gzhttp.{GzipHandler},\
 sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex,\
+github.com/prometheus/prometheus/promql/parser.{ParseExpr,ParseMetricSelector}=github.com/thanos-io/thanos/pkg/extpromql.{ParseExpr,ParseMetricSelector},\
 io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v "internal/cortex")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"

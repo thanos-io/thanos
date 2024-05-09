@@ -172,64 +172,87 @@ func runSidecar(
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
 
+		ctx := context.Background()
+		// Only check Prometheus's flags when upload is enabled.
+		if uploads {
+			// Check prometheus's flags to ensure same sidecar flags.
+			// We retry infinitely until we validated prometheus flags
+			err := runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
+				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
+				defer iterCancel()
+
+				if err := validatePrometheus(iterCtx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to validate prometheus flags. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
+				level.Info(logger).Log(
+					"msg", "successfully validated prometheus flags",
+				)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to validate prometheus flags")
+			}
+		}
+
+		// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
+		err := runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
+			iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
+			defer iterCancel()
+
+			if err := m.BuildVersion(iterCtx); err != nil {
+				level.Warn(logger).Log(
+					"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
+					"err", err,
+				)
+				return err
+			}
+
+			level.Info(logger).Log(
+				"msg", "successfully loaded prometheus version",
+			)
+			return nil
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to get prometheus version")
+		}
+
+		// Blocking query of external labels before joining as a Source Peer into gossip.
+		// We retry infinitely until we reach and fetch labels from our Prometheus.
+		err = runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
+			iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
+			defer iterCancel()
+
+			if err := m.UpdateLabels(iterCtx); err != nil {
+				level.Warn(logger).Log(
+					"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
+					"err", err,
+				)
+				return err
+			}
+
+			level.Info(logger).Log(
+				"msg", "successfully loaded prometheus external labels",
+				"external_labels", m.Labels().String(),
+			)
+			return nil
+		})
+		if err != nil {
+			return errors.Wrap(err, "initial external labels query")
+		}
+
+		if len(m.Labels()) == 0 {
+			return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+		}
+		promUp.Set(1)
+		statusProber.Ready()
+
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			// Only check Prometheus's flags when upload is enabled.
-			if uploads {
-				// Check prometheus's flags to ensure same sidecar flags.
-				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
-					return errors.Wrap(err, "validate Prometheus flags")
-				}
-			}
-
-			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
-			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := m.BuildVersion(ctx); err != nil {
-					level.Warn(logger).Log(
-						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
-						"err", err,
-					)
-					return err
-				}
-
-				level.Info(logger).Log(
-					"msg", "successfully loaded prometheus version",
-				)
-				return nil
-			})
-			if err != nil {
-				return errors.Wrap(err, "failed to get prometheus version")
-			}
-
-			// Blocking query of external labels before joining as a Source Peer into gossip.
-			// We retry infinitely until we reach and fetch labels from our Prometheus.
-			err = runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := m.UpdateLabels(ctx); err != nil {
-					level.Warn(logger).Log(
-						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
-						"err", err,
-					)
-					promUp.Set(0)
-					statusProber.NotReady(err)
-					return err
-				}
-
-				level.Info(logger).Log(
-					"msg", "successfully loaded prometheus external labels",
-					"external_labels", m.Labels().String(),
-				)
-				promUp.Set(1)
-				statusProber.Ready()
-				return nil
-			})
-			if err != nil {
-				return errors.Wrap(err, "initial external labels query")
-			}
-
-			if len(m.Labels()) == 0 {
-				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
-			}
-
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
 			// the external labels we apply.
 			return runutil.Repeat(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
