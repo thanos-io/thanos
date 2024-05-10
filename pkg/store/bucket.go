@@ -2725,8 +2725,11 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 		matchers := make([]*labels.Matcher, 0, len(vals))
 		// Merge PostingGroups with the same matcher into 1 to
 		// avoid fetching duplicate postings.
+		cnt := 0
 		for _, val := range values {
-			pg, vals, err = toPostingGroup(ctx, lvalsFunc, val, len(values) == 1)
+			cnt++
+			// We can only reuse the values if the values won't be reused anymore.
+			pg, vals, err = toPostingGroup(ctx, lvalsFunc, val, cnt == len(values))
 			if err != nil {
 				return nil, errors.Wrap(err, "toPostingGroup")
 			}
