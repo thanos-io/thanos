@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -2953,8 +2952,19 @@ func samePostingGroup(a, b *postingGroup) bool {
 		return false
 	}
 
-	if !reflect.DeepEqual(a.addKeys, b.addKeys) || !reflect.DeepEqual(a.removeKeys, b.removeKeys) {
+	if len(a.addKeys) != len(b.addKeys) || len(a.removeKeys) != len(b.removeKeys) {
 		return false
+	}
+	for i, key := range a.addKeys {
+		if key != b.addKeys[i] {
+			return false
+		}
+	}
+
+	for i, key := range a.removeKeys {
+		if key != b.removeKeys[i] {
+			return false
+		}
 	}
 
 	for i := 0; i < len(a.matchers); i++ {

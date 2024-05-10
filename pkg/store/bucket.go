@@ -2841,7 +2841,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	if reuseValues {
 		toAdd = vals[:0]
 	}
-	// If non-equal matcher matches an empty string, shortcut all values since label
+	// If non-equal matcher matches a non-empty string, shortcut all values since label
 	// values should always be non-empty string.
 	if m.Value == "" && (m.Type == labels.MatchNotRegexp || m.Type == labels.MatchNotEqual) {
 		toAdd = vals
