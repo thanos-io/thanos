@@ -2726,7 +2726,7 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 		// Merge PostingGroups with the same matcher into 1 to
 		// avoid fetching duplicate postings.
 		for _, val := range values {
-			pg, vals, err = toPostingGroup(ctx, lvalsFunc, val)
+			pg, vals, err = toPostingGroup(ctx, lvalsFunc, val, len(values) == 1)
 			if err != nil {
 				return nil, errors.Wrap(err, "toPostingGroup")
 			}
@@ -2770,7 +2770,7 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 }
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
+func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher, reuseValues bool) (*postingGroup, []string, error) {
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
@@ -2796,7 +2796,10 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 			return nil, nil, err
 		}
 
-		toRemove := vals[:0]
+		var toRemove []string
+		if reuseValues {
+			toRemove = vals[:0]
+		}
 		// Only equal cases are left. Shortcut all values since label
 		// values should always be non-empty string.
 		if m.Value == "" {
@@ -2831,7 +2834,10 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		return nil, nil, err
 	}
 
-	toAdd := vals[:0]
+	var toAdd []string
+	if reuseValues {
+		toAdd = vals[:0]
+	}
 	// Only non-equal cases are left. For regex not match, it is the same as
 	// matching a non-empty string, which is always true for label values.
 	if m.Value == "" {
