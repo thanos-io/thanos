@@ -2775,8 +2775,6 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
-		var toRemove []string
-
 		// Fast-path for MatchNotRegexp matching.
 		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
 		// Fast-path for set matching.
@@ -2798,12 +2796,19 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 			return nil, nil, err
 		}
 
-		for _, val := range vals {
-			if ctx.Err() != nil {
-				return nil, nil, ctx.Err()
-			}
-			if !m.Matches(val) {
-				toRemove = append(toRemove, val)
+		toRemove := vals[:0]
+		// Only equal cases are left. Shortcut all values since label
+		// values should always be non-empty string.
+		if m.Value == "" {
+			toRemove = vals
+		} else {
+			for _, val := range vals {
+				if ctx.Err() != nil {
+					return nil, nil, ctx.Err()
+				}
+				if !m.Matches(val) {
+					toRemove = append(toRemove, val)
+				}
 			}
 		}
 
@@ -2826,13 +2831,19 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		return nil, nil, err
 	}
 
-	var toAdd []string
-	for _, val := range vals {
-		if ctx.Err() != nil {
-			return nil, nil, ctx.Err()
-		}
-		if m.Matches(val) {
-			toAdd = append(toAdd, val)
+	toAdd := vals[:0]
+	// Only non-equal cases are left. For regex not match, it is the same as
+	// matching a non-empty string, which is always true for label values.
+	if m.Value == "" {
+		toAdd = vals
+	} else {
+		for _, val := range vals {
+			if ctx.Err() != nil {
+				return nil, nil, ctx.Err()
+			}
+			if m.Matches(val) {
+				toAdd = append(toAdd, val)
+			}
 		}
 	}
 
