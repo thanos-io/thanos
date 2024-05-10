@@ -2803,9 +2803,9 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 		if reuseValues {
 			toRemove = vals[:0]
 		}
-		// Only equal cases are left. Shortcut all values since label
+		// If equal matcher matches an empty string, shortcut all values since label
 		// values should always be non-empty string.
-		if m.Value == "" {
+		if m.Value == "" && (m.Type == labels.MatchRegexp || m.Type == labels.MatchEqual) {
 			toRemove = vals
 		} else {
 			for _, val := range vals {
@@ -2841,9 +2841,9 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	if reuseValues {
 		toAdd = vals[:0]
 	}
-	// Only non-equal cases are left. For regex not match, it is the same as
-	// matching a non-empty string, which is always true for label values.
-	if m.Value == "" {
+	// If non-equal matcher matches an empty string, shortcut all values since label
+	// values should always be non-empty string.
+	if m.Value == "" && (m.Type == labels.MatchNotRegexp || m.Type == labels.MatchNotEqual) {
 		toAdd = vals
 	} else {
 		for _, val := range vals {
