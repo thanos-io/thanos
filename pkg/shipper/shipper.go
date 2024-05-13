@@ -136,6 +136,13 @@ func (s *Shipper) SetLabels(lbls labels.Labels) {
 	s.labels = func() labels.Labels { return lbls }
 }
 
+func (s *Shipper) SetDirectoryToSync(dir string) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.dir = dir
+}
+
 // Timestamps returns the minimum timestamp for which data is available and the highest timestamp
 // of blocks that were successfully uploaded.
 func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {

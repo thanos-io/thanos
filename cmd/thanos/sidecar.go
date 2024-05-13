@@ -150,26 +150,11 @@ func runSidecar(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-
-	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
-	// Configure Request Logging for HTTP calls.
-	opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
-		return logging.NoLogCall
-	})}
-	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
-	router := route.New()
-
-	api := sidecarAPI.NewSidecarAPI(logger, reg, true, nil)
-
-	api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
-
 	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
-
-	srv.Handle("/", router)
 
 	g.Add(func() error {
 		statusProber.Healthy()
@@ -362,17 +347,8 @@ func runSidecar(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			promReadyTimeout := conf.prometheus.readyTimeout
-			extLabelsCtx, cancel := context.WithTimeout(ctx, promReadyTimeout)
-			defer cancel()
-
-			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
-				if len(m.Labels()) == 0 {
-					return errors.New("not uploading as no external labels are configured yet - is Prometheus healthy/reachable?")
-				}
-				return nil
-			}); err != nil {
-				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
+			if err := m.waitForExternalLabels(ctx, conf.prometheus.readyTimeout); err != nil {
+				return fmt.Errorf("not uploading blocks: %w", err)
 			}
 
 			uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
@@ -395,6 +371,23 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 		})
+
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
+
+		flushShipper := shipper.New(logger, nil, "", bkt, m.Labels, metadata.SidecarSource,
+			uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
+
+		router := route.New()
+		api := sidecarAPI.NewSidecarAPI(logger, reg, false, m.client, flushShipper, conf.tsdb.path, m.promURL, nil)
+
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+
+		srv.Handle("/", router)
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar")
@@ -449,6 +442,21 @@ type promMetadata struct {
 	limitMinTime thanosmodel.TimeOrDurationValue
 
 	client *promclient.Client
+}
+
+func (s *promMetadata) waitForExternalLabels(ctx context.Context, promReadyTimeout time.Duration) error {
+	extLabelsCtx, cancel := context.WithTimeout(ctx, promReadyTimeout)
+	defer cancel()
+
+	if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
+		if len(s.Labels()) == 0 {
+			return errors.New("no external labels found - is Prometheus healthy/reachable?")
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
+	}
+	return nil
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context) error {
