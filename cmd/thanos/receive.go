@@ -418,7 +418,13 @@ func runReceive(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+			pruneInterval := 2 * time.Duration(tsdbOpts.MaxBlockDuration) * time.Millisecond
+			return runutil.Repeat(time.Minute, ctx.Done(), func() error {
+				currentTime := time.Now()
+				currentTotalMinutes := currentTime.Hour()*60 + currentTime.Minute()
+				if currentTotalMinutes%int(pruneInterval.Minutes()) != 0 {
+					return nil
+				}
 				if err := dbs.Prune(ctx); err != nil {
 					level.Error(logger).Log("err", err)
 				}
