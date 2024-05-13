@@ -971,6 +971,13 @@ func (h *Handler) sendRemoteWrite(
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
+	// NOTE(GiedriusS): this has been debated for a long time and seems like there's consensus to do it:
+	// - If the user is switching from scraping same targets with 2 Prometheus instances, it doesn't make sense
+	//   to force them to suddenly add one more instance.
+	// - Replication factor of two, without this if, effectively means that we cannot have downtime.
+	if h.options.ReplicationFactor == 2 {
+		return 1
+	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
