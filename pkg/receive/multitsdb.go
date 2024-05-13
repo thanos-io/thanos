@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -342,6 +343,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 	if t.tsdbOpts.RetentionDuration == 0 {
 		return nil
 	}
+	level.Info(t.logger).Log("msg", "Running pruning job")
 
 	var (
 		wg   sync.WaitGroup
@@ -350,7 +352,6 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		prunedTenants []string
 		pmtx          sync.Mutex
 	)
-
 	t.mtx.RLock()
 	for tenantID, tenantInstance := range t.tenants {
 		wg.Add(1)
