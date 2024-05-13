@@ -1735,3 +1735,51 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestPeerGroup(t *testing.T) {
+	logger := log.NewLogfmtLogger(os.Stderr)
+	serverAddress := "http://localhost:19090"
+	dialOpts := []grpc.DialOption{grpc.WithInsecure()}
+	srv := startServer(logger, serverAddress)
+	ctx := context.TODO()
+	client := NewHandler(logger, &Options{
+		MaxBackoff: 1 * time.Second,
+		DialOpts:   dialOpts,
+	})
+	_, err := client.peers.getConnection(ctx, serverAddress)
+	require.NoError(t, err)
+	// close the server and wait for the backoff to kick in and see how long it takes
+	srv.Close()
+	// server is closed, now we can't send requests to it
+	er := endpointReplica{endpoint: serverAddress, replica: 0}
+	data := trackedSeries{
+		timeSeries: []prompb.TimeSeries{
+			{
+				Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+				Samples: []prompb.Sample{{Timestamp: time.Now().Unix(), Value: 123}},
+			},
+		},
+	}
+
+	N := 50
+	responses := make(chan writeResponse, N)
+	for i := 0; i < N; i++ {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		client.sendRemoteWrite(ctx, "", er, data, false, responses, &wg)
+		wg.Wait()
+		_, err = client.peers.getConnection(ctx, serverAddress)
+		require.Error(t, errUnavailable, err)
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func startServer(logger log.Logger, serverAddress string) *Handler {
+	srv := NewHandler(logger, &Options{
+		ListenAddress: serverAddress,
+	})
+	go func() {
+		srv.Run()
+	}()
+	return srv
+}

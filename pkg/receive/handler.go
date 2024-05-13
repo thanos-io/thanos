@@ -149,7 +149,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		writer:  o.Writer,
 		router:  route.New(),
 		options: o,
-		peers: newPeerGroup(
+		peers: newPeerGroup(logger,
 			backoff.Backoff{
 				Factor: 2,
 				Min:    100 * time.Millisecond,
@@ -790,6 +790,12 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			writeDestination[endpointReplica] = writeableSeries
 		}
 	}
+	if h.receiverMode == RouterOnly && len(localWrites) > 0 {
+		panic("router only mode should not have any local writes")
+	}
+	if h.receiverMode == IngestorOnly && len(remoteWrites) > 0 {
+		panic("ingestor only mode should not have any remote writes")
+	}
 	return localWrites, remoteWrites, nil
 }
 
@@ -1212,8 +1218,9 @@ type peerWorker struct {
 	forwardDelay prometheus.Histogram
 }
 
-func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, dialOpts ...grpc.DialOption) peersContainer {
+func newPeerGroup(logger log.Logger, backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, dialOpts ...grpc.DialOption) peersContainer {
 	return &peerGroup{
+		logger:                   logger,
 		dialOpts:                 dialOpts,
 		connections:              map[string]*peerWorker{},
 		m:                        sync.RWMutex{},
@@ -1260,6 +1267,7 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 }
 
 type peerGroup struct {
+	logger                   log.Logger
 	dialOpts                 []grpc.DialOption
 	connections              map[string]*peerWorker
 	peerStates               map[string]*retryState
@@ -1276,14 +1284,17 @@ type peerGroup struct {
 func (p *peerGroup) close(addr string) error {
 	p.m.Lock()
 	defer p.m.Unlock()
+	return p.closeUnlocked(addr)
+}
 
+func (p *peerGroup) closeUnlocked(addr string) error {
 	c, ok := p.connections[addr]
 	if !ok {
 		// NOTE(GiedriusS): this could be valid case when the connection
 		// was never established.
 		return nil
 	}
-
+	level.Error(p.logger).Log("msg", "closing connection", "addr", addr)
 	p.connections[addr].wp.Close()
 	delete(p.connections, addr)
 	if err := c.cc.Close(); err != nil {
@@ -1313,8 +1324,11 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	if ok {
 		return c, nil
 	}
+	level.Info(p.logger).Log("msg", "dialing peer", "peer", addr)
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
+		// clear retry state if dial failed, this is necessary to avoid dialing peer too often.
+		delete(p.peerStates, addr)
 		p.markPeerUnavailableUnlocked(addr)
 		dialError := errors.Wrap(err, "failed to dial peer")
 		return nil, errors.Wrap(dialError, errUnavailable.Error())
@@ -1328,17 +1342,24 @@ func (p *peerGroup) markPeerUnavailable(addr string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	p.markPeerUnavailableUnlocked(addr)
+	if p.markPeerUnavailableUnlocked(addr) {
+		// close the connection if the backoff tries too many times, likely server is down.
+		if err := p.closeUnlocked(addr); err != nil {
+			level.Error(p.logger).Log("msg", "failed to close connection", "addr", addr, "err", err)
+		}
+	}
 }
 
-func (p *peerGroup) markPeerUnavailableUnlocked(addr string) {
+func (p *peerGroup) markPeerUnavailableUnlocked(addr string) bool {
 	state, ok := p.peerStates[addr]
 	if !ok {
 		state = &retryState{attempt: -1}
 	}
 	state.attempt++
-	state.nextAllowed = time.Now().Add(p.expBackoff.ForAttempt(state.attempt))
+	delay := p.expBackoff.ForAttempt(state.attempt)
+	state.nextAllowed = time.Now().Add(delay)
 	p.peerStates[addr] = state
+	return delay >= p.expBackoff.Max
 }
 
 func (p *peerGroup) markPeerAvailable(addr string) {
