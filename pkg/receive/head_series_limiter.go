@@ -93,7 +93,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 	}
 
 	var err error
-	limit.metaMonitoringClient, err = clientconfig.NewHTTPClient(c, "meta-mon-for-limit")
+	limit.metaMonitoringClient, err = clientconfig.NewHTTPClient(c, "meta-mon-for-limit", c.EnableHedged)
 	if err != nil {
 		level.Error(logger).Log("msg", "improper http client config", "err", err.Error())
 	}

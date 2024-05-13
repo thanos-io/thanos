@@ -56,9 +56,10 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 }
 
 type httpConfig struct {
-	bindAddress string
-	tlsConfig   string
-	gracePeriod model.Duration
+	bindAddress  string
+	tlsConfig    string
+	EnableHedged bool
+	gracePeriod  model.Duration
 }
 
 func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
@@ -72,6 +73,8 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 		"http.config",
 		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
 	).Default("").StringVar(&hc.tlsConfig)
+	cmd.Flag("enable-hedged", "Enable hedged requests").
+		Default("false").BoolVar(&hc.EnableHedged)
 	return hc
 }
 

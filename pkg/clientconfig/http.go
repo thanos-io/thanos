@@ -14,10 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
+	hedged "github.com/cristalhq/hedgedhttp"
 	"github.com/go-kit/log"
 	"github.com/mwitkow/go-conntrack"
 	config_util "github.com/prometheus/common/config"
@@ -26,16 +28,16 @@ import (
 	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"golang.org/x/net/http2"
 	"gopkg.in/yaml.v2"
-
-	"github.com/thanos-io/thanos/pkg/discovery/cache"
 )
 
 // HTTPConfig is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
 type HTTPConfig struct {
 	HTTPClientConfig HTTPClientConfig    `yaml:"http_config"`
 	EndpointsConfig  HTTPEndpointsConfig `yaml:",inline"`
+	EnableHedged     bool                `yaml:"enable_hedged"`
 }
 
 func (c *HTTPConfig) NotEmpty() bool {
@@ -59,6 +61,8 @@ type HTTPClientConfig struct {
 	// ClientMetrics contains metrics that will be used to instrument
 	// the client that will be created with this config.
 	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
+
+	EnableHedged bool `yaml:"enable_hedged"`
 }
 
 // TLSConfig configures TLS connections.
@@ -200,7 +204,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 }
 
 // NewHTTPClient returns a new HTTP client.
-func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
+func NewHTTPClient(cfg HTTPClientConfig, name string, enableHedged bool) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -255,6 +259,21 @@ func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
 
 	rt = &userAgentRoundTripper{name: ThanosUserAgent, rt: rt}
 	client := &http.Client{Transport: rt}
+
+	if enableHedged {
+		hedgedConfig := hedged.Config{
+			Transport: rt,
+			Upto:      cfg.TransportConfig.MaxIdleConns,
+			Delay:     time.Second,
+		}
+
+		hedgedClient, err := hedged.New(hedgedConfig)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create hedged HTTP client")
+		}
+
+		client.Transport = hedgedClient
+	}
 
 	return client, nil
 }

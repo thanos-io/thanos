@@ -85,7 +85,7 @@ func NewClient(c HTTPClient, logger log.Logger, userAgent string) *Client {
 
 // NewDefaultClient returns Client with tracing tripperware.
 func NewDefaultClient() *Client {
-	client, _ := clientconfig.NewHTTPClient(clientconfig.HTTPClientConfig{}, "")
+	client, _ := clientconfig.NewHTTPClient(clientconfig.HTTPClientConfig{}, "", false)
 	return NewWithTracingClient(
 		log.NewNopLogger(),
 		client,

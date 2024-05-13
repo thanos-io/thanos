@@ -380,7 +380,7 @@ func runRule(
 	for _, cfg := range queryCfg {
 		if cfg.HTTPConfig.NotEmpty() {
 			cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
-			c, err := clientconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
+			c, err := clientconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query", cfg.HTTPConfig.EnableHedged)
 			if err != nil {
 				return err
 			}
@@ -568,7 +568,7 @@ func runRule(
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
 		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
-		c, err := clientconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := clientconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager", cfg.HTTPClientConfig.EnableHedged)
 		if err != nil {
 			return err
 		}
