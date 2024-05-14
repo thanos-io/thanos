@@ -208,6 +208,7 @@ Flags:
                                  compression).
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --enable-hedged            Enable hedged requests
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"

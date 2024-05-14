@@ -380,6 +380,7 @@ Flags:
                                 a human eye anyway
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
                                 consumption.
+      --enable-hedged           Enable hedged requests
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not
