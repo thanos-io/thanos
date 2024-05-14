@@ -158,6 +158,7 @@ func runReceive(
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
 	if receiveMode == receive.RouterOnly {
+		dialOpts = append(dialOpts, grpc.WithIdleTimeout(time.Duration(*conf.maxBackoff)))
 		dialOpts = append(dialOpts, extgrpc.EndpointGroupGRPCOpts()...)
 	}
 

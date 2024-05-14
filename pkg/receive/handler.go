@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -396,6 +397,9 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 // Close stops the Handler.
 func (h *Handler) Close() {
 	runutil.CloseWithLogOnErr(h.logger, h.httpSrv, "receive HTTP server")
+	if err := h.peers.closeAll(); err != nil {
+		level.Error(h.logger).Log("msg", "closing peer connections failed, we might have leaked file descriptors", "err", err)
+	}
 }
 
 // Run serves the HTTP endpoints.
@@ -789,6 +793,12 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			writeableSeries.seriesIDs = append(writeDestination[endpointReplica].seriesIDs, tsIndex)
 			writeDestination[endpointReplica] = writeableSeries
 		}
+	}
+	if h.receiverMode == RouterOnly && len(localWrites) > 0 {
+		panic("router only mode should not have any local writes")
+	}
+	if h.receiverMode == IngestorOnly && len(remoteWrites) > 0 {
+		panic("ingestor only mode should not have any remote writes")
 	}
 	return localWrites, remoteWrites, nil
 }
@@ -1226,6 +1236,7 @@ func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, as
 }
 
 type peersContainer interface {
+	closeAll() error
 	close(string) error
 	getConnection(context.Context, string) (WriteableStoreAsyncClient, error)
 	markPeerUnavailable(string)
@@ -1273,18 +1284,37 @@ type peerGroup struct {
 	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
 }
 
+func (p *peerGroup) closeAll() error {
+	p.m.Lock()
+	defer p.m.Unlock()
+	var closeErrors []string // Slice to store error messages
+	for addr := range p.connections {
+		if err := p.closeUnlocked(addr); err != nil {
+			// Collect error messages
+			closeErrors = append(closeErrors, fmt.Sprintf("failed to close %s: %v", addr, err))
+		}
+	}
+	if len(closeErrors) > 0 {
+		// Return aggregated error messages
+		return fmt.Errorf("multiple errors closing connections: %s", strings.Join(closeErrors, ", "))
+	}
+	return nil
+}
+
 func (p *peerGroup) close(addr string) error {
 	p.m.Lock()
 	defer p.m.Unlock()
+	return p.closeUnlocked(addr)
+}
 
+func (p *peerGroup) closeUnlocked(addr string) error {
 	c, ok := p.connections[addr]
 	if !ok {
 		// NOTE(GiedriusS): this could be valid case when the connection
 		// was never established.
 		return nil
 	}
-
-	p.connections[addr].wp.Close()
+	c.wp.Close()
 	delete(p.connections, addr)
 	if err := c.cc.Close(); err != nil {
 		return fmt.Errorf("closing connection for %s", addr)
