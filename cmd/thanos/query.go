@@ -180,7 +180,7 @@ func registerQuery(app *extkingpin.App) {
 		Default(string(dns.MiekgdnsResolverType)).Hidden().String()
 
 	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
-	ignoreStoreErrors := cmd.Flag("store.ignore-errors", "Ignore errors from store endpoints. This is for qeury result completeness.").
+	ignoreStoreErrors := cmd.Flag("store.ignore-errors", "Fan out a query to a store/receive endpoint even if it has errors previously. This is for query result completeness.").
 		Default("false").Bool()
 
 	endpointInfoTimeout := extkingpin.ModelDuration(cmd.Flag("endpoint.info-timeout", "Timeout of gRPC Info requests.").Default("5s").Hidden())
