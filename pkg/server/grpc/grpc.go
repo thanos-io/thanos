@@ -78,6 +78,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc.MaxRecvMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
+			NewUnaryServerRequestIDInterceptor(),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),
 			tags.UnaryServerInterceptor(tagsOpts...),
@@ -85,6 +86,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 		grpc_middleware.WithStreamServerChain(
+			NewStreamServerRequestIDInterceptor(),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.StreamServerInterceptor(),
 			tags.StreamServerInterceptor(tagsOpts...),

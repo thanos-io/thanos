@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -58,12 +59,14 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 		grpc.WithUnaryInterceptor(
 			grpc_middleware.ChainUnaryClient(
+				grpcserver.NewUnaryClientRequestIDInterceptor(),
 				grpcMets.UnaryClientInterceptor(),
 				tracing.UnaryClientInterceptor(tracer),
 			),
 		),
 		grpc.WithStreamInterceptor(
 			grpc_middleware.ChainStreamClient(
+				grpcserver.NewStreamClientRequestIDInterceptor(),
 				grpcMets.StreamClientInterceptor(),
 				tracing.StreamClientInterceptor(tracer),
 			),
