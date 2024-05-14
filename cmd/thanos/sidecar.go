@@ -6,6 +6,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/common/route"
+	sidecarAPI "github.com/thanos-io/thanos/pkg/api/sidecar"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"math"
 	"net/http"
 	"net/url"
@@ -401,6 +404,23 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 		})
+
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
+
+		flushShipper := shipper.New(logger, nil, "", bkt, m.Labels, metadata.SidecarSource,
+			uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
+
+		router := route.New()
+		api := sidecarAPI.NewSidecarAPI(logger, reg, m.client, flushShipper, conf.tsdb.path, m.promURL)
+
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+
+		srv.Handle("/", router)
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar")
