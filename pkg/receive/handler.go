@@ -149,7 +149,8 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		writer:  o.Writer,
 		router:  route.New(),
 		options: o,
-		peers: newPeerGroup(logger,
+		peers: newPeerGroup(
+			logger,
 			backoff.Backoff{
 				Factor: 2,
 				Min:    100 * time.Millisecond,
@@ -396,6 +397,9 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 // Close stops the Handler.
 func (h *Handler) Close() {
 	runutil.CloseWithLogOnErr(h.logger, h.httpSrv, "receive HTTP server")
+	if err := h.peers.closeAll(); err != nil {
+		level.Error(h.logger).Log("msg", "closing peer connections failed, we might have leaked file descriptors", "err", err)
+	}
 }
 
 // Run serves the HTTP endpoints.
@@ -1218,6 +1222,27 @@ type peerWorker struct {
 	forwardDelay prometheus.Histogram
 }
 
+func (pw *peerWorker) isReady() bool {
+	return pw.cc != nil
+}
+
+func (pw *peerWorker) markNotReady() error {
+	if pw.cc != nil {
+		err := pw.cc.Close()
+		pw.cc = nil
+		return err
+	}
+	return nil
+}
+
+func (pw *peerWorker) close() error {
+	pw.wp.Close()
+	if pw.cc != nil {
+		return pw.cc.Close()
+	}
+	return nil
+}
+
 func newPeerGroup(logger log.Logger, backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, dialOpts ...grpc.DialOption) peersContainer {
 	return &peerGroup{
 		logger:                   logger,
@@ -1233,6 +1258,7 @@ func newPeerGroup(logger log.Logger, backoff backoff.Backoff, forwardDelay prome
 }
 
 type peersContainer interface {
+	closeAll() error
 	close(string) error
 	getConnection(context.Context, string) (WriteableStoreAsyncClient, error)
 	markPeerUnavailable(string)
@@ -1281,6 +1307,17 @@ type peerGroup struct {
 	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
 }
 
+func (p *peerGroup) closeAll() error {
+	p.m.Lock()
+	defer p.m.Unlock()
+	for addr := range p.connections {
+		if err := p.closeUnlocked(addr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *peerGroup) close(addr string) error {
 	p.m.Lock()
 	defer p.m.Unlock()
@@ -1294,10 +1331,8 @@ func (p *peerGroup) closeUnlocked(addr string) error {
 		// was never established.
 		return nil
 	}
-	level.Error(p.logger).Log("msg", "closing connection", "addr", addr)
-	p.connections[addr].wp.Close()
 	delete(p.connections, addr)
-	if err := c.cc.Close(); err != nil {
+	if err := c.close(); err != nil {
 		return fmt.Errorf("closing connection for %s", addr)
 	}
 
@@ -1312,6 +1347,7 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	// use a RLock first to prevent blocking if we don't need to.
 	p.m.RLock()
 	c, ok := p.connections[addr]
+	ok = ok && c.isReady()
 	p.m.RUnlock()
 	if ok {
 		return c, nil
@@ -1321,20 +1357,21 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	defer p.m.Unlock()
 	// Make sure that another caller hasn't created the connection since obtaining the write lock.
 	c, ok = p.connections[addr]
-	if ok {
+	if ok && c.isReady() {
 		return c, nil
 	}
-	level.Info(p.logger).Log("msg", "dialing peer", "peer", addr)
+	level.Debug(p.logger).Log("msg", "dialing peer", "addr", addr)
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
-		// clear retry state if dial failed, this is necessary to avoid dialing peer too often.
-		delete(p.peerStates, addr)
 		p.markPeerUnavailableUnlocked(addr)
 		dialError := errors.Wrap(err, "failed to dial peer")
 		return nil, errors.Wrap(dialError, errUnavailable.Error())
 	}
-
-	p.connections[addr] = newPeerWorker(conn, p.forwardDelay, p.asyncForwardWorkersCount)
+	if !ok {
+		p.connections[addr] = newPeerWorker(conn, p.forwardDelay, p.asyncForwardWorkersCount)
+	} else {
+		p.connections[addr].cc = conn
+	}
 	return p.connections[addr], nil
 }
 
@@ -1342,15 +1379,10 @@ func (p *peerGroup) markPeerUnavailable(addr string) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	if p.markPeerUnavailableUnlocked(addr) {
-		// close the connection if the backoff tries too many times, likely server is down.
-		if err := p.closeUnlocked(addr); err != nil {
-			level.Error(p.logger).Log("msg", "failed to close connection", "addr", addr, "err", err)
-		}
-	}
+	p.markPeerUnavailableUnlocked(addr)
 }
 
-func (p *peerGroup) markPeerUnavailableUnlocked(addr string) bool {
+func (p *peerGroup) markPeerUnavailableUnlocked(addr string) {
 	state, ok := p.peerStates[addr]
 	if !ok {
 		state = &retryState{attempt: -1}
@@ -1359,7 +1391,12 @@ func (p *peerGroup) markPeerUnavailableUnlocked(addr string) bool {
 	delay := p.expBackoff.ForAttempt(state.attempt)
 	state.nextAllowed = time.Now().Add(delay)
 	p.peerStates[addr] = state
-	return delay >= p.expBackoff.Max
+	if delay >= p.expBackoff.Max {
+		level.Warn(p.logger).Log("msg", "peer is not ready", "addr", addr, "next_allowed", state.nextAllowed)
+		if err := p.connections[addr].markNotReady(); err != nil {
+			level.Error(p.logger).Log("msg", "failed to mark peer as not ready", "err", err)
+		}
+	}
 }
 
 func (p *peerGroup) markPeerAvailable(addr string) {

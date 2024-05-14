@@ -163,3 +163,29 @@ func (s *Server) Shutdown(err error) {
 	}
 	level.Info(s.logger).Log("msg", "internal server is shutdown gracefully", "err", err)
 }
+
+// TestServer is used only for unit tests to create a new gRPC server.
+func TestServer(logger log.Logger, comp component.Component, address string, opts ...Option) *Server {
+	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
+	options := options{
+		network: "tcp",
+		listen:  address,
+		grpcOpts: []grpc.ServerOption{
+			grpc.MaxSendMsgSize(math.MaxInt32),
+		},
+	}
+	for _, o := range opts {
+		o.apply(&options)
+	}
+	s := grpc.NewServer(options.grpcOpts...)
+	// Register all configured servers.
+	for _, f := range options.registerServerFuncs {
+		f(s)
+	}
+	return &Server{
+		logger: logger,
+		comp:   comp,
+		srv:    s,
+		opts:   options,
+	}
+}

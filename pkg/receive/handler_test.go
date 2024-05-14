@@ -26,7 +26,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
@@ -40,18 +42,62 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/stretchr/testify/require"
-
-	"github.com/efficientgo/core/testutil"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/resolver"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
+
+const dnsScheme = "dns"
+
+type dnsResolver struct {
+	logger    log.Logger
+	target    resolver.Target
+	cc        resolver.ClientConn
+	addrStore map[string][]string
+}
+
+func (r *dnsResolver) start() {
+	addrStrs := r.addrStore[r.target.Endpoint()]
+	addrs := make([]resolver.Address, len(addrStrs))
+	for i, s := range addrStrs {
+		addrs[i] = resolver.Address{Addr: s}
+	}
+	if err := r.cc.UpdateState(resolver.State{Addresses: addrs}); err != nil {
+		level.Error(r.logger).Log("msg", "failed to update state", "err", err)
+	}
+}
+
+func (*dnsResolver) ResolveNow(_ resolver.ResolveNowOptions) {}
+
+func (*dnsResolver) Close() {}
+
+type dnsResolverBuilder struct {
+	logger    log.Logger
+	addrStore map[string][]string
+}
+
+func (b *dnsResolverBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
+	r := &dnsResolver{
+		logger:    b.logger,
+		target:    target,
+		cc:        cc,
+		addrStore: b.addrStore,
+	}
+	r.start()
+	return r, nil
+}
+func (*dnsResolverBuilder) Scheme() string { return dnsScheme }
 
 type fakeTenantAppendable struct {
 	f *fakeAppendable
@@ -188,6 +234,10 @@ func (g *fakePeersGroup) close(addr string) error {
 		g.closeCalled = map[string]bool{}
 	}
 	g.closeCalled[addr] = true
+	return nil
+}
+
+func (g *fakePeersGroup) closeAll() error {
 	return nil
 }
 
@@ -1736,50 +1786,90 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	wg.Wait()
 }
 
-func TestPeerGroup(t *testing.T) {
+func TestIngestorRestart(t *testing.T) {
+	var err error
 	logger := log.NewLogfmtLogger(os.Stderr)
-	serverAddress := "http://localhost:19090"
-	dialOpts := []grpc.DialOption{grpc.WithInsecure()}
-	srv := startServer(logger, serverAddress)
-	ctx := context.TODO()
+	addr1, addr2, addr3 := "localhost:14090", "localhost:14091", "localhost:14092"
+	ing1, ing2 := startIngestor(logger, addr1, 0), startIngestor(logger, addr2, 0)
+	defer ing1.Shutdown(err) // srv1 is stable and will only be closed after the test ends
+
+	clientAddr := "ingestor.com"
+	dnsBuilder := &dnsResolverBuilder{
+		logger:    logger,
+		addrStore: map[string][]string{clientAddr: {addr2}},
+	}
+	resolver.Register(dnsBuilder)
+	dialOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithResolvers(resolver.Get(dnsScheme)),
+	}
 	client := NewHandler(logger, &Options{
-		MaxBackoff: 1 * time.Second,
-		DialOpts:   dialOpts,
+		MaxBackoff:        1 * time.Second,
+		DialOpts:          dialOpts,
+		ReplicationFactor: 2,
+		ReceiverMode:      RouterOnly,
+		ForwardTimeout:    15 * time.Second,
 	})
-	_, err := client.peers.getConnection(ctx, serverAddress)
-	require.NoError(t, err)
-	// close the server and wait for the backoff to kick in and see how long it takes
-	srv.Close()
-	// server is closed, now we can't send requests to it
-	er := endpointReplica{endpoint: serverAddress, replica: 0}
-	data := trackedSeries{
-		timeSeries: []prompb.TimeSeries{
+	// one of the endpoints is DNS and wire up to different backend address on the fly
+	client.Hashring(&simpleHashring{addr1, fmt.Sprintf("%s:///%s", dnsScheme, clientAddr)})
+	defer client.Close()
+
+	ctx := context.TODO()
+	data := &prompb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
 			{
-				Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+				Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", addr3)),
 				Samples: []prompb.Sample{{Timestamp: time.Now().Unix(), Value: 123}},
 			},
 		},
 	}
 
-	N := 50
-	responses := make(chan writeResponse, N)
-	for i := 0; i < N; i++ {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		client.sendRemoteWrite(ctx, "", er, data, false, responses, &wg)
-		wg.Wait()
-		_, err = client.peers.getConnection(ctx, serverAddress)
-		require.Error(t, errUnavailable, err)
-		time.Sleep(100 * time.Millisecond)
+	err = client.handleRequest(ctx, 0, "test", data)
+	require.NoError(t, err)
+
+	// close srv2 to simulate ingestor down
+	ing2.Shutdown(err)
+	ing3 := startIngestor(logger, addr3, 2*time.Second)
+	defer ing3.Shutdown(err)
+	// bind the new backend to the same DNS
+	dnsBuilder.addrStore[clientAddr] = []string{addr3}
+
+	iter, errs := 10, 0
+	for i := 0; i < iter; i++ {
+		err = client.handleRequest(ctx, 0, "test", data)
+		if err != nil {
+			require.Error(t, errUnavailable, err)
+			errs++
+		} else {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
+	require.Greater(t, errs, 0, "expected to have unavailable errors initially")
+	require.Less(t, errs, iter, "expected to recover quickly after server restarts")
 }
 
-func startServer(logger log.Logger, serverAddress string) *Handler {
-	srv := NewHandler(logger, &Options{
-		ListenAddress: serverAddress,
-	})
+type fakeStoreServer struct {
+	logger log.Logger
+}
+
+func (f *fakeStoreServer) RemoteWrite(_ context.Context, in *storepb.WriteRequest) (*storepb.WriteResponse, error) {
+	level.Debug(f.logger).Log("msg", "received remote write request", "request", in.String())
+	return &storepb.WriteResponse{}, nil
+}
+
+func startIngestor(logger log.Logger, serverAddress string, delay time.Duration) *grpcserver.Server {
+	h := &fakeStoreServer{logger: logger}
+	srv := grpcserver.TestServer(logger, component.Receive, serverAddress,
+		grpcserver.WithServer(store.RegisterWritableStoreServer(h)),
+	)
 	go func() {
-		srv.Run()
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+		if err := srv.ListenAndServe(); err != nil {
+			level.Error(logger).Log("msg", "server error", "addr", serverAddress, "err", err)
+		}
 	}()
 	return srv
 }
