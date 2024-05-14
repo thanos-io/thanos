@@ -60,7 +60,8 @@ scrape_configs:
 	testutil.Ok(t, err)
 	promClient := promclient.NewClient(httpClient, logger, "thanos-sidecar")
 
-	// Wait targets response to be ready as Prometheus scrapes targets.
+	// Waits for targets to be present in prometheus, so we know there will be active chunks in the head block
+	// to snapshot
 	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
 		targets, err := promClient.TargetsInGRPC(ctx, promURL, "")
 		testutil.Ok(t, err)
@@ -79,18 +80,17 @@ scrape_configs:
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		logger:      logger,
-		disableCORS: true,
-		promURL:     promURL,
-		dataDir:     prom.Dir(),
-		client:      promClient,
-		shipper:     s,
+		logger:  logger,
+		promURL: promURL,
+		dataDir: prom.Dir(),
+		client:  promClient,
+		shipper: s,
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "", nil)
 	testutil.Ok(t, err)
 
 	res, _, err, _ := api.flush(req)
 	r := res.(*flushResponse)
-	testutil.Assert(t, r.UploadedBlocks > 0)
+	testutil.Assert(t, r.BlocksUploaded > 0)
 
 }

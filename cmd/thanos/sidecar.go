@@ -383,7 +383,7 @@ func runSidecar(
 			uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
 
 		router := route.New()
-		api := sidecarAPI.NewSidecarAPI(logger, reg, false, m.client, flushShipper, conf.tsdb.path, m.promURL, nil)
+		api := sidecarAPI.NewSidecarAPI(logger, reg, m.client, flushShipper, conf.tsdb.path, m.promURL)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 

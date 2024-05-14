@@ -22,43 +22,39 @@ import (
 
 // SidecarAPI is a very simple API used by Thanos Sidecar.
 type SidecarAPI struct {
-	baseAPI     *api.BaseAPI
-	client      *promclient.Client
-	shipper     *shipper.Shipper
-	promURL     *url.URL
-	dataDir     string
-	logger      log.Logger
-	reg         prometheus.Registerer
-	disableCORS bool
+	baseAPI *api.BaseAPI
+	client  *promclient.Client
+	shipper *shipper.Shipper
+	promURL *url.URL
+	dataDir string
+	logger  log.Logger
+	reg     prometheus.Registerer
 }
 
 // NewSidecarAPI creates an Thanos Sidecar API.
 func NewSidecarAPI(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	disableCORS bool,
 	client *promclient.Client,
 	shipper *shipper.Shipper,
 	dataDir string,
 	promURL *url.URL,
-	flagsMap map[string]string,
 ) *SidecarAPI {
 	return &SidecarAPI{
-		baseAPI:     api.NewBaseAPI(logger, disableCORS, flagsMap),
-		logger:      logger,
-		client:      client,
-		reg:         reg,
-		shipper:     shipper,
-		dataDir:     dataDir,
-		promURL:     promURL,
-		disableCORS: disableCORS,
+		baseAPI: api.NewBaseAPI(logger, true, nil),
+		logger:  logger,
+		client:  client,
+		reg:     reg,
+		shipper: shipper,
+		dataDir: dataDir,
+		promURL: promURL,
 	}
 }
 
 func (s *SidecarAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	s.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins, logMiddleware, s.disableCORS)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware, true)
 	r.Post("/flush", instr("flush", s.flush))
 }
 
