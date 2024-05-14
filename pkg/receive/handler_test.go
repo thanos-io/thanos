@@ -26,7 +26,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
-	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -44,6 +43,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
+
+	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -1800,6 +1801,7 @@ func TestIngestorRestart(t *testing.T) {
 	}
 	resolver.Register(dnsBuilder)
 	dialOpts := []grpc.DialOption{
+		grpc.WithIdleTimeout(1 * time.Second), // set idle timeout to 1s will re-establish the connection quickly
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithResolvers(resolver.Get(dnsScheme)),
 	}
