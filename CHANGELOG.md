@@ -18,7 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#7359](https://github.com/thanos-io/thanos/pull/7358) Sidecar: Add HTTP flush endpoint for uploading what's in the head block
+- [#7359](https://github.com/thanos-io/thanos/pull/7359) Sidecar: Add HTTP flush endpoint for uploading what's in the head block
 - [#7317](https://github.com/thanos-io/thanos/pull/7317) Tracing: allow specifying resource attributes for the OTLP configuration.
 
 ### Changed

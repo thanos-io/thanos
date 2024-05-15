@@ -93,5 +93,5 @@ scrape_configs:
 	res, _, err, _ := api.flush(req)
 	r := res.(*flushResponse)
 	testutil.Assert(t, r.BlocksUploaded > 0)
-
+	testutil.Equals(t, (*baseAPI.ApiError)(nil), err)
 }
