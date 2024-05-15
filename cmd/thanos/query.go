@@ -180,8 +180,6 @@ func registerQuery(app *extkingpin.App) {
 		Default(string(dns.MiekgdnsResolverType)).Hidden().String()
 
 	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
-	ignoreStoreErrors := cmd.Flag("store.ignore-errors", "Fan out a query to a store/receive endpoint even if it has errors previously. This is for query result completeness.").
-		Default("false").Bool()
 
 	endpointInfoTimeout := extkingpin.ModelDuration(cmd.Flag("endpoint.info-timeout", "Timeout of gRPC Info requests.").Default("5s").Hidden())
 
@@ -190,6 +188,9 @@ func registerQuery(app *extkingpin.App) {
 
 	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
+
+	enableGroupReplicaPartialStrategy := cmd.Flag("query.group-replica-strategy", "Enable group-replica partial response strategy.").
+		Default("false").Bool()
 
 	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -372,7 +373,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantCertField,
 			*enforceTenancy,
 			*tenantLabel,
-			*ignoreStoreErrors,
+			*enableGroupReplicaPartialStrategy,
 		)
 	})
 }
@@ -455,7 +456,7 @@ func runQuery(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
-	ignoreStoreErrors bool,
+	groupReplicaPartialResponseStrategy bool,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -553,7 +554,8 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
-			ignoreStoreErrors,
+			// ignoreErrors when group_replica partial response strategy is enabled.
+			groupReplicaPartialResponseStrategy,
 			queryConnMetricLabels...,
 		)
 
@@ -562,6 +564,9 @@ func runQuery(
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
 		exemplarsProxy   = exemplars.NewProxy(logger, endpoints.GetExemplarsStores, selectorLset)
+		queryableCreator query.QueryableCreator
+	)
+	if groupReplicaPartialResponseStrategy {
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -569,7 +574,15 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-	)
+	} else {
+		queryableCreator = query.NewQueryableCreatorWithGroupReplicaPartialResponseStrategy(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
+			proxy,
+			maxConcurrentSelects,
+			queryTimeout,
+		)
+	}
 
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
