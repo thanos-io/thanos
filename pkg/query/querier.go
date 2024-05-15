@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -204,7 +205,7 @@ func newQuerierInternal(
 
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
 	if groupReplicaPartialResponseStrategy {
-		logger.Log("msg", "groupReplicaPartialResponseStrategy is enabled")
+		level.Debug(logger).Log("msg", "Enabled group-replica partial response strategy in newQuerierInternal")
 		partialResponseStrategy = storepb.PartialResponseStrategy_GROUP_REPLICA
 	} else if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN
