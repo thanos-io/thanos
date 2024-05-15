@@ -30,11 +30,12 @@ func NewQueryWarningsResponse(errs ...error) *QueryResponse {
 	}
 }
 
-func NewQueryRangeResponse(series *prompb.TimeSeries) *QueryRangeResponse {
+func NewQueryRangeResponse(series *prompb.TimeSeries, stats *QueryStats) *QueryRangeResponse {
 	return &QueryRangeResponse{
 		Result: &QueryRangeResponse_Timeseries{
 			Timeseries: series,
 		},
+		Stats: stats,
 	}
 }
 
