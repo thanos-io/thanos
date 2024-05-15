@@ -204,6 +204,7 @@ func newQuerierInternal(
 
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
 	if groupReplicaPartialResponseStrategy {
+		logger.Log("msg", "groupReplicaPartialResponseStrategy is enabled")
 		partialResponseStrategy = storepb.PartialResponseStrategy_GROUP_REPLICA
 	} else if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN
