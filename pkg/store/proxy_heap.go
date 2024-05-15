@@ -213,7 +213,9 @@ func (h *ProxyResponseHeap) Min() *ProxyResponseHeapNode {
 }
 
 type ProxyResponseHeapNode struct {
-	rs respSet
+	rs         respSet
+	groupKey   string
+	replicaKey string
 }
 
 // NewProxyResponseHeap returns heap that k-way merge series together.
@@ -229,6 +231,28 @@ func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
 		}
 		ss := ss
 		ret.Push(ProxyResponseHeapNode{rs: ss})
+	}
+
+	heap.Init(&ret)
+
+	return &ret
+}
+
+func NewProxyResponseHeapWithKeys(seriesSets []respSet, groupKeys, replicaKeys []string) *ProxyResponseHeap {
+	ret := ProxyResponseHeap{
+		nodes: make([]ProxyResponseHeapNode, 0, len(seriesSets)),
+	}
+
+	for i, ss := range seriesSets {
+		if ss.Empty() {
+			continue
+		}
+		ss := ss
+		ret.Push(ProxyResponseHeapNode{
+			rs:         ss,
+			groupKey:   groupKeys[i],
+			replicaKey: replicaKeys[i],
+		})
 	}
 
 	heap.Init(&ret)
@@ -252,6 +276,21 @@ func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
 	}
 
 	return atResp
+}
+
+func (h *ProxyResponseHeap) AtWithKeys() (*storepb.SeriesResponse, string, string) {
+	min := h.Min().rs
+
+	atResp := min.At()
+	groupKey, replicaKey := h.Min().groupKey, h.Min().replicaKey
+
+	if min.Next() {
+		heap.Fix(h, 0)
+	} else {
+		heap.Remove(h, 0)
+	}
+
+	return atResp, groupKey, replicaKey
 }
 
 func (l *lazyRespSet) StoreID() string {

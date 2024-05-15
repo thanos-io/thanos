@@ -67,6 +67,7 @@ const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
 	queryPushdown        = "query-pushdown"
+	dnsPrefix            = "dnssrv+"
 )
 
 type queryMode string
@@ -187,6 +188,9 @@ func registerQuery(app *extkingpin.App) {
 
 	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
+
+	enableGroupReplicaPartialStrategy := cmd.Flag("query.group-replica-strategy", "Enable group-replica partial response strategy.").
+		Default("false").Bool()
 
 	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -369,6 +373,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantCertField,
 			*enforceTenancy,
 			*tenantLabel,
+			*enableGroupReplicaPartialStrategy,
 		)
 	})
 }
@@ -451,6 +456,7 @@ func runQuery(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	groupReplicaPartialResponseStrategy bool,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -548,6 +554,8 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
+			// ignoreErrors when group_replica partial response strategy is enabled.
+			groupReplicaPartialResponseStrategy,
 			queryConnMetricLabels...,
 		)
 
@@ -556,6 +564,18 @@ func runQuery(
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
 		exemplarsProxy   = exemplars.NewProxy(logger, endpoints.GetExemplarsStores, selectorLset)
+		queryableCreator query.QueryableCreator
+	)
+	if groupReplicaPartialResponseStrategy {
+		level.Info(logger).Log("msg", "Enabled group-replica partial response strategy")
+		queryableCreator = query.NewQueryableCreatorWithGroupReplicaPartialResponseStrategy(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
+			proxy,
+			maxConcurrentSelects,
+			queryTimeout,
+		)
+	} else {
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -563,7 +583,7 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-	)
+	}
 
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
@@ -863,6 +883,7 @@ func prepareEndpointSet(
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	ignoreStoreErrors bool,
 	queryConnMetricLabels ...string,
 ) *query.EndpointSet {
 	endpointSet := query.NewEndpointSet(
@@ -881,9 +902,13 @@ func prepareEndpointSet(
 
 			for _, dnsProvider := range dnsProviders {
 				var tmpSpecs []*query.GRPCEndpointSpec
-
-				for _, addr := range dnsProvider.Addresses() {
-					tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+				for dnsName, addrs := range dnsProvider.AddressesWithDNS() {
+					// The dns name is like "dnssrv+pantheon-db-rep0:10901" whose replica key is "pantheon-db-rep0".
+					// TODO: have a more robust protocol to extract the replica key.
+					replicaKey := strings.Split(strings.TrimPrefix(dnsName, dnsPrefix), ":")[0]
+					for _, addr := range addrs {
+						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpecWithReplicaKey(replicaKey, addr, false, ignoreStoreErrors))
+					}
 				}
 				tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
 				specs = append(specs, tmpSpecs...)

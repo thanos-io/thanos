@@ -162,7 +162,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("failed to unmarshal \"asdfsdfsdfsd\" as 'partial_response_strategy'. Possible values are ABORT,WARN"),
+			expectedErr: errors.New("failed to unmarshal \"asdfsdfsdfsd\" as 'partial_response_strategy'. Possible values are ABORT,GROUP_REPLICA,WARN"),
 		},
 		{
 			name: "one valid group with 1 alerting rule containing no alerts.",

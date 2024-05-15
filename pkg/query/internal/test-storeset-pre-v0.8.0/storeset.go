@@ -183,6 +183,14 @@ type storeRef struct {
 	logger log.Logger
 }
 
+func (s *storeRef) GroupKey() string {
+	return ""
+}
+
+func (s *storeRef) ReplicaKey() string {
+	return ""
+}
+
 func (s *storeRef) Update(labelSets []labels.Labels, minTime, maxTime int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()

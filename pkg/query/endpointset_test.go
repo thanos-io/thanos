@@ -316,6 +316,14 @@ func TestEndpointSetUpdate(t *testing.T) {
 	# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
 	# TYPE thanos_store_nodes_grpc_connections gauge
 	`
+	const metricsMetaAddr = `
+	# HELP thanos_store_nodes_grpc_connections_addr Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+	# TYPE thanos_store_nodes_grpc_connections_addr gauge
+	`
+	const metricsMetaKeys = `
+	# HELP thanos_store_nodes_grpc_connections_keys Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+	# TYPE thanos_store_nodes_grpc_connections_keys gauge
+	`
 	testCases := []struct {
 		name       string
 		endpoints  []testEndpointMeta
@@ -343,6 +351,12 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedConnMetrics: metricsMeta +
 				`
 			thanos_store_nodes_grpc_connections{store_type="sidecar"} 1
+			` + metricsMetaAddr +
+				`
+			thanos_store_nodes_grpc_connections_addr{addr="127.0.0.1",replica_key=""} 1
+			` + metricsMetaKeys +
+				`
+			thanos_store_nodes_grpc_connections_keys{group_key="",replica_key=""} 1
 			`,
 		},
 		{
@@ -397,6 +411,12 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedConnMetrics: metricsMeta +
 				`
 			thanos_store_nodes_grpc_connections{store_type="sidecar"} 1
+			` + metricsMetaAddr +
+				`
+			thanos_store_nodes_grpc_connections_addr{addr="127.0.0.1",replica_key=""} 1
+			` + metricsMetaKeys +
+				`
+			thanos_store_nodes_grpc_connections_keys{group_key="",replica_key=""} 1
 			`,
 		},
 		{
@@ -420,6 +440,12 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedEndpoints: 1,
 			expectedConnMetrics: metricsMeta + `
 			thanos_store_nodes_grpc_connections{external_labels="{lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val}",store_type="sidecar"} 1
+			` + metricsMetaAddr +
+				`
+			thanos_store_nodes_grpc_connections_addr{addr="127.0.0.1",replica_key=""} 1
+			` + metricsMetaKeys +
+				`
+			thanos_store_nodes_grpc_connections_keys{group_key="",replica_key=""} 1
 			`,
 		},
 	}

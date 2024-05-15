@@ -71,6 +71,14 @@ type Client interface {
 	// Addr returns address of the store client. If second parameter is true, the client
 	// represents a local client (server-as-client) and has no remote address.
 	Addr() (addr string, isLocalClient bool)
+
+	// A replica key defines a set of endpoints belong to the same replica.
+	// E.g, "pantheon-db-rep0", "pantheon-db-rep1", "long-range-store".
+	ReplicaKey() string
+	// A group key defeines a group of replicas that belong to the same group.
+	// E.g. "pantheon-db" has replicas "pantheon-db-rep0", "pantheon-db-rep1".
+	//		"long-range-store" has only one replica, "long-range-store".
+	GroupKey() string
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -329,6 +337,18 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		stores         []Client
 		storeLabelSets []labels.Labels
 	)
+	// groupReplicaStores[groupKey][replicaKey] = number of stores with the groupKey and replicaKey
+	groupReplicaStores := make(map[string]map[string]int)
+	// failedStores[groupKey][replicaKey] = number of store failures
+	failedStores := make(map[string]map[string]int)
+	totalFailedStores := 0
+	bumpCounter := func(key1, key2 string, mp map[string]map[string]int) {
+		if _, ok := mp[key1]; !ok {
+			mp[key1] = make(map[string]int)
+		}
+		mp[key1][key2]++
+	}
+
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
@@ -345,6 +365,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		storeLabelSets = append(storeLabelSets, extraMatchers...)
 
 		stores = append(stores, st)
+		bumpCounter(st.GroupKey(), st.ReplicaKey(), groupReplicaStores)
 	}
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
@@ -353,6 +374,33 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	r.Matchers = append(r.Matchers, MatchersForLabelSets(storeLabelSets)...)
 
 	storeResponses := make([]respSet, 0, len(stores))
+
+	checkGroupReplicaErrors := func(st Client, err error) error {
+		if len(failedStores[st.GroupKey()]) > 1 {
+			level.Error(reqLogger).Log(
+				"msg", "Multipel replicas have failures for the same group",
+				"group", st.GroupKey(),
+				"replicas", failedStores[st.GroupKey()],
+			)
+			return err
+		}
+		if len(groupReplicaStores[st.GroupKey()]) == 1 && failedStores[st.GroupKey()][st.ReplicaKey()] > 1 {
+			level.Error(reqLogger).Log(
+				"msg", "A single replica group has multiple failures",
+				"group", st.GroupKey(),
+				"replicas", failedStores[st.GroupKey()],
+			)
+			return err
+		}
+		return nil
+	}
+
+	logGroupReplicaErrors := func() {
+		if len(failedStores) > 0 {
+			level.Warn(s.logger).Log("msg", "Group/replica errors", "errors", failedStores)
+		}
+	}
+	defer logGroupReplicaErrors()
 
 	for _, st := range stores {
 		st := st
@@ -363,8 +411,13 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
-
-			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			bumpCounter(st.GroupKey(), st.ReplicaKey(), failedStores)
+			totalFailedStores++
+			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+				if checkGroupReplicaErrors(st, err) != nil {
+					return err
+				}
+			} else if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
@@ -384,8 +437,20 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for respHeap.Next() {
 		resp := respHeap.At()
 
-		if resp.GetWarning() != "" && (r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
-			return status.Error(codes.Aborted, resp.GetWarning())
+		if resp.GetWarning() != "" {
+			totalFailedStores++
+			level.Error(s.logger).Log("msg", "Series: warning from store", "warning", resp.GetWarning())
+			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+				// TODO: attribute the warning to the store(group key and replica key) that produced it.
+				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
+				if totalFailedStores > 1 {
+					level.Error(reqLogger).Log("msg", "more than one stores have failed")
+					// If we don't know which store has failed, we can tolerate at most one failed store.
+					return status.Error(codes.Aborted, resp.GetWarning())
+				}
+			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
+				return status.Error(codes.Aborted, resp.GetWarning())
+			}
 		}
 
 		if err := srv.Send(resp); err != nil {
