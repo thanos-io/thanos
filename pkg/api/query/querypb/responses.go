@@ -9,11 +9,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-func NewQueryResponse(series *prompb.TimeSeries) *QueryResponse {
+func NewQueryResponse(series *prompb.TimeSeries, stats *QueryStats) *QueryResponse {
 	return &QueryResponse{
 		Result: &QueryResponse_Timeseries{
 			Timeseries: series,
 		},
+		Stats: stats,
 	}
 }
 

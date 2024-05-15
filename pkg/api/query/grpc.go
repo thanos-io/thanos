@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -109,12 +110,22 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	}
 
+	stats := &querypb.QueryStats{
+		SamplesTotal: 0,
+		PeakSamples:  0,
+	}
+	if explQry, ok := qry.(engine.ExplainableQuery); ok {
+		analyze := explQry.Analyze()
+		stats.SamplesTotal = analyze.TotalSamples()
+		stats.PeakSamples = analyze.PeakSamples()
+	}
+
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
 		}
-		if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
+		if err := server.Send(querypb.NewQueryResponse(series, stats)); err != nil {
 			return err
 		}
 	case promql.Vector:
@@ -125,7 +136,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 				Samples:    floats,
 				Histograms: histograms,
 			}
-			if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
+			if err := server.Send(querypb.NewQueryResponse(series, stats)); err != nil {
 				return err
 			}
 		}
