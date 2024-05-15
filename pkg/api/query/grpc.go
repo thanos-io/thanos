@@ -110,16 +110,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	}
 
-	stats := &querypb.QueryStats{
-		SamplesTotal: 0,
-		PeakSamples:  0,
-	}
-	if explQry, ok := qry.(engine.ExplainableQuery); ok {
-		analyze := explQry.Analyze()
-		stats.SamplesTotal = analyze.TotalSamples()
-		stats.PeakSamples = analyze.PeakSamples()
-	}
-
+	stats := extractQueryStats(qry)
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
@@ -231,6 +222,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		}
 	}
 
+	stats := extractQueryStats(qry)
 	switch value := result.Value.(type) {
 	case promql.Matrix:
 		for _, series := range value {
@@ -240,7 +232,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				Samples:    floats,
 				Histograms: histograms,
 			}
-			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+			if err := srv.Send(querypb.NewQueryRangeResponse(series, stats)); err != nil {
 				return err
 			}
 		}
@@ -252,7 +244,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				Samples:    floats,
 				Histograms: histograms,
 			}
-			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+			if err := srv.Send(querypb.NewQueryRangeResponse(series, stats)); err != nil {
 				return err
 			}
 		}
@@ -261,10 +253,24 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
 		}
-		return srv.Send(querypb.NewQueryRangeResponse(series))
+		return srv.Send(querypb.NewQueryRangeResponse(series, stats))
 	}
 
 	return nil
+}
+
+func extractQueryStats(qry promql.Query) *querypb.QueryStats {
+	stats := &querypb.QueryStats{
+		SamplesTotal: 0,
+		PeakSamples:  0,
+	}
+	if explQry, ok := qry.(engine.ExplainableQuery); ok {
+		analyze := explQry.Analyze()
+		stats.SamplesTotal = analyze.TotalSamples()
+		stats.PeakSamples = analyze.PeakSamples()
+	}
+
+	return stats
 }
 
 func (g *GRPCAPI) getRangeQueryForEngine(
