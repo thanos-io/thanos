@@ -46,24 +46,6 @@ type Client struct {
 	tsdbInfos infopb.TSDBInfos
 }
 
-type remoteEnginePhases int
-
-const (
-	remoteExecutionPhase remoteEnginePhases = iota
-	remoteSeriesPhase
-)
-
-func (r remoteEnginePhases) String() string {
-	switch r {
-	case remoteExecutionPhase:
-		return "execution"
-	case remoteSeriesPhase:
-		return "series"
-	default:
-		return "unknown"
-	}
-}
-
 // NewClient creates a new Client.
 func NewClient(queryClient querypb.QueryClient, address string, tsdbInfos infopb.TSDBInfos) Client {
 	return Client{
