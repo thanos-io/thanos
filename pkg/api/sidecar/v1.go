@@ -5,15 +5,16 @@ package v1
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/shipper"
-	"net/http"
-	"net/url"
-	"os"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"

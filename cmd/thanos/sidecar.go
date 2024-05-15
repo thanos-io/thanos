@@ -6,14 +6,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/prometheus/common/route"
-	sidecarAPI "github.com/thanos-io/thanos/pkg/api/sidecar"
-	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"math"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/prometheus/common/route"
+	sidecarAPI "github.com/thanos-io/thanos/pkg/api/sidecar"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
