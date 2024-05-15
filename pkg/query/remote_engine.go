@@ -248,13 +248,13 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	start := time.Now()
 	defer func() {
 		keys := []any{
-			"msg", "Executed query",
+			"msg", "Executed remote query",
 			"query", r.plan.String(),
 			"time", time.Since(start),
 		}
 		if r.samplesStats != nil {
-			keys = append(keys, "peak_samples", r.samplesStats.PeakSamples)
-			keys = append(keys, "total_samples", r.samplesStats.TotalSamples)
+			keys = append(keys, "remote_peak_samples", r.samplesStats.PeakSamples)
+			keys = append(keys, "remote_total_samples", r.samplesStats.TotalSamples)
 		}
 		level.Debug(r.logger).Log(keys...)
 	}()
