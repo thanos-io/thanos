@@ -261,7 +261,13 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		thanosTraceID = traceID
 	}
 
-	remoteUser, _, _ := r.BasicAuth()
+	var remoteUser string
+	// Prefer reading remote user from header. Fall back to the value of basic authentication.
+	if f.cfg.SlowQueryLogsUserHeader != "" {
+		remoteUser = r.Header.Get(f.cfg.SlowQueryLogsUserHeader)
+	} else {
+		remoteUser, _, _ = r.BasicAuth()
+	}
 
 	logMessage := append([]interface{}{
 		"msg", "slow query detected",
