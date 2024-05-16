@@ -313,6 +313,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 			if s := msg.GetStats(); s != nil {
 				qryStats = s
+				continue
 			}
 
 			ts := msg.GetTimeseries()
@@ -383,6 +384,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		if s := msg.GetStats(); s != nil {
 			qryStats = s
+			continue
 		}
 
 		ts := msg.GetTimeseries()
