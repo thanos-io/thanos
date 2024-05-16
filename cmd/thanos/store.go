@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +17,6 @@ import (
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	commonmodel "github.com/prometheus/common/model"
@@ -46,6 +44,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
