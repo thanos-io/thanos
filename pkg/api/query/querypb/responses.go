@@ -9,12 +9,19 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-func NewQueryResponse(series *prompb.TimeSeries, stats *QueryStats) *QueryResponse {
+func NewQueryResponse(series *prompb.TimeSeries) *QueryResponse {
 	return &QueryResponse{
 		Result: &QueryResponse_Timeseries{
 			Timeseries: series,
 		},
-		Stats: stats,
+	}
+}
+
+func NewQueryStatsResponse(stats *QueryStats) *QueryResponse {
+	return &QueryResponse{
+		Result: &QueryResponse_Stats{
+			Stats: stats,
+		},
 	}
 }
 
@@ -30,12 +37,19 @@ func NewQueryWarningsResponse(errs ...error) *QueryResponse {
 	}
 }
 
-func NewQueryRangeResponse(series *prompb.TimeSeries, stats *QueryStats) *QueryRangeResponse {
+func NewQueryRangeResponse(series *prompb.TimeSeries) *QueryRangeResponse {
 	return &QueryRangeResponse{
 		Result: &QueryRangeResponse_Timeseries{
 			Timeseries: series,
 		},
-		Stats: stats,
+	}
+}
+
+func NewQueryRangeStatsResponse(stats *QueryStats) *QueryRangeResponse {
+	return &QueryRangeResponse{
+		Result: &QueryRangeResponse_Stats{
+			Stats: stats,
+		},
 	}
 }
 

@@ -68,9 +68,10 @@ message QueryResponse {
 
     /// timeseries is one series from the result of the executed query.
     prometheus_copy.TimeSeries timeseries = 2;
-  }
 
-  QueryStats stats = 3;
+    // performance stats
+    QueryStats stats = 3;
+  }
 }
 
 message queryPlan {
@@ -112,10 +113,10 @@ message QueryRangeResponse {
 
     /// timeseries is one series from the result of the executed query.
     prometheus_copy.TimeSeries timeseries = 2;
-  }
 
-  // performance stats
-  QueryStats stats = 3;
+    // performance stats
+    QueryStats stats = 3;
+  }
 }
 
 service Query {
