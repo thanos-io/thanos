@@ -57,10 +57,16 @@ service WriteableStore {
 message WriteResponse {
 }
 
+message TimeSeriesTenantTuple {
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+}
+
 message WriteRequest {
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+  repeated TimeSeriesTenantTuple timeseriesTenantData = 4 [(gogoproto.nullable) = false];
 }
 
 // Deprecated. Use `thanos.info` instead.

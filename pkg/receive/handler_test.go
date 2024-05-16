@@ -1693,16 +1693,22 @@ func TestDistributeSeries(t *testing.T) {
 	h.Hashring(hr)
 
 	_, remote, err := h.distributeTimeseriesToReplicas(
-		"foo",
-		[]uint64{0},
-		[]prompb.TimeSeries{
+		[]wreqTenantTuple{
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", metaLabelTenantID, "bar")),
-			},
-			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", metaLabelTenantID, "boo")),
+				tenant: "foo",
+				wreq: &prompb.WriteRequest{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", metaLabelTenantID, "bar")),
+						},
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", metaLabelTenantID, "boo")),
+						},
+					},
+				},
 			},
 		},
+		[]uint64{0},
 	)
 	require.NoError(t, err)
 	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries[0].Labels).Len())
@@ -1745,17 +1751,22 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 				return
 			}
 
-			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
-					{
-						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
-						Samples: []prompb.Sample{
+			_, err := h.handleRequest(ctx, 0, []wreqTenantTuple{
+				{
+					wreq: &prompb.WriteRequest{
+						Timeseries: []prompb.TimeSeries{
 							{
-								Timestamp: time.Now().Unix(),
-								Value:     123,
+								Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+								Samples: []prompb.Sample{
+									{
+										Timestamp: time.Now().Unix(),
+										Value:     123,
+									},
+								},
 							},
 						},
 					},
+					tenant: "test",
 				},
 			})
 			require.Error(t, err)
