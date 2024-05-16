@@ -110,13 +110,12 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	}
 
-	stats := extractQueryStats(qry)
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
 		}
-		if err := server.Send(querypb.NewQueryResponse(series, stats)); err != nil {
+		if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
 			return err
 		}
 	case promql.Vector:
@@ -127,11 +126,13 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 				Samples:    floats,
 				Histograms: histograms,
 			}
-			if err := server.Send(querypb.NewQueryResponse(series, stats)); err != nil {
+			if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
 				return err
 			}
 		}
-		return nil
+	}
+	if err := server.Send(querypb.NewQueryStatsResponse(extractQueryStats(qry))); err != nil {
+		return err
 	}
 
 	return nil
@@ -222,7 +223,6 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		}
 	}
 
-	stats := extractQueryStats(qry)
 	switch value := result.Value.(type) {
 	case promql.Matrix:
 		for _, series := range value {
@@ -232,7 +232,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				Samples:    floats,
 				Histograms: histograms,
 			}
-			if err := srv.Send(querypb.NewQueryRangeResponse(series, stats)); err != nil {
+			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
 				return err
 			}
 		}
@@ -244,16 +244,20 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				Samples:    floats,
 				Histograms: histograms,
 			}
-			if err := srv.Send(querypb.NewQueryRangeResponse(series, stats)); err != nil {
+			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
 				return err
 			}
 		}
-		return nil
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
 		}
-		return srv.Send(querypb.NewQueryRangeResponse(series, stats))
+		if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+			return err
+		}
+	}
+	if err := srv.Send(querypb.NewQueryRangeStatsResponse(extractQueryStats(qry))); err != nil {
+		return err
 	}
 
 	return nil
