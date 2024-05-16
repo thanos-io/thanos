@@ -453,6 +453,10 @@ func WithLogger(logger log.Logger) BucketStoreOption {
 
 type RequestLoggerFunc func(ctx context.Context, log log.Logger) log.Logger
 
+func NoopRequestLoggerFunc(_ context.Context, logger log.Logger) log.Logger {
+	return logger
+}
+
 // WithRequestLoggerFunc sets the BucketStore to use the passed RequestLoggerFunc
 // to initialize logger during query time.
 func WithRequestLoggerFunc(loggerFunc RequestLoggerFunc) BucketStoreOption {
@@ -595,9 +599,7 @@ func NewBucketStore(
 		seriesBatchSize:                 SeriesBatchSize,
 		sortingStrategy:                 sortingStrategyStore,
 		indexHeaderLazyDownloadStrategy: indexheader.AlwaysEagerDownloadIndexHeader,
-		requestLoggerFunc: func(ctx context.Context, logger log.Logger) log.Logger {
-			return logger
-		},
+		requestLoggerFunc:               NoopRequestLoggerFunc,
 	}
 
 	for _, option := range options {

@@ -1787,6 +1787,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 		bytesLimiterFactory:  NewBytesLimiterFactory(0),
 		seriesBatchSize:      SeriesBatchSize,
+		requestLoggerFunc:    NoopRequestLoggerFunc,
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
