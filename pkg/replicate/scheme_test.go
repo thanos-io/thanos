@@ -82,12 +82,13 @@ func testDeletionMark(ulid ulid.ULID) *metadata.DeletionMark {
 func TestReplicationSchemeAll(t *testing.T) {
 	testBlockID := testULID(0)
 	var cases = []struct {
-		name                    string
-		selector                labels.Selector
-		blockIDs                []ulid.ULID
-		ignoreMarkedForDeletion bool
-		prepare                 func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
-		assert                  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		name                      string
+		selector                  labels.Selector
+		blockIDs                  []ulid.ULID
+		ignoreMarkedForDeletion   bool
+		markReplicatedForDeletion bool
+		prepare                   func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		assert                    func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 	}{
 		{
 			name:    "EmptyOrigin",
@@ -362,6 +363,33 @@ func TestReplicationSchemeAll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:                      "MarkReplicatedForDeletion",
+			markReplicatedForDeletion: true,
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				ulid := testULID(0)
+				meta := testMeta(ulid)
+
+				b, err := json.Marshal(meta)
+				testutil.Ok(t, err)
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "meta.json"), bytes.NewReader(b))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
+			},
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				expectedOrigin := 4
+				expectedTarget := 3
+				gotOrigin := len(originBucket.Objects())
+				gotTarget := len(targetBucket.Objects())
+
+				if gotOrigin != expectedOrigin {
+					t.Fatalf("OriginBucket should have one block made up of three objects replicated + deletion mark. Got %d but expected %d objects.", gotOrigin, expectedOrigin)
+				}
+				if gotTarget != expectedTarget {
+					t.Fatalf("TargetBucket should have one block made up of three objects replicated. Got %d but expected %d objects.", gotTarget, expectedTarget)
+				}
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -393,7 +421,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		)
 		testutil.Ok(t, err)
 
-		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
+		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil, c.markReplicatedForDeletion)
 
 		err = r.execute(ctx)
 		testutil.Ok(t, err)
