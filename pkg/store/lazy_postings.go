@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -192,6 +193,7 @@ func fetchLazyExpandedPostings(
 	lazyExpandedPostingEnabled bool,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	tenant string,
+	logger log.Logger,
 ) (*lazyExpandedPostings, error) {
 	var (
 		err               error
@@ -222,7 +224,7 @@ func fetchLazyExpandedPostings(
 		}
 	}
 
-	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant)
+	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -267,9 +269,9 @@ func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label
 	return keys, lazyMatchers
 }
 
-func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string) ([]storage.SeriesRef, []*labels.Matcher, error) {
+func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string, logger log.Logger) ([]storage.SeriesRef, []*labels.Matcher, error) {
 	keys, lazyMatchers := keysToFetchFromPostingGroups(postingGroups)
-	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant)
+	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant, logger)
 	defer func() {
 		for _, closeFn := range closeFns {
 			closeFn()

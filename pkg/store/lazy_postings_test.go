@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -254,7 +253,6 @@ func (h *mockIndexHeaderReader) LabelNames() ([]string, error) { return nil, nil
 
 func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 	ctx := context.Background()
-	logger := log.NewNopLogger()
 	dir := t.TempDir()
 	bkt, err := filesystem.NewBucket(dir)
 	testutil.Ok(t, err)
@@ -555,7 +553,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			headerReader := &mockIndexHeaderReader{postings: tc.inputPostings, err: tc.inputError}
 			registry := prometheus.NewRegistry()
-			block, err := newBucketBlock(ctx, logger, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
+			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
 			testutil.Ok(t, err)
 			ir := newBucketIndexReader(block)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
