@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -258,6 +259,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
+	logger := log.NewNopLogger()
 	inputError := errors.New("random")
 	blockID := ulid.MustNew(1, nil)
 	meta := &metadata.Meta{
@@ -557,7 +559,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			testutil.Ok(t, err)
 			ir := newBucketIndexReader(block)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
-			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, dummyCounter)
+			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, dummyCounter, logger)
 			if err != nil {
 				testutil.Equals(t, tc.expectedError, err.Error())
 				return

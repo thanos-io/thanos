@@ -40,7 +40,7 @@ func (p *lazyExpandedPostings) lazyExpanded() bool {
 	return p != nil && len(p.matchers) > 0
 }
 
-func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64, lazyExpandedPostingSizeBytes prometheus.Counter) ([]*postingGroup, bool, error) {
+func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64, lazyExpandedPostingSizeBytes prometheus.Counter, logger log.Logger) ([]*postingGroup, bool, error) {
 	if len(postingGroups) <= 1 {
 		return postingGroups, false, nil
 	}
@@ -61,7 +61,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 				continue
 			}
 			if rng.End <= rng.Start {
-				level.Error(r.block.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
+				level.Error(logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
 				return postingGroups, false, nil
 			}
 			// Each range starts from the #entries field which is 4 bytes.
@@ -215,6 +215,7 @@ func fetchLazyExpandedPostings(
 			int64(r.block.estimatedMaxSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
 			lazyExpandedPostingSizeBytes,
+			logger,
 		)
 		if err != nil {
 			return nil, err
