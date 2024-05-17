@@ -278,12 +278,12 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 			Analysis:   AnalyzesMerge(analyzes...),
 		},
 	}
-
+	response.Headers = QueryBytesFetchedPrometheusResponseHeaders(responses...)
 	if len(resultsCacheGenNumberHeaderValues) != 0 {
-		response.Headers = []*PrometheusResponseHeader{{
+		response.Headers = append(response.Headers, &PrometheusResponseHeader{
 			Name:   ResultsCacheGenNumberHeaderName,
 			Values: resultsCacheGenNumberHeaderValues,
-		}}
+		})
 	}
 
 	return &response, nil
@@ -449,7 +449,8 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 
 	resp := http.Response{
 		Header: http.Header{
-			"Content-Type": []string{"application/json"},
+			"Content-Type":              []string{"application/json"},
+			QueryBytesFetchedHeaderName: QueryBytesFetchedHttpHeaderValue(res),
 		},
 		Body:          io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode:    http.StatusOK,
