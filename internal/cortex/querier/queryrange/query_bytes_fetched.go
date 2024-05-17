@@ -43,7 +43,7 @@ func QueryBytesFetchedPrometheusResponseHeaders(responses ...Response) []*Promet
 }
 
 func QueryBytesFetchedHttpHeaderValue(response Response) []string {
-	result := []string{}
+	var result []string
 	for _, hdr := range response.GetHeaders() {
 		if hdr.GetName() == QueryBytesFetchedHeaderName {
 			result = hdr.GetValues()

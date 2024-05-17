@@ -8,7 +8,7 @@ import (
 	"context"
 	stdjson "encoding/json"
 	"fmt"
-	io "io"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -447,11 +447,13 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 
 	sp.LogFields(otlog.Int("bytes", len(b)))
 
+	httpHeader := http.Header{
+		"Content-Type": []string{"application/json"}}
+	if queryBytesFetchedHttpHeaderValue := QueryBytesFetchedHttpHeaderValue(res); queryBytesFetchedHttpHeaderValue != nil {
+		httpHeader[QueryBytesFetchedHeaderName] = queryBytesFetchedHttpHeaderValue
+	}
 	resp := http.Response{
-		Header: http.Header{
-			"Content-Type":              []string{"application/json"},
-			QueryBytesFetchedHeaderName: QueryBytesFetchedHttpHeaderValue(res),
-		},
+		Header:        httpHeader,
 		Body:          io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode:    http.StatusOK,
 		ContentLength: int64(len(b)),
