@@ -557,9 +557,9 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			registry := prometheus.NewRegistry()
 			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
 			testutil.Ok(t, err)
-			ir := newBucketIndexReader(block)
+			ir := newBucketIndexReader(block, logger)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
-			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, dummyCounter, logger)
+			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, dummyCounter)
 			if err != nil {
 				testutil.Equals(t, tc.expectedError, err.Error())
 				return

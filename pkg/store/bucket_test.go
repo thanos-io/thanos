@@ -1318,11 +1318,11 @@ func benchmarkExpandedPostings(
 				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
-			indexr := newBucketIndexReader(b)
+			indexr := newBucketIndexReader(b, logger)
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant, logger)
+				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p.postings))
 			}
@@ -1351,13 +1351,13 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	indexr := newBucketIndexReader(b)
+	indexr := newBucketIndexReader(b, logger)
 	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	// Match nothing.
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
 	ctx := context.Background()
 	dummyCounter := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
-	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant, logger)
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant)
 	testutil.Ok(t, err)
 	testutil.Equals(t, ps, (*lazyExpandedPostings)(nil))
 	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
@@ -1386,14 +1386,14 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-	indexr := newBucketIndexReader(b)
+	indexr := newBucketIndexReader(b, logger)
 	// matcher1 and matcher2 will match nothing after intersection.
 	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "n", "1_.*")
 	matcher3 := labels.MustNewMatcher(labels.MatchRegexp, "i", ".+")
 	ctx := context.Background()
 	dummyCounter := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
-	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2, matcher3}), NewBytesLimiterFactory(0)(nil), true, dummyCounter, tenancy.DefaultTenant, logger)
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2, matcher3}), NewBytesLimiterFactory(0)(nil), true, dummyCounter, tenancy.DefaultTenant)
 	testutil.Ok(t, err)
 	// We expect emptyLazyPostings rather than lazy postings with 0 length but with matchers.
 	testutil.Equals(t, ps, emptyLazyPostings)
@@ -3542,7 +3542,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 			i := i
 			bb := bb
 			go func(i int, bb *bucketBlock) {
-				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant, logger)
+				refs, err := bb.indexReader(logger).ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant)
 				testutil.Ok(t, err)
 				defer wg.Done()
 

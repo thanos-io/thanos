@@ -8,7 +8,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -40,7 +39,7 @@ func (p *lazyExpandedPostings) lazyExpanded() bool {
 	return p != nil && len(p.matchers) > 0
 }
 
-func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64, lazyExpandedPostingSizeBytes prometheus.Counter, logger log.Logger) ([]*postingGroup, bool, error) {
+func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64, lazyExpandedPostingSizeBytes prometheus.Counter) ([]*postingGroup, bool, error) {
 	if len(postingGroups) <= 1 {
 		return postingGroups, false, nil
 	}
@@ -61,7 +60,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 				continue
 			}
 			if rng.End <= rng.Start {
-				level.Error(logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
+				level.Error(r.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
 				return postingGroups, false, nil
 			}
 			// Each range starts from the #entries field which is 4 bytes.
@@ -193,7 +192,6 @@ func fetchLazyExpandedPostings(
 	lazyExpandedPostingEnabled bool,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	tenant string,
-	logger log.Logger,
 ) (*lazyExpandedPostings, error) {
 	var (
 		err               error
@@ -215,7 +213,6 @@ func fetchLazyExpandedPostings(
 			int64(r.block.estimatedMaxSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
 			lazyExpandedPostingSizeBytes,
-			logger,
 		)
 		if err != nil {
 			return nil, err
@@ -225,7 +222,7 @@ func fetchLazyExpandedPostings(
 		}
 	}
 
-	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant, logger)
+	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -270,9 +267,9 @@ func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label
 	return keys, lazyMatchers
 }
 
-func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string, logger log.Logger) ([]storage.SeriesRef, []*labels.Matcher, error) {
+func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string) ([]storage.SeriesRef, []*labels.Matcher, error) {
 	keys, lazyMatchers := keysToFetchFromPostingGroups(postingGroups)
-	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant, logger)
+	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant)
 	defer func() {
 		for _, closeFn := range closeFns {
 			closeFn()
