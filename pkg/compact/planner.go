@@ -234,6 +234,67 @@ type largeTotalIndexSizeFilter struct {
 
 var _ Planner = &largeTotalIndexSizeFilter{}
 
+type verticalCompactionDownsampleFilter struct {
+	bkt                objstore.Bucket
+	markedForNoCompact prometheus.Counter
+
+	*largeTotalIndexSizeFilter
+}
+
+var _ Planner = &verticalCompactionDownsampleFilter{}
+
+func WithVerticalCompactionDownsampleFilter(with *largeTotalIndexSizeFilter, bkt objstore.Bucket, markedForNoCompact prometheus.Counter) Planner {
+	return &verticalCompactionDownsampleFilter{
+		markedForNoCompact:        markedForNoCompact,
+		bkt:                       bkt,
+		largeTotalIndexSizeFilter: with,
+	}
+}
+
+func (v *verticalCompactionDownsampleFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
+	noCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, 0)
+PlanLoop:
+	for {
+		plan, err := v.plan(ctx, noCompactMarked, metasByMinTime)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(selectOverlappingMetas(plan)) == 0 {
+			return plan, nil
+		}
+
+		// If we have downsampled blocks, we need to mark them as no compact because it's impossible to do that with vertical compaction.
+		// Technically, the resolution is part of the group key but do not attach ourselves to that level of detail.
+		var marked = false
+		for _, m := range plan {
+			if m.Thanos.Downsample.Resolution == 0 {
+				continue
+			}
+			if err := block.MarkForNoCompact(
+				ctx,
+				v.logger,
+				v.bkt,
+				m.ULID,
+				metadata.DownsampleVerticalCompactionNoCompactReason,
+				"verticalCompactionDownsampleFilter: Downsampled block, see https://github.com/thanos-io/thanos/issues/6775",
+				v.markedForNoCompact,
+			); err != nil {
+				return nil, errors.Wrapf(err, "mark %v for no compaction", m.ULID.String())
+			}
+			noCompactMarked[m.ULID] = &metadata.NoCompactMark{ID: m.ULID, Version: metadata.NoCompactMarkVersion1}
+			marked = true
+		}
+
+		if marked {
+			continue PlanLoop
+		}
+
+		return plan, nil
+
+	}
+}
+
 // WithLargeTotalIndexSizeFilter wraps Planner with largeTotalIndexSizeFilter that checks the given plans and estimates total index size.
 // When found, it marks block for no compaction by placing no-compact-mark.json and updating cache.
 // NOTE: The estimation is very rough as it assumes extreme cases of indexes sharing no bytes, thus summing all source index sizes.
@@ -243,16 +304,19 @@ func WithLargeTotalIndexSizeFilter(with *tsdbBasedPlanner, bkt objstore.Bucket, 
 	return &largeTotalIndexSizeFilter{tsdbBasedPlanner: with, bkt: bkt, totalMaxIndexSizeBytes: totalMaxIndexSizeBytes, markedForNoCompact: markedForNoCompact}
 }
 
-func (t *largeTotalIndexSizeFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
+func (t *largeTotalIndexSizeFilter) plan(ctx context.Context, extraNoCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error) {
 	noCompactMarked := t.noCompBlocksFunc()
-	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(noCompactMarked))
+	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(noCompactMarked)+len(extraNoCompactMarked))
 	for k, v := range noCompactMarked {
+		copiedNoCompactMarked[k] = v
+	}
+	for k, v := range extraNoCompactMarked {
 		copiedNoCompactMarked[k] = v
 	}
 
 PlanLoop:
 	for {
-		plan, err := t.plan(copiedNoCompactMarked, metasByMinTime)
+		plan, err := t.tsdbBasedPlanner.plan(copiedNoCompactMarked, metasByMinTime)
 		if err != nil {
 			return nil, err
 		}
@@ -302,4 +366,8 @@ PlanLoop:
 		// Planned blocks should not exceed limit.
 		return plan, nil
 	}
+}
+
+func (t *largeTotalIndexSizeFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
+	return t.plan(ctx, nil, metasByMinTime)
 }

@@ -22,6 +22,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#7334](https://github.com/thanos-io/thanos/pull/7334) Compactor: do not vertically compact downsampled blocks. Such cases are now marked with `no-compact-mark.json`. Fixes panic `panic: unexpected seriesToChunkEncoder lack of iterations`.
+
 ### Removed
 
 ## [v0.35.1](https://github.com/thanos-io/thanos/tree/release-0.35) - 28.05.2024
