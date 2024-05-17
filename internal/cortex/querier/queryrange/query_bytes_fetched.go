@@ -32,9 +32,13 @@ func sumQueryBytesFetched(responses ...Response) uint64 {
 }
 
 func QueryBytesFetchedPrometheusResponseHeaders(responses ...Response) []*PrometheusResponseHeader {
+	n := sumQueryBytesFetched(responses...)
+	if n == 0 {
+		return nil
+	}
 	return []*PrometheusResponseHeader{{
 		Name:   QueryBytesFetchedHeaderName,
-		Values: []string{strconv.FormatUint(sumQueryBytesFetched(responses...), 10)},
+		Values: []string{strconv.FormatUint(n, 10)},
 	}}
 }
 
