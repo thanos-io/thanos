@@ -17,7 +17,7 @@ func sumQueryBytesFetched(responses ...Response) uint64 {
 	for _, resp := range responses {
 		for _, hdr := range resp.GetHeaders() {
 			if hdr.GetName() == QueryBytesFetchedHeaderName {
-				for _, v := range hdr.Values {
+				for _, v := range hdr.GetValues() {
 					n, err := strconv.ParseUint(v, 10, 64)
 					if err != nil {
 						continue
