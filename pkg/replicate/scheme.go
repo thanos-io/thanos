@@ -21,6 +21,7 @@ import (
 
 	"github.com/thanos-io/objstore"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -109,7 +110,7 @@ type blockFilterFunc func(b *metadata.Meta) bool
 
 // TODO: Add filters field.
 type replicationScheme struct {
-	fromBkt objstore.InstrumentedBucketReader
+	fromBkt objstore.InstrumentedBucket
 	toBkt   objstore.Bucket
 
 	blockFilter blockFilterFunc
@@ -119,6 +120,8 @@ type replicationScheme struct {
 	metrics *replicationMetrics
 
 	reg prometheus.Registerer
+
+	markAfter bool
 }
 
 type replicationMetrics struct {
@@ -150,9 +153,10 @@ func newReplicationScheme(
 	metrics *replicationMetrics,
 	blockFilter blockFilterFunc,
 	fetcher thanosblock.MetadataFetcher,
-	from objstore.InstrumentedBucketReader,
+	from objstore.InstrumentedBucket,
 	to objstore.Bucket,
 	reg prometheus.Registerer,
+	markAfter bool,
 ) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -166,6 +170,7 @@ func newReplicationScheme(
 		toBkt:       to,
 		metrics:     metrics,
 		reg:         reg,
+		markAfter:   markAfter,
 	}
 }
 
@@ -246,7 +251,26 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 			// If the origin meta file content and target meta file content is
 			// equal, we know we have already successfully replicated
 			// previously.
-			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
+			if rs.markAfter {
+				deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+				deletionMarkExists, err := rs.fromBkt.Exists(ctx, deletionMarkFile)
+				if err != nil {
+					return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
+				}
+
+				if !deletionMarkExists {
+					level.Debug(rs.logger).Log("msg", "marking block for deletion as already replicated", "block_uuid", blockID)
+					if err := block.MarkForDeletion(ctx, rs.logger, rs.fromBkt, id, "marked for deletion by thanos bucket replicate", promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						return errors.Wrapf(err, "mark %v for deletion", id)
+					}
+				} else {
+					level.Debug(rs.logger).Log("msg", "block already marked for deletion as already replicated", "block_uuid", blockID)
+				}
+
+			} else {
+				level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
+			}
+
 			rs.metrics.blocksAlreadyReplicated.Inc()
 
 			return nil
@@ -272,6 +296,23 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewBuffer(originMetaFileContent)); err != nil {
 		return errors.Wrap(err, "upload meta file")
+	}
+
+	if rs.markAfter {
+		deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+		deletionMarkExists, err := rs.fromBkt.Exists(ctx, deletionMarkFile)
+		if err != nil {
+			return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
+		}
+
+		if !deletionMarkExists {
+			level.Debug(rs.logger).Log("msg", "marking block for deletion", "block_uuid", blockID)
+			if err := block.MarkForDeletion(ctx, rs.logger, rs.fromBkt, id, "marked for deletion by thanos bucket replicate", promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+				return errors.Wrapf(err, "mark %v for deletion", id)
+			}
+		} else {
+			level.Debug(rs.logger).Log("msg", "block already marked for deletion", "block_uuid", blockID)
+		}
 	}
 
 	rs.metrics.blocksReplicated.Inc()
