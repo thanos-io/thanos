@@ -45,6 +45,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -394,6 +395,13 @@ func runStore(
 
 	options := []store.BucketStoreOption{
 		store.WithLogger(logger),
+		store.WithRequestLoggerFunc(func(ctx context.Context, logger log.Logger) log.Logger {
+			reqID, ok := middleware.RequestIDFromContext(ctx)
+			if ok {
+				return log.With(logger, "request-id", reqID)
+			}
+			return logger
+		}),
 		store.WithRegistry(reg),
 		store.WithIndexCache(indexCache),
 		store.WithQueryGate(queriesGate),

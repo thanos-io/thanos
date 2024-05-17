@@ -60,7 +60,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 				continue
 			}
 			if rng.End <= rng.Start {
-				level.Error(r.block.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
+				level.Error(r.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
 				return postingGroups, false, nil
 			}
 			// Each range starts from the #entries field which is 4 bytes.

@@ -254,12 +254,12 @@ func (h *mockIndexHeaderReader) LabelNames() ([]string, error) { return nil, nil
 
 func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 	ctx := context.Background()
-	logger := log.NewNopLogger()
 	dir := t.TempDir()
 	bkt, err := filesystem.NewBucket(dir)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
+	logger := log.NewNopLogger()
 	inputError := errors.New("random")
 	blockID := ulid.MustNew(1, nil)
 	meta := &metadata.Meta{
@@ -555,9 +555,9 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			headerReader := &mockIndexHeaderReader{postings: tc.inputPostings, err: tc.inputError}
 			registry := prometheus.NewRegistry()
-			block, err := newBucketBlock(ctx, logger, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
+			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
 			testutil.Ok(t, err)
-			ir := newBucketIndexReader(block)
+			ir := newBucketIndexReader(block, logger)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
 			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, dummyCounter)
 			if err != nil {
