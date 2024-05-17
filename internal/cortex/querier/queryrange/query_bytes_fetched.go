@@ -9,13 +9,14 @@ import (
 
 const QueryBytesFetchedHeaderName = "M3-Fetched-Bytes-Estimate"
 
-func sumQueryBytesFetched(responses ...Response) int {
-	result := 0
+func sumQueryBytesFetched(responses ...Response) uint64 {
+	var result uint64
+	result = 0
 	for _, resp := range responses {
 		for _, hdr := range resp.GetHeaders() {
 			if hdr.GetName() == QueryBytesFetchedHeaderName {
 				for _, v := range hdr.Values {
-					n, err := strconv.Atoi(v)
+					n, err := strconv.ParseUint(v, 10, 64)
 					if err != nil {
 						continue
 					}
@@ -31,7 +32,7 @@ func sumQueryBytesFetched(responses ...Response) int {
 func QueryBytesFetchedPrometheusResponseHeaders(responses ...Response) []*PrometheusResponseHeader {
 	return []*PrometheusResponseHeader{{
 		Name:   QueryBytesFetchedHeaderName,
-		Values: []string{strconv.Itoa(sumQueryBytesFetched(responses...))},
+		Values: []string{strconv.FormatUint(sumQueryBytesFetched(responses...), 10)},
 	}}
 }
 
