@@ -7,6 +7,8 @@ import (
 	"strconv"
 )
 
+// QueryBytesFetchedHeaderName is the http header name of number of bytes fetched by a query from m3readcoord.
+// This name is compatible with M3 and rule manager code
 const QueryBytesFetchedHeaderName = "M3-Fetched-Bytes-Estimate"
 
 func sumQueryBytesFetched(responses ...Response) uint64 {
