@@ -216,7 +216,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 			},
 		},
 	}
-	b, _ := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
+	b, _ := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	ms := []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
 	}
@@ -264,7 +264,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
+	b, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -1080,10 +1080,10 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 			},
 		},
 		bkt:        bkt,
-		logger:     log.NewNopLogger(),
 		metrics:    s,
 		indexCache: noopCache{},
 	}
+	logger := log.NewNopLogger()
 
 	buf := encoding.Encbuf{}
 	buf.PutByte(0)
@@ -1100,6 +1100,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 		block:        b,
 		stats:        &queryStats{},
 		loadedSeries: map[storage.SeriesRef][]byte{},
+		logger:       logger,
 	}
 
 	// Success with no refetches.
@@ -1277,6 +1278,7 @@ func benchmarkExpandedPostings(
 	})
 	iRegexBigValueSet := labels.MustNewMatcher(labels.MatchRegexp, "uniq", strings.Join(bigValueSet, "|"))
 
+	logger := log.NewNopLogger()
 	series = series / 5
 	cases := []struct {
 		name     string
@@ -1309,7 +1311,6 @@ func benchmarkExpandedPostings(
 	for _, c := range cases {
 		t.Run(c.name, func(t testutil.TB) {
 			b := &bucketBlock{
-				logger:            log.NewNopLogger(),
 				metrics:           newBucketStoreMetrics(nil),
 				indexHeaderReader: r,
 				indexCache:        noopCache{},
@@ -1318,7 +1319,7 @@ func benchmarkExpandedPostings(
 				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
-			indexr := newBucketIndexReader(b)
+			indexr := newBucketIndexReader(b, logger)
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
@@ -1342,7 +1343,6 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling, indexheader.NewBinaryReaderMetrics(nil))
 	testutil.Ok(t, err)
 	b := &bucketBlock{
-		logger:            log.NewNopLogger(),
 		metrics:           newBucketStoreMetrics(nil),
 		indexHeaderReader: r,
 		indexCache:        noopCache{},
@@ -1351,7 +1351,8 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 		partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 	}
 
-	indexr := newBucketIndexReader(b)
+	logger := log.NewNopLogger()
+	indexr := newBucketIndexReader(b, logger)
 	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	// Match nothing.
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "i", "500.*")
@@ -1376,7 +1377,6 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling, indexheader.NewBinaryReaderMetrics(nil))
 	testutil.Ok(t, err)
 	b := &bucketBlock{
-		logger:                 log.NewNopLogger(),
 		metrics:                newBucketStoreMetrics(nil),
 		indexHeaderReader:      r,
 		indexCache:             noopCache{},
@@ -1386,7 +1386,8 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 		estimatedMaxSeriesSize: 20,
 	}
 
-	indexr := newBucketIndexReader(b)
+	logger := log.NewNopLogger()
+	indexr := newBucketIndexReader(b, logger)
 	// matcher1 and matcher2 will match nothing after intersection.
 	matcher1 := labels.MustNewMatcher(labels.MatchEqual, "j", "foo")
 	matcher2 := labels.MustNewMatcher(labels.MatchRegexp, "n", "1_.*")
@@ -1716,7 +1717,6 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		b1 = &bucketBlock{
 			indexCache:             indexCache,
-			logger:                 logger,
 			metrics:                newBucketStoreMetrics(nil),
 			bkt:                    bkt,
 			meta:                   meta,
@@ -1757,7 +1757,6 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		b2 = &bucketBlock{
 			indexCache:             indexCache,
-			logger:                 logger,
 			metrics:                newBucketStoreMetrics(nil),
 			bkt:                    bkt,
 			meta:                   meta,
@@ -1789,6 +1788,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 		bytesLimiterFactory:  NewBytesLimiterFactory(0),
 		seriesBatchSize:      SeriesBatchSize,
+		requestLoggerFunc:    NoopRequestLoggerFunc,
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -2754,7 +2754,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
+	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
 	testutil.Ok(b, err)
 
 	b.ResetTimer()
@@ -2763,7 +2763,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 		offset := int64(0)
 		length := readLengths[n%len(readLengths)]
 
-		_, err := blk.readChunkRange(ctx, 0, offset, length, byteRanges{{offset: 0, length: int(length)}})
+		_, err := blk.readChunkRange(ctx, 0, offset, length, byteRanges{{offset: 0, length: int(length)}}, logger)
 		if err != nil {
 			b.Fatal(err.Error())
 		}
@@ -2843,7 +2843,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
+	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
 	testutil.Ok(b, err)
 	return blk, blockMeta
 }
@@ -3459,6 +3459,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 		testutil.Ok(t, bkt.Close())
 	})
 
+	logger := log.NewNopLogger()
 	// Create a block.
 	head, _ := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
 		TSDBDir:          filepath.Join(tmpDir, "head"),
@@ -3498,7 +3499,6 @@ func TestExpandedPostingsRace(t *testing.T) {
 
 		blk, err := newBucketBlock(
 			context.Background(),
-			log.NewLogfmtLogger(os.Stderr),
 			newBucketStoreMetrics(nil),
 			m,
 			bkt,
@@ -3543,7 +3543,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 			i := i
 			bb := bb
 			go func(i int, bb *bucketBlock) {
-				refs, err := bb.indexReader().ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant)
+				refs, err := bb.indexReader(logger).ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, dummyCounter, tenancy.DefaultTenant)
 				testutil.Ok(t, err)
 				defer wg.Done()
 
