@@ -78,6 +78,7 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 				Analysis: queryrange.AnalyzesMerge(analyzes...),
 				Stats:    queryrange.StatsMerge(responses),
 			},
+			Headers: queryrange.QueryBytesFetchedPrometheusResponseHeaders(responses...),
 		}
 	default:
 		v, err := vectorMerge(req, promResponses)
@@ -96,6 +97,7 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 				Analysis: queryrange.AnalyzesMerge(analyzes...),
 				Stats:    queryrange.StatsMerge(responses),
 			},
+			Headers: queryrange.QueryBytesFetchedPrometheusResponseHeaders(responses...),
 		}
 	}
 
@@ -248,7 +250,8 @@ func (c queryInstantCodec) EncodeResponse(ctx context.Context, res queryrange.Re
 
 	resp := http.Response{
 		Header: http.Header{
-			"Content-Type": []string{"application/json"},
+			"Content-Type":                         []string{"application/json"},
+			queryrange.QueryBytesFetchedHeaderName: queryrange.QueryBytesFetchedHttpHeaderValue(res),
 		},
 		Body:          io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode:    http.StatusOK,
