@@ -755,7 +755,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	}
 	requestLogger := log.With(h.logger, logTags...)
 
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.data, params.replicas)
+	localWrites, remoteWrites, maxBufferedResponses, err := h.distributeTimeseriesToReplicas(params.data, params.replicas)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return stats, err
@@ -765,11 +765,6 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
-	maxBufferedResponses := len(localWrites)
-	for er := range remoteWrites {
-		maxBufferedResponses += len(remoteWrites[er])
-	}
-
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := sync.WaitGroup{}
 
@@ -836,12 +831,16 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 func (h *Handler) distributeTimeseriesToReplicas(
 	data []wreqTenantTuple,
 	replicas []uint64,
-) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, error) {
+) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, int, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
 	remoteWrites := make(map[endpointReplica]map[string]trackedSeries)
 	localWrites := make(map[endpointReplica]map[string]trackedSeries)
+	maxBufferedResponses := 0
+	localTenantsSeen := make(map[string]struct{})
 
+	// Remote: one destination = one response.
+	// Local: one tenant = one response.
 	var seriesID int
 	for _, t := range data {
 		for _, ts := range t.wreq.Timeseries {
@@ -863,12 +862,13 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			for _, rn := range replicas {
 				endpoint, err := h.hashring.GetN(tenant, &ts, rn)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, maxBufferedResponses, err
 				}
 				endpointReplica := endpointReplica{endpoint: endpoint, replica: rn}
 				var writeDestination = remoteWrites
 				if endpoint == h.options.Endpoint {
 					writeDestination = localWrites
+					localTenantsSeen[tenant] = struct{}{}
 				}
 				writeableSeries, ok := writeDestination[endpointReplica]
 				if !ok {
@@ -890,7 +890,10 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		}
 	}
 
-	return localWrites, remoteWrites, nil
+	maxBufferedResponses += len(remoteWrites)
+	maxBufferedResponses += len(localTenantsSeen)
+
+	return localWrites, remoteWrites, maxBufferedResponses, nil
 }
 
 // sendWrites sends the local and remote writes to execute concurrently, controlling them through the provided sync.WaitGroup.

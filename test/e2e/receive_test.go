@@ -1008,11 +1008,21 @@ func TestReceiveExtractsTenant(t *testing.T) {
 						{Value: 1, Timestamp: time.Now().UnixMilli()},
 					},
 				},
+				{
+					Labels: []prompb.Label{
+						{Name: "thanos_tenant_id", Value: "tenant-2"},
+						{Name: "bb", Value: "cc"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
 			},
 		})
 	}))
 
 	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "tenant-1")), e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "tenant-2")), e2emon.WaitMissingMetrics()))
 }
 
 func TestReceiveGlob(t *testing.T) {
