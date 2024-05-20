@@ -42,25 +42,25 @@ func TestReaders(t *testing.T) {
 
 	// Create block index version 2.
 	id1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
-		{{Name: "a", Value: "1"}},
-		{{Name: "a", Value: "2"}},
-		{{Name: "a", Value: "3"}},
-		{{Name: "a", Value: "4"}},
-		{{Name: "a", Value: "5"}},
-		{{Name: "a", Value: "6"}},
-		{{Name: "a", Value: "7"}},
-		{{Name: "a", Value: "8"}},
-		{{Name: "a", Value: "9"}},
+		labels.FromStrings("a", "1"),
+		labels.FromStrings("a", "2"),
+		labels.FromStrings("a", "3"),
+		labels.FromStrings("a", "4"),
+		labels.FromStrings("a", "5"),
+		labels.FromStrings("a", "6"),
+		labels.FromStrings("a", "7"),
+		labels.FromStrings("a", "8"),
+		labels.FromStrings("a", "9"),
 		// Missing 10 on purpose.
-		{{Name: "a", Value: "11"}},
-		{{Name: "a", Value: "12"}},
-		{{Name: "a", Value: "13"}},
-		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "1"}},
-		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "2"}},
-		{{Name: "cluster", Value: "a-eu-west-1"}},
-		{{Name: "cluster", Value: "b-eu-west-1"}},
-		{{Name: "cluster", Value: "c-eu-west-1"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
+		labels.FromStrings("a", "11"),
+		labels.FromStrings("a", "12"),
+		labels.FromStrings("a", "13"),
+		labels.FromStrings("a", "1", "longer-string", "1"),
+		labels.FromStrings("a", "1", "longer-string", "2"),
+		labels.FromStrings("cluster", "a-eu-west-1"),
+		labels.FromStrings("cluster", "b-eu-west-1"),
+		labels.FromStrings("cluster", "c-eu-west-1"),
+	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
@@ -87,7 +87,7 @@ func TestReaders(t *testing.T) {
 	e2eutil.Copy(t, "./testdata/index_format_v1", filepath.Join(tmpDir, m.ULID.String()))
 
 	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String()), metadata.Thanos{
-		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Labels:     labels.FromStrings("ext1", "1").Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: 0},
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
@@ -381,7 +381,7 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 	e2eutil.Copy(t, "./testdata/index_format_v2", filepath.Join(tmpDir, m.ULID.String()))
 
 	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String()), metadata.Thanos{
-		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Labels:     labels.FromStrings("ext1", "1").Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: 0},
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
@@ -453,11 +453,11 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	// Generate series labels.
 	seriesLabels := make([]labels.Labels, 0, numSeries)
 	for i := 0; i < numSeries; i++ {
-		seriesLabels = append(seriesLabels, labels.Labels{{Name: "a", Value: strconv.Itoa(i)}})
+		seriesLabels = append(seriesLabels, labels.FromStrings("a", strconv.Itoa(i)))
 	}
 
 	// Create a block.
-	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
+	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
 	testutil.Ok(b, err)
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
@@ -573,27 +573,25 @@ func TestReaderPostingsOffsets(t *testing.T) {
 			continue
 		}
 		valueSet[idx] = struct{}{}
-		clusterLbls = append(clusterLbls, []labels.Label{
-			{Name: "cluster", Value: totalValues[idx]},
-		})
+		clusterLbls = append(clusterLbls, labels.FromStrings("cluster", totalValues[idx]))
 		i++
 	}
 
 	// Add additional labels.
 	lbls := append([]labels.Labels{
-		{{Name: "job", Value: "1"}},
-		{{Name: "job", Value: "2"}},
-		{{Name: "job", Value: "3"}},
-		{{Name: "job", Value: "4"}},
-		{{Name: "job", Value: "5"}},
-		{{Name: "job", Value: "6"}},
-		{{Name: "job", Value: "7"}},
-		{{Name: "job", Value: "8"}},
-		{{Name: "job", Value: "9"}}}, clusterLbls...)
+		labels.FromStrings("job", "1"),
+		labels.FromStrings("job", "2"),
+		labels.FromStrings("job", "3"),
+		labels.FromStrings("job", "4"),
+		labels.FromStrings("job", "5"),
+		labels.FromStrings("job", "6"),
+		labels.FromStrings("job", "7"),
+		labels.FromStrings("job", "8"),
+		labels.FromStrings("job", "9")}, clusterLbls...)
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
-	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
+	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id.String()), metadata.NoneFunc))
