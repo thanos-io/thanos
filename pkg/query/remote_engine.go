@@ -296,7 +296,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			result   = make(promql.Vector, 0)
 			warnings annotations.Annotations
 			builder  = labels.NewScratchBuilder(8)
-			qryStats *querypb.QueryStats
+			qryStats querypb.QueryStats
 		)
 		for {
 			msg, err := qry.Recv()
@@ -312,7 +312,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				continue
 			}
 			if s := msg.GetStats(); s != nil {
-				qryStats = s
+				qryStats = *s
 				continue
 			}
 
@@ -330,10 +330,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
 		}
-		if qryStats != nil {
-			r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
-			r.samplesStats.TotalSamples = qryStats.SamplesTotal
-		}
+		r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
+		r.samplesStats.TotalSamples = qryStats.SamplesTotal
 
 		return &promql.Result{
 			Value:    result,
@@ -364,7 +362,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		result   = make(promql.Matrix, 0)
 		warnings annotations.Annotations
 		builder  = labels.NewScratchBuilder(8)
-		qryStats *querypb.QueryStats
+		qryStats querypb.QueryStats
 	)
 	for {
 		msg, err := qry.Recv()
@@ -380,7 +378,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			continue
 		}
 		if s := msg.GetStats(); s != nil {
-			qryStats = s
+			qryStats = *s
 			continue
 		}
 
@@ -408,10 +406,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	if qryStats != nil {
-		r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
-		r.samplesStats.TotalSamples = qryStats.SamplesTotal
-	}
+	r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
+	r.samplesStats.TotalSamples = qryStats.SamplesTotal
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }
