@@ -312,6 +312,9 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 
 			ts := msg.GetTimeseries()
+			if ts == nil {
+				continue
+			}
 			builder.Reset()
 			for _, l := range ts.Labels {
 				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
@@ -378,6 +381,9 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 
 		ts := msg.GetTimeseries()
+		if ts == nil {
+			continue
+		}
 		builder.Reset()
 		for _, l := range ts.Labels {
 			builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
