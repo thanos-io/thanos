@@ -4,35 +4,44 @@
 package strutil
 
 import (
+	"context"
 	"sort"
 	"strings"
 )
 
 // MergeSlices merges a set of sorted string slices into a single ones
 // while removing all duplicates.
-func MergeSlices(a ...[]string) []string {
+func MergeSlices(ctx context.Context, a ...[]string) ([]string, error) {
 	if len(a) == 0 {
-		return nil
+		return nil, nil
 	}
 	if len(a) == 1 {
-		return a[0]
+		return a[0], nil
 	}
 	l := len(a) / 2
-	return mergeTwoStringSlices(MergeSlices(a[:l]...), MergeSlices(a[l:]...))
+	a1, err := MergeSlices(ctx, a[:l]...)
+	if err != nil {
+		return nil, err
+	}
+	a2, err := MergeSlices(ctx, a[l:]...)
+	if err != nil {
+		return nil, err
+	}
+	return mergeTwoStringSlices(ctx, a1, a2)
 }
 
 // MergeUnsortedSlices behaves like StringSlices but input slices are validated
 // for sortedness and are sorted if they are not ordered yet.
-func MergeUnsortedSlices(a ...[]string) []string {
+func MergeUnsortedSlices(ctx context.Context, a ...[]string) ([]string, error) {
 	for _, s := range a {
 		if !sort.StringsAreSorted(s) {
 			sort.Strings(s)
 		}
 	}
-	return MergeSlices(a...)
+	return MergeSlices(ctx, a...)
 }
 
-func mergeTwoStringSlices(a, b []string) []string {
+func mergeTwoStringSlices(ctx context.Context, a, b []string) ([]string, error) {
 	maxl := len(a)
 	if len(b) > len(a) {
 		maxl = len(b)
@@ -40,6 +49,9 @@ func mergeTwoStringSlices(a, b []string) []string {
 	res := make([]string, 0, maxl*10/9)
 
 	for len(a) > 0 && len(b) > 0 {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		d := strings.Compare(a[0], b[0])
 
 		if d == 0 {
@@ -56,5 +68,5 @@ func mergeTwoStringSlices(a, b []string) []string {
 	// Append all remaining elements.
 	res = append(res, a...)
 	res = append(res, b...)
-	return res
+	return res, nil
 }
