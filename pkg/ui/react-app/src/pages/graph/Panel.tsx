@@ -247,7 +247,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     // Create request headers
     const requestHeaders: HeadersInit = new Headers();
-    requestHeaders.set('Content-Type', 'application/json');
+    requestHeaders.set('Content-Type', 'application/x-www-form-urlencoded');
 
     if (this.props.options.forceTracing) {
       requestHeaders.set('X-Thanos-Force-Tracing', 'true');
@@ -257,9 +257,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       requestHeaders.set(tenantHeader, this.props.options.tenant);
     }
 
-    fetch(`${this.props.pathPrefix}${path}?${params}`, {
-      method: 'GET',
+    fetch(`${this.props.pathPrefix}${path}`, {
+      method: 'POST',
       headers: requestHeaders,
+      body: params,
       cache: 'no-store',
       credentials: 'same-origin',
       signal: abortController.signal,
