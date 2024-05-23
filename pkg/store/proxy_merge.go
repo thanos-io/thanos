@@ -325,14 +325,13 @@ func newLazyRespSet(
 	}
 
 	go func(st string, l *lazyRespSet) {
-		bytesProcessed := 0
 		seriesStats := &storepb.SeriesStatsCounter{}
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
+			l.span.SetTag("processed.bytes", seriesStats.Bytes)
 			l.span.Finish()
 		}()
 
@@ -369,9 +368,7 @@ func newLazyRespSet(
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", st)
 				}
-
 				l.span.SetTag("err", rerr.Error())
-
 				l.bufferedResponsesMtx.Lock()
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
 				l.noMoreData = true
@@ -381,16 +378,12 @@ func newLazyRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.Size()
+			seriesStats.Count(resp)
 
 			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
-
-			if resp.GetSeries() != nil {
-				seriesStats.Count(resp.GetSeries())
-			}
-
+			
 			l.bufferedResponsesMtx.Lock()
 			l.bufferedResponses = append(l.bufferedResponses, resp)
 			l.dataOrFinishEvent.Signal()
@@ -583,13 +576,12 @@ func newEagerRespSet(
 	// Start a goroutine and immediately buffer everything.
 	go func(l *eagerRespSet) {
 		seriesStats := &storepb.SeriesStatsCounter{}
-		bytesProcessed := 0
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
+			l.span.SetTag("processed.bytes", seriesStats.Bytes)
 			l.span.Finish()
 			ret.wg.Done()
 		}()
@@ -631,18 +623,12 @@ func newEagerRespSet(
 				l.span.SetTag("err", rerr.Error())
 				return false
 			}
-
 			numResponses++
-			bytesProcessed += resp.Size()
 
+			seriesStats.Count(resp)
 			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
-
-			if resp.GetSeries() != nil {
-				seriesStats.Count(resp.GetSeries())
-			}
-
 			l.bufferedResponses = append(l.bufferedResponses, resp)
 			return true
 		}
