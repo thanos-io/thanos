@@ -206,7 +206,7 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetSeries() != nil {
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
-		s.seriesSetStats.Count(r.GetSeries())
+		s.seriesSetStats.Count(r)
 		return nil
 	}
 
