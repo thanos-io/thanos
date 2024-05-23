@@ -484,6 +484,7 @@ type SeriesStatsCounter struct {
 	Series  int
 	Chunks  int
 	Samples int
+	Bytes   int
 }
 
 func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
@@ -491,6 +492,42 @@ func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
 		c.Series++
+	}
+}
+
+func (c *SeriesStatsCounter) CountByResponse(r *SeriesResponse) {
+	series := r.GetSeries()
+	c.CountSeries(series.Labels)
+	for _, chk := range series.Chunks {
+		if chk.Raw != nil {
+			c.Chunks++
+			c.Samples += chk.Raw.XORNumSamples()
+		}
+
+		if chk.Count != nil {
+			c.Chunks++
+			c.Samples += chk.Count.XORNumSamples()
+		}
+
+		if chk.Counter != nil {
+			c.Chunks++
+			c.Samples += chk.Counter.XORNumSamples()
+		}
+
+		if chk.Max != nil {
+			c.Chunks++
+			c.Samples += chk.Max.XORNumSamples()
+		}
+
+		if chk.Min != nil {
+			c.Chunks++
+			c.Samples += chk.Min.XORNumSamples()
+		}
+
+		if chk.Sum != nil {
+			c.Chunks++
+			c.Samples += chk.Sum.XORNumSamples()
+		}
 	}
 }
 

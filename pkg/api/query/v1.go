@@ -80,6 +80,7 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
+	seriesHeader             = "series_header"
 )
 
 type PromqlEngineType string
@@ -589,6 +590,16 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}
 
 	ctx := r.Context()
+
+	//var resultMetadataMutex sync.Mutex
+	//resultMetadata := storepb.SeriesStatsCounter{}
+	//resultMetadataReceiveFn := func(m storepb.SeriesStatsCounter) {
+	//	resultMetadataMutex.Lock()
+	//	defer resultMetadataMutex.Unlock()
+	//	resultMetadata = resultMetadata.CombineMetadata(m)
+	//}
+	//agg := store.NewSeriesStatsAggregator()
+	//ctx = context.WithValue(ctx, seriesHeader, resultMetadataReceiveFn)
 	if to := r.FormValue("timeout"); to != "" {
 		var cancel context.CancelFunc
 		timeout, err := parseDuration(to)
@@ -705,7 +716,9 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	for i := range seriesStats {
 		aggregator.Aggregate(seriesStats[i])
 	}
+
 	aggregator.Observe(time.Since(beforeRange).Seconds())
+	seriesStatsCounter := aggregator.getSeriesStatsCounter()
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats

@@ -24,13 +24,17 @@ type seriesStatsAggregator struct {
 	seriesStats storepb.SeriesStatsCounter
 }
 
-type seriesStatsAggregatorFactory struct {
+func (s *seriesStatsAggregator) getSeriesStatsCounter() storepb.SeriesStatsCounter {
+	return s.seriesStats
+}
+
+type SeriesStatsAggregatorFactory struct {
 	queryDuration    *prometheus.HistogramVec
 	seriesLeBuckets  []float64
 	samplesLeBuckets []float64
 }
 
-func (f *seriesStatsAggregatorFactory) NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator {
+func (f *SeriesStatsAggregatorFactory) NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator {
 	return &seriesStatsAggregator{
 		queryDuration:    f.queryDuration,
 		seriesLeBuckets:  f.seriesLeBuckets,
@@ -45,8 +49,8 @@ func NewSeriesStatsAggregatorFactory(
 	durationQuantiles []float64,
 	sampleQuantiles []float64,
 	seriesQuantiles []float64,
-) *seriesStatsAggregatorFactory {
-	return &seriesStatsAggregatorFactory{
+) *SeriesStatsAggregatorFactory {
+	return &SeriesStatsAggregatorFactory{
 		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "thanos_store_api_query_duration_seconds",
 			Help:    "Duration of the Thanos Store API select phase for a query.",
@@ -99,6 +103,9 @@ func (s *seriesStatsAggregator) Observe(duration float64) {
 	s.reset()
 }
 
+func (s *seriesStatsAggregator) getSeriesStats() storepb.SeriesStatsCounter {
+	return s.seriesStats
+}
 func (s *seriesStatsAggregator) reset() {
 	s.seriesStats = storepb.SeriesStatsCounter{}
 }
@@ -124,10 +131,15 @@ type SeriesQueryPerformanceMetricsAggregatorFactory interface {
 type SeriesQueryPerformanceMetricsAggregator interface {
 	Aggregate(seriesStats storepb.SeriesStatsCounter)
 	Observe(duration float64)
+	getSeriesStatsCounter() storepb.SeriesStatsCounter
 }
 
 // NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.
 type NoopSeriesStatsAggregator struct{}
+
+func (s *NoopSeriesStatsAggregator) getSeriesStatsCounter() storepb.SeriesStatsCounter {
+	return storepb.SeriesStatsCounter{}
+}
 
 func (s *NoopSeriesStatsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
