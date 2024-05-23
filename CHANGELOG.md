@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7317](https://github.com/thanos-io/thanos/pull/7317) Tracing: allow specifying resource attributes for the OTLP configuration.
 - [#7367](https://github.com/thanos-io/thanos/pull/7367) Store Gateway: log request ID in request logs.
+- [#7380](https://github.com/thanos-io/thanos/pull/7380) Query: Support match filter in labels API.
 
 ### Changed
 
