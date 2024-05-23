@@ -503,11 +503,25 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 	gctx = metadata.AppendToOutgoingContext(gctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
 
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		if s.debugLogging {
+			level.Debug(s.logger).Log("msg", "Stores filtered out due to: proxy selector labels")
+		}
+		return &storepb.LabelNamesResponse{
+			Names:    strutil.MergeUnsortedSlices(names...),
+			Warnings: warnings,
+		}, nil
+	}
+
 	for _, st := range s.stores() {
 		st := st
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
+		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End, matchers...); !ok {
 			if s.debugLogging {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
 			}
@@ -593,6 +607,20 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 	gctx = metadata.AppendToOutgoingContext(gctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
 
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		if s.debugLogging {
+			level.Debug(s.logger).Log("msg", "Stores filtered out due to: proxy selector labels")
+		}
+		return &storepb.LabelValuesResponse{
+			Values:   strutil.MergeUnsortedSlices(all...),
+			Warnings: warnings,
+		}, nil
+	}
+
 	for _, st := range s.stores() {
 		st := st
 
@@ -603,7 +631,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		}
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
+		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End, matchers...); !ok {
 			if s.debugLogging {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
 			}

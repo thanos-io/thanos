@@ -1453,6 +1453,12 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			MinTime: timestamp.FromTime(time.Now().Add(-1 * time.Minute)),
 			MaxTime: timestamp.FromTime(time.Now()),
 		},
+		&storetestutil.TestClient{StoreClient: &mockedStoreAPI{
+			RespLabelValues: &storepb.LabelValuesResponse{
+				Values: []string{"7", "8"},
+			}},
+			ExtLset: []labels.Labels{{{Name: "ext", Value: "1"}}},
+		},
 	}
 	q := NewProxyStore(nil,
 		nil,
@@ -1473,7 +1479,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
 
-	testutil.Equals(t, []string{"1", "2", "3", "4", "5", "6"}, resp.Values)
+	testutil.Equals(t, []string{"1", "2", "3", "4", "5", "6", "7", "8"}, resp.Values)
 	testutil.Equals(t, 1, len(resp.Warnings))
 
 	// Request outside the time range of the last store client.
@@ -1487,7 +1493,22 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
 
-	testutil.Equals(t, []string{"1", "2", "3", "4"}, resp.Values)
+	testutil.Equals(t, []string{"1", "2", "3", "4", "7", "8"}, resp.Values)
+	testutil.Equals(t, 1, len(resp.Warnings))
+
+	// Request with a matcher that doesn't match the store extLabels
+	req = &storepb.LabelValuesRequest{
+		Label:                   "a",
+		PartialResponseDisabled: true,
+		Start:                   timestamp.FromTime(minTime),
+		End:                     timestamp.FromTime(maxTime),
+		Matchers:                []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "2"}},
+	}
+	resp, err = q.LabelValues(ctx, req)
+	testutil.Ok(t, err)
+	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
+
+	testutil.Equals(t, []string{"1", "2", "3", "4", "5", "6"}, resp.Values)
 	testutil.Equals(t, 1, len(resp.Warnings))
 }
 
@@ -1648,6 +1669,34 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				PartialResponseDisabled: false,
 			},
 			storeDebugMatchers:  [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}},
+			expectedNames:       []string{"a", "b"},
+			expectedWarningsLen: 0,
+		},
+		{
+			title: "label_names with matcher that doesn't match a store ext labels",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"d", "e", "f"},
+						},
+					},
+					ExtLset: []labels.Labels{{{Name: "a", Value: "2"}}},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+				Matchers:                []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"}},
+				PartialResponseDisabled: true,
+			},
 			expectedNames:       []string{"a", "b"},
 			expectedWarningsLen: 0,
 		},
