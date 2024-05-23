@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7323](https://github.com/thanos-io/thanos/pull/7323) Sidecar: wait for prometheus on startup
 - [#6948](https://github.com/thanos-io/thanos/pull/6948) Receive: fix goroutines leak during series requests to thanos store api.
+- [#7382](https://github.com/thanos-io/thanos/pull/7382) *: Ensure objstore flag values are masked & disable debug/pprof/cmdline
 
 ### Added
 
