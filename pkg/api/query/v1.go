@@ -296,8 +296,9 @@ type queryData struct {
 	Result     parser.Value     `json:"result"`
 	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	QueryAnalysis queryTelemetry `json:"analysis,omitempty"`
-	Warnings      []error        `json:"warnings,omitempty"`
+	QueryAnalysis      queryTelemetry             `json:"analysis,omitempty"`
+	Warnings           []error                    `json:"warnings,omitempty"`
+	SeriesStatsCounter storepb.SeriesStatsCounter `json:"warnings,omitempty"`
 }
 
 type queryTelemetry struct {
@@ -598,7 +599,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	//	defer resultMetadataMutex.Unlock()
 	//	resultMetadata = resultMetadata.CombineMetadata(m)
 	//}
-	//agg := store.NewSeriesStatsAggregator()
+
 	//ctx = context.WithValue(ctx, seriesHeader, resultMetadataReceiveFn)
 	if to := r.FormValue("timeout"); to != "" {
 		var cancel context.CancelFunc
@@ -718,7 +719,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}
 
 	aggregator.Observe(time.Since(beforeRange).Seconds())
-	seriesStatsCounter := aggregator.getSeriesStatsCounter()
+	seriesStatsCounter := aggregator.GetSeriesStatsCounter()
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -726,10 +727,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
-		ResultType:    res.Value.Type(),
-		Result:        res.Value,
-		Stats:         qs,
-		QueryAnalysis: analysis,
+		ResultType:         res.Value.Type(),
+		Result:             res.Value,
+		Stats:              qs,
+		QueryAnalysis:      analysis,
+		SeriesStatsCounter: seriesStatsCounter,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 

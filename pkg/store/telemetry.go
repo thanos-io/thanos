@@ -24,7 +24,7 @@ type seriesStatsAggregator struct {
 	seriesStats storepb.SeriesStatsCounter
 }
 
-func (s *seriesStatsAggregator) getSeriesStatsCounter() storepb.SeriesStatsCounter {
+func (s *seriesStatsAggregator) GetSeriesStatsCounter() storepb.SeriesStatsCounter {
 	return s.seriesStats
 }
 
@@ -131,13 +131,13 @@ type SeriesQueryPerformanceMetricsAggregatorFactory interface {
 type SeriesQueryPerformanceMetricsAggregator interface {
 	Aggregate(seriesStats storepb.SeriesStatsCounter)
 	Observe(duration float64)
-	getSeriesStatsCounter() storepb.SeriesStatsCounter
+	GetSeriesStatsCounter() storepb.SeriesStatsCounter
 }
 
 // NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.
 type NoopSeriesStatsAggregator struct{}
 
-func (s *NoopSeriesStatsAggregator) getSeriesStatsCounter() storepb.SeriesStatsCounter {
+func (s *NoopSeriesStatsAggregator) GetSeriesStatsCounter() storepb.SeriesStatsCounter {
 	return storepb.SeriesStatsCounter{}
 }
 
