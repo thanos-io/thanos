@@ -221,10 +221,10 @@ func GetInstr(
 			}
 		})
 
-		return tracing.HTTPMiddleware(tracer, name, logger,
-			ins.NewHandler(name,
-				gzhttp.GzipHandler(
-					middleware.RequestID(
+		return middleware.RequestID(
+			tracing.HTTPMiddleware(tracer, name, logger,
+				ins.NewHandler(name,
+					gzhttp.GzipHandler(
 						logMiddleware.HTTPMiddleware(name, hf),
 					),
 				),

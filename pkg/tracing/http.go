@@ -14,6 +14,8 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 )
 
@@ -32,6 +34,9 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		}
 
 		opts := []opentracing.StartSpanOption{ext.RPCServerOption(wireContext)}
+		if requestID, ok := middleware.RequestIDFromContext(r.Context()); ok {
+			opts = append(opts, opentracing.Tag{Key: "request_id", Value: requestID})
+		}
 		// Check for force tracing header and add it as a tag at the start of span.
 		// This is required for the OpenTelemetry sampler to force tracing.
 		if r.Header.Get(ForceTracingBaggageKey) != "" {
