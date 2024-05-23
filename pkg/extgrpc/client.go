@@ -71,6 +71,7 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 				tracing.StreamClientInterceptor(tracer),
 			),
 		),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
 	}
 	if reg != nil {
 		reg.MustRegister(grpcMets)
