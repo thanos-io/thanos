@@ -214,6 +214,11 @@ func getFlagsMap(flags []*kingpin.FlagModel) map[string]string {
 		if boilerplateFlags.GetFlag(f.Name) != nil {
 			continue
 		}
+		// Mask inline objstore flag which can have credentials.
+		if f.Name == "objstore.config" || f.Name == "objstore.config-file" {
+			flagsMap[f.Name] = "<REDACTED>"
+			continue
+		}
 		flagsMap[f.Name] = f.Value.String()
 	}
 
