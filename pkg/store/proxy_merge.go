@@ -466,16 +466,10 @@ func newAsyncRespSet(
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
-	storeAddr, isLocalStore := st.Addr()
-	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
-	if storeID == "" {
-		storeID = "Store Gateway"
-	}
-
+	storeID, storeAddr, isLocalStore := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
 	})
-
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
 		"store.id":       storeID,
 		"store.is_local": isLocalStore,
