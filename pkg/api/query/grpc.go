@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -129,7 +130,9 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 				return err
 			}
 		}
-		return nil
+	}
+	if err := server.Send(querypb.NewQueryStatsResponse(extractQueryStats(qry))); err != nil {
+		return err
 	}
 
 	return nil
@@ -245,15 +248,33 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				return err
 			}
 		}
-		return nil
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
 		}
-		return srv.Send(querypb.NewQueryRangeResponse(series))
+		if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+			return err
+		}
+	}
+	if err := srv.Send(querypb.NewQueryRangeStatsResponse(extractQueryStats(qry))); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func extractQueryStats(qry promql.Query) *querypb.QueryStats {
+	stats := &querypb.QueryStats{
+		SamplesTotal: 0,
+		PeakSamples:  0,
+	}
+	if explQry, ok := qry.(engine.ExplainableQuery); ok {
+		analyze := explQry.Analyze()
+		stats.SamplesTotal = analyze.TotalSamples()
+		stats.PeakSamples = analyze.PeakSamples()
+	}
+
+	return stats
 }
 
 func (g *GRPCAPI) getRangeQueryForEngine(
