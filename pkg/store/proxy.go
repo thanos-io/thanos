@@ -377,7 +377,20 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
-	storeResponses := make([]respSet, 0, len(stores))
+	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
+	r := &storepb.SeriesRequest{
+		MinTime:                 originalRequest.MinTime,
+		MaxTime:                 originalRequest.MaxTime,
+		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
+		Aggregates:              originalRequest.Aggregates,
+		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
+		SkipChunks:              originalRequest.SkipChunks,
+		QueryHints:              originalRequest.QueryHints,
+		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
+		ShardInfo:               originalRequest.ShardInfo,
+		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+	}
 
 	checkGroupReplicaErrors := func(st Client, err error) error {
 		if len(failedStores[st.GroupKey()]) > 1 {
