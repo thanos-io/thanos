@@ -299,24 +299,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	if !match {
 		return nil
 	}
+
 	if len(matchers) == 0 {
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding selector labels)").Error())
-	}
-	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
-
-	storeDebugMsgs := []string{}
-	r := &storepb.SeriesRequest{
-		MinTime:                 originalRequest.MinTime,
-		MaxTime:                 originalRequest.MaxTime,
-		Matchers:                storeMatchers,
-		Aggregates:              originalRequest.Aggregates,
-		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
-		SkipChunks:              originalRequest.SkipChunks,
-		QueryHints:              originalRequest.QueryHints,
-		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
-		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
-		ShardInfo:               originalRequest.ShardInfo,
-		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
 	// We may arrive here either via the promql engine
@@ -332,42 +317,30 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
-	var (
-		stores         []Client
-		storeLabelSets []labels.Labels
-	)
-	for _, st := range s.stores() {
-		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(ctx, st, s.debugLogging, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
-			}
-			continue
-		}
-		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-		if !matches {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
-			}
-			continue
-		}
-		storeLabelSets = append(storeLabelSets, extraMatchers...)
-
-		stores = append(stores, st)
-	}
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.MinTime, originalRequest.MaxTime, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
 	}
-	r.Matchers = append(r.Matchers, MatchersForLabelSets(storeLabelSets)...)
+
+	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
+	r := &storepb.SeriesRequest{
+		MinTime:                 originalRequest.MinTime,
+		MaxTime:                 originalRequest.MaxTime,
+		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
+		Aggregates:              originalRequest.Aggregates,
+		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
+		SkipChunks:              originalRequest.SkipChunks,
+		QueryHints:              originalRequest.QueryHints,
+		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
+		ShardInfo:               originalRequest.ShardInfo,
+		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+	}
 
 	storeResponses := make([]respSet, 0, len(stores))
-
 	for _, st := range stores {
 		st := st
-		if s.debugLogging {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
-		}
 
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
@@ -405,8 +378,240 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	return nil
 }
 
+// LabelNames returns all known label names.
+func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
+	// tiggered by tracing span to reduce cognitive load.
+	reqLogger := log.With(s.logger, "component", "proxy")
+	if s.debugLogging {
+		reqLogger = log.With(reqLogger, "request", originalRequest.String())
+	}
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		return &storepb.LabelNamesResponse{}, nil
+	}
+
+	// We may arrive here either via the promql engine
+	// or as a result of a grpc call in layered queries
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
+	if !foundTenant {
+		level.Debug(reqLogger).Log("msg", "using tenant from context instead of metadata")
+		if ctx.Value(tenancy.TenantKey) != nil {
+			tenant = ctx.Value(tenancy.TenantKey).(string)
+		}
+	}
+
+	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
+	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
+
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
+	if len(stores) == 0 {
+		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
+		return &storepb.LabelNamesResponse{}, nil
+	}
+	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
+	r := &storepb.LabelNamesRequest{
+		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		Start:                   originalRequest.Start,
+		End:                     originalRequest.End,
+		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
+		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+	}
+
+	var (
+		warnings []string
+		names    [][]string
+		mtx      sync.Mutex
+		g, gctx  = errgroup.WithContext(ctx)
+	)
+	for _, st := range stores {
+		st := st
+
+		storeID, storeAddr, isLocalStore := storeInfo(st)
+		g.Go(func() error {
+			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_names", tracing.Tags{
+				"store.id":       storeID,
+				"store.addr":     storeAddr,
+				"store.is_local": isLocalStore,
+			})
+			defer span.Finish()
+			resp, err := st.LabelNames(spanCtx, r)
+			if err != nil {
+				err = errors.Wrapf(err, "fetch label names from store %s", st)
+				if r.PartialResponseDisabled {
+					return err
+				}
+
+				mtx.Lock()
+				warnings = append(warnings, err.Error())
+				mtx.Unlock()
+				return nil
+			}
+
+			mtx.Lock()
+			warnings = append(warnings, resp.Warnings...)
+			names = append(names, resp.Names)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+	level.Debug(reqLogger).Log("msg", "LabelNames: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &storepb.LabelNamesResponse{
+		Names:    strutil.MergeUnsortedSlices(names...),
+		Warnings: warnings,
+	}, nil
+}
+
+// LabelValues returns all known label values for a given label name.
+func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.LabelValuesRequest) (
+	*storepb.LabelValuesResponse, error,
+) {
+	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
+	// tiggered by tracing span to reduce cognitive load.
+	reqLogger := log.With(s.logger, "component", "proxy")
+	if s.debugLogging {
+		reqLogger = log.With(reqLogger, "request", originalRequest.String())
+	}
+
+	if originalRequest.Label == "" {
+		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
+
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		return &storepb.LabelValuesResponse{}, nil
+	}
+
+	// We may arrive here either via the promql engine
+	// or as a result of a grpc call in layered queries
+	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
+	if !foundTenant {
+		level.Debug(reqLogger).Log("msg", "using tenant from context instead of metadata")
+		if ctx.Value(tenancy.TenantKey) != nil {
+			tenant = ctx.Value(tenancy.TenantKey).(string)
+		}
+	}
+
+	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
+	level.Debug(reqLogger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
+
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
+	if len(stores) == 0 {
+		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
+		return &storepb.LabelValuesResponse{}, nil
+	}
+	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
+	r := &storepb.LabelValuesRequest{
+		Label:                   originalRequest.Label,
+		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		Start:                   originalRequest.Start,
+		End:                     originalRequest.End,
+		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
+		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+	}
+
+	var (
+		warnings []string
+		all      [][]string
+		mtx      sync.Mutex
+		g, gctx  = errgroup.WithContext(ctx)
+	)
+	for _, st := range stores {
+		st := st
+
+		storeID, storeAddr, isLocalStore := storeInfo(st)
+		g.Go(func() error {
+			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
+				"store.id":       storeID,
+				"store.addr":     storeAddr,
+				"store.is_local": isLocalStore,
+			})
+			defer span.Finish()
+
+			resp, err := st.LabelValues(spanCtx, r)
+			if err != nil {
+				err = errors.Wrapf(err, "fetch label values from store %s", st)
+				if r.PartialResponseDisabled {
+					return err
+				}
+
+				mtx.Lock()
+				warnings = append(warnings, err.Error())
+				mtx.Unlock()
+				return nil
+			}
+
+			mtx.Lock()
+			warnings = append(warnings, resp.Warnings...)
+			all = append(all, resp.Values)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+	level.Debug(reqLogger).Log("msg", "LabelValues: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &storepb.LabelValuesResponse{
+		Values:   strutil.MergeUnsortedSlices(all...),
+		Warnings: warnings,
+	}, nil
+}
+
+func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) {
+	storeAddr, isLocalStore = st.Addr()
+	storeID = labelpb.PromLabelSetsToString(st.LabelSets())
+	if storeID == "" {
+		storeID = "Store Gateway"
+	}
+	return storeID, storeAddr, isLocalStore
+}
+
+// TODO: consider moving the following functions into something like "pkg/pruneutils" since it is also used for exemplars.
+
+func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64, matchers []*labels.Matcher) ([]Client, []labels.Labels, []string) {
+	var (
+		stores         []Client
+		storeLabelSets []labels.Labels
+		storeDebugMsgs []string
+	)
+	for _, st := range s.stores() {
+		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
+		if ok, reason := storeMatches(ctx, st, minTime, maxTime, matchers...); !ok {
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
+			continue
+		}
+		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			continue
+		}
+		storeLabelSets = append(storeLabelSets, extraMatchers...)
+
+		stores = append(stores, st)
+		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+	}
+
+	return stores, storeLabelSets, storeDebugMsgs
+}
+
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
-func storeMatches(ctx context.Context, s Client, debugLogging bool, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
+func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
 	var storeDebugMatcher [][]*labels.Matcher
 	if ctxVal := ctx.Value(StoreMatcherKey); ctxVal != nil {
 		if value, ok := ctxVal.([][]*labels.Matcher); ok {
@@ -416,10 +621,7 @@ func storeMatches(ctx context.Context, s Client, debugLogging bool, mint, maxt i
 
 	storeMinTime, storeMaxTime := s.TimeRange()
 	if mint > storeMaxTime || maxt < storeMinTime {
-		if debugLogging {
-			reason = fmt.Sprintf("does not have data within this time period: [%v,%v]. Store time ranges: [%v,%v]", mint, maxt, storeMinTime, storeMaxTime)
-		}
-		return false, reason
+		return false, fmt.Sprintf("does not have data within this time period: [%v,%v]. Store time ranges: [%v,%v]", mint, maxt, storeMinTime, storeMaxTime)
 	}
 
 	if ok, reason := storeMatchDebugMetadata(s, storeDebugMatcher); !ok {
@@ -428,10 +630,7 @@ func storeMatches(ctx context.Context, s Client, debugLogging bool, mint, maxt i
 
 	extLset := s.LabelSets()
 	if !LabelSetsMatch(matchers, extLset...) {
-		if debugLogging {
-			reason = fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
-		}
-		return false, reason
+		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 	}
 	return true, ""
 }
@@ -476,195 +675,4 @@ func LabelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
 		}
 	}
 	return false
-}
-
-// LabelNames returns all known label names.
-func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
-	*storepb.LabelNamesResponse, error,
-) {
-	var (
-		warnings       []string
-		names          [][]string
-		mtx            sync.Mutex
-		g, gctx        = errgroup.WithContext(ctx)
-		storeDebugMsgs []string
-	)
-
-	// We may arrive here either via the promql engine
-	// or as a result of a grpc call in layered queries
-	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(gctx)
-	if !foundTenant {
-		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
-		if gctx.Value(tenancy.TenantKey) != nil {
-			tenant = gctx.Value(tenancy.TenantKey).(string)
-		}
-	}
-
-	gctx = metadata.AppendToOutgoingContext(gctx, tenancy.DefaultTenantHeader, tenant)
-	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
-
-	for _, st := range s.stores() {
-		st := st
-
-		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
-			}
-			continue
-		}
-		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-		if !matches {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
-			}
-			continue
-		}
-
-		if s.debugLogging {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
-		}
-
-		g.Go(func() error {
-			resp, err := st.LabelNames(gctx, &storepb.LabelNamesRequest{
-				PartialResponseDisabled: r.PartialResponseDisabled,
-				Start:                   r.Start,
-				End:                     r.End,
-				Matchers:                append(r.Matchers, MatchersForLabelSets(extraMatchers)...),
-				WithoutReplicaLabels:    r.WithoutReplicaLabels,
-			})
-			if err != nil {
-				err = errors.Wrapf(err, "fetch label names from store %s", st)
-				if r.PartialResponseDisabled {
-					return err
-				}
-
-				mtx.Lock()
-				warnings = append(warnings, err.Error())
-				mtx.Unlock()
-				return nil
-			}
-
-			mtx.Lock()
-			warnings = append(warnings, resp.Warnings...)
-			names = append(names, resp.Names)
-			mtx.Unlock()
-
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-
-	level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
-	return &storepb.LabelNamesResponse{
-		Names:    strutil.MergeUnsortedSlices(names...),
-		Warnings: warnings,
-	}, nil
-}
-
-// LabelValues returns all known label values for a given label name.
-func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
-	*storepb.LabelValuesResponse, error,
-) {
-	var (
-		warnings       []string
-		all            [][]string
-		mtx            sync.Mutex
-		g, gctx        = errgroup.WithContext(ctx)
-		storeDebugMsgs []string
-	)
-	if r.Label == "" {
-		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
-	}
-
-	// We may arrive here either via the promql engine
-	// or as a result of a grpc call in layered queries
-	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(gctx)
-	if !foundTenant {
-		level.Debug(s.logger).Log("msg", "using tenant from context instead of metadata")
-		if gctx.Value(tenancy.TenantKey) != nil {
-			tenant = gctx.Value(tenancy.TenantKey).(string)
-		}
-	}
-
-	gctx = metadata.AppendToOutgoingContext(gctx, tenancy.DefaultTenantHeader, tenant)
-	level.Debug(s.logger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
-
-	for _, st := range s.stores() {
-		st := st
-
-		storeAddr, isLocalStore := st.Addr()
-		storeID := labelpb.PromLabelSetsToString(st.LabelSets())
-		if storeID == "" {
-			storeID = "Store Gateway"
-		}
-
-		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(gctx, st, s.debugLogging, r.Start, r.End); !ok {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
-			}
-			continue
-		}
-		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-		if !matches {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
-			}
-			continue
-		}
-		if s.debugLogging {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
-		}
-
-		g.Go(func() error {
-			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-				"store.id":       storeID,
-				"store.addr":     storeAddr,
-				"store.is_local": isLocalStore,
-			})
-			defer span.Finish()
-
-			resp, err := st.LabelValues(spanCtx, &storepb.LabelValuesRequest{
-				Label:                   r.Label,
-				PartialResponseDisabled: r.PartialResponseDisabled,
-				Start:                   r.Start,
-				End:                     r.End,
-				Matchers:                append(r.Matchers, MatchersForLabelSets(extraMatchers)...),
-				WithoutReplicaLabels:    r.WithoutReplicaLabels,
-			})
-			if err != nil {
-				msg := "fetch label values from store %s"
-				err = errors.Wrapf(err, msg, st)
-				if r.PartialResponseDisabled {
-					return err
-				}
-
-				mtx.Lock()
-				warnings = append(warnings, errors.Wrapf(err, msg, st).Error())
-				mtx.Unlock()
-				return nil
-			}
-
-			mtx.Lock()
-			warnings = append(warnings, resp.Warnings...)
-			all = append(all, resp.Values)
-			mtx.Unlock()
-
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-
-	level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
-	return &storepb.LabelValuesResponse{
-		Values:   strutil.MergeUnsortedSlices(all...),
-		Warnings: warnings,
-	}, nil
 }
