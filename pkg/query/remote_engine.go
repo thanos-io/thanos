@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -231,17 +233,20 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	r.cancel = cancel
 	defer cancel()
 
-	queryRange := r.end.Sub(r.start)
-	span, qctx := opentracing.StartSpanFromContext(qctx, "remote_query_exec", opentracing.Tags{
-		"query":            r.plan.String(),
-		"remote_address":   r.remoteAddr,
-		"start":            r.start.UTC().String(),
-		"end":              r.end.UTC().String(),
-		"interval_seconds": r.interval.Seconds(),
-		"range_seconds":    queryRange.Seconds(),
-		"range_human":      queryRange,
+	var (
+		queryRange   = r.end.Sub(r.start)
+		requestID, _ = middleware.RequestIDFromContext(qctx)
+	)
+	qctx = tracing.ClientAddContextTags(qctx, opentracing.Tags{
+		"query.expr":             r.plan.String(),
+		"query.remote_address":   r.remoteAddr,
+		"query.start":            r.start.UTC().String(),
+		"query.end":              r.end.UTC().String(),
+		"query.interval_seconds": r.interval.Seconds(),
+		"query.range_seconds":    queryRange.Seconds(),
+		"query.range_human":      queryRange,
+		"request_id":             requestID,
 	})
-	defer span.Finish()
 
 	var maxResolution int64
 	if r.opts.AutoDownsample {
