@@ -13,8 +13,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -24,11 +22,13 @@ import (
 
 	"github.com/thanos-io/promql-engine/api"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	grpc_tracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 )
 
 // Opts are the options for a PromQL query.
@@ -251,7 +251,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		queryRange   = r.end.Sub(r.start)
 		requestID, _ = middleware.RequestIDFromContext(qctx)
 	)
-	qctx = tracing.ClientAddContextTags(qctx, opentracing.Tags{
+	qctx = grpc_tracing.ClientAddContextTags(qctx, opentracing.Tags{
 		"query.expr":             r.plan.String(),
 		"query.remote_address":   r.remoteAddr,
 		"query.start":            r.start.UTC().String(),
