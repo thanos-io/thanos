@@ -148,6 +148,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-frontend.log-failed-queries", "Log failed queries due to any reason").Default("true").BoolVar(&cfg.CortexHandlerConfig.LogFailedQueries)
 
+	cmd.Flag("query-frontend.enable-failed-queries-cache", "Enable cache for failed queries").Default("true").BoolVar(&cfg.CortexHandlerConfig.EnableFailedQueryCache)
+
 	cmd.Flag("query-frontend.org-id-header", "Deprecation Warning - This flag will be soon deprecated in favor of query-frontend.tenant-header"+
 		" and both flags cannot be used at the same time. "+
 		"Request header names used to identify the source of slow queries (repeated flag). "+
