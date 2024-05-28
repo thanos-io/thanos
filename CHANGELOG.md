@@ -28,7 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7334](https://github.com/thanos-io/thanos/pull/7334) Compactor: do not vertically compact downsampled blocks. Such cases are now marked with `no-compact-mark.json`. Fixes panic `panic: unexpected seriesToChunkEncoder lack of iterations`.
 - [#7382](https://github.com/thanos-io/thanos/pull/7382) *: Ensure objstore flag values are masked & disable debug/pprof/cmdline
-- [#7393](https://github.com/thanos-io/thanos/pull/7393) *: Using native histograms for grpc middleware metrics. Metrics `grpc_client_handling_seconds` and `grpc_server_handling_seconds` will now be native histograms. 
+- [#7393](https://github.com/thanos-io/thanos/pull/7393) *: Using native histograms for grpc middleware metrics. Metrics `grpc_client_handling_seconds` and `grpc_server_handling_seconds` will now be native histograms.
 
 ### Removed
 
