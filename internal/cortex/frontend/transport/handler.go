@@ -45,11 +45,12 @@ var (
 
 // HandlerConfig Config for a Handler.
 type HandlerConfig struct {
-	LogQueriesLongerThan   time.Duration `yaml:"log_queries_longer_than"`
-	MaxBodySize            int64         `yaml:"max_body_size"`
-	QueryStatsEnabled      bool          `yaml:"query_stats_enabled"`
-	LogFailedQueries       bool          `yaml:"log_failed_queries"`
-	EnableFailedQueryCache bool          `yaml:"enable_failed_query_cache"`
+	LogQueriesLongerThan     time.Duration `yaml:"log_queries_longer_than"`
+	MaxBodySize              int64         `yaml:"max_body_size"`
+	QueryStatsEnabled        bool          `yaml:"query_stats_enabled"`
+	LogFailedQueries         bool          `yaml:"log_failed_queries"`
+	EnableFailedQueryCache   bool          `yaml:"enable_failed_query_cache"`
+	FailedQueryCacheCapacity int           `yaml:"failed_query_cache_capacity"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -59,19 +60,13 @@ type Handler struct {
 	log          log.Logger
 	roundTripper http.RoundTripper
 	lru          lru.Cache
+	regex        *regexp.Regexp
 
 	// Metrics.
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
 	activeUsers  *util.ActiveUsersCleanupService
-}
-
-// NormalizeString Condeneses whitespaces in string; does not remove all whitespaces
-func NormalizeString(inp string) string {
-	normalized := regexp.MustCompile(`[\n\t]+`).ReplaceAllString(inp, " ")
-	normalized = regexp.MustCompile(`\s+`).ReplaceAllString(normalized, " ")
-	return normalized
 }
 
 // CacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false
@@ -85,12 +80,18 @@ func CacheableError(statusCode int) bool {
 }
 
 // NewHandler creates a new frontend handler.
-func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, lru lru.Cache, reg prometheus.Registerer) http.Handler {
+func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
+	lru, err := lru.New[string, int](cfg.FailedQueryCacheCapacity)
+	if err != nil {
+		level.Error(log).Log("msg", "failed to create lru cache", "err", err)
+	}
+
 	h := &Handler{
 		cfg:          cfg,
 		log:          log,
 		roundTripper: roundTripper,
-		lru:          lru,
+		lru:          *lru,
+		regex:        regexp.MustCompile(`[\s\n\t]+`),
 	}
 
 	if cfg.QueryStatsEnabled {
@@ -123,9 +124,10 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		stats                     *querier_stats.Stats
-		queryString               url.Values
-		queryExpressionNormalized string
+		stats                      *querier_stats.Stats
+		queryString                url.Values
+		queryExpressionNormalized  string
+		queryExpressionRangeLength int
 	)
 
 	// Initialise the stats in the context and make sure it's propagated
@@ -146,8 +148,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	if f.cfg.EnableFailedQueryCache {
-		// Store query expression and range length for checks
-		queryExpressionNormalized = NormalizeString(r.URL.Query().Get("query"))
+		// Store query expression
+		queryExpressionNormalized = f.regex.ReplaceAllString(r.URL.Query().Get("query"), " ")
 
 		// Time range length for queries, if either of "start" or "end" are not present, return 0
 		getQueryRangeSeconds := func() int {
@@ -161,16 +163,14 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return end - start
 		}
-		queryExpressionRangeLength := getQueryRangeSeconds()
+
+		//Store query time range length
+		queryExpressionRangeLength = getQueryRangeSeconds()
 
 		// Check if query in cache and whether value exceeds time range length
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
-			level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-				"msg", "found expensive query in cache ", "query expression ", queryExpressionNormalized,
-			)
-
 			w.WriteHeader(http.StatusForbidden)
-			level.Error(util_log.WithContext(r.Context(), f.log)).Log("msg", "found query in cache, caused error", "filter for this error log with following query expression ", queryExpressionNormalized)
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "found query in cache, caused error", "filter for this error log with following query expression ", queryExpressionNormalized)
 			return
 		}
 	}
@@ -186,7 +186,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if f.cfg.EnableFailedQueryCache {
 			// If error should be cached, store it in cache
 			if CacheableError(resp.StatusCode) {
-				f.lru.Add(queryExpressionNormalized, int(queryResponseTime.Seconds())) //need to find query expression
+				f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
 
 				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
 					"msg", "Cached the query due to a cachable error ", "response ", resp,
