@@ -5,6 +5,7 @@ package transport
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -39,14 +40,28 @@ var (
 	errCanceled              = httpgrpc.Errorf(StatusClientClosedRequest, context.Canceled.Error())
 	errDeadlineExceeded      = httpgrpc.Errorf(http.StatusGatewayTimeout, context.DeadlineExceeded.Error())
 	errRequestEntityTooLarge = httpgrpc.Errorf(http.StatusRequestEntityTooLarge, "http: request body too large")
+	cacheableResponseCodes   = []int{http.StatusRequestTimeout, http.StatusGatewayTimeout}
 )
+
+// Node to store value of cache key and pointer to list element for LRU
+type Node struct {
+	Data   int
+	KeyPtr *list.Element
+}
+
+// LRU Cache struct to be part of the handler
+type LRUCache struct {
+	Queue    *list.List
+	Items    map[string]*Node
+	Capacity int
+}
 
 // Config for a Handler.
 type HandlerConfig struct {
 	LogQueriesLongerThan time.Duration `yaml:"log_queries_longer_than"`
 	MaxBodySize          int64         `yaml:"max_body_size"`
 	QueryStatsEnabled    bool          `yaml:"query_stats_enabled"`
-	LogFailedQueries    bool          `yaml:"log_failed_queries"`
+	LogFailedQueries     bool          `yaml:"log_failed_queries"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -55,6 +70,7 @@ type Handler struct {
 	cfg          HandlerConfig
 	log          log.Logger
 	roundTripper http.RoundTripper
+	lru          LRUCache
 
 	// Metrics.
 	querySeconds *prometheus.CounterVec
@@ -63,12 +79,58 @@ type Handler struct {
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
+// Initialize LRU Cache
+func LRUInit(capacity int) LRUCache {
+	return LRUCache{Queue: list.New(), Items: make(map[string]*Node), Capacity: capacity}
+}
+
+// Put method for LRU cache
+func (l *LRUCache) Put(key string, value int) {
+	if item, ok := l.Items[key]; !ok {
+		if l.Capacity <= len(l.Items) {
+			back := l.Queue.Back()
+			l.Queue.Remove(back)
+			delete(l.Items, back.Value.(string))
+		}
+		l.Items[key] = &Node{Data: value, KeyPtr: l.Queue.PushFront(key)}
+	} else {
+		item.Data = value
+		l.Items[key] = item
+		l.Queue.MoveToFront(item.KeyPtr)
+	}
+}
+
+// Get method for LRU cache
+func (l *LRUCache) Get(key string) int {
+	if item, ok := l.Items[key]; ok {
+		l.Queue.MoveToFront(item.KeyPtr)
+		return item.Data
+	}
+	return -1
+}
+
+// Removes whitespaces from string
+func NormalizeString(inp string) string {
+	return strings.ReplaceAll(inp, " ", "")
+}
+
+// Returns true if response code is in pre-defined cacheable errors list, else returns false
+func CacheableError(statusCode int) bool {
+	for _, errStatusCode := range cacheableResponseCodes {
+		if errStatusCode == statusCode {
+			return true
+		}
+	}
+	return false
+}
+
 // NewHandler creates a new frontend handler.
-func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
+func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, lru LRUCache, reg prometheus.Registerer) http.Handler {
 	h := &Handler{
 		cfg:          cfg,
 		log:          log,
 		roundTripper: roundTripper,
+		lru:          lru,
 	}
 
 	if cfg.QueryStatsEnabled {
@@ -122,14 +184,32 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
+	queryExpressionNormalized := NormalizeString(r.URL.Query().Get("query"))                //change to correct key for query expression
+	queryExpressionRangeLength, str_conv_err := strconv.Atoi(r.URL.Query().Get("duration")) //change to correct key for query time range length
+
+	if str_conv_err != nil { //temporary, remove when correct key found for query time range length
+		writeError(w, str_conv_err)
+		return
+	}
+
+	if item := f.lru.Get(queryExpressionNormalized); item != -1 && item >= queryExpressionRangeLength {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	startTime := time.Now()
 	resp, err := f.roundTripper.RoundTrip(r)
 	queryResponseTime := time.Since(startTime)
 
 	if err != nil {
 		writeError(w, err)
+		queryString = f.parseRequestQueryString(r, buf)
+
+		if CacheableError(resp.StatusCode) {
+			f.lru.Put(queryExpressionNormalized, int(queryResponseTime.Seconds())) //need to find query expression
+		}
+
 		if f.cfg.LogFailedQueries {
-			queryString = f.parseRequestQueryString(r, buf)
 			f.reportFailedQuery(r, queryString, err)
 		}
 		return
