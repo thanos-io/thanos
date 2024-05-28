@@ -714,10 +714,10 @@ type remoteWriteParams struct {
 func (h *Handler) gatherWriteStats(writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
     var stats tenantRequestStats = make(tenantRequestStats)
 
-	for _, write := range writes {
-		for er := range write {
-			for tenant, series := range write[er] {
-				samples := 0
+    for write := range writes {
+	    for er := range write {
+		    for tenant, series := range write[er] {
+		  	    samples := 0
 
    			    for _, ts := range series.timeSeries {
 				    samples += len(ts.Samples)
