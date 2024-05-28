@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/promql-engine/logicalplan"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store"
 )
@@ -36,7 +36,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	}
 	api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
 
-	expr, err := parser.ParseExpr("metric")
+	expr, err := extpromql.ParseExpr("metric")
 	testutil.Ok(t, err)
 	lplan := logicalplan.NewFromAST(expr, &equery.Options{}, logicalplan.PlanOptions{})
 	testutil.Ok(t, err)
@@ -117,7 +117,9 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 			if len(test.engine.warns) > 0 {
 				testutil.Ok(t, err)
 				for i, resp := range srv.responses {
-					testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					if resp.GetWarnings() != "" {
+						testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					}
 				}
 			}
 		})
@@ -136,7 +138,9 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 			if len(test.engine.warns) > 0 {
 				testutil.Ok(t, err)
 				for i, resp := range srv.responses {
-					testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					if resp.GetWarnings() != "" {
+						testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					}
 				}
 			}
 		})

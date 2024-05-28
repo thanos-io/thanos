@@ -14,11 +14,11 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+	grpc_opentracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 
 	"github.com/thanos-io/thanos/pkg/losertree"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -442,16 +442,10 @@ func newAsyncRespSet(
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
-	storeAddr, isLocalStore := st.Addr()
-	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
-	if storeID == "" {
-		storeID = "Store Gateway"
-	}
-
+	storeID, storeAddr, isLocalStore := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
 	})
-
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
 		"store.id":       storeID,
 		"store.is_local": isLocalStore,

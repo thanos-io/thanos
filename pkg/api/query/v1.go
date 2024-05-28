@@ -52,6 +52,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/metadata"
@@ -121,13 +122,19 @@ func (f *QueryEngineFactory) GetPrometheusEngine() promql.QueryEngine {
 
 func (f *QueryEngineFactory) GetThanosEngine() ThanosEngine {
 	f.createThanosEngine.Do(func() {
+		opts := engine.Opts{
+			EngineOpts:       f.engineOpts,
+			Engine:           f.GetPrometheusEngine(),
+			EnableAnalysis:   true,
+			EnableXFunctions: f.enableXFunctions,
+		}
 		if f.thanosEngine != nil {
 			return
 		}
 		if f.remoteEngineEndpoints == nil {
-			f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true, EnableXFunctions: f.enableXFunctions})
+			f.thanosEngine = engine.New(opts)
 		} else {
-			f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine(), EnableAnalysis: true}, f.remoteEngineEndpoints)
+			f.thanosEngine = engine.NewDistributedEngine(opts, f.remoteEngineEndpoints)
 		}
 	})
 
@@ -368,7 +375,7 @@ func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatche
 	}
 
 	for _, s := range r.Form[StoreMatcherParam] {
-		matchers, err := parser.ParseMetricSelector(s)
+		matchers, err := extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}

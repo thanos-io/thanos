@@ -14,12 +14,12 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/promql-engine/query"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -34,7 +34,7 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 		end   = time.Unix(120, 0)
 		step  = 30 * time.Second
 	)
-	qryExpr, err := parser.ParseExpr("up")
+	qryExpr, err := extpromql.ParseExpr("up")
 	testutil.Ok(t, err)
 
 	plan := logicalplan.NewFromAST(qryExpr, &query.Options{

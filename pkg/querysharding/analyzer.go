@@ -22,6 +22,8 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 var (
@@ -88,7 +90,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
-	expr, err := parser.ParseExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		return nonShardableQuery(), err
 	}

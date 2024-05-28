@@ -369,13 +369,20 @@ func runCompact(
 		conf.blockFilesConcurrency,
 		conf.compactBlocksFetchConcurrency,
 	)
+	var planner compact.Planner
+
 	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
-	planner := compact.WithLargeTotalIndexSizeFilter(
+	largeIndexFilterPlanner := compact.WithLargeTotalIndexSizeFilter(
 		tsdbPlanner,
 		insBkt,
 		int64(conf.maxBlockIndexSize),
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
 	)
+	if enableVerticalCompaction {
+		planner = compact.WithVerticalCompactionDownsampleFilter(largeIndexFilterPlanner, insBkt, compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.DownsampleVerticalCompactionNoCompactReason))
+	} else {
+		planner = largeIndexFilterPlanner
+	}
 	blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(
 		logger,

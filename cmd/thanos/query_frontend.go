@@ -350,19 +350,19 @@ func runQueryFrontend(
 				if !cfg.webDisableCORS {
 					api.SetCORS(w)
 				}
-				tracing.HTTPMiddleware(
-					tracer,
-					name,
-					logger,
-					ins.NewHandler(
+				middleware.RequestID(
+					tracing.HTTPMiddleware(
+						tracer,
 						name,
-						gzhttp.GzipHandler(
-							middleware.RequestID(
+						logger,
+						ins.NewHandler(
+							name,
+							gzhttp.GzipHandler(
 								logMiddleware.HTTPMiddleware(name, f),
 							),
 						),
+						// Cortex frontend middlewares require orgID.
 					),
-					// Cortex frontend middlewares require orgID.
 				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
 			})
 			return hf

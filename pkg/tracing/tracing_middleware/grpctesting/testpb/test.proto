@@ -1,0 +1,40 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+/*
+This was copied over from https://github.com/grpc-ecosystem/go-grpc-middleware/tree/v2.0.0-rc.3
+and modified to support tracing in Thanos till migration to Otel is supported.
+*/
+
+syntax = "proto3";
+
+package grpc_middleware.testpb;
+
+option go_package = "testpb";
+
+message Empty {
+}
+
+message PingRequest {
+  string value = 1;
+  int32 sleep_time_ms = 2;
+  uint32 error_code_returned = 3;
+}
+
+message PingResponse {
+  string Value = 1;
+  int32 counter = 2;
+}
+
+service TestService {
+  rpc PingEmpty(Empty) returns (PingResponse) {}
+
+  rpc Ping(PingRequest) returns (PingResponse) {}
+
+  rpc PingError(PingRequest) returns (Empty) {}
+
+  rpc PingList(PingRequest) returns (stream PingResponse) {}
+
+  rpc PingStream(stream PingRequest) returns (stream PingResponse) {}
+
+}
