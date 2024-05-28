@@ -33,8 +33,7 @@ require (
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grafana/regexp v0.0.0-20221122212121-6b5c0a4cb7fd // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0
-	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.17.7
@@ -81,14 +80,14 @@ require (
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.21.0
-	golang.org/x/net v0.23.0
+	golang.org/x/crypto v0.22.0
+	golang.org/x/net v0.24.0
 	golang.org/x/sync v0.6.0
 	golang.org/x/text v0.14.0
 	golang.org/x/time v0.5.0
 	google.golang.org/api v0.168.0 // indirect
 	google.golang.org/genproto v0.0.0-20240205150955-31a09d347014 // indirect
-	google.golang.org/grpc v1.62.1
+	google.golang.org/grpc v1.63.2
 	google.golang.org/grpc/examples v0.0.0-20211119005141-f45e61797429
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.4.0
@@ -115,6 +114,7 @@ require (
 
 require (
 	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.29.0
@@ -151,7 +151,7 @@ require (
 	go.opentelemetry.io/contrib/propagators/ot v1.13.0 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240304212257-790db918fca8 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240304161311-37d4d3c04a78 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240415180920-8c6c420018be // indirect
 	k8s.io/apimachinery v0.29.3 // indirect
 	k8s.io/client-go v0.29.3 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
@@ -262,7 +262,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/mod v0.16.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/tools v0.19.0 // indirect
 	gonum.org/v1/gonum v0.12.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
