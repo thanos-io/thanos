@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -870,6 +871,21 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := os.MkdirAll(subDir, 0750); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			var sb strings.Builder
+
+			cgIDs := cg.IDs()
+			for i, blid := range cgIDs {
+				_, _ = sb.WriteString(blid.String())
+				if i < len(cgIDs)-1 {
+					_, _ = sb.WriteString(",")
+				}
+			}
+			rerr = fmt.Errorf("paniced while compacting %s: %v", sb.String(), p)
+		}
+	}()
 
 	errChan := make(chan error, 1)
 	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
