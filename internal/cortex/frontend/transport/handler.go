@@ -49,14 +49,14 @@ type Node struct {
 	KeyPtr *list.Element
 }
 
-// LRU Cache struct to be part of the handler
+// LRUCache LRU Cache struct to be part of the handler
 type LRUCache struct {
 	Queue    *list.List
 	Items    map[string]*Node
 	Capacity int
 }
 
-// Config for a Handler.
+// HandlerConfig Config for a Handler.
 type HandlerConfig struct {
 	LogQueriesLongerThan time.Duration `yaml:"log_queries_longer_than"`
 	MaxBodySize          int64         `yaml:"max_body_size"`
@@ -79,7 +79,7 @@ type Handler struct {
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
-// Initialize LRU Cache
+// LRUInit Initializes LRU Cache
 func LRUInit(capacity int) LRUCache {
 	return LRUCache{Queue: list.New(), Items: make(map[string]*Node), Capacity: capacity}
 }
@@ -109,12 +109,12 @@ func (l *LRUCache) Get(key string) int {
 	return -1
 }
 
-// Removes whitespaces from string
+// NormalizeString Removes whitespaces from string
 func NormalizeString(inp string) string {
 	return strings.ReplaceAll(inp, " ", "")
 }
 
-// Returns true if response code is in pre-defined cacheable errors list, else returns false
+// CacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false
 func CacheableError(statusCode int) bool {
 	for _, errStatusCode := range cacheableResponseCodes {
 		if errStatusCode == statusCode {
@@ -184,15 +184,17 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	queryExpressionNormalized := NormalizeString(r.URL.Query().Get("query"))                //change to correct key for query expression
-	queryExpressionRangeLength, str_conv_err := strconv.Atoi(r.URL.Query().Get("duration")) //change to correct key for query time range length
+	// Store query expression and range length for checks
+	queryExpressionNormalized := NormalizeString(r.URL.Query().Get("query"))              //change to correct key for query expression
+	queryExpressionRangeLength, strConvErr := strconv.Atoi(r.URL.Query().Get("duration")) //change to correct key for query time range length
 
-	if str_conv_err != nil { //temporary, remove when correct key found for query time range length
-		writeError(w, str_conv_err)
+	if strConvErr != nil { //temporary, remove when correct key found for query time range length
+		writeError(w, strConvErr)
 		return
 	}
 
-	if item := f.lru.Get(queryExpressionNormalized); item != -1 && item >= queryExpressionRangeLength {
+	// Check if query in cache and whether value exceeds time range length
+	if value := f.lru.Get(queryExpressionNormalized); value != -1 && value >= queryExpressionRangeLength {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -205,6 +207,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
+		// If error should be cached, store it in cache
 		if CacheableError(resp.StatusCode) {
 			f.lru.Put(queryExpressionNormalized, int(queryResponseTime.Seconds())) //need to find query expression
 		}
