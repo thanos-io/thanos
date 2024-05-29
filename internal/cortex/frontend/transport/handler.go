@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"io"
 	"net/http"
 	"net/url"
@@ -24,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
+	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
 	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 	"github.com/weaveworks/common/httpgrpc"
@@ -81,7 +81,7 @@ func CacheableError(statusCode int) bool {
 
 // NewHandler creates a new frontend handler.
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
-	lru, err := lru.New[string, int](cfg.FailedQueryCacheCapacity)
+	lru, err := lru.New(cfg.FailedQueryCacheCapacity)
 	if err != nil {
 		level.Error(log).Log("msg", "failed to create lru cache", "err", err)
 	}
