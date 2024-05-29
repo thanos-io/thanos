@@ -127,6 +127,9 @@ func registerQuery(app *extkingpin.App) {
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
 
+	enableDedupMerge := cmd.Flag("query.dedup-merge", "Enable deduplication merge of multiple time series with the same labels.").
+		Default("false").Bool()
+
 	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
 	defaultMetadataTimeRange := cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
@@ -374,6 +377,7 @@ func registerQuery(app *extkingpin.App) {
 			*enforceTenancy,
 			*tenantLabel,
 			*enableGroupReplicaPartialStrategy,
+			*enableDedupMerge,
 		)
 	})
 }
@@ -457,6 +461,7 @@ func runQuery(
 	enforceTenancy bool,
 	tenantLabel string,
 	groupReplicaPartialResponseStrategy bool,
+	enableDedupMerge bool,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -566,24 +571,19 @@ func runQuery(
 		exemplarsProxy   = exemplars.NewProxy(logger, endpoints.GetExemplarsStores, selectorLset)
 		queryableCreator query.QueryableCreator
 	)
-	if groupReplicaPartialResponseStrategy {
-		level.Info(logger).Log("msg", "Enabled group-replica partial response strategy")
-		queryableCreator = query.NewQueryableCreatorWithGroupReplicaPartialResponseStrategy(
-			logger,
-			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
-			proxy,
-			maxConcurrentSelects,
-			queryTimeout,
-		)
-	} else {
-		queryableCreator = query.NewQueryableCreator(
-			logger,
-			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
-			proxy,
-			maxConcurrentSelects,
-			queryTimeout,
-		)
+	opts := query.Options{
+		GroupReplicaPartialResponseStrategy: groupReplicaPartialResponseStrategy,
+		EnableDedupMerge:                    enableDedupMerge,
 	}
+	level.Info(logger).Log("msg", "databricks querier features", "opts", opts)
+	queryableCreator = query.NewQueryableCreatorWithOptions(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_query_", reg),
+		proxy,
+		maxConcurrentSelects,
+		queryTimeout,
+		opts,
+	)
 
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {

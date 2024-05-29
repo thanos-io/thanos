@@ -66,7 +66,7 @@ func newQueryableCreator(
 	proxy storepb.StoreServer,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
-	groupReplicaPartialResponseStrategy bool,
+	opts Options,
 ) QueryableCreator {
 	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
 
@@ -92,13 +92,18 @@ func newQueryableCreator(
 			gateProviderFn: func() gate.Gate {
 				return gf.New()
 			},
-			maxConcurrentSelects:                maxConcurrentSelects,
-			selectTimeout:                       selectTimeout,
-			shardInfo:                           shardInfo,
-			seriesStatsReporter:                 seriesStatsReporter,
-			groupReplicaPartialResponseStrategy: groupReplicaPartialResponseStrategy,
+			maxConcurrentSelects: maxConcurrentSelects,
+			selectTimeout:        selectTimeout,
+			shardInfo:            shardInfo,
+			seriesStatsReporter:  seriesStatsReporter,
+			opts:                 opts,
 		}
 	}
+}
+
+type Options struct {
+	GroupReplicaPartialResponseStrategy bool
+	EnableDedupMerge                    bool
 }
 
 func NewQueryableCreator(
@@ -108,21 +113,23 @@ func NewQueryableCreator(
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
-	return newQueryableCreator(
+	return NewQueryableCreatorWithOptions(
 		logger,
 		reg,
 		proxy,
 		maxConcurrentSelects,
 		selectTimeout,
-		false,
+		Options{},
 	)
 }
-func NewQueryableCreatorWithGroupReplicaPartialResponseStrategy(
+
+func NewQueryableCreatorWithOptions(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	proxy storepb.StoreServer,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
+	opts Options,
 ) QueryableCreator {
 	return newQueryableCreator(
 		logger,
@@ -130,34 +137,30 @@ func NewQueryableCreatorWithGroupReplicaPartialResponseStrategy(
 		proxy,
 		maxConcurrentSelects,
 		selectTimeout,
-		true,
+		opts,
 	)
 }
 
 type queryable struct {
-	logger                              log.Logger
-	replicaLabels                       []string
-	storeDebugMatchers                  [][]*labels.Matcher
-	proxy                               storepb.StoreServer
-	deduplicate                         bool
-	maxResolutionMillis                 int64
-	partialResponse                     bool
-	skipChunks                          bool
-	gateProviderFn                      func() gate.Gate
-	maxConcurrentSelects                int
-	selectTimeout                       time.Duration
-	shardInfo                           *storepb.ShardInfo
-	seriesStatsReporter                 seriesStatsReporter
-	groupReplicaPartialResponseStrategy bool
+	logger               log.Logger
+	replicaLabels        []string
+	storeDebugMatchers   [][]*labels.Matcher
+	proxy                storepb.StoreServer
+	deduplicate          bool
+	maxResolutionMillis  int64
+	partialResponse      bool
+	skipChunks           bool
+	gateProviderFn       func() gate.Gate
+	maxConcurrentSelects int
+	selectTimeout        time.Duration
+	shardInfo            *storepb.ShardInfo
+	seriesStatsReporter  seriesStatsReporter
+	opts                 Options
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	if q.groupReplicaPartialResponseStrategy {
-		return newQuerierWithGroupReplicaPartialResponseStrategy(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
-	} else {
-		return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
-	}
+	return newQuerierWithOpts(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.opts), nil
 }
 
 type querier struct {
@@ -174,11 +177,13 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
+	enableDedupMerge        bool
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
 // store API endpoints.
-func newQuerierInternal(
+// nolint:unparam
+func newQuerier(
 	logger log.Logger,
 	mint,
 	maxt int64,
@@ -193,7 +198,26 @@ func newQuerierInternal(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
-	groupReplicaPartialResponseStrategy bool,
+) *querier {
+	return newQuerierWithOpts(logger, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, Options{})
+}
+
+func newQuerierWithOpts(
+	logger log.Logger,
+	mint,
+	maxt int64,
+	replicaLabels []string,
+	storeDebugMatchers [][]*labels.Matcher,
+	proxy storepb.StoreServer,
+	deduplicate bool,
+	maxResolutionMillis int64,
+	partialResponse,
+	skipChunks bool,
+	selectGate gate.Gate,
+	selectTimeout time.Duration,
+	shardInfo *storepb.ShardInfo,
+	seriesStatsReporter seriesStatsReporter,
+	opts Options,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -204,7 +228,7 @@ func newQuerierInternal(
 	}
 
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
-	if groupReplicaPartialResponseStrategy {
+	if opts.GroupReplicaPartialResponseStrategy {
 		level.Debug(logger).Log("msg", "Enabled group-replica partial response strategy in newQuerierInternal")
 		partialResponseStrategy = storepb.PartialResponseStrategy_GROUP_REPLICA
 	} else if partialResponse {
@@ -226,76 +250,8 @@ func newQuerierInternal(
 		skipChunks:              skipChunks,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
+		enableDedupMerge:        opts.EnableDedupMerge,
 	}
-}
-
-func newQuerier(
-	logger log.Logger,
-	mint,
-	maxt int64,
-	replicaLabels []string,
-	storeDebugMatchers [][]*labels.Matcher,
-	proxy storepb.StoreServer,
-	deduplicate bool,
-	maxResolutionMillis int64,
-	partialResponse,
-	skipChunks bool,
-	selectGate gate.Gate,
-	selectTimeout time.Duration,
-	shardInfo *storepb.ShardInfo,
-	seriesStatsReporter seriesStatsReporter,
-) *querier {
-	return newQuerierInternal(
-		logger,
-		mint,
-		maxt,
-		replicaLabels,
-		storeDebugMatchers,
-		proxy,
-		deduplicate,
-		maxResolutionMillis,
-		partialResponse,
-		skipChunks,
-		selectGate,
-		selectTimeout,
-		shardInfo,
-		seriesStatsReporter,
-		false,
-	)
-}
-func newQuerierWithGroupReplicaPartialResponseStrategy(
-	logger log.Logger,
-	mint,
-	maxt int64,
-	replicaLabels []string,
-	storeDebugMatchers [][]*labels.Matcher,
-	proxy storepb.StoreServer,
-	deduplicate bool,
-	maxResolutionMillis int64,
-	partialResponse,
-	skipChunks bool,
-	selectGate gate.Gate,
-	selectTimeout time.Duration,
-	shardInfo *storepb.ShardInfo,
-	seriesStatsReporter seriesStatsReporter,
-) *querier {
-	return newQuerierInternal(
-		logger,
-		mint,
-		maxt,
-		replicaLabels,
-		storeDebugMatchers,
-		proxy,
-		deduplicate,
-		maxResolutionMillis,
-		partialResponse,
-		skipChunks,
-		selectGate,
-		selectTimeout,
-		shardInfo,
-		seriesStatsReporter,
-		true,
-	)
 }
 
 func (q *querier) isDedupEnabled() bool {
@@ -497,8 +453,11 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		aggrs,
 		warns,
 	)
-
-	return dedup.NewSeriesSet(set, hints.Func), resp.seriesSetStats, nil
+	f := hints.Func
+	if q.enableDedupMerge {
+		f = dedup.UseMergedSeries
+	}
+	return dedup.NewSeriesSet(set, f), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.
