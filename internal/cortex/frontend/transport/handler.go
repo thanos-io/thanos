@@ -49,7 +49,6 @@ type HandlerConfig struct {
 	MaxBodySize              int64         `yaml:"max_body_size"`
 	QueryStatsEnabled        bool          `yaml:"query_stats_enabled"`
 	LogFailedQueries         bool          `yaml:"log_failed_queries"`
-	EnableFailedQueryCache   bool          `yaml:"enable_failed_query_cache"`
 	FailedQueryCacheCapacity int           `yaml:"failed_query_cache_capacity"`
 }
 
@@ -81,16 +80,23 @@ func CacheableError(statusCode int) bool {
 
 // NewHandler creates a new frontend handler.
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
-	lru, err := lru.New(cfg.FailedQueryCacheCapacity)
-	if err != nil {
-		level.Error(log).Log("msg", "failed to create lru cache", "err", err)
+	var (
+		LRU *lru.Cache
+	)
+
+	if cfg.FailedQueryCacheCapacity > 0 {
+		LRU_res, err := lru.New(cfg.FailedQueryCacheCapacity)
+		LRU = LRU_res
+		if err != nil {
+			level.Error(log).Log("msg", "failed to create lru cache", "err", err)
+		}
 	}
 
 	h := &Handler{
 		cfg:          cfg,
 		log:          log,
 		roundTripper: roundTripper,
-		lru:          *lru,
+		lru:          *LRU,
 		regex:        regexp.MustCompile(`[\s\n\t]+`),
 	}
 
@@ -147,7 +153,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	if f.cfg.EnableFailedQueryCache {
+	if f.cfg.FailedQueryCacheCapacity > 0 {
 		// Store query expression
 		queryExpressionNormalized = f.regex.ReplaceAllString(r.URL.Query().Get("query"), " ")
 
@@ -183,7 +189,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
-		if f.cfg.EnableFailedQueryCache {
+		if f.cfg.FailedQueryCacheCapacity > 0 {
 			// If error should be cached, store it in cache
 			if CacheableError(resp.StatusCode) {
 				f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"gopkg.in/yaml.v2"
+
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -19,7 +21,6 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/promql-engine/execution/parse"
 	"github.com/weaveworks/common/user"
-	"gopkg.in/yaml.v2"
 
 	cortexfrontend "github.com/thanos-io/thanos/internal/cortex/frontend"
 	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
@@ -147,8 +148,6 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
 	cmd.Flag("query-frontend.log-failed-queries", "Log failed queries due to any reason").Default("true").BoolVar(&cfg.CortexHandlerConfig.LogFailedQueries)
-
-	cmd.Flag("query-frontend.enable-failed-queries-cache", "Enable cache for failed queries").Default("false").BoolVar(&cfg.CortexHandlerConfig.EnableFailedQueryCache)
 
 	cmd.Flag("failed-query-cache-capacity", "Capacity of cache for failed queries").IntVar(&cfg.CortexHandlerConfig.FailedQueryCacheCapacity)
 
