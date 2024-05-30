@@ -192,7 +192,13 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if f.lru != nil {
 			// If error should be cached, store it in cache
 			if CacheableError(resp.StatusCode) {
-				f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
+				//checks if queryExpression is already in cache, and updates time range length value if it is shorter
+				if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
+					if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
+						queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
+					}
+					f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
+				}
 
 				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
 					"msg", "Cached the query due to a cachable error ", "response ", resp,
