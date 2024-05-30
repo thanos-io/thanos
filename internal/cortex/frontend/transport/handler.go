@@ -58,7 +58,7 @@ type Handler struct {
 	cfg          HandlerConfig
 	log          log.Logger
 	roundTripper http.RoundTripper
-	lru          lru.Cache
+	lru          *lru.Cache
 	regex        *regexp.Regexp
 
 	// Metrics.
@@ -96,7 +96,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		cfg:          cfg,
 		log:          log,
 		roundTripper: roundTripper,
-		lru:          *LRU,
+		lru:          LRU,
 		regex:        regexp.MustCompile(`[\s\n\t]+`),
 	}
 
@@ -153,7 +153,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	if f.cfg.FailedQueryCacheCapacity > 0 {
+	if f.lru != nil {
 		// Store query expression
 		queryExpressionNormalized = f.regex.ReplaceAllString(r.URL.Query().Get("query"), " ")
 
@@ -189,7 +189,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
-		if f.cfg.FailedQueryCacheCapacity > 0 {
+		if f.lru != nil {
 			// If error should be cached, store it in cache
 			if CacheableError(resp.StatusCode) {
 				f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
