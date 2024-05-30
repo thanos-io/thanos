@@ -188,6 +188,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
+		level.Error(util_log.WithContext(r.Context(), f.log)).Log("error response status code", resp.StatusCode) //remove after testing
 
 		if f.lru != nil {
 			// If error should be cached, store it in cache
