@@ -65,6 +65,8 @@ type Handler struct {
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
+	totalQueries *prometheus.CounterVec
+	cachedHits   *prometheus.CounterVec
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
@@ -116,10 +118,22 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 			Help: "Size of all chunks fetched to execute a query in bytes.",
 		}, []string{"user"})
 
+		h.totalQueries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_queries_total",
+			Help: "Total number of queries.",
+		}, []string{"user"})
+
+		h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Name: "cortex_queries_hits_total",
+			Help: "Total number of queries that hit the cache.",
+		}, []string{"user"})
+
 		h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
 			h.querySeconds.DeleteLabelValues(user)
 			h.querySeries.DeleteLabelValues(user)
 			h.queryBytes.DeleteLabelValues(user)
+			h.totalQueries.DeleteLabelValues(user)
+			h.cachedHits.DeleteLabelValues(user)
 		})
 		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
 		_ = h.activeUsers.StartAsync(context.Background())
@@ -177,6 +191,14 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
 			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "found query in cache, caused error", "filter for this error log with following query expression ", queryExpressionNormalized)
+
+			tenantIDs, err := tenant.TenantIDs(r.Context())
+			if err != nil {
+
+				return
+			}
+			userID := tenant.JoinTenantIDs(tenantIDs)
+			f.cachedHits.WithLabelValues(userID).Add(1)
 			return
 		}
 	}
@@ -322,6 +344,7 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 	remoteUser, _, _ := r.BasicAuth()
 
 	// Track stats.
+	f.totalQueries.WithLabelValues(userID).Add(1)
 	f.querySeconds.WithLabelValues(userID).Add(wallTime.Seconds())
 	f.querySeries.WithLabelValues(userID).Add(float64(numSeries))
 	f.queryBytes.WithLabelValues(userID).Add(float64(numBytes))
