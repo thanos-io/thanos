@@ -2872,9 +2872,7 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
 		return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
 	}
-	r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
-	r.stats.postingsTouched++
-	r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(dataFromCache))
+	r.stats.addDataTouchedStats(Postings, 1, len(dataFromCache))
 	p, closeFns, err := r.decodeCachedPostings(dataFromCache)
 	defer func() {
 		for _, closeFn := range closeFns {
@@ -2946,7 +2944,6 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
 		}
-		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
 	}
 
 	// Iterate over all groups and fetch posting from cache.
@@ -2958,8 +2955,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		}
 		// Get postings for the given key from cache first.
 		if b, ok := fromCache[key]; ok {
-			r.stats.postingsTouched++
-			r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(b))
+			r.stats.addDataTouchedStats(Postings, 1, len(b))
 
 			l, closer, err := r.decodeCachedPostings(b)
 			if err != nil {
@@ -3003,7 +2999,6 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		if err := bytesLimiter.Reserve(uint64(length)); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
 		}
-		r.stats.DataDownloadedSizeSum += units.Base2Bytes(length)
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -3035,8 +3030,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			rdr := newPostingsReaderBuilder(ctx, brdr, ptrs[i:j], start, length)
 
 			stats.postingsFetchCount++
-			stats.postingsFetched += j - i
-			stats.PostingsFetchedSizeSum += units.Base2Bytes(int(length))
+			stats.addDataFetchedStats(Postings, j-i, int(length))
 
 			for rdr.Next() {
 				diffVarintPostings, postingsCount, keyID := rdr.AtDiffVarint()
@@ -3050,8 +3044,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 					return errors.Wrap(err, "encoding with snappy")
 				}
 
-				stats.postingsTouched++
-				stats.PostingsTouchedSizeSum += units.Base2Bytes(int(len(diffVarintPostings)))
+				stats.addDataTouchedStats(Postings, 1, len(diffVarintPostings))
 				stats.cachedPostingsCompressions += 1
 				stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(diffVarintPostings))
 				stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(len(dataToCache))
@@ -3181,7 +3174,6 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 		if err := bytesLimiter.Reserve(uint64(len(b))); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
 		}
-		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(b))
 	}
 
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
@@ -3211,7 +3203,6 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 		}
-		stats.DataDownloadedSizeSum += units.Base2Bytes(end - start)
 	}
 
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start), r.logger)
@@ -3220,9 +3211,8 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 	}
 
 	stats.seriesFetchCount++
-	stats.seriesFetched += len(ids)
 	stats.SeriesFetchDurationSum += time.Since(begin)
-	stats.SeriesFetchedSizeSum += units.Base2Bytes(int(end - start))
+	stats.addDataFetchedStats(Series, len(ids), int(end - start))
 
 	for i, id := range ids {
 		c := b[uint64(id)-start:]
@@ -3325,8 +3315,7 @@ func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]sym
 		return false, errors.Errorf("series %d not found", ref)
 	}
 
-	r.stats.seriesTouched++
-	r.stats.SeriesTouchedSizeSum += units.Base2Bytes(len(b))
+	r.stats.addDataTouchedStats(Series, 1, len(b))
 	return decodeSeriesForTime(b, lset, chks, skipChunks, mint, maxt)
 }
 
@@ -3517,7 +3506,6 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
 				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 			}
-			r.stats.DataDownloadedSizeSum += units.Base2Bytes(p.End - p.Start)
 		}
 
 		for _, p := range parts {
@@ -3551,8 +3539,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
 	stats.chunksFetchCount++
-	stats.chunksFetched += len(pIdxs)
-	stats.ChunksFetchedSizeSum += units.Base2Bytes(int(part.End - part.Start))
+	stats.addDataFetchedStats(Chunks, len(pIdxs), int(part.End - part.Start))
 
 	var (
 		buf        []byte
@@ -3613,8 +3600,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
-			stats.chunksTouched++
-			stats.ChunksTouchedSizeSum += units.Base2Bytes(int(chunkDataLen))
+			stats.addDataTouchedStats(Chunks, 1, int(chunkDataLen))
 			continue
 		}
 
@@ -3626,7 +3612,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		if err := bytesLimiter.Reserve(uint64(chunkLen)); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 		}
-		stats.DataDownloadedSizeSum += units.Base2Bytes(chunkLen)
 
 		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}}, r.logger)
 		if err != nil {
@@ -3636,16 +3621,15 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			return errors.Errorf("preloaded chunk too small, expecting %d", chunkLen)
 		}
 
-		stats.chunksFetchCount++
-		stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
+		stats.addDataFetchedStats(Chunks, 1, len(*nb))
 		c := rawChunk((*nb)[n:])
 		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")
 		}
-		stats.chunksTouched++
-		stats.ChunksTouchedSizeSum += units.Base2Bytes(int(chunkDataLen))
+
+		stats.addDataTouchedStats(Chunks, 1, int(chunkDataLen))
 
 		r.block.chunkPool.Put(nb)
 	}
@@ -3744,6 +3728,48 @@ type queryStats struct {
 	MergeDuration     time.Duration
 
 	DataDownloadedSizeSum units.Base2Bytes
+}
+
+type dataType string
+
+const (
+	Postings dataType = "postings"
+	Series dataType = "series"
+	Chunks dataType = "chunks"
+)
+
+func (s *queryStats) addDataFetchedStats(dataType dataType, dataCount int, dataSize int) {
+	switch dataType {
+	case Postings:
+		s.postingsFetched += dataCount
+		s.PostingsFetchedSizeSum += units.Base2Bytes(dataSize)
+	case Series:
+		s.seriesFetched += dataCount
+		s.SeriesFetchedSizeSum += units.Base2Bytes(dataSize)
+	case Chunks:
+		s.chunksFetched += dataCount
+		s.ChunksFetchedSizeSum += units.Base2Bytes(dataSize)
+	default:
+		return
+	}
+	s.DataDownloadedSizeSum += units.Base2Bytes(dataSize)
+}
+
+func (s *queryStats) addDataTouchedStats(dataType dataType, dataCount int, dataSize int) {
+	switch dataType {
+	case Postings:
+		s.postingsTouched += dataCount
+		s.PostingsTouchedSizeSum += units.Base2Bytes(dataSize)
+	case Series:
+		s.seriesTouched += dataCount
+		s.SeriesTouchedSizeSum += units.Base2Bytes(dataSize)
+	case Chunks:
+		s.chunksTouched += dataCount
+		s.ChunksTouchedSizeSum += units.Base2Bytes(dataSize)
+	default:
+		return
+	}
+	s.DataDownloadedSizeSum += units.Base2Bytes(dataSize)
 }
 
 func (s *queryStats) merge(o *queryStats) {
