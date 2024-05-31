@@ -171,6 +171,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
+	// Check if caching is enabled
 	if f.lru != nil {
 		// Store query expression
 		queryExpressionNormalized = f.regex.ReplaceAllString(r.URL.Query().Get("query"), " ")
@@ -194,15 +195,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Check if query in cache and whether value exceeds time range length
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
-			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "found query in cache, caused error", "filter for this error log with following query expression ", queryExpressionNormalized)
-
-			tenantIDs, err := tenant.TenantIDs(r.Context())
-			if err != nil {
-
-				return
-			}
-			userID := tenant.JoinTenantIDs(tenantIDs)
-			f.cachedHits.WithLabelValues(userID).Add(1)
+			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "solution", "filter for this error log with following query expression ", queryExpressionNormalized)
+			//f.cachedHits.WithLabelValues(userID).Add(1)
 			return
 		}
 	}
@@ -215,48 +209,49 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
-		logMessage := append([]interface{}{
-			"msg", "TESTING_LOG_ERROR_STATUS_CODE",
-			"error", err.Error(),
-		}, formatQueryString(queryString)...)
+		// Check if caching is enabled
+		if f.lru != nil {
+			// Extracting error code
+			codeExtract := f.errorExtract.FindStringSubmatch(err.Error())
 
-		level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+			// Checking if error code extracted successfully
+			if codeExtract != nil && len(codeExtract) >= 2 {
 
-		// Extracting error code
-		codeExtract := f.errorExtract.FindStringSubmatch(err.Error())
+				// Converting error code to int
+				errCode, strConvError := strconv.Atoi(codeExtract[1])
 
-		// If error should be cached, store it in cache
-		if codeExtract != nil && len(codeExtract) >= 2 {
-
-			// Converting error code to int
-			errCode, strConvError := strconv.Atoi(codeExtract[1])
-			if strConvError != nil {
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-					"msg", "STRING TO INT CONVERSION ERROR ", "response ", resp,
-				)
-			}
-			if CacheableError(errCode) {
-				//checks if queryExpression is already in cache, and updates time range length value if it is shorter
-				if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
-					if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
-						queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
-					}
-					f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
+				// Checking if error code extracted properly
+				if strConvError != nil {
+					level.Error(util_log.WithContext(r.Context(), f.log)).Log(
+						"msg", "STRING TO INT CONVERSION ERROR ", "response ", resp,
+					)
 				}
 
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-					"msg", "CACHED QUERY: CACHABLE ", "response ", resp,
-				)
+				// If error should be cached, store it in cache
+				if CacheableError(errCode) {
+					//checks if queryExpression is already in cache, and updates time range length value if it is shorter
+					if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
+						if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
+							queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
+						}
+						f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
+					}
+
+					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+						"msg", "CACHED QUERY: CACHABLE ERROR", "response ", resp,
+					)
+				} else {
+					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+						"msg", "DID NOT CACHE QUERY: NOT CACHABLE ERROR", "response ", resp,
+					)
+				}
 			} else {
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-					"msg", "DID NOT CACHE QUERY: NOT CACHABLE ", "response ", resp,
+				level.Error(util_log.WithContext(r.Context(), f.log)).Log(
+					"msg", "REGEX CONVERSION ERROR ", "response ", resp,
 				)
 			}
-		} else {
-			level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-				"msg", "REGEX CONVERSION ERROR ", "response ", resp,
-			)
 		}
+
 		if f.cfg.LogFailedQueries {
 			f.reportFailedQuery(r, queryString, err)
 		}
@@ -366,7 +361,7 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 	remoteUser, _, _ := r.BasicAuth()
 
 	// Track stats.
-	f.totalQueries.WithLabelValues(userID).Add(1)
+	//f.totalQueries.WithLabelValues(userID).Add(1)
 	f.querySeconds.WithLabelValues(userID).Add(wallTime.Seconds())
 	f.querySeries.WithLabelValues(userID).Add(float64(numSeries))
 	f.queryBytes.WithLabelValues(userID).Add(float64(numBytes))
