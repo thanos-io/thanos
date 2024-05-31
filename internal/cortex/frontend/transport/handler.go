@@ -86,6 +86,8 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		LRU *lru.Cache
 	)
 
+	LRU = nil
+
 	if cfg.FailedQueryCacheCapacity > 0 {
 		LRU_res, err := lru.New(cfg.FailedQueryCacheCapacity)
 		LRU = LRU_res
@@ -217,8 +219,16 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}, formatQueryString(queryString)...)
 
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+		level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...) //added w/ initial testing to make sure docker image is updating, delete after
 
 		if f.lru != nil {
+
+			logMessage := append([]interface{}{
+				"msg", "CACHE_ERROR_ATTEMPT",
+			}, formatQueryString(queryString)...)
+
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+
 			// If error should be cached, store it in cache
 			if CacheableError(resp.StatusCode) {
 				//checks if queryExpression is already in cache, and updates time range length value if it is shorter
