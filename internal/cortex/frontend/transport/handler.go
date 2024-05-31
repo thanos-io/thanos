@@ -219,7 +219,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}, formatQueryString(queryString)...)
 
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
-		level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...) //added w/ initial testing to make sure docker image is updating, delete after
 
 		if f.lru != nil {
 
@@ -230,18 +229,37 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 
 			// If error should be cached, store it in cache
-			if CacheableError(resp.StatusCode) {
-				//checks if queryExpression is already in cache, and updates time range length value if it is shorter
-				if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
-					if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
-						queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
-					}
-					f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
-				}
+			if resp != nil {
 
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-					"msg", "Cached the query due to a cachable error ", "response ", resp,
-				)
+				logMessage := append([]interface{}{
+					"msg", "RESP_STATUS_CODE_NOT_NIL",
+				}, formatQueryString(queryString)...)
+
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+
+				if CacheableError(resp.StatusCode) {
+					//checks if queryExpression is already in cache, and updates time range length value if it is shorter
+					if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
+						if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
+							queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
+						}
+						f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
+					}
+
+					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+						"msg", "CACHED QUERY: CACHABLE ", "response ", resp,
+					)
+				} else {
+					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+						"msg", "DID NOT CACHE QUERY: NOT CACHABLE ", "response ", resp,
+					)
+				}
+			} else {
+				logMessage := append([]interface{}{
+					"msg", "NIL_RESP",
+				}, formatQueryString(queryString)...)
+
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 			}
 		}
 
