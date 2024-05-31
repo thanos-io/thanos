@@ -98,7 +98,7 @@ func Downsample(
 
 	// Writes downsampled chunks right into the files, avoiding excess memory allocation.
 	// Flushes index and meta data after aggregations.
-	streamedBlockWriter, err := NewStreamedBlockWriter(blockDir, indexr, logger, newMeta)
+	streamedBlockWriter, err := NewStreamedBlockWriter(blockDir, indexr, logger, newMeta, true)
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}

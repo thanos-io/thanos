@@ -42,7 +42,8 @@ type streamedBlockWriter struct {
 	indexReader tsdb.IndexReader
 	closers     []io.Closer
 
-	seriesRefs storage.SeriesRef // postings is a current posting position.
+	seriesRefs     storage.SeriesRef // postings is a current posting position.
+	logEmptyChunks bool              // New field to control logging of empty chunks
 }
 
 // NewStreamedBlockWriter returns streamedBlockWriter instance, it's not concurrency safe.
@@ -57,6 +58,7 @@ func NewStreamedBlockWriter(
 	indexReader tsdb.IndexReader,
 	logger log.Logger,
 	originMeta metadata.Meta,
+	logEmptyChunks bool,
 ) (w *streamedBlockWriter, err error) {
 	closers := make([]io.Closer, 0, 2)
 
@@ -95,13 +97,14 @@ func NewStreamedBlockWriter(
 	}
 
 	return &streamedBlockWriter{
-		logger:      logger,
-		blockDir:    blockDir,
-		indexReader: indexReader,
-		indexWriter: indexWriter,
-		chunkWriter: chunkWriter,
-		meta:        originMeta,
-		closers:     closers,
+		logger:         logger,
+		blockDir:       blockDir,
+		indexReader:    indexReader,
+		indexWriter:    indexWriter,
+		chunkWriter:    chunkWriter,
+		meta:           originMeta,
+		closers:        closers,
+		logEmptyChunks: logEmptyChunks,
 	}, nil
 }
 
@@ -113,7 +116,11 @@ func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Me
 	}
 
 	if len(chunks) == 0 {
-		level.Warn(w.logger).Log("msg", "empty chunks happened, skip series", "series", strings.ReplaceAll(lset.String(), "\"", "'"))
+		if w.logEmptyChunks {
+			level.Warn(w.logger).Log("msg", "empty chunks happened, skip series", "series", strings.ReplaceAll(lset.String(), "\"", "'"))
+		} else {
+			level.Debug(w.logger).Log("msg", "empty chunks happened, skip series", "series", strings.ReplaceAll(lset.String(), "\"", "'"))
+		}
 		return nil
 	}
 
