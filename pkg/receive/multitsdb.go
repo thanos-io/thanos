@@ -97,12 +97,18 @@ func NewMultiTSDB(
 type localClient struct {
 	storepb.StoreClient
 	store *store.TSDBStore
+	desc  string
 }
 
 func newLocalClient(c storepb.StoreClient, store *store.TSDBStore) *localClient {
+	mint, maxt := store.TimeRange()
 	return &localClient{
 		StoreClient: c,
 		store:       store,
+		desc: fmt.Sprintf(
+			"LabelSets: %v MinTime: %d MaxTime: %d",
+			labelpb.PromLabelSetsToString(labelpb.ZLabelSetsToPromLabelSets(store.LabelSet()...)), mint, maxt,
+		),
 	}
 }
 
@@ -131,11 +137,7 @@ func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 }
 
 func (l *localClient) String() string {
-	mint, maxt := l.store.TimeRange()
-	return fmt.Sprintf(
-		"LabelSets: %v MinTime: %d MaxTime: %d",
-		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
-	)
+	return l.desc
 }
 
 func (l *localClient) Addr() (string, bool) {
