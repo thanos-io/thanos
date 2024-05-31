@@ -87,12 +87,11 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		LRU *lru.Cache
 	)
 
-	LRU = nil
-
 	if cfg.FailedQueryCacheCapacity > 0 {
 		LRU_res, err := lru.New(cfg.FailedQueryCacheCapacity)
 		LRU = LRU_res
 		if err != nil {
+			LRU = nil
 			level.Error(log).Log("msg", "failed to create lru cache", "err", err)
 		}
 	}
@@ -125,12 +124,12 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		h.totalQueries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_queries_total",
 			Help: "Total number of queries.",
-		}, []string{"user"})
+		}, []string{})
 
 		h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_queries_hits_total",
 			Help: "Total number of queries that hit the cache.",
-		}, []string{"user"})
+		}, []string{})
 
 		h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
 			h.querySeconds.DeleteLabelValues(user)
@@ -171,6 +170,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
+	// Increment total queries
+	f.totalQueries.WithLabelValues("").Add(float64(1))
+
 	// Check if caching is enabled
 	if f.lru != nil {
 		// Store query expression
@@ -196,7 +198,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
 			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "query expression", queryExpressionNormalized)
-			//f.cachedHits.WithLabelValues(userID).Add(1)
+			f.cachedHits.WithLabelValues("").Add(float64(1))
 			return
 		}
 	}
@@ -361,7 +363,6 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 	remoteUser, _, _ := r.BasicAuth()
 
 	// Track stats.
-	//f.totalQueries.WithLabelValues(userID).Add(1)
 	f.querySeconds.WithLabelValues(userID).Add(wallTime.Seconds())
 	f.querySeries.WithLabelValues(userID).Add(float64(numSeries))
 	f.queryBytes.WithLabelValues(userID).Add(float64(numBytes))
