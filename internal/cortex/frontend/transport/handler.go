@@ -60,6 +60,7 @@ type Handler struct {
 	roundTripper http.RoundTripper
 	lru          *lru.Cache
 	regex        *regexp.Regexp
+	errorExtract *regexp.Regexp
 
 	// Metrics.
 	querySeconds *prometheus.CounterVec
@@ -102,6 +103,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		roundTripper: roundTripper,
 		lru:          LRU,
 		regex:        regexp.MustCompile(`[\s\n\t]+`),
+		errorExtract: regexp.MustCompile(`Code\((\d+)\)`),
 	}
 
 	if cfg.QueryStatsEnabled {
@@ -220,49 +222,41 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 
-		if f.lru != nil {
+		// Extracting error code
+		codeExtract := f.errorExtract.FindStringSubmatch(err.Error())
 
-			logMessage := append([]interface{}{
-				"msg", "CACHE_ERROR_ATTEMPT",
-			}, formatQueryString(queryString)...)
+		// If error should be cached, store it in cache
+		if codeExtract != nil && len(codeExtract) >= 2 {
 
-			level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
-
-			// If error should be cached, store it in cache
-			if resp != nil {
-
-				logMessage := append([]interface{}{
-					"msg", "RESP_STATUS_CODE_NOT_NIL",
-				}, formatQueryString(queryString)...)
-
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
-
-				if CacheableError(resp.StatusCode) {
-					//checks if queryExpression is already in cache, and updates time range length value if it is shorter
-					if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
-						if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
-							queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
-						}
-						f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
-					}
-
-					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "CACHED QUERY: CACHABLE ", "response ", resp,
-					)
-				} else {
-					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "DID NOT CACHE QUERY: NOT CACHABLE ", "response ", resp,
-					)
-				}
-			} else {
-				logMessage := append([]interface{}{
-					"msg", "NIL_RESP",
-				}, formatQueryString(queryString)...)
-
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+			// Converting error code to int
+			errCode, strConvError := strconv.Atoi(codeExtract[1])
+			if strConvError != nil {
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+					"msg", "STRING TO INT CONVERSION ERROR ", "response ", resp,
+				)
 			}
-		}
+			if CacheableError(errCode) {
+				//checks if queryExpression is already in cache, and updates time range length value if it is shorter
+				if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
+					if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
+						queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
+					}
+					f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
+				}
 
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+					"msg", "CACHED QUERY: CACHABLE ", "response ", resp,
+				)
+			} else {
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+					"msg", "DID NOT CACHE QUERY: NOT CACHABLE ", "response ", resp,
+				)
+			}
+		} else {
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+				"msg", "REGEX CONVERSION ERROR ", "response ", resp,
+			)
+		}
 		if f.cfg.LogFailedQueries {
 			f.reportFailedQuery(r, queryString, err)
 		}
