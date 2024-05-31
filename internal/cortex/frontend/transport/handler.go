@@ -195,7 +195,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Check if query in cache and whether value exceeds time range length
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
-			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "solution", "filter for this error log with following query expression ", queryExpressionNormalized)
+			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "query expression", queryExpressionNormalized)
 			//f.cachedHits.WithLabelValues(userID).Add(1)
 			return
 		}
