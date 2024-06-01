@@ -243,6 +243,17 @@ func AnalyzesMerge(analysis ...*Analysis) *Analysis {
 	return root
 }
 
+func SeriesStatsCounterMerge(seriesStatsCounters ...*SeriesStatsCounter) *SeriesStatsCounter {
+	result := SeriesStatsCounter{}
+	for _, c := range seriesStatsCounters {
+		seriesStatsCounters[0].Series += c.Series
+		seriesStatsCounters[0].Chunks += c.Chunks
+		seriesStatsCounters[0].Samples += c.Samples
+		seriesStatsCounters[0].Bytes += c.Bytes
+	}
+	return &result
+}
+
 func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response, error) {
 	if len(responses) == 0 {
 		return NewEmptyPrometheusResponse(), nil
@@ -269,13 +280,23 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
 	}
 
+	seriesStatsCounters := make([]*SeriesStatsCounter, 0, len(responses))
+	for i := range promResponses {
+		if promResponses[i].Data.GetSeriesStatsCounter() == nil {
+			continue
+		}
+
+		seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
+	}
+
 	response := PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType: model.ValMatrix.String(),
-			Result:     matrixMerge(promResponses),
-			Stats:      StatsMerge(responses),
-			Analysis:   AnalyzesMerge(analyzes...),
+			ResultType:         model.ValMatrix.String(),
+			Result:             matrixMerge(promResponses),
+			Stats:              StatsMerge(responses),
+			Analysis:           AnalyzesMerge(analyzes...),
+			SeriesStatsCounter: SeriesStatsCounterMerge(seriesStatsCounters...),
 		},
 	}
 	response.Headers = QueryBytesFetchedPrometheusResponseHeaders(responses...)

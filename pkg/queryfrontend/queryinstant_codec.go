@@ -63,6 +63,15 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
 	}
 
+	var seriesStatsCounters []*queryrange.SeriesStatsCounter
+	for i := range promResponses {
+		if promResponses[i].Data.GetSeriesStatsCounter() == nil {
+			continue
+		}
+
+		seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
+	}
+
 	var res queryrange.Response
 	switch promResponses[0].Data.ResultType {
 	case model.ValMatrix.String():
@@ -75,8 +84,9 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Matrix: matrixMerge(promResponses),
 					},
 				},
-				Analysis: queryrange.AnalyzesMerge(analyzes...),
-				Stats:    queryrange.StatsMerge(responses),
+				Analysis:           queryrange.AnalyzesMerge(analyzes...),
+				Stats:              queryrange.StatsMerge(responses),
+				SeriesStatsCounter: queryrange.SeriesStatsCounterMerge(seriesStatsCounters...),
 			},
 			Headers: queryrange.QueryBytesFetchedPrometheusResponseHeaders(responses...),
 		}
@@ -94,8 +104,9 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Vector: v,
 					},
 				},
-				Analysis: queryrange.AnalyzesMerge(analyzes...),
-				Stats:    queryrange.StatsMerge(responses),
+				Analysis:           queryrange.AnalyzesMerge(analyzes...),
+				Stats:              queryrange.StatsMerge(responses),
+				SeriesStatsCounter: queryrange.SeriesStatsCounterMerge(seriesStatsCounters...),
 			},
 			Headers: queryrange.QueryBytesFetchedPrometheusResponseHeaders(responses...),
 		}
