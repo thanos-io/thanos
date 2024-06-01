@@ -124,19 +124,19 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		h.totalQueries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_queries_total",
 			Help: "Total number of queries.",
-		}, []string{})
+		}, []string{""})
 
 		h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "cortex_queries_hits_total",
 			Help: "Total number of queries that hit the cache.",
-		}, []string{})
+		}, []string{""})
 
 		h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
 			h.querySeconds.DeleteLabelValues(user)
 			h.querySeries.DeleteLabelValues(user)
 			h.queryBytes.DeleteLabelValues(user)
-			h.totalQueries.DeleteLabelValues(user)
-			h.cachedHits.DeleteLabelValues(user)
+			h.totalQueries.DeleteLabelValues("")
+			h.cachedHits.DeleteLabelValues("")
 		})
 		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
 		_ = h.activeUsers.StartAsync(context.Background())
@@ -171,7 +171,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	// Increment total queries
-	f.totalQueries.WithLabelValues("").Add(float64(1))
+	//f.totalQueries.WithLabelValues("").Add(float64(1))
 
 	// Check if caching is enabled
 	if f.lru != nil {
@@ -198,7 +198,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
 			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "query expression", queryExpressionNormalized)
-			f.cachedHits.WithLabelValues("").Add(float64(1))
+			//f.cachedHits.WithLabelValues("").Add(float64(1))
 			return
 		}
 	}
