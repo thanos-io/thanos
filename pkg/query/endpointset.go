@@ -65,107 +65,9 @@ func NewGRPCEndpointSpec(addr string, isStrictStatic bool, dialOpts ...grpc.Dial
 	}
 }
 
-func (es *GRPCEndpointSpec) Addr() string {
+func (spec *GRPCEndpointSpec) Addr() string {
 	// API address should not change between state changes.
-	return es.addr
-}
-
-// Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
-// that time, we assume that the host is unhealthy and return error.
-func (es *endpointRef) Metadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
-	if infoClient != nil {
-		resp, err := infoClient.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
-		if err != nil {
-			if status.Convert(err).Code() != codes.Unimplemented {
-				return nil, err
-			}
-		} else {
-			return &endpointMetadata{resp}, nil
-		}
-	}
-
-	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
-	if storeClient != nil {
-		metadata, err := es.getMetadataUsingStoreAPI(ctx, storeClient)
-		if err != nil {
-			return nil, errors.Wrapf(err, "fallback fetching info from %s", es.addr)
-		}
-		return metadata, nil
-	}
-
-	return nil, errors.New(noMetadataEndpointMessage)
-}
-
-func (es *endpointRef) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
-	resp, err := client.Info(ctx, &storepb.InfoRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	infoResp := fillExpectedAPIs(component.FromProto(resp.StoreType), resp.MinTime, resp.MaxTime)
-	infoResp.LabelSets = resp.LabelSets
-	infoResp.ComponentType = component.FromProto(resp.StoreType).String()
-
-	return &endpointMetadata{
-		&infoResp,
-	}, nil
-}
-
-func fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
-	switch componentType {
-	case component.Sidecar:
-		return infopb.InfoResponse{
-			Store: &infopb.StoreInfo{
-				MinTime: mintime,
-				MaxTime: maxTime,
-			},
-			Rules:          &infopb.RulesInfo{},
-			Targets:        &infopb.TargetsInfo{},
-			MetricMetadata: &infopb.MetricMetadataInfo{},
-			Exemplars:      &infopb.ExemplarsInfo{},
-		}
-	case component.Query:
-		{
-			return infopb.InfoResponse{
-				Store: &infopb.StoreInfo{
-					MinTime: mintime,
-					MaxTime: maxTime,
-				},
-				Rules:          &infopb.RulesInfo{},
-				Targets:        &infopb.TargetsInfo{},
-				MetricMetadata: &infopb.MetricMetadataInfo{},
-				Exemplars:      &infopb.ExemplarsInfo{},
-				Query:          &infopb.QueryAPIInfo{},
-			}
-		}
-	case component.Receive:
-		{
-			return infopb.InfoResponse{
-				Store: &infopb.StoreInfo{
-					MinTime: mintime,
-					MaxTime: maxTime,
-				},
-				Exemplars: &infopb.ExemplarsInfo{},
-			}
-		}
-	case component.Store:
-		return infopb.InfoResponse{
-			Store: &infopb.StoreInfo{
-				MinTime: mintime,
-				MaxTime: maxTime,
-			},
-		}
-	case component.Rule:
-		return infopb.InfoResponse{
-			Store: &infopb.StoreInfo{
-				MinTime: mintime,
-				MaxTime: maxTime,
-			},
-			Rules: &infopb.RulesInfo{},
-		}
-	default:
-		return infopb.InfoResponse{}
-	}
+	return spec.addr
 }
 
 // stringError forces the error to be a string
@@ -317,7 +219,6 @@ type nowFunc func() time.Time
 
 // NewEndpointSet returns a new set of Thanos APIs.
 func NewEndpointSet(
-	now nowFunc,
 	logger log.Logger,
 	reg prometheus.Registerer,
 	endpointSpecs func() []*GRPCEndpointSpec,
@@ -340,7 +241,7 @@ func NewEndpointSet(
 	}
 
 	return &EndpointSet{
-		now:             now,
+		now:             time.Now,
 		logger:          log.With(logger, "component", "endpointset"),
 		endpointsMetric: endpointsMetric,
 
@@ -377,17 +278,17 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	for _, spec := range e.endpointSpec() {
 		spec := spec
 
-		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
+		if existingRef, ok := e.endpoints[spec.Addr()]; ok {
 			wg.Add(1)
 			go func(spec *GRPCEndpointSpec) {
 				defer wg.Done()
 				ctx, cancel := context.WithTimeout(ctx, e.endpointInfoTimeout)
 				defer cancel()
-				e.updateEndpoint(ctx, spec, er)
+				existingRef.update(ctx)
 
 				mu.Lock()
 				defer mu.Unlock()
-				existingRefs[spec.Addr()] = er
+				existingRefs[spec.Addr()] = existingRef
 			}(spec)
 
 			continue
@@ -404,8 +305,8 @@ func (e *EndpointSet) Update(ctx context.Context) {
 				level.Warn(e.logger).Log("msg", "new endpoint creation failed", "err", err, "address", spec.Addr())
 				return
 			}
+			newRef.update(ctx)
 
-			e.updateEndpoint(ctx, spec, newRef)
 			if !newRef.isQueryable() {
 				newRef.Close()
 				return
@@ -464,14 +365,6 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	}
 
 	e.endpointsMetric.Update(stats)
-}
-
-func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec, er *endpointRef) {
-	metadata, err := er.Metadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
-	if err != nil {
-		level.Warn(e.logger).Log("msg", "update of endpoint failed", "err", errors.Wrap(err, "getting metadata"), "address", spec.Addr())
-	}
-	er.update(e.now, metadata, err)
 }
 
 // getTimedOutRefs returns unhealthy endpoints for which the last
@@ -642,6 +535,8 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 type endpointRef struct {
 	storepb.StoreClient
 
+	now nowFunc
+
 	mtx      sync.RWMutex
 	cc       *grpc.ClientConn
 	addr     string
@@ -672,6 +567,7 @@ func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec
 	}
 
 	return &endpointRef{
+		now:      e.now,
 		logger:   e.logger,
 		created:  e.now(),
 		addr:     spec.Addr(),
@@ -680,24 +576,127 @@ func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec
 	}, nil
 }
 
+// Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
+// that time, we assume that the host is unhealthy and return error.
+func (er *endpointRef) getMetadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
+	if infoClient != nil {
+		resp, err := infoClient.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
+		if err != nil {
+			if status.Convert(err).Code() != codes.Unimplemented {
+				return nil, err
+			}
+		} else {
+			return &endpointMetadata{resp}, nil
+		}
+	}
+
+	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
+	if storeClient != nil {
+		metadata, err := er.getMetadataUsingStoreAPI(ctx, storeClient)
+		if err != nil {
+			return nil, errors.Wrapf(err, "fallback fetching info from %s", er.addr)
+		}
+		return metadata, nil
+	}
+
+	return nil, errors.New(noMetadataEndpointMessage)
+}
+
+func (er *endpointRef) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
+	resp, err := client.Info(ctx, &storepb.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	infoResp := fillExpectedAPIs(component.FromProto(resp.StoreType), resp.MinTime, resp.MaxTime)
+	infoResp.LabelSets = resp.LabelSets
+	infoResp.ComponentType = component.FromProto(resp.StoreType).String()
+
+	return &endpointMetadata{
+		&infoResp,
+	}, nil
+}
+
+func fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
+	switch componentType {
+	case component.Sidecar:
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+			Rules:          &infopb.RulesInfo{},
+			Targets:        &infopb.TargetsInfo{},
+			MetricMetadata: &infopb.MetricMetadataInfo{},
+			Exemplars:      &infopb.ExemplarsInfo{},
+		}
+	case component.Query:
+		{
+			return infopb.InfoResponse{
+				Store: &infopb.StoreInfo{
+					MinTime: mintime,
+					MaxTime: maxTime,
+				},
+				Rules:          &infopb.RulesInfo{},
+				Targets:        &infopb.TargetsInfo{},
+				MetricMetadata: &infopb.MetricMetadataInfo{},
+				Exemplars:      &infopb.ExemplarsInfo{},
+				Query:          &infopb.QueryAPIInfo{},
+			}
+		}
+	case component.Receive:
+		{
+			return infopb.InfoResponse{
+				Store: &infopb.StoreInfo{
+					MinTime: mintime,
+					MaxTime: maxTime,
+				},
+				Exemplars: &infopb.ExemplarsInfo{},
+			}
+		}
+	case component.Store:
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+		}
+	case component.Rule:
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+			Rules: &infopb.RulesInfo{},
+		}
+	default:
+		return infopb.InfoResponse{}
+	}
+}
+
 // update sets the metadata and status of the endpoint ref based on the info response value and error.
-func (er *endpointRef) update(now nowFunc, metadata *endpointMetadata, err error) {
+func (er *endpointRef) update(ctx context.Context) {
+	metadata, err := er.getMetadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
+	if err != nil {
+		level.Warn(er.logger).Log("msg", "update of endpoint failed", "err", errors.Wrap(err, "getting metadata"), "address", er.addr)
+	}
+
 	er.mtx.Lock()
 	defer er.mtx.Unlock()
 
 	er.updateMetadata(metadata, err)
-	er.updateStatus(now, err)
+	er.updateStatus(err)
 }
 
 // updateStatus updates the endpointRef status based on the info call error.
-func (er *endpointRef) updateStatus(now nowFunc, err error) {
+func (er *endpointRef) updateStatus(err error) {
 	mint, maxt := er.timeRange()
 	if er.status == nil {
 		er.status = &EndpointStatus{Name: er.addr}
 	}
 
 	if err == nil {
-		er.status.LastCheck = now()
+		er.status.LastCheck = er.now()
 		er.status.LabelSets = er.labelSets()
 		er.status.ComponentType = er.componentType()
 		er.status.MinTime = mint
@@ -884,19 +883,19 @@ func (er *endpointRef) apisPresent() []string {
 	var apisPresent []string
 
 	if er.HasStoreAPI() {
-		apisPresent = append(apisPresent, "storeEndpoints")
+		apisPresent = append(apisPresent, "StoreEndpoints")
 	}
 
 	if er.HasRulesAPI() {
-		apisPresent = append(apisPresent, "rulesAPI")
+		apisPresent = append(apisPresent, "RulesAPI")
 	}
 
 	if er.HasExemplarsAPI() {
-		apisPresent = append(apisPresent, "exemplarsAPI")
+		apisPresent = append(apisPresent, "ExemplarsAPI")
 	}
 
 	if er.HasTargetsAPI() {
-		apisPresent = append(apisPresent, "targetsAPI")
+		apisPresent = append(apisPresent, "TargetsAPI")
 	}
 
 	if er.HasMetricMetadataAPI() {

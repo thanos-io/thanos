@@ -180,6 +180,7 @@ func registerQuery(app *extkingpin.App) {
 	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
 
 	endpointInfoTimeout := extkingpin.ModelDuration(cmd.Flag("endpoint.info-timeout", "Timeout of gRPC Info requests.").Default("5s").Hidden())
+	endpointInfoInterval := extkingpin.ModelDuration(cmd.Flag("endpoint.info-interval", "Interval to refresh gRPC Info requests.").Default("5s").Hidden())
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
@@ -347,6 +348,7 @@ func registerQuery(app *extkingpin.App) {
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*endpointInfoTimeout),
+			time.Duration(*endpointInfoInterval),
 			time.Duration(*instantDefaultMaxSourceResolution),
 			*defaultMetadataTimeRange,
 			*strictStores,
@@ -429,6 +431,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	endpointInfoInterval time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
@@ -548,6 +551,7 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
+			endpointInfoInterval,
 			queryConnMetricLabels...,
 		)
 
@@ -863,10 +867,10 @@ func prepareEndpointSet(
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	endpointInfoInterval time.Duration,
 	queryConnMetricLabels ...string,
 ) *query.EndpointSet {
 	endpointSet := query.NewEndpointSet(
-		time.Now,
 		logger,
 		reg,
 		func() (specs []*query.GRPCEndpointSpec) {
@@ -913,7 +917,7 @@ func prepareEndpointSet(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(endpointInfoInterval, ctx.Done(), func() error {
 				endpointSet.Update(ctx)
 				return nil
 			})
