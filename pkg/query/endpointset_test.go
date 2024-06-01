@@ -431,7 +431,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
 			// Specify only "store_type" to exclude "external_labels".
-			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, tc.connLabels...)
+			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, tc.connLabels...)
 			defer endpointSet.Close()
 
 			endpointSet.Update(context.Background())
@@ -460,7 +460,7 @@ func TestEndpointSetUpdate_DuplicateSpecs(t *testing.T) {
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
 
-	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false)
 	defer endpointSet.Close()
 
 	endpointSet.Update(context.Background())
@@ -482,7 +482,7 @@ func TestEndpointSetUpdate_EndpointGoingAway(t *testing.T) {
 	defer endpoints.Close()
 
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
-	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -510,7 +510,7 @@ func TestEndpointSetUpdate_EndpointComingOnline(t *testing.T) {
 	defer endpoints.Close()
 
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
-	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -542,7 +542,7 @@ func TestEndpointSetUpdate_StrictEndpointMetadata(t *testing.T) {
 	defer endpoints.Close()
 
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
-	endpointSet := makeEndpointSet(discoveredEndpointAddr, true, time.Now)
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, true)
 	defer endpointSet.Close()
 
 	addr := discoveredEndpointAddr[0]
@@ -613,7 +613,8 @@ func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
 
 			updateTime := time.Now()
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
-			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, func() time.Time { return updateTime })
+			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict)
+			endpointSet.now = func() time.Time { return updateTime }
 			defer endpointSet.Close()
 
 			endpointSet.Update(context.Background())
@@ -644,7 +645,8 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 
 	updateTime := time.Now()
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
-	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, func() time.Time { return updateTime })
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false)
+	endpointSet.now = func() time.Time { return updateTime }
 	endpointSet.endpointInfoTimeout = 3 * time.Second
 	defer endpointSet.Close()
 
@@ -724,10 +726,9 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 
 	now := time.Now()
-	nowFunc := func() time.Time { return now }
 	// Testing if duplicates can cause weird results.
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
-	endpointSet := NewEndpointSet(nowFunc, nil, nil,
+	endpointSet := NewEndpointSet(nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -735,6 +736,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			return specs
 		},
 		testGRPCOpts, time.Minute, 2*time.Second)
+	endpointSet.now = func() time.Time { return now }
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1108,7 +1110,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 	endpoints.CloseOne(initialEndpointAddr[0])
 	endpoints.CloseOne(initialEndpointAddr[1])
 
-	endpointSet := NewEndpointSet(time.Now, nil, nil,
+	endpointSet := NewEndpointSet(nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range initialEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -1218,7 +1220,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 
 	staticEndpointAddr := discoveredEndpointAddr[0]
 	slowStaticEndpointAddr := discoveredEndpointAddr[2]
-	endpointSet := NewEndpointSet(time.Now, nil, nil, func() (specs []*GRPCEndpointSpec) {
+	endpointSet := NewEndpointSet(nil, nil, func() (specs []*GRPCEndpointSpec) {
 		return []*GRPCEndpointSpec{
 			NewGRPCEndpointSpec(discoveredEndpointAddr[0], true),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false),
@@ -1395,7 +1397,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			currentState := 0
 
-			endpointSet := NewEndpointSet(time.Now, nil, nil,
+			endpointSet := NewEndpointSet(nil, nil,
 				func() []*GRPCEndpointSpec {
 					if tc.states[currentState].endpointSpec == nil {
 						return nil
@@ -1545,13 +1547,13 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 
 	for _, tc := range tcs {
 		mockEndpointRef := &endpointRef{
+			now:  time.Now,
 			addr: "mockedStore",
 			metadata: &endpointMetadata{
 				&infopb.InfoResponse{},
 			},
 		}
-
-		mockEndpointRef.update(time.Now, mockEndpointRef.metadata, tc.InputError)
+		mockEndpointRef.updateStatus(tc.InputError)
 
 		b, err := json.Marshal(mockEndpointRef.status.LastError)
 		testutil.Ok(t, err)
@@ -1561,28 +1563,29 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 
 func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 	mockEndpointRef := &endpointRef{
+		now:  time.Now,
 		addr: "mockedStore",
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
 		},
 	}
 
-	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, errors.New("test err"))
+	mockEndpointRef.updateStatus(errors.New("test err"))
 
 	b, err := json.Marshal(mockEndpointRef.status.LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `"test err"`, string(b))
 
 	// updating status without and error should clear the previous one.
-	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, nil)
+	mockEndpointRef.updateStatus(nil)
 
 	b, err = json.Marshal(mockEndpointRef.status.LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `null`, string(b))
 }
 
-func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
-	endpointSet := NewEndpointSet(now, nil, nil,
+func makeEndpointSet(discoveredEndpointAddr []string, strict bool, metricLabels ...string) *EndpointSet {
+	endpointSet := NewEndpointSet(nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, strict))
@@ -1642,6 +1645,7 @@ func TestDeadlockLocking(t *testing.T) {
 	t.Parallel()
 
 	mockEndpointRef := &endpointRef{
+		now:  time.Now,
 		addr: "mockedStore",
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
@@ -1656,9 +1660,11 @@ func TestDeadlockLocking(t *testing.T) {
 			if time.Now().After(deadline) {
 				break
 			}
-			mockEndpointRef.update(time.Now, &endpointMetadata{
+			mockEndpointRef.mtx.Lock()
+			mockEndpointRef.updateMetadata(&endpointMetadata{
 				InfoResponse: &infopb.InfoResponse{},
 			}, nil)
+			mockEndpointRef.mtx.Unlock()
 		}
 		return nil
 	})
