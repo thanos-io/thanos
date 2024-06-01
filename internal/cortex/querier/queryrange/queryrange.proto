@@ -49,7 +49,7 @@ message PrometheusData {
   repeated SampleStream Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
   Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
-  SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter"];
+  SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter,omitempty"];
 }
 
 message PrometheusInstantQueryResponse {
@@ -65,7 +65,7 @@ message PrometheusInstantQueryData {
   PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
   Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
-  SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter"];
+  SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter,omitempty"];
 }
 
 message PrometheusInstantQueryResult {
