@@ -431,14 +431,13 @@ func newLazyRespSet(
 	}
 
 	go func(st string, l *lazyRespSet) {
-		bytesProcessed := 0
 		seriesStats := &storepb.SeriesStatsCounter{}
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
+			l.span.SetTag("processed.bytes", seriesStats.Bytes)
 			l.span.Finish()
 		}()
 
@@ -498,15 +497,12 @@ func newLazyRespSet(
 				}
 
 				numResponses++
-				bytesProcessed += resp.Size()
 
 				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 					return true
 				}
 
-				if resp.GetSeries() != nil {
-					seriesStats.Count(resp.GetSeries())
-				}
+				seriesStats.Count(resp)
 
 				l.bufferedResponsesMtx.Lock()
 				l.bufferedResponses = append(l.bufferedResponses, resp)
@@ -714,13 +710,12 @@ func newEagerRespSet(
 	// Start a goroutine and immediately buffer everything.
 	go func(l *eagerRespSet) {
 		seriesStats := &storepb.SeriesStatsCounter{}
-		bytesProcessed := 0
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
+			l.span.SetTag("processed.bytes", seriesStats.Bytes)
 			l.span.Finish()
 			ret.wg.Done()
 		}()
@@ -767,15 +762,12 @@ func newEagerRespSet(
 				}
 
 				numResponses++
-				bytesProcessed += resp.Size()
 
 				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 					return true
 				}
 
-				if resp.GetSeries() != nil {
-					seriesStats.Count(resp.GetSeries())
-				}
+				seriesStats.Count(resp)
 
 				l.bufferedResponses = append(l.bufferedResponses, resp)
 				return true

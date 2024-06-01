@@ -295,8 +295,9 @@ type queryData struct {
 	Result     parser.Value     `json:"result"`
 	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	QueryAnalysis queryTelemetry `json:"analysis,omitempty"`
-	Warnings      []error        `json:"warnings,omitempty"`
+	QueryAnalysis      queryTelemetry             `json:"analysis,omitempty"`
+	Warnings           []error                    `json:"warnings,omitempty"`
+	SeriesStatsCounter storepb.SeriesStatsCounter `json:"seriesStatsCounter,omitempty"`
 }
 
 type queryTelemetry struct {
@@ -705,6 +706,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	for i := range seriesStats {
 		aggregator.Aggregate(seriesStats[i])
 	}
+	seriesStatsCounter := aggregator.GetSeriesStatsCounter()
 	aggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
@@ -713,10 +715,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
-		ResultType:    res.Value.Type(),
-		Result:        res.Value,
-		Stats:         qs,
-		QueryAnalysis: analysis,
+		ResultType:         res.Value.Type(),
+		Result:             res.Value,
+		Stats:              qs,
+		QueryAnalysis:      analysis,
+		SeriesStatsCounter: seriesStatsCounter,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
@@ -1004,6 +1007,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	for i := range seriesStats {
 		aggregator.Aggregate(seriesStats[i])
 	}
+	seriesStatsCounter := aggregator.GetSeriesStatsCounter()
 	aggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
@@ -1012,10 +1016,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
-		ResultType:    res.Value.Type(),
-		Result:        res.Value,
-		Stats:         qs,
-		QueryAnalysis: analysis,
+		ResultType:         res.Value.Type(),
+		Result:             res.Value,
+		Stats:              qs,
+		QueryAnalysis:      analysis,
+		SeriesStatsCounter: seriesStatsCounter,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
