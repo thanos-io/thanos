@@ -246,10 +246,10 @@ func AnalyzesMerge(analysis ...*Analysis) *Analysis {
 func SeriesStatsCounterMerge(seriesStatsCounters ...*SeriesStatsCounter) *SeriesStatsCounter {
 	result := SeriesStatsCounter{}
 	for _, c := range seriesStatsCounters {
-		seriesStatsCounters[0].Series += c.Series
-		seriesStatsCounters[0].Chunks += c.Chunks
-		seriesStatsCounters[0].Samples += c.Samples
-		seriesStatsCounters[0].Bytes += c.Bytes
+		result.Series += c.Series
+		result.Chunks += c.Chunks
+		result.Samples += c.Samples
+		result.Bytes += c.Bytes
 	}
 	return &result
 }
