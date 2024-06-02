@@ -639,6 +639,90 @@ func TestMergeResponse(t *testing.T) {
 			},
 		},
 		{
+			name: "merge two responses with series status counter",
+			req:  defaultReq,
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Timestamp:   0,
+											SampleValue: 1,
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+						SeriesStatsCounter: &queryrange.SeriesStatsCounter{Series: 2, Chunks: 16, Samples: 256, Bytes: 1024},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Timestamp:   0,
+											SampleValue: 2,
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+									},
+								},
+							},
+						},
+						SeriesStatsCounter: &queryrange.SeriesStatsCounter{Series: 2, Chunks: 16, Samples: 256, Bytes: 1024},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValVector.String(),
+					Analysis:   &queryrange.Analysis{},
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{
+									{
+										Timestamp:   0,
+										SampleValue: 2,
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Timestamp:   0,
+										SampleValue: 1,
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+					SeriesStatsCounter: &queryrange.SeriesStatsCounter{Series: 4, Chunks: 32, Samples: 512, Bytes: 2048},
+				},
+			},
+		},
+		{
 			name: "merge multiple responses with same label sets, won't happen if sharding is enabled on downstream querier",
 			req:  defaultReq,
 			resps: []queryrange.Response{

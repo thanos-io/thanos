@@ -345,6 +345,72 @@ func TestMergeAPIResponses(t *testing.T) {
 		},
 
 		{
+			name: "Basic merging of two responses with series stats counter.",
+			input: []Response{
+				&PrometheusResponse{
+					Data: PrometheusData{
+						ResultType: matrix,
+						Analysis: &Analysis{
+							Name:          "foo",
+							ExecutionTime: Duration(1 * time.Second),
+						},
+						Result: []SampleStream{
+							{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
+									{Value: 0, TimestampMs: 0},
+									{Value: 1, TimestampMs: 1},
+								},
+							},
+						},
+						SeriesStatsCounter: &SeriesStatsCounter{Series: 2, Chunks: 16, Samples: 256, Bytes: 1024},
+					},
+				},
+				&PrometheusResponse{
+					Data: PrometheusData{
+						ResultType: matrix,
+						Analysis: &Analysis{
+							Name:          "foo",
+							ExecutionTime: Duration(1 * time.Second),
+						},
+						Result: []SampleStream{
+							{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
+									{Value: 2, TimestampMs: 2},
+									{Value: 3, TimestampMs: 3},
+								},
+							},
+						},
+						SeriesStatsCounter: &SeriesStatsCounter{Series: 2, Chunks: 16, Samples: 256, Bytes: 1024},
+					},
+				},
+			},
+			expected: &PrometheusResponse{
+				Status: StatusSuccess,
+				Data: PrometheusData{
+					ResultType: matrix,
+					Analysis: &Analysis{
+						Name:          "foo",
+						ExecutionTime: Duration(2 * time.Second),
+					},
+					Result: []SampleStream{
+						{
+							Labels: []cortexpb.LabelAdapter{},
+							Samples: []cortexpb.Sample{
+								{Value: 0, TimestampMs: 0},
+								{Value: 1, TimestampMs: 1},
+								{Value: 2, TimestampMs: 2},
+								{Value: 3, TimestampMs: 3},
+							},
+						},
+					},
+					SeriesStatsCounter: &SeriesStatsCounter{Series: 4, Chunks: 32, Samples: 512, Bytes: 2048},
+				},
+			},
+		},
+
+		{
 			name: "Basic merging of two responses with nested analysis trees.",
 			input: []Response{
 				&PrometheusResponse{
