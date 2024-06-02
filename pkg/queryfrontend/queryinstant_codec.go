@@ -84,11 +84,13 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Matrix: matrixMerge(promResponses),
 					},
 				},
-				Analysis:           queryrange.AnalyzesMerge(analyzes...),
-				Stats:              queryrange.StatsMerge(responses),
-				SeriesStatsCounter: queryrange.SeriesStatsCounterMerge(seriesStatsCounters...),
+				Analysis: queryrange.AnalyzesMerge(analyzes...),
+				Stats:    queryrange.StatsMerge(responses),
 			},
 			Headers: queryrange.QueryBytesFetchedPrometheusResponseHeaders(responses...),
+		}
+		if len(seriesStatsCounters) > 0 {
+			res.(*queryrange.PrometheusInstantQueryResponse).Data.SeriesStatsCounter = queryrange.SeriesStatsCounterMerge(seriesStatsCounters...)
 		}
 	default:
 		v, err := vectorMerge(req, promResponses)
@@ -104,11 +106,13 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 						Vector: v,
 					},
 				},
-				Analysis:           queryrange.AnalyzesMerge(analyzes...),
-				Stats:              queryrange.StatsMerge(responses),
-				SeriesStatsCounter: queryrange.SeriesStatsCounterMerge(seriesStatsCounters...),
+				Analysis: queryrange.AnalyzesMerge(analyzes...),
+				Stats:    queryrange.StatsMerge(responses),
 			},
 			Headers: queryrange.QueryBytesFetchedPrometheusResponseHeaders(responses...),
+		}
+		if len(seriesStatsCounters) > 0 {
+			res.(*queryrange.PrometheusInstantQueryResponse).Data.SeriesStatsCounter = queryrange.SeriesStatsCounterMerge(seriesStatsCounters...)
 		}
 	}
 

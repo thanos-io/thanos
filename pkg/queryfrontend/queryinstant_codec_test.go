@@ -173,10 +173,10 @@ func TestQueryInstantCodec_DecodeRequest(t *testing.T) {
 			codec := NewThanosQueryInstantCodec(tc.partialResponse)
 			req, err := codec.DecodeRequest(context.Background(), r, nil)
 			if tc.expectedError != nil {
-				testutil.Equals(t, err, tc.expectedError)
+				testutil.Equals(t, tc.expectedError, err)
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, req, tc.expectedRequest)
+				testutil.Equals(t, tc.expectedRequest, req)
 			}
 		})
 	}
@@ -264,10 +264,10 @@ func TestQueryInstantCodec_EncodeRequest(t *testing.T) {
 			codec := NewThanosQueryInstantCodec(false)
 			r, err := codec.EncodeRequest(context.TODO(), tc.req)
 			if tc.expectedError != nil {
-				testutil.Equals(t, err, tc.expectedError)
+				testutil.Equals(t, tc.expectedError, err)
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, tc.checkFunc(r), true)
+				testutil.Equals(t, true, tc.checkFunc(r))
 			}
 		})
 	}
@@ -945,8 +945,8 @@ func TestMergeResponse(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := codec.MergeResponse(tc.req, tc.resps...)
-			testutil.Equals(t, err, tc.expectedErr)
-			testutil.Equals(t, resp, tc.expectedResp)
+			testutil.Equals(t, tc.expectedErr, err)
+			testutil.Equals(t, tc.expectedResp, resp)
 		})
 	}
 }
