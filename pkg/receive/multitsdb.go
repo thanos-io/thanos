@@ -636,7 +636,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	opts.EnableOverlappingCompaction = false
 	s, err := tsdb.Open(
 		dataDir,
-		logger,
+		level.NewFilter(logger, level.AllowError()),
 		reg,
 		&opts,
 		nil,

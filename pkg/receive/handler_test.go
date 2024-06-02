@@ -1877,7 +1877,7 @@ func TestIngestorRestart(t *testing.T) {
 		},
 	}
 
-	err = client.handleRequest(ctx, 0, "test", data)
+	_, err = client.handleRequest(ctx, 0, "test", data)
 	require.NoError(t, err)
 
 	// close srv2 to simulate ingestor down
@@ -1889,7 +1889,7 @@ func TestIngestorRestart(t *testing.T) {
 
 	iter, errs := 10, 0
 	for i := 0; i < iter; i++ {
-		err = client.handleRequest(ctx, 0, "test", data)
+		_, err = client.handleRequest(ctx, 0, "test", data)
 		if err != nil {
 			require.Error(t, errUnavailable, err)
 			errs++

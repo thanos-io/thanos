@@ -694,7 +694,11 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 	defer func() { testutil.Ok(t, bucketStore.Close()) }()
 
 	testutil.Ok(t, bucketStore.SyncBlocks(ctx))
-	testutil.Equals(t, bucketStore.TSDBInfos(), []infopb.TSDBInfo{
+	actual := bucketStore.TSDBInfos()
+	sort.Slice(actual, func(i, j int) bool {
+		return actual[i].Labels.String() < actual[j].Labels.String()
+	})
+	testutil.Equals(t, []infopb.TSDBInfo{
 		{
 			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}},
 			MinTime: 0,
@@ -710,7 +714,7 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 			MinTime: 0,
 			MaxTime: 2000,
 		},
-	})
+	}, actual)
 }
 
 func TestBucketStore_Info(t *testing.T) {
