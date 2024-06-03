@@ -49,6 +49,7 @@ message PrometheusData {
   repeated SampleStream Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
   Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+  SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter,omitempty"];
 }
 
 message PrometheusInstantQueryResponse {
@@ -64,6 +65,7 @@ message PrometheusInstantQueryData {
   PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
   Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+  SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter,omitempty"];
 }
 
 message PrometheusInstantQueryResult {
@@ -162,4 +164,11 @@ message Analysis {
   string name = 1 [(gogoproto.jsontag) = "name"];
   google.protobuf.Duration executionTime = 2 [(gogoproto.customtype) = "Duration", (gogoproto.nullable) = false, (gogoproto.jsontag) = "executionTime"];
   repeated Analysis children = 3 [(gogoproto.jsontag) = "children"];
+}
+
+message SeriesStatsCounter {
+  int64 Series = 1 [(gogoproto.jsontag) = "Series"];
+  int64 Chunks = 2 [(gogoproto.jsontag) = "Chunks"];
+  int64 Samples = 3 [(gogoproto.jsontag) = "Samples"];
+  int64 Bytes = 4 [(gogoproto.jsontag) = "Bytes"];
 }
