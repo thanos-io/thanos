@@ -34,11 +34,7 @@ type BytesLimiter interface {
 	// Reserve bytes out of the total amount of bytes enforced by the limiter.
 	// Returns an error if the limit has been exceeded. This function must be
 	// goroutine safe.
-	Reserve(num uint64) error
-}
-
-type TypedBytesLimiter interface {
-	Reserve(bytes int64, dataType storeDataType) error
+	ReserveWithType(num uint64, dataType storeDataType) error
 }
 
 // ChunksLimiterFactory is used to create a new ChunksLimiter. The factory is useful for
@@ -48,8 +44,11 @@ type ChunksLimiterFactory func(failedCounter prometheus.Counter) ChunksLimiter
 // SeriesLimiterFactory is used to create a new SeriesLimiter.
 type SeriesLimiterFactory func(failedCounter prometheus.Counter) SeriesLimiter
 
-// BytesLimiterFactory is used to create a new BytesLimiter.
-type BytesLimiterFactory func(failedCounter prometheus.Counter) BytesLimiter
+// // BytesLimiterFactory is used to create a new BytesLimiter.
+// type BytesLimiterFactory func(failedCounter prometheus.Counter) BytesLimiter
+
+// BytesLimitersFactory is used to create new BytesLimiters.
+type BytesLimitersFactory func(failedCounter prometheus.Counter) []BytesLimiter
 
 // Limiter is a simple mechanism for checking if something has passed a certain threshold.
 type Limiter struct {
@@ -83,6 +82,22 @@ func (l *Limiter) Reserve(num uint64) error {
 	return nil
 }
 
+func (l *Limiter) ReserveWithType(num uint64, dataType storeDataType) error {
+	if l == nil {
+		return nil
+	}
+	if l.limit == 0 {
+		return nil
+	}
+	if reserved := l.reserved.Add(num); reserved > l.limit {
+		// We need to protect from the counter being incremented twice due to concurrency
+		// while calling Reserve().
+		l.failedOnce.Do(l.failedCounter.Inc)
+		return errors.Errorf("limit %v violated (got %v)", l.limit, reserved)
+	}
+	return nil
+}
+
 // NewChunksLimiterFactory makes a new ChunksLimiterFactory with a static limit.
 func NewChunksLimiterFactory(limit uint64) ChunksLimiterFactory {
 	return func(failedCounter prometheus.Counter) ChunksLimiter {
@@ -97,10 +112,10 @@ func NewSeriesLimiterFactory(limit uint64) SeriesLimiterFactory {
 	}
 }
 
-// NewBytesLimiterFactory makes a new BytesLimiterFactory with a static limit.
-func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
-	return func(failedCounter prometheus.Counter) BytesLimiter {
-		return NewLimiter(uint64(limit), failedCounter)
+// NewBytesLimitersFactory makes a new BytesLimitersFactory with a static limit.
+func DefaultBytesLimitersFactory(limit units.Base2Bytes) BytesLimitersFactory {
+	return func(failedCounter prometheus.Counter) []BytesLimiter {
+		return []BytesLimiter{NewLimiter(uint64(limit), failedCounter)}
 	}
 }
 

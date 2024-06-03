@@ -398,9 +398,8 @@ type BucketStore struct {
 	// or LabelName and LabelValues calls when used with matchers.
 	seriesLimiterFactory SeriesLimiterFactory
 
-	// bytesLimiterFactory creates a new limiter used to limit the amount of bytes fetched/touched by each Series() call.
-	bytesLimiterFactory BytesLimiterFactory
-	typedBytesLimiter   TypedBytesLimiter
+	// bytesLimitersFactory creates new limiters used to limit the amount of bytes fetched/touched by each Series() call.
+	bytesLimitersFactory BytesLimitersFactory
 
 	partitioner Partitioner
 
@@ -574,8 +573,7 @@ func NewBucketStore(
 	dir string,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
-	bytesLimiterFactory BytesLimiterFactory,
-	typedBytesLimiter TypedBytesLimiter,
+	bytesLimitersFactory BytesLimitersFactory,
 	partitioner Partitioner,
 	blockSyncConcurrency int,
 	enableCompatibilityLabel bool,
@@ -602,8 +600,7 @@ func NewBucketStore(
 		queryGate:                       gate.NewNoop(),
 		chunksLimiterFactory:            chunksLimiterFactory,
 		seriesLimiterFactory:            seriesLimiterFactory,
-		bytesLimiterFactory:             bytesLimiterFactory,
-		typedBytesLimiter:               typedBytesLimiter,
+		bytesLimitersFactory:            bytesLimitersFactory,
 		partitioner:                     partitioner,
 		enableCompatibilityLabel:        enableCompatibilityLabel,
 		postingOffsetsInMemSampling:     postingOffsetsInMemSampling,
@@ -1011,10 +1008,9 @@ type blockSeriesClient struct {
 	chunkr         *bucketChunkReader
 	loadAggregates []storepb.Aggr
 
-	seriesLimiter     SeriesLimiter
-	chunksLimiter     ChunksLimiter
-	bytesLimiter      BytesLimiter
-	typedBytesLimiter TypedBytesLimiter
+	seriesLimiter SeriesLimiter
+	chunksLimiter ChunksLimiter
+	bytesLimiters []BytesLimiter
 
 	lazyExpandedPostingEnabled                    bool
 	lazyExpandedPostingsCount                     prometheus.Counter
@@ -1050,8 +1046,7 @@ func newBlockSeriesClient(
 	req *storepb.SeriesRequest,
 	seriesLimiter SeriesLimiter,
 	chunksLimiter ChunksLimiter,
-	bytesLimiter BytesLimiter,
-	typedBytesLimiter TypedBytesLimiter,
+	bytesLimiters []BytesLimiter,
 	blockMatchers []*labels.Matcher,
 	shardMatcher *storepb.ShardMatcher,
 	calculateChunkHash bool,
@@ -1088,8 +1083,7 @@ func newBlockSeriesClient(
 		chunkr:                 chunkr,
 		seriesLimiter:          seriesLimiter,
 		chunksLimiter:          chunksLimiter,
-		bytesLimiter:           bytesLimiter,
-		typedBytesLimiter:      typedBytesLimiter,
+		bytesLimiters:          bytesLimiters,
 		skipChunks:             req.SkipChunks,
 		seriesFetchDurationSum: seriesFetchDurationSum,
 		chunkFetchDuration:     chunkFetchDuration,
@@ -1148,7 +1142,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
-	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.typedBytesLimiter, b.lazyExpandedPostingEnabled, b.lazyExpandedPostingSizeBytes, b.tenant)
+	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiters, b.lazyExpandedPostingEnabled, b.lazyExpandedPostingSizeBytes, b.tenant)
 	if err != nil {
 		return errors.Wrap(err, "expanded matching posting")
 	}
@@ -1238,7 +1232,7 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 		b.chunkr.reset()
 	}
 
-	if err := b.indexr.PreloadSeries(b.ctx, postingsBatch, b.bytesLimiter, b.typedBytesLimiter, b.tenant); err != nil {
+	if err := b.indexr.PreloadSeries(b.ctx, postingsBatch, b.bytesLimiters, b.tenant); err != nil {
 		return errors.Wrap(err, "preload series")
 	}
 
@@ -1249,7 +1243,7 @@ OUTER:
 		if err := b.ctx.Err(); err != nil {
 			return err
 		}
-		hasMatchedChunks, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt, b.typedBytesLimiter)
+		hasMatchedChunks, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			return errors.Wrap(err, "read series")
 		}
@@ -1330,7 +1324,7 @@ OUTER:
 	}
 
 	if !b.skipChunks {
-		if err := b.chunkr.load(b.ctx, b.entries, b.loadAggregates, b.calculateChunkHash, b.bytesLimiter, b.tenant); err != nil {
+		if err := b.chunkr.load(b.ctx, b.entries, b.loadAggregates, b.calculateChunkHash, b.bytesLimiters, b.tenant); err != nil {
 			return errors.Wrap(err, "load chunks")
 		}
 	}
@@ -1488,7 +1482,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		bytesLimiter     = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+		bytesLimiters    = s.bytesLimitersFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 		ctx              = srv.Context()
 		stats            = &queryStats{}
 		respSets         []respSet
@@ -1560,8 +1554,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				req,
 				seriesLimiter,
 				chunksLimiter,
-				bytesLimiter,
-				s.typedBytesLimiter,
+				bytesLimiters,
 				sortedBlockMatchers,
 				shardMatcher,
 				s.enableChunkHashCalculation,
@@ -1796,7 +1789,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+	var bytesLimiters = s.bytesLimitersFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
@@ -1866,8 +1859,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					seriesReq,
 					seriesLimiter,
 					nil,
-					bytesLimiter,
-					s.typedBytesLimiter,
+					bytesLimiters,
 					reqSeriesMatchersNoExtLabels,
 					nil,
 					true,
@@ -2008,7 +2000,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+	var bytesLimiters = s.bytesLimitersFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
@@ -2081,8 +2073,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					seriesReq,
 					seriesLimiter,
 					nil,
-					bytesLimiter,
-					s.typedBytesLimiter,
+					bytesLimiters,
 					reqSeriesMatchersNoExtLabels,
 					nil,
 					true,
@@ -2533,14 +2524,14 @@ func (r *bucketIndexReader) reset(size int) {
 // Reminder: A posting is a reference (represented as a uint64) to a series reference, which in turn points to the first
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
-func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, lazyExpandedPostingEnabled bool, lazyExpandedPostingSizeBytes prometheus.Counter, tenant string) (*lazyExpandedPostings, error) {
+func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatchers, bytesLimiters []BytesLimiter, lazyExpandedPostingEnabled bool, lazyExpandedPostingSizeBytes prometheus.Counter, tenant string) (*lazyExpandedPostings, error) {
 	// Shortcut the case of `len(postingGroups) == 0`. It will only happen when no
 	// matchers specified, and we don't need to fetch expanded postings from cache.
 	if len(ms) == 0 {
 		return nil, nil
 	}
 
-	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiter, tenant)
+	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiters, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -2585,7 +2576,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatch
 		postingGroups = append(postingGroups, newPostingGroup(true, name, []string{value}, nil))
 	}
 
-	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, typedBytesLimiter, addAllPostings, lazyExpandedPostingEnabled, lazyExpandedPostingSizeBytes, tenant)
+	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiters, addAllPostings, lazyExpandedPostingEnabled, lazyExpandedPostingSizeBytes, tenant)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch and expand postings")
 	}
@@ -2883,14 +2874,17 @@ type postingPtr struct {
 	ptr   index.Range
 }
 
-func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter, tenant string) (bool, []storage.SeriesRef, error) {
+func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, ms []*labels.Matcher, bytesLimiters []BytesLimiter, tenant string) (bool, []storage.SeriesRef, error) {
 	dataFromCache, hit := r.block.indexCache.FetchExpandedPostings(ctx, r.block.meta.ULID, ms, tenant)
 	if !hit {
 		return false, nil, nil
 	}
-	if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
-		return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
+	for _, bytesLimiter := range bytesLimiters {
+		if err := bytesLimiter.ReserveWithType(uint64(len(dataFromCache)), PostingsFetched); err != nil {
+			return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
+		}
 	}
+
 	r.stats.add(PostingsFetched, 1, len(dataFromCache))
 	p, closeFns, err := r.decodeCachedPostings(dataFromCache)
 	defer func() {
@@ -2947,7 +2941,7 @@ var bufioReaderPool = sync.Pool{
 // fetchPostings fill postings requested by posting groups.
 // It returns one posting for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
-func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, tenant string) ([]index.Postings, []func(), error) {
+func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiters []BytesLimiter, tenant string) ([]index.Postings, []func(), error) {
 	var closeFns []func()
 
 	timer := prometheus.NewTimer(r.block.metrics.postingsFetchDuration.WithLabelValues(tenant))
@@ -2960,14 +2954,9 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	// Fetch postings from the cache with a single call.
 	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys, tenant)
 	for _, dataFromCache := range fromCache {
-		if bytesLimiter != nil {
-			if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
+		for _, bytesLimiter := range bytesLimiters {
+			if err := bytesLimiter.ReserveWithType(uint64(len(dataFromCache)), PostingsTouched); err != nil {
 				return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
-			}
-		}
-		if typedBytesLimiter != nil {
-			if err := typedBytesLimiter.Reserve(int64(len(dataFromCache)), PostingsTouched); err != nil {
-				return nil, closeFns, err
 			}
 		}
 	}
@@ -3022,14 +3011,11 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		start := int64(part.Start)
 		length := int64(part.End) - start
 
-		if bytesLimiter != nil {
-			if err := bytesLimiter.Reserve(uint64(length)); err != nil {
-				return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
-			}
-		}
-		if typedBytesLimiter != nil {
-			if err := typedBytesLimiter.Reserve(length, PostingsFetched); err != nil {
-				return nil, closeFns, err
+		for _, bytesLimiter := range bytesLimiters {
+			if bytesLimiter != nil {
+				if err := bytesLimiter.ReserveWithType(uint64(length), PostingsFetched); err != nil {
+					return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
+				}
 			}
 		}
 	}
@@ -3192,7 +3178,7 @@ func (it *bigEndianPostings) length() int {
 	return len(it.list) / 4
 }
 
-func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.SeriesRef, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, tenant string) error {
+func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.SeriesRef, bytesLimiters []BytesLimiter, tenant string) error {
 	timer := prometheus.NewTimer(r.block.metrics.seriesFetchDuration.WithLabelValues(tenant))
 	defer func() {
 		d := timer.ObserveDuration()
@@ -3204,8 +3190,10 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 	fromCache, ids := r.block.indexCache.FetchMultiSeries(ctx, r.block.meta.ULID, ids, tenant)
 	for id, b := range fromCache {
 		r.loadedSeries[id] = b
-		if err := bytesLimiter.Reserve(uint64(len(b))); err != nil {
-			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
+		for _, bytesLimiter := range bytesLimiters {
+			if err := bytesLimiter.ReserveWithType(uint64(len(b)), SeriesTouched); err != nil {
+				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
+			}
 		}
 	}
 
@@ -3219,27 +3207,22 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 		i, j := p.ElemRng[0], p.ElemRng[1]
 
 		g.Go(func() error {
-			return r.loadSeries(ctx, ids[i:j], false, s, e, bytesLimiter, typedBytesLimiter, tenant)
+			return r.loadSeries(ctx, ids[i:j], false, s, e, bytesLimiters, tenant)
 		})
 	}
 	return g.Wait()
 }
 
-func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.SeriesRef, refetch bool, start, end uint64, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, tenant string) error {
+func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.SeriesRef, refetch bool, start, end uint64, bytesLimiters []BytesLimiter, tenant string) error {
 	begin := time.Now()
 	stats := new(queryStats)
 	defer func() {
 		r.stats.merge(stats)
 	}()
 
-	if bytesLimiter != nil {
-		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
+	for _, bytesLimiter := range bytesLimiters {
+		if err := bytesLimiter.ReserveWithType(uint64(end-start), SeriesFetched); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
-		}
-	}
-	if typedBytesLimiter != nil {
-		if err := typedBytesLimiter.Reserve(int64(end-start), SeriesFetched); err != nil {
-			return err
 		}
 	}
 
@@ -3269,7 +3252,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 			level.Warn(r.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", r.block.estimatedMaxSeriesSize)
 
 			// Fetch plus to get the size of next one if exists.
-			return r.loadSeries(ctx, ids[i:], true, uint64(id), uint64(id)+uint64(n+int(l)+1), bytesLimiter, typedBytesLimiter, tenant)
+			return r.loadSeries(ctx, ids[i:], true, uint64(id), uint64(id)+uint64(n+int(l)+1), bytesLimiters, tenant)
 		}
 		c = c[n : n+int(l)]
 		r.loadedSeriesMtx.Lock()
@@ -3347,7 +3330,7 @@ type symbolizedLabel struct {
 // LoadSeriesForTime returns false, when there are no series data for given time range.
 //
 // Error is returned on decoding error or if the reference does not resolve to a known series.
-func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]symbolizedLabel, chks *[]chunks.Meta, skipChunks bool, mint, maxt int64, typedBytesLimiter TypedBytesLimiter) (ok bool, err error) {
+func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]symbolizedLabel, chks *[]chunks.Meta, skipChunks bool, mint, maxt int64) (ok bool, err error) {
 	b, ok := r.loadedSeries[ref]
 	if !ok {
 		return false, errors.Errorf("series %d not found", ref)
@@ -3514,7 +3497,7 @@ func (r *bucketChunkReader) addLoad(id chunks.ChunkRef, seriesEntry, chunk int) 
 }
 
 // load loads all added chunks and saves resulting aggrs to refs.
-func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool, bytesLimiter BytesLimiter, tenant string) error {
+func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool, bytesLimiters []BytesLimiter, tenant string) error {
 	r.loadingChunksMtx.Lock()
 	r.loadingChunks = true
 	r.loadingChunksMtx.Unlock()
@@ -3541,8 +3524,10 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 		})
 
 		for _, p := range parts {
-			if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
-				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
+			for _, bytesLimiter := range bytesLimiters {
+				if err := bytesLimiter.ReserveWithType(uint64(p.End-p.Start), ChunksFetched); err != nil {
+					return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
+				}
 			}
 		}
 
@@ -3551,7 +3536,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			p := p
 			indices := pIdxs[p.ElemRng[0]:p.ElemRng[1]]
 			g.Go(func() error {
-				return r.loadChunks(ctx, res, aggrs, seq, p, indices, calculateChunkChecksum, bytesLimiter, tenant)
+				return r.loadChunks(ctx, res, aggrs, seq, p, indices, calculateChunkChecksum, bytesLimiters, tenant)
 			})
 		}
 	}
@@ -3560,7 +3545,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
-func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter, tenant string) error {
+func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiters []BytesLimiter, tenant string) error {
 	fetchBegin := time.Now()
 	stats := new(queryStats)
 	defer func() {
@@ -3647,8 +3632,10 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		fetchBegin = time.Now()
 		// Read entire chunk into new buffer.
 		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
-		if err := bytesLimiter.Reserve(uint64(chunkLen)); err != nil {
-			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
+		for _, bytesLimiter := range bytesLimiters {
+			if err := bytesLimiter.ReserveWithType(uint64(chunkLen), ChunksTouched); err != nil {
+				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
+			}
 		}
 
 		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}}, r.logger)

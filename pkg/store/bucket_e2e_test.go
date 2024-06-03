@@ -131,7 +131,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	return
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, chunksLimiterFactory ChunksLimiterFactory, seriesLimiterFactory SeriesLimiterFactory, bytesLimiterFactory BytesLimiterFactory, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, chunksLimiterFactory ChunksLimiterFactory, seriesLimiterFactory SeriesLimiterFactory, bytesLimitersFactory BytesLimitersFactory, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -168,8 +168,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		chunksLimiterFactory,
 		seriesLimiterFactory,
-		bytesLimiterFactory,
-		nil,
+		bytesLimitersFactory,
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
 		true,
@@ -489,7 +488,7 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		dir := t.TempDir()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), DefaultBytesLimitersFactory(0), emptyRelabelConfig, allowAllFilterConf)
 
 		if ok := t.Run("no index cache", func(t *testing.T) {
 			s.cache.SwapWith(noopCache{})
@@ -542,7 +541,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 
 		dir := t.TempDir()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, true, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, true, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), DefaultBytesLimitersFactory(0), emptyRelabelConfig, allowAllFilterConf)
 
 		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, nil, storecache.InMemoryIndexCacheConfig{
 			MaxItemSize: 1e5,
@@ -568,7 +567,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	// The query will fetch 2 series from 2 blocks, so we do expect to hit a total of 4 chunks.
 	expectedChunks := uint64(2 * 2)
 
-	s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(expectedChunks), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, &FilterConfig{
+	s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(expectedChunks), NewSeriesLimiterFactory(0), DefaultBytesLimitersFactory(0), emptyRelabelConfig, &FilterConfig{
 		MinTime: minTimeDuration,
 		MaxTime: filterMaxTime,
 	})
@@ -650,7 +649,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 			dir := t.TempDir()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(units.Base2Bytes(testData.maxBytesLimit)), emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), DefaultBytesLimitersFactory(units.Base2Bytes(testData.maxBytesLimit)), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{
@@ -685,7 +684,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 
 		dir := t.TempDir()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), DefaultBytesLimitersFactory(0), emptyRelabelConfig, allowAllFilterConf)
 		s.cache.SwapWith(noopCache{})
 
 		mint, maxt := s.store.TimeRange()
@@ -805,7 +804,7 @@ func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
 
 			bkt := objstore.NewInMemBucket()
 			dir := t.TempDir()
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(testData.maxSeriesLimit), DefaultBytesLimitersFactory(0), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 			req := &storepb.LabelNamesRequest{
 				Matchers: []storepb.LabelMatcher{
@@ -840,7 +839,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 
 		dir := t.TempDir()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), DefaultBytesLimitersFactory(0), emptyRelabelConfig, allowAllFilterConf)
 		s.cache.SwapWith(noopCache{})
 
 		mint, maxt := s.store.TimeRange()
@@ -964,7 +963,7 @@ func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 
 			dir := t.TempDir()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(testData.maxSeriesLimit), DefaultBytesLimitersFactory(0), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.LabelValuesRequest{
