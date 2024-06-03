@@ -473,7 +473,11 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 	httpHeader := http.Header{
 		"Content-Type": []string{"application/json"}}
 	if queryBytesFetchedHttpHeaderValue := QueryBytesFetchedHttpHeaderValue(res); queryBytesFetchedHttpHeaderValue != nil {
+		// M3 code path
 		httpHeader[QueryBytesFetchedHeaderName] = queryBytesFetchedHttpHeaderValue
+	} else if res.(*PrometheusResponse).Data.SeriesStatsCounter != nil {
+		// Pantheon code path
+		httpHeader[QueryBytesFetchedHeaderName] = []string{strconv.FormatInt(res.(*PrometheusResponse).Data.SeriesStatsCounter.Bytes, 10)}
 	}
 	resp := http.Response{
 		Header:        httpHeader,
