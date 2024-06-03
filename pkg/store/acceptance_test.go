@@ -1012,18 +1012,24 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 
 		}
 
-		p1 := startNestedStore(tt, extLset, appendFn)
-		p2 := startNestedStore(tt, labels.FromStrings("some", "label"), appendFn)
+		extLset1 := labels.NewBuilder(extLset).Set("replica", "A").Labels()
+		extLset2 := labels.NewBuilder(extLset).Set("replica", "B").Labels()
+		extLset3 := labels.NewBuilder(extLset).Set("replica", "C").Labels()
+
+		p1 := startNestedStore(tt, extLset1, appendFn)
+		p2 := startNestedStore(tt, extLset2, appendFn)
+		p3 := startNestedStore(tt, extLset3, appendFn)
 
 		clients := []Client{
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1), ExtLset: []labels.Labels{extLset}},
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2), ExtLset: []labels.Labels{labels.FromStrings("some", "label")}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1), ExtLset: []labels.Labels{extLset1}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2), ExtLset: []labels.Labels{extLset2}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p3), ExtLset: []labels.Labels{extLset3}},
 		}
 
 		relabelCfgs := []*relabel.Config{{
-			SourceLabels: model.LabelNames([]model.LabelName{"some"}),
-			Regex:        relabel.MustNewRegexp("label"),
-			Action:       relabel.Drop,
+			SourceLabels: model.LabelNames([]model.LabelName{"replica"}),
+			Regex:        relabel.MustNewRegexp("(A|C)"),
+			Action:       relabel.Keep,
 		}}
 
 		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval), WithTSDBSelector(NewTSDBSelector(relabelCfgs)))

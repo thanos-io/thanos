@@ -241,20 +241,6 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
 }
 
-func storeHintsFromPromHints(hints *storage.SelectHints) *storepb.QueryHints {
-	return &storepb.QueryHints{
-		StepMillis: hints.Step,
-		Func: &storepb.Func{
-			Name: hints.Func,
-		},
-		Grouping: &storepb.Grouping{
-			By:     hints.By,
-			Labels: hints.Grouping,
-		},
-		Range: &storepb.Range{Millis: hints.Range},
-	}
-}
-
 func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.SeriesSet {
 	if hints == nil {
 		hints = &storage.SelectHints{
@@ -351,7 +337,6 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		ShardInfo:               q.shardInfo,
 		PartialResponseStrategy: q.partialResponseStrategy,
 		SkipChunks:              q.skipChunks,
-		QueryHints:              storeHintsFromPromHints(hints),
 	}
 	if q.isDedupEnabled() {
 		// Soft ask to sort without replica labels and push them at the end of labelset.

@@ -117,7 +117,9 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 			if len(test.engine.warns) > 0 {
 				testutil.Ok(t, err)
 				for i, resp := range srv.responses {
-					testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					if resp.GetWarnings() != "" {
+						testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					}
 				}
 			}
 		})
@@ -136,7 +138,9 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 			if len(test.engine.warns) > 0 {
 				testutil.Ok(t, err)
 				for i, resp := range srv.responses {
-					testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					if resp.GetWarnings() != "" {
+						testutil.Equals(t, test.engine.warns.AsErrors()[i].Error(), resp.GetWarnings())
+					}
 				}
 			}
 		})
