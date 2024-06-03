@@ -66,8 +66,6 @@ type Handler struct {
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
-	//totalQueries *prometheus.CounterVec
-	//cachedHits   *prometheus.CounterVec
 	totalQueries prometheus.Counter
 	cachedHits   prometheus.Counter
 	activeUsers  *util.ActiveUsersCleanupService
@@ -123,16 +121,6 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 			Help: "Size of all chunks fetched to execute a query in bytes.",
 		}, []string{"user"})
 
-		//h.totalQueries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		//	Name: "cortex_queries_total",
-		//	Help: "Total number of queries.",
-		//}, []string{})
-		//
-		//h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		//	Name: "cortex_queries_hits_total",
-		//	Help: "Total number of queries that hit the cache.",
-		//}, []string{})
-
 		h.totalQueries = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "cortex_queries_total",
 			Help: "Total number of queries.",
@@ -170,6 +158,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ctx context.Context
 		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
 		r = r.WithContext(ctx)
+		// Increment total queries
+		f.totalQueries.Inc()
 		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "QUERY STATS ENABLED, COUNTERS INSTANTIATED")
 	}
 
@@ -181,15 +171,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
-
-	// Increment total queries
-	//f.totalQueries.WithLabelValues("").Add(float64(1))
-
-	if f.totalQueries != nil {
-		f.totalQueries.Inc()
-	} else {
-		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "totalQueries is nil")
-	}
 
 	// Check if caching is enabled
 	if f.lru != nil {
@@ -216,7 +197,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
 			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "query expression", queryExpressionNormalized)
-			//f.cachedHits.WithLabelValues("").Add(float64(1))
+			f.cachedHits.Inc()
 			return
 		}
 	}
