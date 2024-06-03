@@ -19,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type GRPCAPI struct {
@@ -93,13 +94,20 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		query.NoopSeriesStatsReporter,
 	)
 
-	qry, err := g.getQueryForEngine(ctx, request, queryable, maxResolution)
-	if err != nil {
+	var qry promql.Query
+	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
+		var err error
+		qry, err = g.getQueryForEngine(ctx, request, queryable, maxResolution)
+		return err
+	}); err != nil {
 		return err
 	}
 	defer qry.Close()
 
-	result := qry.Exec(ctx)
+	var result *promql.Result
+	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+		result = qry.Exec(ctx)
+	})
 	if result.Err != nil {
 		return status.Error(codes.Aborted, result.Err.Error())
 	}
@@ -206,13 +214,20 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		query.NoopSeriesStatsReporter,
 	)
 
-	qry, err := g.getRangeQueryForEngine(ctx, request, queryable)
-	if err != nil {
+	var qry promql.Query
+	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
+		var err error
+		qry, err = g.getRangeQueryForEngine(ctx, request, queryable)
+		return err
+	}); err != nil {
 		return err
 	}
 	defer qry.Close()
 
-	result := qry.Exec(ctx)
+	var result *promql.Result
+	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+		result = qry.Exec(ctx)
+	})
 	if result.Err != nil {
 		return status.Error(codes.Aborted, result.Err.Error())
 	}
