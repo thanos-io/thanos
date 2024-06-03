@@ -124,9 +124,10 @@ func (PrometheusResponseExtractor) ResponseWithoutStats(resp Response) Response 
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType: promRes.Data.ResultType,
-			Result:     promRes.Data.Result,
-			Analysis:   promRes.Data.Analysis,
+			ResultType:         promRes.Data.ResultType,
+			Result:             promRes.Data.Result,
+			Analysis:           promRes.Data.Analysis,
+			SeriesStatsCounter: promRes.Data.SeriesStatsCounter,
 		},
 		Headers: promRes.Headers,
 	}
