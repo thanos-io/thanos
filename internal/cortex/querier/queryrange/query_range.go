@@ -595,10 +595,11 @@ func (s *StringSample) UnmarshalJSON(b []byte) error {
 // UnmarshalJSON implements json.Unmarshaler.
 func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	var queryData struct {
-		ResultType string                   `json:"resultType"`
-		Result     jsoniter.RawMessage      `json:"result"`
-		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-		Analysis   *Analysis                `json:"analysis,omitempty"`
+		ResultType         string                   `json:"resultType"`
+		Result             jsoniter.RawMessage      `json:"result"`
+		Stats              *PrometheusResponseStats `json:"stats,omitempty"`
+		Analysis           *Analysis                `json:"analysis,omitempty"`
+		SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
 	}
 
 	if err := json.Unmarshal(data, &queryData); err != nil {
@@ -608,6 +609,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	s.ResultType = queryData.ResultType
 	s.Stats = queryData.Stats
 	s.Analysis = queryData.Analysis
+	s.SeriesStatsCounter = queryData.SeriesStatsCounter
 	switch s.ResultType {
 	case model.ValVector.String():
 		var result struct {
