@@ -171,7 +171,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	// Increment total queries
-	//f.totalQueries.WithLabelValues("").Add(float64(1))
+	f.totalQueries.WithLabelValues("").Add(float64(1))
 
 	// Check if caching is enabled
 	if f.lru != nil {
