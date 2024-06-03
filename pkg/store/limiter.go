@@ -37,6 +37,10 @@ type BytesLimiter interface {
 	Reserve(num uint64) error
 }
 
+type TypedBytesLimiter interface {
+	Reserve(bytes int64, dataType storeDataType) error
+}
+
 // ChunksLimiterFactory is used to create a new ChunksLimiter. The factory is useful for
 // projects depending on Thanos (eg. Cortex) which have dynamic limits.
 type ChunksLimiterFactory func(failedCounter prometheus.Counter) ChunksLimiter
