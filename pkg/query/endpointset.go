@@ -609,6 +609,8 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 				StoreClient: storepb.NewStoreClient(er.cc),
 				addr:        er.addr,
 				metadata:    er.metadata,
+				groupKey:    er.GroupKey(),
+				replicaKey:  er.ReplicaKey(),
 			})
 			er.mtx.RUnlock()
 		}
