@@ -148,6 +148,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 			h.querySeries.DeleteLabelValues(user)
 			h.queryBytes.DeleteLabelValues(user)
 		})
+
 		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
 		_ = h.activeUsers.StartAsync(context.Background())
 	}
@@ -169,6 +170,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ctx context.Context
 		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
 		r = r.WithContext(ctx)
+		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "QUERY STATS ENABLED, COUNTERS INSTANTIATED")
 	}
 
 	defer func() {
@@ -183,7 +185,11 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Increment total queries
 	//f.totalQueries.WithLabelValues("").Add(float64(1))
 
-	f.totalQueries.Inc()
+	if f.totalQueries != nil {
+		f.totalQueries.Inc()
+	} else {
+		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "totalQueries is nil")
+	}
 
 	// Check if caching is enabled
 	if f.lru != nil {
