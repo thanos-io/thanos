@@ -157,6 +157,8 @@ Other cache configuration parameters, you can refer to [redis-index-cache](store
 
 Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
 
+The field `remote_user` can be read from an HTTP header, like `X-Grafana-User`, by setting `--query-frontend.slow-query-logs-user-header`.
+
 ## Naming
 
 Naming is hard :) Please check [here](https://github.com/thanos-io/thanos/pull/2434#discussion_r408300683) to see why we chose `query-frontend` as the name.
@@ -295,6 +297,11 @@ Flags:
                                  the request, the first matching arg specified
                                  will take precedence. If no headers match
                                  'anonymous' will be used.
+      --query-frontend.slow-query-logs-user-header=<http-header-name>
+                                 Set the value of the field remote_user in the
+                                 slow query logs to the value of the given HTTP
+                                 header. Falls back to reading the user from the
+                                 basic auth header.
       --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
                                  Number of shards to use when
                                  distributing shardable PromQL queries.
