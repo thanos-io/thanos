@@ -66,8 +66,10 @@ type Handler struct {
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
-	totalQueries *prometheus.CounterVec
-	cachedHits   *prometheus.CounterVec
+	//totalQueries *prometheus.CounterVec
+	//cachedHits   *prometheus.CounterVec
+	totalQueries prometheus.Counter
+	cachedHits   prometheus.Counter
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
@@ -121,22 +123,30 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 			Help: "Size of all chunks fetched to execute a query in bytes.",
 		}, []string{"user"})
 
-		h.totalQueries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		//h.totalQueries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		//	Name: "cortex_queries_total",
+		//	Help: "Total number of queries.",
+		//}, []string{})
+		//
+		//h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		//	Name: "cortex_queries_hits_total",
+		//	Help: "Total number of queries that hit the cache.",
+		//}, []string{})
+
+		h.totalQueries = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "cortex_queries_total",
 			Help: "Total number of queries.",
-		}, []string{""})
+		})
 
-		h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "cortex_queries_hits_total",
 			Help: "Total number of queries that hit the cache.",
-		}, []string{""})
+		})
 
 		h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
 			h.querySeconds.DeleteLabelValues(user)
 			h.querySeries.DeleteLabelValues(user)
 			h.queryBytes.DeleteLabelValues(user)
-			h.totalQueries.DeleteLabelValues("")
-			h.cachedHits.DeleteLabelValues("")
 		})
 		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
 		_ = h.activeUsers.StartAsync(context.Background())
@@ -171,7 +181,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	// Increment total queries
-	f.totalQueries.WithLabelValues("").Add(float64(1))
+	//f.totalQueries.WithLabelValues("").Add(float64(1))
+
+	f.totalQueries.Inc()
 
 	// Check if caching is enabled
 	if f.lru != nil {
