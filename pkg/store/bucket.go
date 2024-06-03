@@ -1330,7 +1330,7 @@ OUTER:
 	}
 
 	if !b.skipChunks {
-		if err := b.chunkr.load(b.ctx, b.entries, b.loadAggregates, b.calculateChunkHash, b.bytesLimiter, b.typedBytesLimiter, b.tenant); err != nil {
+		if err := b.chunkr.load(b.ctx, b.entries, b.loadAggregates, b.calculateChunkHash, b.bytesLimiter, b.tenant); err != nil {
 			return errors.Wrap(err, "load chunks")
 		}
 	}
@@ -2540,7 +2540,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatch
 		return nil, nil
 	}
 
-	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiter, typedBytesLimiter, tenant)
+	hit, postings, err := r.fetchExpandedPostingsFromCache(ctx, ms, bytesLimiter, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -2883,7 +2883,7 @@ type postingPtr struct {
 	ptr   index.Range
 }
 
-func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, tenant string) (bool, []storage.SeriesRef, error) {
+func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter, tenant string) (bool, []storage.SeriesRef, error) {
 	dataFromCache, hit := r.block.indexCache.FetchExpandedPostings(ctx, r.block.meta.ULID, ms, tenant)
 	if !hit {
 		return false, nil, nil
@@ -2891,9 +2891,7 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
 		return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
 	}
-	if err := r.stats.addAndCheck(PostingsFetched, 1, len(dataFromCache), typedBytesLimiter); err != nil {
-		return false, nil, err
-	}
+	r.stats.add(PostingsFetched, 1, len(dataFromCache))
 	p, closeFns, err := r.decodeCachedPostings(dataFromCache)
 	defer func() {
 		for _, closeFn := range closeFns {
@@ -3083,9 +3081,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(diffVarintPostings))
 				stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(len(dataToCache))
 				stats.CachedPostingsCompressionTimeSum += time.Since(startCompression)
-				if err := stats.addAndCheck(PostingsTouched, 1, len(diffVarintPostings), typedBytesLimiter); err != nil {
-					return err
-				}
+				stats.add(PostingsTouched, 1, len(diffVarintPostings))
 
 				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[keyID], dataToCache, tenant)
 			}
@@ -3357,10 +3353,7 @@ func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]sym
 		return false, errors.Errorf("series %d not found", ref)
 	}
 
-	if err := r.stats.addAndCheck(SeriesTouched, 1, len(b), typedBytesLimiter); err != nil {
-		return false, err
-	}
-
+	r.stats.add(SeriesTouched, 1, len(b))
 	return decodeSeriesForTime(b, lset, chks, skipChunks, mint, maxt)
 }
 
@@ -3521,7 +3514,7 @@ func (r *bucketChunkReader) addLoad(id chunks.ChunkRef, seriesEntry, chunk int) 
 }
 
 // load loads all added chunks and saves resulting aggrs to refs.
-func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, tenant string) error {
+func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool, bytesLimiter BytesLimiter, tenant string) error {
 	r.loadingChunksMtx.Lock()
 	r.loadingChunks = true
 	r.loadingChunksMtx.Unlock()
@@ -3558,7 +3551,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			p := p
 			indices := pIdxs[p.ElemRng[0]:p.ElemRng[1]]
 			g.Go(func() error {
-				return r.loadChunks(ctx, res, aggrs, seq, p, indices, calculateChunkChecksum, bytesLimiter, typedBytesLimiter, tenant)
+				return r.loadChunks(ctx, res, aggrs, seq, p, indices, calculateChunkChecksum, bytesLimiter, tenant)
 			})
 		}
 	}
@@ -3567,7 +3560,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
-func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter, typedBytesLimiter TypedBytesLimiter, tenant string) error {
+func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter, tenant string) error {
 	fetchBegin := time.Now()
 	stats := new(queryStats)
 	defer func() {
@@ -3584,9 +3577,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
 	stats.chunksFetchCount++
-	if err := stats.addAndCheck(ChunksFetched, len(pIdxs), int(part.End-part.Start), typedBytesLimiter); err != nil {
-		return err
-	}
+	stats.add(ChunksFetched, len(pIdxs), int(part.End-part.Start))
 
 	var (
 		buf        []byte
@@ -3647,9 +3638,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
-			if err := stats.addAndCheck(ChunksTouched, 1, int(chunkDataLen), typedBytesLimiter); err != nil {
-				return err
-			}
+			stats.add(ChunksTouched, 1, int(chunkDataLen))
 			continue
 		}
 
@@ -3670,7 +3659,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			return errors.Errorf("preloaded chunk too small, expecting %d", chunkLen)
 		}
 
-		stats.addDataFetchedStats(Chunks, 1, len(*nb))
+		stats.add(ChunksFetched, 1, len(*nb))
 		c := rawChunk((*nb)[n:])
 		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
@@ -3678,9 +3667,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			return errors.Wrap(err, "populate chunk")
 		}
 
-		if err := stats.addAndCheck(ChunksTouched, 1, int(chunkDataLen), typedBytesLimiter); err != nil {
-			return err
-		}
+		stats.add(ChunksTouched, 1, int(chunkDataLen))
 
 		r.block.chunkPool.Put(nb)
 	}
@@ -3781,11 +3768,10 @@ type queryStats struct {
 	DataDownloadedSizeSum units.Base2Bytes
 }
 
-func (s *queryStats) add(dataType storeDataType, dataCount int, dataSize int) error {
-	return s.addAndCheck(dataType, dataCount, dataSize, nil)
-}
+func (s *queryStats) add(dataType storeDataType, dataCount int, dataSize int) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
 
-func (s *queryStats) addAndCheck(dataType storeDataType, dataCount int, dataSize int, limiter TypedBytesLimiter) error {
 	switch dataType {
 	case PostingsFetched:
 		s.postingsFetched += dataCount
@@ -3806,15 +3792,9 @@ func (s *queryStats) addAndCheck(dataType storeDataType, dataCount int, dataSize
 		s.chunksTouched += dataCount
 		s.ChunksTouchedSizeSum += units.Base2Bytes(dataSize)
 	default:
-		return nil
+		return
 	}
 	s.DataDownloadedSizeSum += units.Base2Bytes(dataSize)
-
-	if limiter != nil {
-		return limiter.Reserve(int64(dataSize), dataType)
-	}
-
-	return nil
 }
 
 func (s *queryStats) merge(o *queryStats) {
