@@ -669,45 +669,48 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
-	defer span.Finish()
-
-	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := engine.NewInstantQuery(
-		ctx,
-		qapi.queryableCreate(
-			enableDedup,
-			replicaLabels,
-			storeDebugMatchers,
-			maxSourceResolution,
-			enablePartialResponse,
-			false,
-			shardInfo,
-			query.NewAggregateStatsReporter(&seriesStats),
-		),
-		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		queryStr,
-		ts,
+	var (
+		qry         promql.Query
+		seriesStats []storepb.SeriesStatsCounter
 	)
-
-	if err != nil {
+	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
+		var err error
+		qry, err = engine.NewInstantQuery(
+			ctx,
+			qapi.queryableCreate(
+				enableDedup,
+				replicaLabels,
+				storeDebugMatchers,
+				maxSourceResolution,
+				enablePartialResponse,
+				false,
+				shardInfo,
+				query.NewAggregateStatsReporter(&seriesStats),
+			),
+			promql.NewPrometheusQueryOpts(false, lookbackDelta),
+			queryStr,
+			ts,
+		)
+		return err
+	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	res := qry.Exec(ctx)
+
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
 	if err != nil {
 		return nil, nil, apiErr, func() {}
 	}
 
-	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = qapi.gate.Start(ctx)
-	})
-	if err != nil {
+	if err := tracing.DoInSpanWithErr(ctx, "query_gate_ismyturn", qapi.gate.Start); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
 	beforeRange := time.Now()
+
+	var res *promql.Result
+	tracing.DoInSpan(ctx, "instant_query_exec", func(ctx context.Context) {
+		res = qry.Exec(ctx)
+	})
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
@@ -969,48 +972,49 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
-	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
-	defer span.Finish()
-
-	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := engine.NewRangeQuery(
-		ctx,
-		qapi.queryableCreate(
-			enableDedup,
-			replicaLabels,
-			storeDebugMatchers,
-			maxSourceResolution,
-			enablePartialResponse,
-			false,
-			shardInfo,
-			query.NewAggregateStatsReporter(&seriesStats),
-		),
-		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		queryStr,
-		start,
-		end,
-		step,
+	var (
+		qry         promql.Query
+		seriesStats []storepb.SeriesStatsCounter
 	)
-	if err != nil {
+	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
+		var err error
+		qry, err = engine.NewRangeQuery(
+			ctx,
+			qapi.queryableCreate(
+				enableDedup,
+				replicaLabels,
+				storeDebugMatchers,
+				maxSourceResolution,
+				enablePartialResponse,
+				false,
+				shardInfo,
+				query.NewAggregateStatsReporter(&seriesStats),
+			),
+			promql.NewPrometheusQueryOpts(false, lookbackDelta),
+			queryStr,
+			start,
+			end,
+			step,
+		)
+		return err
+	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-
-	res := qry.Exec(ctx)
-
 	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
 	if err != nil {
 		return nil, nil, apiErr, func() {}
 	}
 
-	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = qapi.gate.Start(ctx)
-	})
-	if err != nil {
+	if err := tracing.DoInSpanWithErr(ctx, "query_gate_ismyturn", qapi.gate.Start); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
 
+	var res *promql.Result
+	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+		res = qry.Exec(ctx)
+
+	})
 	beforeRange := time.Now()
 	if res.Err != nil {
 		switch res.Err.(type) {
