@@ -397,7 +397,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	logGroupReplicaErrors := func() {
 		if len(failedStores) > 0 {
-			level.Warn(s.logger).Log("msg", "Group/replica errors", "errors", failedStores)
+			level.Warn(s.logger).Log("msg", "Group/replica errors",
+				"errors", fmt.Sprintf("%+v", failedStores),
+				"total_failed_stores", totalFailedStores,
+			)
 		}
 	}
 	defer logGroupReplicaErrors()
@@ -411,6 +414,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
+			level.Warn(s.logger).Log("msg", "Store failure", "group", st.GroupKey(), "replica", st.ReplicaKey())
 			bumpCounter(st.GroupKey(), st.ReplicaKey(), failedStores)
 			totalFailedStores++
 			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
