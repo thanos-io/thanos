@@ -2879,8 +2879,8 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	if !hit {
 		return false, nil, nil
 	}
-	for _, bytesLimiter := range bytesLimiters {
-		if err := bytesLimiter.ReserveWithType(uint64(len(dataFromCache)), PostingsFetched); err != nil {
+	for _, b := range bytesLimiters {
+		if err := b.ReserveWithType(uint64(len(dataFromCache)), PostingsFetched); err != nil {
 			return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
 		}
 	}
@@ -2954,8 +2954,8 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	// Fetch postings from the cache with a single call.
 	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys, tenant)
 	for _, dataFromCache := range fromCache {
-		for _, bytesLimiter := range bytesLimiters {
-			if err := bytesLimiter.ReserveWithType(uint64(len(dataFromCache)), PostingsTouched); err != nil {
+		for _, b := range bytesLimiters {
+			if err := b.ReserveWithType(uint64(len(dataFromCache)), PostingsTouched); err != nil {
 				return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
 			}
 		}
@@ -3011,11 +3011,9 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		start := int64(part.Start)
 		length := int64(part.End) - start
 
-		for _, bytesLimiter := range bytesLimiters {
-			if bytesLimiter != nil {
-				if err := bytesLimiter.ReserveWithType(uint64(length), PostingsFetched); err != nil {
-					return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
-				}
+		for _, b := range bytesLimiters {
+			if err := b.ReserveWithType(uint64(length), PostingsFetched); err != nil {
+				return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
 			}
 		}
 	}
@@ -3188,10 +3186,10 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
 	fromCache, ids := r.block.indexCache.FetchMultiSeries(ctx, r.block.meta.ULID, ids, tenant)
-	for id, b := range fromCache {
-		r.loadedSeries[id] = b
-		for _, bytesLimiter := range bytesLimiters {
-			if err := bytesLimiter.ReserveWithType(uint64(len(b)), SeriesTouched); err != nil {
+	for id, bytes := range fromCache {
+		r.loadedSeries[id] = bytes
+		for _, b := range bytesLimiters {
+			if err := b.ReserveWithType(uint64(len(bytes)), SeriesTouched); err != nil {
 				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
 			}
 		}
@@ -3220,8 +3218,8 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		r.stats.merge(stats)
 	}()
 
-	for _, bytesLimiter := range bytesLimiters {
-		if err := bytesLimiter.ReserveWithType(uint64(end-start), SeriesFetched); err != nil {
+	for _, b := range bytesLimiters {
+		if err := b.ReserveWithType(uint64(end-start), SeriesFetched); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 		}
 	}
@@ -3524,8 +3522,8 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 		})
 
 		for _, p := range parts {
-			for _, bytesLimiter := range bytesLimiters {
-				if err := bytesLimiter.ReserveWithType(uint64(p.End-p.Start), ChunksFetched); err != nil {
+			for _, b := range bytesLimiters {
+				if err := b.ReserveWithType(uint64(p.End-p.Start), ChunksFetched); err != nil {
 					return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 				}
 			}
@@ -3632,8 +3630,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		fetchBegin = time.Now()
 		// Read entire chunk into new buffer.
 		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
-		for _, bytesLimiter := range bytesLimiters {
-			if err := bytesLimiter.ReserveWithType(uint64(chunkLen), ChunksTouched); err != nil {
+		for _, b := range bytesLimiters {
+			if err := b.ReserveWithType(uint64(chunkLen), ChunksTouched); err != nil {
 				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 			}
 		}

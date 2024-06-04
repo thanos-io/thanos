@@ -64,22 +64,10 @@ func NewLimiter(limit uint64, ctr prometheus.Counter) *Limiter {
 
 // Reserve implements ChunksLimiter.
 func (l *Limiter) Reserve(num uint64) error {
-	if l == nil {
-		return nil
-	}
-	if l.limit == 0 {
-		return nil
-	}
-	if reserved := l.reserved.Add(num); reserved > l.limit {
-		// We need to protect from the counter being incremented twice due to concurrency
-		// while calling Reserve().
-		l.failedOnce.Do(l.failedCounter.Inc)
-		return errors.Errorf("limit %v violated (got %v)", l.limit, reserved)
-	}
-	return nil
+	return l.ReserveWithType(num, "")
 }
 
-func (l *Limiter) ReserveWithType(num uint64, dataType storeDataType) error {
+func (l *Limiter) ReserveWithType(num uint64, _ storeDataType) error {
 	if l == nil {
 		return nil
 	}

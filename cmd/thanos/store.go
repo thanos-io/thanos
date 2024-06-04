@@ -439,8 +439,7 @@ func runStore(
 		dataDir,
 		store.NewChunksLimiterFactory(conf.storeRateLimits.SamplesPerRequest/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(conf.storeRateLimits.SeriesPerRequest),
-		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
-		nil,
+		store.DefaultBytesLimitersFactory(conf.maxDownloadedBytes),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		conf.blockSyncConcurrency,
 		conf.advertiseCompatibilityLabel,
