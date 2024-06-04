@@ -58,7 +58,7 @@ type Handler struct {
 	cfg          HandlerConfig
 	log          log.Logger
 	roundTripper http.RoundTripper
-	lru          *lru.Cache
+	lruCache     *lru.Cache
 	regex        *regexp.Regexp
 	errorExtract *regexp.Regexp
 
@@ -66,19 +66,8 @@ type Handler struct {
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
-	totalQueries prometheus.Counter
 	cachedHits   prometheus.Counter
 	activeUsers  *util.ActiveUsersCleanupService
-}
-
-// isCacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false
-func isCacheableError(statusCode int) bool {
-	for _, errStatusCode := range cacheableResponseCodes {
-		if errStatusCode == statusCode {
-			return true
-		}
-	}
-	return false
 }
 
 // NewHandler creates a new frontend handler.
@@ -100,7 +89,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		cfg:          cfg,
 		log:          log,
 		roundTripper: roundTripper,
-		lru:          LruCache,
+		lruCache:     LruCache,
 		regex:        regexp.MustCompile(`[\s\n\t]+`),
 		errorExtract: regexp.MustCompile(`Code\((\d+)\)`),
 	}
@@ -133,7 +122,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 
 	h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "cached_failed_queries_count",
-		Help: "Total number of queries that hit the cache.",
+		Help: "Total number of queries that hit the failed query cache.",
 	})
 
 	return h
@@ -165,31 +154,18 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	// Check if caching is enabled
-	if f.lru != nil {
-		// Store query expression
+	// Check if caching is enabled.
+	if f.lruCache != nil {
+		// Store query expression.
 		queryExpressionNormalized = f.regex.ReplaceAllString(r.URL.Query().Get("query"), " ")
 
-		// Time range length for queries, if either of "start" or "end" are not present, return 0
-		getQueryRangeSeconds := func() int {
-			start, err := strconv.Atoi(r.URL.Query().Get("start"))
-			if err != nil {
-				return 0
-			}
-			end, err := strconv.Atoi(r.URL.Query().Get("end"))
-			if err != nil {
-				return 0
-			}
-			return end - start
-		}
+		// Store query time range length.
+		queryExpressionRangeLength = getQueryRangeSeconds(r)
 
-		// Store query time range length
-		queryExpressionRangeLength = getQueryRangeSeconds()
-
-		// Check if query in cache and whether value exceeds time range length
-		if value, ok := f.lru.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
+		// Check if query in cache and whether value exceeds time range length.
+		if value, ok := f.lruCache.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
-			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "FOUND QUERY IN CACHE: CAUSED ERROR: ", "query expression", queryExpressionNormalized)
+			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "Retrieved query from cache", "Query expression", queryExpressionNormalized)
 			f.cachedHits.Inc()
 			return
 		}
@@ -203,47 +179,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
-		// Check if caching is enabled
-		if f.lru != nil {
-			// Extracting error code
-			codeExtract := f.errorExtract.FindStringSubmatch(err.Error())
-
-			// Checking if error code extracted successfully
-			if codeExtract != nil && len(codeExtract) >= 2 {
-
-				// Converting error code to int
-				errCode, strConvError := strconv.Atoi(codeExtract[1])
-
-				// Checking if error code extracted properly
-				if strConvError != nil {
-					level.Error(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "String to int conversion error", "response ", resp,
-					)
-				}
-
-				// If error should be cached, store it in cache
-				if isCacheableError(errCode) {
-					//checks if queryExpression is already in cache, and updates time range length value if it is shorter
-					if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
-						if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
-							queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
-						}
-						f.lru.Add(queryExpressionNormalized, queryExpressionRangeLength)
-					}
-
-					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "Cached query due to cacheable error code", "response ", resp,
-					)
-				} else {
-					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "Did not cache query due to non-cacheable error code", "response ", resp,
-					)
-				}
-			} else {
-				level.Error(util_log.WithContext(r.Context(), f.log)).Log(
-					"msg", "Error string regex conversion error", "response ", resp,
-				)
-			}
+		// Check if caching is enabled.
+		if f.lruCache != nil {
+			f.updateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, r)
 		}
 
 		if f.cfg.LogFailedQueries {
@@ -280,6 +218,69 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
 	}
+}
+
+func (f *Handler) updateFailedQueryCache(err error, queryExpressionNormalized string, queryExpressionRangeLength int, r *http.Request) {
+	// Extracting error code from error string.
+	codeExtract := f.errorExtract.FindStringSubmatch(err.Error())
+
+	// Checking if error code extracted successfully.
+	if codeExtract == nil || len(codeExtract) < 2 {
+		level.Error(util_log.WithContext(r.Context(), f.log)).Log(
+			"msg", "Error string regex conversion error")
+		return
+	}
+
+	// Converting error code to int.
+	errCode, strConvError := strconv.Atoi(codeExtract[1])
+
+	// Checking if error code extracted properly from string.
+	if strConvError != nil {
+		level.Error(util_log.WithContext(r.Context(), f.log)).Log(
+			"msg", "String to int conversion error")
+		return
+	}
+
+	// If error should be cached, store it in cache.
+	if !isCacheableError(errCode) {
+		level.Debug(util_log.WithContext(r.Context(), f.log)).Log(
+			"msg", "Query not cached due to non-cacheable error code")
+		return
+	}
+
+	// Checks if queryExpression is already in cache, and updates time range length value to min of stored and new value.
+	if contains, _ := f.lruCache.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
+		if oldValue, ok := f.lruCache.Get(queryExpressionNormalized); ok {
+			queryExpressionRangeLength = min(queryExpressionRangeLength, oldValue.(int))
+		}
+		f.lruCache.Add(queryExpressionNormalized, queryExpressionRangeLength)
+	}
+
+	level.Debug(util_log.WithContext(r.Context(), f.log)).Log(
+		"msg", "Query cached", "response ")
+}
+
+// isCacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false.
+func isCacheableError(statusCode int) bool {
+	for _, errStatusCode := range cacheableResponseCodes {
+		if errStatusCode == statusCode {
+			return true
+		}
+	}
+	return false
+}
+
+// Time range length for queries, if either of "start" or "end" are not present, return 0.
+func getQueryRangeSeconds(r *http.Request) int {
+	start, err := strconv.Atoi(r.URL.Query().Get("start"))
+	if err != nil {
+		return 0
+	}
+	end, err := strconv.Atoi(r.URL.Query().Get("end"))
+	if err != nil {
+		return 0
+	}
+	return end - start
 }
 
 func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err error) {
