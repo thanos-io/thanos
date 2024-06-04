@@ -44,9 +44,6 @@ type ChunksLimiterFactory func(failedCounter prometheus.Counter) ChunksLimiter
 // SeriesLimiterFactory is used to create a new SeriesLimiter.
 type SeriesLimiterFactory func(failedCounter prometheus.Counter) SeriesLimiter
 
-// // BytesLimiterFactory is used to create a new BytesLimiter.
-// type BytesLimiterFactory func(failedCounter prometheus.Counter) BytesLimiter
-
 // BytesLimitersFactory is used to create new BytesLimiters.
 type BytesLimitersFactory func(failedCounter prometheus.Counter) []BytesLimiter
 
@@ -112,7 +109,7 @@ func NewSeriesLimiterFactory(limit uint64) SeriesLimiterFactory {
 	}
 }
 
-// NewBytesLimitersFactory makes a new BytesLimitersFactory with a static limit.
+// DefaultBytesLimitersFactory makes a new BytesLimitersFactory with single BytesLimiter with a static limit.
 func DefaultBytesLimitersFactory(limit units.Base2Bytes) BytesLimitersFactory {
 	return func(failedCounter prometheus.Counter) []BytesLimiter {
 		return []BytesLimiter{NewLimiter(uint64(limit), failedCounter)}

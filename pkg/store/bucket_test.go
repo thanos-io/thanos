@@ -1792,7 +1792,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		queryGate:            gate.NewNoop(),
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
-		bytesLimitersFactory:  DefaultBytesLimitersFactory(0),
+		bytesLimitersFactory: DefaultBytesLimitersFactory(0),
 		seriesBatchSize:      SeriesBatchSize,
 		requestLoggerFunc:    NoopRequestLoggerFunc,
 	}
@@ -3852,6 +3852,9 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
+	firstBytesLimiterChecked := false
+	secondBytesLimiterChecked := false
+
 	// Set series limit to 2. Only pass if series limiter applies
 	// for lazy postings only.
 	bucketStore, err := NewBucketStore(
@@ -3860,7 +3863,22 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 		"",
 		NewChunksLimiterFactory(10e6),
 		NewSeriesLimiterFactory(2),
-		DefaultBytesLimitersFactory(10e6),
+		func(_ prometheus.Counter) []BytesLimiter {
+			return []BytesLimiter{
+				&bytesLimiterMock{
+					limitFunc: func(_ uint64, _ storeDataType) error {
+						firstBytesLimiterChecked = true
+						return nil
+					},
+				},
+				&bytesLimiterMock{
+					limitFunc: func(_ uint64, _ storeDataType) error {
+						secondBytesLimiterChecked = true
+						return nil
+					},
+				},
+			}
+		},
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
 		true,
@@ -3891,4 +3909,14 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	srv := newStoreSeriesServer(context.Background())
 	testutil.Ok(t, bucketStore.Series(req, srv))
 	testutil.Equals(t, 2, len(srv.SeriesSet))
+	testutil.Equals(t, true, firstBytesLimiterChecked)
+	testutil.Equals(t, true, secondBytesLimiterChecked)
+}
+
+type bytesLimiterMock struct {
+	limitFunc func(uint64, storeDataType) error
+}
+
+func (m *bytesLimiterMock) ReserveWithType(num uint64, dataType storeDataType) error {
+	return m.limitFunc(num, dataType)
 }
