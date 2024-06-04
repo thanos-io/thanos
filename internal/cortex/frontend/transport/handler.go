@@ -81,7 +81,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		LruCache, err = lru.New(cfg.FailedQueryCacheCapacity)
 		if err != nil {
 			LruCache = nil
-			level.Error(log).Log("msg", "Failed to create LruCache", "err", err)
+			level.Warn(log).Log("msg", "Failed to create LruCache", "error", err)
 		}
 	}
 
@@ -142,7 +142,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ctx context.Context
 		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
 		r = r.WithContext(ctx)
-		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "Query Stats Enabled")
 	}
 
 	defer func() {
@@ -165,7 +164,11 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Check if query in cache and whether value exceeds time range length.
 		if value, ok := f.lruCache.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
 			w.WriteHeader(http.StatusForbidden)
-			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "Retrieved query from cache", "Query expression", queryExpressionNormalized)
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log(
+				"msg", "Retrieved query from cache",
+				"normalized_query", queryExpressionNormalized,
+				"range_seconds", queryExpressionRangeLength,
+			)
 			f.cachedHits.Inc()
 			return
 		}
@@ -227,7 +230,10 @@ func (f *Handler) updateFailedQueryCache(err error, queryExpressionNormalized st
 	// Checking if error code extracted successfully.
 	if codeExtract == nil || len(codeExtract) < 2 {
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log(
-			"msg", "Error string regex conversion error")
+			"msg", "Error string regex conversion error",
+			"normalized_query", queryExpressionNormalized,
+			"range_seconds", queryExpressionRangeLength,
+			"error", err)
 		return
 	}
 
@@ -237,14 +243,21 @@ func (f *Handler) updateFailedQueryCache(err error, queryExpressionNormalized st
 	// Checking if error code extracted properly from string.
 	if strConvError != nil {
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log(
-			"msg", "String to int conversion error")
+			"msg", "String to int conversion error",
+			"normalized_query", queryExpressionNormalized,
+			"range_seconds", queryExpressionRangeLength,
+			"error", err)
 		return
 	}
 
 	// If error should be cached, store it in cache.
 	if !isCacheableError(errCode) {
 		level.Debug(util_log.WithContext(r.Context(), f.log)).Log(
-			"msg", "Query not cached due to non-cacheable error code")
+			"msg", "Query not cached due to non-cacheable error code",
+			"normalized_query", queryExpressionNormalized,
+			"range_seconds", queryExpressionRangeLength,
+			"error", err,
+		)
 		return
 	}
 
@@ -257,7 +270,12 @@ func (f *Handler) updateFailedQueryCache(err error, queryExpressionNormalized st
 	}
 
 	level.Debug(util_log.WithContext(r.Context(), f.log)).Log(
-		"msg", "Query cached", "response ")
+		"msg", "Cached a failed query",
+		"normalized_query", queryExpressionNormalized,
+		"range_seconds", queryExpressionRangeLength,
+		"error", err,
+	)
+
 }
 
 // isCacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false.
