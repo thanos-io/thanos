@@ -690,6 +690,10 @@ func (h *Handler) gatherWriteStats(writes ...map[endpointReplica]map[string]trac
 
 	for _, write := range writes {
 		for er := range write {
+			if er.replica != 0 {
+				// TODO: this is a temporary solution to avoid duplicated counting
+				continue
+			}
 			for tenant, series := range write[er] {
 				samples := 0
 
