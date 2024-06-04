@@ -121,11 +121,6 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 			Help: "Size of all chunks fetched to execute a query in bytes.",
 		}, []string{"user"})
 
-		h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "cached_failed_queries_count",
-			Help: "Total number of queries that hit the cache.",
-		})
-
 		h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
 			h.querySeconds.DeleteLabelValues(user)
 			h.querySeries.DeleteLabelValues(user)
@@ -135,6 +130,11 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
 		_ = h.activeUsers.StartAsync(context.Background())
 	}
+
+	h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "cached_failed_queries_count",
+		Help: "Total number of queries that hit the cache.",
+	})
 
 	return h
 }
