@@ -458,9 +458,9 @@ func runCompact(
 			}
 
 			for _, meta := range filteredMetas {
-				groupKey := meta.Thanos.GroupKey()
-				downsampleMetrics.downsamples.WithLabelValues(groupKey)
-				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
+				resolutionLabel := meta.Thanos.ResolutionString()
+				downsampleMetrics.downsamples.WithLabelValues(resolutionLabel)
+				downsampleMetrics.downsampleFailures.WithLabelValues(resolutionLabel)
 			}
 
 			if err := downsampleBucket(

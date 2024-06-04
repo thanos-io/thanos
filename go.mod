@@ -36,7 +36,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20201002093600-73cf2ae9d891
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201207153454-9f6bf00c00a7
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/hashicorp/golang-lru v0.6.0
 	github.com/jpillora/backoff v1.0.0
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.17.7
@@ -65,7 +64,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
 	github.com/thanos-io/objstore v0.0.0-20240309075357-e8336a5fd5f3
-	github.com/thanos-io/promql-engine v0.0.0-20240327143517-c5e4b2e6ef02
+	github.com/thanos-io/promql-engine v0.0.0-20240405095051-b7d0da367508
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -117,6 +116,7 @@ require (
 
 require (
 	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.29.0
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0

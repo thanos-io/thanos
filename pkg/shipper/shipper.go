@@ -136,13 +136,6 @@ func (s *Shipper) SetLabels(lbls labels.Labels) {
 	s.labels = func() labels.Labels { return lbls }
 }
 
-func (s *Shipper) getLabels() labels.Labels {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	return s.labels()
-}
-
 // Timestamps returns the minimum timestamp for which data is available and the highest timestamp
 // of blocks that were successfully uploaded.
 func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
@@ -254,6 +247,9 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 //
 // It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok).
 func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	meta, err := ReadMetaFile(s.metadataFilePath)
 	if err != nil {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
@@ -275,7 +271,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta.Uploaded = nil
 
 	var (
-		checker    = newLazyOverlapChecker(s.logger, s.bucket, s.getLabels)
+		checker    = newLazyOverlapChecker(s.logger, s.bucket, func() labels.Labels { return s.labels() })
 		uploadErrs int
 	)
 
@@ -355,6 +351,21 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	return uploaded, nil
 }
 
+func (s *Shipper) UploadedBlocks() map[ulid.ULID]struct{} {
+	meta, err := ReadMetaFile(s.metadataFilePath)
+	if err != nil {
+		// NOTE(GiedriusS): Sync() will inform users about any problems.
+		return nil
+	}
+
+	ret := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
+	for _, id := range meta.Uploaded {
+		ret[id] = struct{}{}
+	}
+
+	return ret
+}
+
 // sync uploads the block if not exists in remote storage.
 // TODO(khyatisoneji): Double check if block does not have deletion-mark.json for some reason, otherwise log it or return error.
 func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
@@ -382,8 +393,10 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 		return errors.Wrap(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
-	if lset := s.getLabels(); !lset.IsEmpty() {
-		meta.Thanos.Labels = lset.Map()
+	if lset := s.labels(); !lset.IsEmpty() {
+		lset.Range(func(l labels.Label) {
+			meta.Thanos.Labels[l.Name] = l.Value
+		})
 	}
 	meta.Thanos.Source = s.source
 	meta.Thanos.SegmentFiles = block.GetSegmentFiles(updir)

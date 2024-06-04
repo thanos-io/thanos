@@ -44,7 +44,7 @@ func NewWorkerPool(workers uint) WorkerPool {
 
 func (p *workerPool) Init() {
 	p.Do(func() {
-		for i := 0; i < cap(p.workCh); i++ {
+		for i := 0; i < p.Size(); i++ {
 			go func() {
 				for {
 					select {

@@ -353,6 +353,21 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			},
 		},
 		{
+			name: "posting group label with add keys exist but no matching value, expect empty posting",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 8}},
+				"bar": {"baz": index.Range{Start: 8, End: 16}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+			},
+			expectedPostingGroups: nil,
+			expectedEmptyPosting:  true,
+		},
+		{
 			name: "posting group label with remove keys exist but no matching value, noop",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},

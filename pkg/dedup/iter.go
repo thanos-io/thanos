@@ -296,6 +296,7 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 		b:        b,
 		lastT:    math.MinInt64,
 		lastIter: a,
+		useA:     true,
 		aval:     a.Next(),
 		bval:     b.Next(),
 	}

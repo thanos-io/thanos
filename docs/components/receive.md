@@ -415,6 +415,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.split-tenant-label-name=""
+                                 Label name through which the request will
+                                 be split into multiple tenants. This takes
+                                 precedence over the HTTP header.
       --receive.tenant-certificate-field=
                                  Use TLS client's certificate field to
                                  determine tenant for write requests.
@@ -440,6 +444,12 @@ Flags:
                                  to the server.
       --remote-write.client-tls-key=""
                                  TLS Key for the client's certificate.
+      --remote-write.client-tls-secure
+                                 Use TLS when talking to the other receivers.
+      --remote-write.client-tls-skip-verify
+                                 Disable TLS certificate verification when
+                                 talking to the other receivers i.e self signed,
+                                 signed by fake CA.
       --remote-write.server-tls-cert=""
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.

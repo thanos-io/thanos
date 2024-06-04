@@ -144,8 +144,8 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.grpcConfig.tlsSrvCert != "",
-		conf.grpcConfig.tlsSrvClientCA == "",
+		conf.rwClientSecure,
+		conf.rwClientSkipVerify,
 		conf.rwClientCert,
 		conf.rwClientKey,
 		conf.rwClientServerCA,
@@ -241,24 +241,25 @@ func runReceive(
 	}
 
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		TenantField:       conf.tenantField,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		RelabelConfigs:    relabelConfig,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		MaxBackoff:        time.Duration(*conf.maxBackoff),
-		TSDBStats:         dbs,
-		Limiter:           limiter,
+		Writer:               writer,
+		ListenAddress:        conf.rwAddress,
+		Registry:             reg,
+		Endpoint:             conf.endpoint,
+		TenantHeader:         conf.tenantHeader,
+		TenantField:          conf.tenantField,
+		DefaultTenantID:      conf.defaultTenantID,
+		ReplicaHeader:        conf.replicaHeader,
+		ReplicationFactor:    conf.replicationFactor,
+		RelabelConfigs:       relabelConfig,
+		ReceiverMode:         receiveMode,
+		Tracer:               tracer,
+		TLSConfig:            rwTLSConfig,
+		SplitTenantLabelName: conf.splitTenantLabelName,
+		DialOpts:             dialOpts,
+		ForwardTimeout:       time.Duration(*conf.forwardTimeout),
+		MaxBackoff:           time.Duration(*conf.maxBackoff),
+		TSDBStats:            dbs,
+		Limiter:              limiter,
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 	})
@@ -346,7 +347,7 @@ func runReceive(
 		infoSrv := info.NewInfoServer(
 			component.Receive.String(),
 			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
-			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					minTime, maxTime := proxy.TimeRange()
 					return &infopb.StoreInfo{
@@ -355,9 +356,9 @@ func runReceive(
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
 						TsdbInfos:                    proxy.TSDBInfos(),
-					}
+					}, nil
 				}
-				return nil
+				return nil, errors.New("Not ready")
 			}),
 			info.WithExemplarsInfoFunc(),
 		)
@@ -784,8 +785,10 @@ type receiveConfig struct {
 	rwServerClientCA   string
 	rwClientCert       string
 	rwClientKey        string
+	rwClientSecure     bool
 	rwClientServerCA   string
 	rwClientServerName string
+	rwClientSkipVerify bool
 
 	dataDir   string
 	labelStrs []string
@@ -821,9 +824,10 @@ type receiveConfig struct {
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbEnableNativeHistograms   bool
 
-	walCompression  bool
-	noLockFile      bool
-	writerInterning bool
+	walCompression       bool
+	noLockFile           bool
+	writerInterning      bool
+	splitTenantLabelName string
 
 	hashFunc string
 
@@ -858,6 +862,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&rc.rwClientKey)
 
+	cmd.Flag("remote-write.client-tls-secure", "Use TLS when talking to the other receivers.").Default("false").BoolVar(&rc.rwClientSecure)
+
+	cmd.Flag("remote-write.client-tls-skip-verify", "Disable TLS certificate verification when talking to the other receivers i.e self signed, signed by fake CA.").Default("false").BoolVar(&rc.rwClientSkipVerify)
+
 	cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").StringVar(&rc.rwClientServerCA)
 
 	cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned TLS certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&rc.rwClientServerName)
@@ -890,6 +898,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
 	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(tenancy.DefaultTenant).StringVar(&rc.defaultTenantID)
+
+	cmd.Flag("receive.split-tenant-label-name", "Label name through which the request will be split into multiple tenants. This takes precedence over the HTTP header.").Default("").StringVar(&rc.splitTenantLabelName)
 
 	cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(tenancy.DefaultTenantLabel).StringVar(&rc.tenantLabelName)
 

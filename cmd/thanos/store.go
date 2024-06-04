@@ -491,7 +491,7 @@ func runStore(
 		info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 			return bs.LabelSet()
 		}),
-		info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+		info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 			if httpProbe.IsReady() {
 				mint, maxt := bs.TimeRange()
 				return &infopb.StoreInfo{
@@ -500,9 +500,9 @@ func runStore(
 					SupportsSharding:             true,
 					SupportsWithoutReplicaLabels: true,
 					TsdbInfos:                    bs.TSDBInfos(),
-				}
+				}, nil
 			}
-			return nil
+			return nil, errors.New("Not ready")
 		}),
 	)
 

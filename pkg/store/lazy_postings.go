@@ -54,15 +54,6 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			return nil, false, errors.Wrapf(err, "postings offsets for %s", pg.name)
 		}
 
-		// If the posting group adds keys, no posting ranges found means empty posting.
-		if len(pg.addKeys) > 0 && len(rngs) == 0 {
-			return nil, true, nil
-		}
-		// If the posting group removes keys, no posting ranges found is fine. It means
-		// that the posting group is a noop. {job != "some_non_existent_value"}
-		if len(pg.removeKeys) > 0 && len(rngs) == 0 {
-			continue
-		}
 		for _, r := range rngs {
 			if r == indexheader.NotFoundRange {
 				continue
@@ -71,6 +62,11 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			// Need to subtract it when calculating number of postings.
 			// https://github.com/prometheus/prometheus/blob/v2.46.0/tsdb/docs/format/index.md.
 			pg.cardinality += (r.End - r.Start - 4) / 4
+		}
+		// If the posting group adds keys, 0 cardinality means the posting doesn't exist.
+		// If the posting group removes keys, no posting ranges found is fine as it is a noop.
+		if len(pg.addKeys) > 0 && pg.cardinality == 0 {
+			return nil, true, nil
 		}
 	}
 	slices.SortFunc(postingGroups, func(a, b *postingGroup) int {

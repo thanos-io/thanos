@@ -30,11 +30,12 @@ enum EngineType {
 
 message QueryRequest {
   string query = 1;
+  queryPlan queryPlan = 14;
 
   int64 time_seconds = 2;
   int64 timeout_seconds = 3;
   int64 max_resolution_seconds = 4;
-    
+
   repeated string replica_labels = 5;
 
   repeated StoreMatchers storeMatchers = 6 [(gogoproto.nullable) = false];
@@ -65,8 +66,15 @@ message QueryResponse {
   }
 }
 
+message queryPlan {
+  oneof encoding {
+    bytes json = 1;
+  }
+}
+
 message QueryRangeRequest {
   string query = 1;
+  queryPlan queryPlan = 16;
 
   int64 start_time_seconds = 2;
   int64 end_time_seconds = 3;
