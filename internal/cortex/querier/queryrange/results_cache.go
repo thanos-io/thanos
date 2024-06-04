@@ -99,7 +99,8 @@ func (PrometheusResponseExtractor) Extract(start, end int64, from Response) Resp
 			Stats:      extractStats(start, end, promRes.Data.Stats),
 			Analysis:   promRes.Data.Analysis,
 		},
-		Headers: promRes.Headers,
+		Headers:  promRes.Headers,
+		Warnings: promRes.Warnings,
 	}
 }
 
@@ -115,6 +116,7 @@ func (PrometheusResponseExtractor) ResponseWithoutHeaders(resp Response) Respons
 			Stats:      promRes.Data.Stats,
 			Analysis:   promRes.Data.Analysis,
 		},
+		Warnings: promRes.Warnings,
 	}
 }
 
@@ -124,11 +126,13 @@ func (PrometheusResponseExtractor) ResponseWithoutStats(resp Response) Response 
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
-			ResultType: promRes.Data.ResultType,
-			Result:     promRes.Data.Result,
-			Analysis:   promRes.Data.Analysis,
+			ResultType:         promRes.Data.ResultType,
+			Result:             promRes.Data.Result,
+			Analysis:           promRes.Data.Analysis,
+			SeriesStatsCounter: promRes.Data.SeriesStatsCounter,
 		},
-		Headers: promRes.Headers,
+		Headers:  promRes.Headers,
+		Warnings: promRes.Warnings,
 	}
 }
 

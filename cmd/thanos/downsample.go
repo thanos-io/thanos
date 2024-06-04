@@ -50,16 +50,16 @@ func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 	m.downsamples = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_downsample_total",
 		Help: "Total number of downsampling attempts.",
-	}, []string{"group"})
+	}, []string{"resolution"})
 	m.downsampleFailures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_downsample_failures_total",
 		Help: "Total number of failed downsampling attempts.",
-	}, []string{"group"})
+	}, []string{"resolution"})
 	m.downsampleDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_compact_downsample_duration_seconds",
 		Help:    "Duration of downsample runs",
 		Buckets: []float64{60, 300, 900, 1800, 3600, 7200, 14400}, // 1m, 5m, 15m, 30m, 60m, 120m, 240m
-	}, []string{"group"})
+	}, []string{"resolution"})
 
 	return m
 }
@@ -130,9 +130,9 @@ func RunDownsample(
 				}
 
 				for _, meta := range metas {
-					groupKey := meta.Thanos.GroupKey()
-					metrics.downsamples.WithLabelValues(groupKey)
-					metrics.downsampleFailures.WithLabelValues(groupKey)
+					resolutionLabel := meta.Thanos.ResolutionString()
+					metrics.downsamples.WithLabelValues(resolutionLabel)
+					metrics.downsampleFailures.WithLabelValues(resolutionLabel)
 				}
 				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
@@ -263,11 +263,11 @@ func downsampleBucket(
 					errMsg = "downsampling to 60 min"
 				}
 				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics, acceptMalformedIndex, blockFilesConcurrency); err != nil {
-					metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
+					metrics.downsampleFailures.WithLabelValues(m.Thanos.ResolutionString()).Inc()
 					errCh <- errors.Wrap(err, errMsg)
 
 				}
-				metrics.downsamples.WithLabelValues(m.Thanos.GroupKey()).Inc()
+				metrics.downsamples.WithLabelValues(m.Thanos.ResolutionString()).Inc()
 			}
 		}()
 	}
@@ -391,7 +391,7 @@ func processDownsampling(
 	downsampleDuration := time.Since(begin)
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", downsampleDuration, "duration_ms", downsampleDuration.Milliseconds())
-	metrics.downsampleDuration.WithLabelValues(m.Thanos.GroupKey()).Observe(downsampleDuration.Seconds())
+	metrics.downsampleDuration.WithLabelValues(m.Thanos.ResolutionString()).Observe(downsampleDuration.Seconds())
 
 	stats, err := block.GatherIndexHealthStats(ctx, logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime)
 	if err == nil {

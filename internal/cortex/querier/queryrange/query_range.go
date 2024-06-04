@@ -243,6 +243,17 @@ func AnalyzesMerge(analysis ...*Analysis) *Analysis {
 	return root
 }
 
+func SeriesStatsCounterMerge(seriesStatsCounters ...*SeriesStatsCounter) *SeriesStatsCounter {
+	result := SeriesStatsCounter{}
+	for _, c := range seriesStatsCounters {
+		result.Series += c.Series
+		result.Chunks += c.Chunks
+		result.Samples += c.Samples
+		result.Bytes += c.Bytes
+	}
+	return &result
+}
+
 func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response, error) {
 	if len(responses) == 0 {
 		return NewEmptyPrometheusResponse(), nil
@@ -260,13 +271,26 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 	// Merge the responses.
 	sort.Sort(byFirstTime(promResponses))
 
-	analyzes := make([]*Analysis, 0, len(responses))
+	var (
+		analyzes          = make([]*Analysis, 0, len(responses))
+		warnings []string = nil
+	)
 	for i := range promResponses {
-		if promResponses[i].Data.GetAnalysis() == nil {
+		if promResponses[i].Data.GetAnalysis() != nil {
+			analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
+		}
+		if len(promResponses[i].Warnings) > 0 {
+			warnings = append(warnings, promResponses[i].Warnings...)
+		}
+	}
+
+	seriesStatsCounters := make([]*SeriesStatsCounter, 0, len(responses))
+	for i := range promResponses {
+		if promResponses[i].Data.GetSeriesStatsCounter() == nil {
 			continue
 		}
 
-		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
+		seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
 	}
 
 	response := PrometheusResponse{
@@ -277,6 +301,10 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 			Stats:      StatsMerge(responses),
 			Analysis:   AnalyzesMerge(analyzes...),
 		},
+		Warnings: warnings,
+	}
+	if len(seriesStatsCounters) > 0 {
+		response.Data.SeriesStatsCounter = SeriesStatsCounterMerge(seriesStatsCounters...)
 	}
 	response.Headers = QueryBytesFetchedPrometheusResponseHeaders(responses...)
 	if len(resultsCacheGenNumberHeaderValues) != 0 {
@@ -450,7 +478,11 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 	httpHeader := http.Header{
 		"Content-Type": []string{"application/json"}}
 	if queryBytesFetchedHttpHeaderValue := QueryBytesFetchedHttpHeaderValue(res); queryBytesFetchedHttpHeaderValue != nil {
+		// M3 code path
 		httpHeader[QueryBytesFetchedHeaderName] = queryBytesFetchedHttpHeaderValue
+	} else if res.(*PrometheusResponse).Data.SeriesStatsCounter != nil {
+		// Pantheon code path
+		httpHeader[QueryBytesFetchedHeaderName] = []string{strconv.FormatInt(res.(*PrometheusResponse).Data.SeriesStatsCounter.Bytes, 10)}
 	}
 	resp := http.Response{
 		Header:        httpHeader,
@@ -572,10 +604,11 @@ func (s *StringSample) UnmarshalJSON(b []byte) error {
 // UnmarshalJSON implements json.Unmarshaler.
 func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	var queryData struct {
-		ResultType string                   `json:"resultType"`
-		Result     jsoniter.RawMessage      `json:"result"`
-		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-		Analysis   *Analysis                `json:"analysis,omitempty"`
+		ResultType         string                   `json:"resultType"`
+		Result             jsoniter.RawMessage      `json:"result"`
+		Stats              *PrometheusResponseStats `json:"stats,omitempty"`
+		Analysis           *Analysis                `json:"analysis,omitempty"`
+		SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
 	}
 
 	if err := json.Unmarshal(data, &queryData); err != nil {
@@ -585,6 +618,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	s.ResultType = queryData.ResultType
 	s.Stats = queryData.Stats
 	s.Analysis = queryData.Analysis
+	s.SeriesStatsCounter = queryData.SeriesStatsCounter
 	switch s.ResultType {
 	case model.ValVector.String():
 		var result struct {
@@ -644,54 +678,62 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 	switch s.ResultType {
 	case model.ValVector.String():
 		res := struct {
-			ResultType string                   `json:"resultType"`
-			Data       []*Sample                `json:"result"`
-			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-			Analysis   *Analysis                `json:"analysis,omitempty"`
+			ResultType         string                   `json:"resultType"`
+			Data               []*Sample                `json:"result"`
+			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis           *Analysis                `json:"analysis,omitempty"`
+			SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
 		}{
-			ResultType: s.ResultType,
-			Data:       s.Result.GetVector().Samples,
-			Stats:      s.Stats,
-			Analysis:   s.Analysis,
+			ResultType:         s.ResultType,
+			Data:               s.Result.GetVector().Samples,
+			Stats:              s.Stats,
+			Analysis:           s.Analysis,
+			SeriesStatsCounter: s.SeriesStatsCounter,
 		}
 		return json.Marshal(res)
 	case model.ValMatrix.String():
 		res := struct {
-			ResultType string                   `json:"resultType"`
-			Data       []*SampleStream          `json:"result"`
-			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-			Analysis   *Analysis                `json:"analysis,omitempty"`
+			ResultType         string                   `json:"resultType"`
+			Data               []*SampleStream          `json:"result"`
+			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis           *Analysis                `json:"analysis,omitempty"`
+			SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
 		}{
-			ResultType: s.ResultType,
-			Data:       s.Result.GetMatrix().SampleStreams,
-			Stats:      s.Stats,
-			Analysis:   s.Analysis,
+			ResultType:         s.ResultType,
+			Data:               s.Result.GetMatrix().SampleStreams,
+			Stats:              s.Stats,
+			Analysis:           s.Analysis,
+			SeriesStatsCounter: s.SeriesStatsCounter,
 		}
 		return json.Marshal(res)
 	case model.ValScalar.String():
 		res := struct {
-			ResultType string                   `json:"resultType"`
-			Data       *cortexpb.Sample         `json:"result"`
-			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-			Analysis   *Analysis                `json:"analysis,omitempty"`
+			ResultType         string                   `json:"resultType"`
+			Data               *cortexpb.Sample         `json:"result"`
+			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis           *Analysis                `json:"analysis,omitempty"`
+			SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
 		}{
-			ResultType: s.ResultType,
-			Data:       s.Result.GetScalar(),
-			Stats:      s.Stats,
-			Analysis:   s.Analysis,
+			ResultType:         s.ResultType,
+			Data:               s.Result.GetScalar(),
+			Stats:              s.Stats,
+			Analysis:           s.Analysis,
+			SeriesStatsCounter: s.SeriesStatsCounter,
 		}
 		return json.Marshal(res)
 	case model.ValString.String():
 		res := struct {
-			ResultType string                   `json:"resultType"`
-			Data       *StringSample            `json:"result"`
-			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-			Analysis   *Analysis                `json:"analysis,omitempty"`
+			ResultType         string                   `json:"resultType"`
+			Data               *StringSample            `json:"result"`
+			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis           *Analysis                `json:"analysis,omitempty"`
+			SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
 		}{
-			ResultType: s.ResultType,
-			Data:       s.Result.GetStringSample(),
-			Stats:      s.Stats,
-			Analysis:   s.Analysis,
+			ResultType:         s.ResultType,
+			Data:               s.Result.GetStringSample(),
+			Stats:              s.Stats,
+			Analysis:           s.Analysis,
+			SeriesStatsCounter: s.SeriesStatsCounter,
 		}
 		return json.Marshal(res)
 	default:

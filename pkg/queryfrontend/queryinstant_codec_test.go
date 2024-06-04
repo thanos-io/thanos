@@ -173,10 +173,10 @@ func TestQueryInstantCodec_DecodeRequest(t *testing.T) {
 			codec := NewThanosQueryInstantCodec(tc.partialResponse)
 			req, err := codec.DecodeRequest(context.Background(), r, nil)
 			if tc.expectedError != nil {
-				testutil.Equals(t, err, tc.expectedError)
+				testutil.Equals(t, tc.expectedError, err)
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, req, tc.expectedRequest)
+				testutil.Equals(t, tc.expectedRequest, req)
 			}
 		})
 	}
@@ -264,10 +264,10 @@ func TestQueryInstantCodec_EncodeRequest(t *testing.T) {
 			codec := NewThanosQueryInstantCodec(false)
 			r, err := codec.EncodeRequest(context.TODO(), tc.req)
 			if tc.expectedError != nil {
-				testutil.Equals(t, err, tc.expectedError)
+				testutil.Equals(t, tc.expectedError, err)
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, tc.checkFunc(r), true)
+				testutil.Equals(t, true, tc.checkFunc(r))
 			}
 		})
 	}
@@ -639,6 +639,90 @@ func TestMergeResponse(t *testing.T) {
 			},
 		},
 		{
+			name: "merge two responses with series status counter",
+			req:  defaultReq,
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Timestamp:   0,
+											SampleValue: 1,
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+						SeriesStatsCounter: &queryrange.SeriesStatsCounter{Series: 2, Chunks: 16, Samples: 256, Bytes: 1024},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Timestamp:   0,
+											SampleValue: 2,
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+									},
+								},
+							},
+						},
+						SeriesStatsCounter: &queryrange.SeriesStatsCounter{Series: 2, Chunks: 16, Samples: 256, Bytes: 1024},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValVector.String(),
+					Analysis:   &queryrange.Analysis{},
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{
+									{
+										Timestamp:   0,
+										SampleValue: 2,
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Timestamp:   0,
+										SampleValue: 1,
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+					SeriesStatsCounter: &queryrange.SeriesStatsCounter{Series: 4, Chunks: 32, Samples: 512, Bytes: 2048},
+				},
+			},
+		},
+		{
 			name: "merge multiple responses with same label sets, won't happen if sharding is enabled on downstream querier",
 			req:  defaultReq,
 			resps: []queryrange.Response{
@@ -945,8 +1029,8 @@ func TestMergeResponse(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := codec.MergeResponse(tc.req, tc.resps...)
-			testutil.Equals(t, err, tc.expectedErr)
-			testutil.Equals(t, resp, tc.expectedResp)
+			testutil.Equals(t, tc.expectedErr, err)
+			testutil.Equals(t, tc.expectedResp, resp)
 		})
 	}
 }

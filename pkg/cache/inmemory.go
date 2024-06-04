@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	lru "github.com/hashicorp/golang-lru/simplelru"
+	lru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -46,7 +46,7 @@ type InMemoryCache struct {
 
 	mtx         sync.Mutex
 	curSize     uint64
-	lru         *lru.LRU
+	lru         *lru.LRU[string, cacheDataWithTTLWrapper]
 	evicted     prometheus.Counter
 	requests    prometheus.Counter
 	hits        prometheus.Counter
@@ -62,11 +62,12 @@ type InMemoryCache struct {
 
 type cacheDataWithTTLWrapper struct {
 	data []byte
-	// The objects that are over the TTL are not destroyed eagerly.
-	// When there is a hit for an item that is over the TTL, the object is removed from the cache
-	// and null is returned.
-	// There is ongoing effort to integrate TTL within the Hashicorp golang cache itself.
-	// This https://github.com/hashicorp/golang-lru/pull/41 can be used here once complete.
+	// Items exceeding their Time-To-Live (TTL) are not immediately removed from the cache.
+	// Instead, when an access attempt is made for an item past its TTL, the item is evicted from the cache, and a null value is returned.
+	// Efforts are underway to incorporate TTL directly into the Hashicorp golang cache.
+	// Although this pull request (https://github.com/hashicorp/golang-lru/pull/41) has been completed, it's challenging to apply here due to the following reasons:
+	// The Hashicorp LRU API requires setting the TTL during the constructor phase, whereas in Thanos, we set the TTL for each Set()/Store() operation.
+	// Refer to this link for more details: https://github.com/thanos-io/thanos/blob/23d205286436291fa0c55c25c392ee08f42d5fbf/pkg/store/cache/caching_bucket.go#L167-L175
 	expiryTime time.Time
 }
 
@@ -176,7 +177,7 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(maxInt, c.onEvict)
+	l, err := lru.NewLRU[string, cacheDataWithTTLWrapper](maxInt, c.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -191,9 +192,9 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 	return c, nil
 }
 
-func (c *InMemoryCache) onEvict(key, val interface{}) {
-	keySize := uint64(len(key.(string)))
-	entrySize := uint64(len(val.(cacheDataWithTTLWrapper).data))
+func (c *InMemoryCache) onEvict(key string, val cacheDataWithTTLWrapper) {
+	keySize := uint64(len(key))
+	entrySize := uint64(len(val.data))
 
 	c.evicted.Inc()
 	c.current.Dec()
@@ -214,13 +215,13 @@ func (c *InMemoryCache) get(key string) ([]byte, bool) {
 	}
 	// If the present time is greater than the TTL for the object from cache, the object will be
 	// removed from the cache and a nil will be returned
-	if time.Now().After(v.(cacheDataWithTTLWrapper).expiryTime) {
+	if time.Now().After(v.expiryTime) {
 		c.hitsExpired.Inc()
 		c.lru.Remove(key)
 		return nil, false
 	}
 	c.hits.Inc()
-	return v.(cacheDataWithTTLWrapper).data, true
+	return v.data, true
 }
 
 func (c *InMemoryCache) set(key string, val []byte, ttl time.Duration) {

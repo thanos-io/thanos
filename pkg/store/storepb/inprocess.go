@@ -36,7 +36,9 @@ func (s serverAsClient) Series(ctx context.Context, in *SeriesRequest, _ ...grpc
 	inSrv := &inProcessStream{recv: make(chan *SeriesResponse), err: make(chan error)}
 	inSrv.ctx, inSrv.cancel = context.WithCancel(ctx)
 	go func() {
-		inSrv.err <- s.srv.Series(in, inSrv)
+		if err := s.srv.Series(in, inSrv); err != nil {
+			inSrv.err <- err
+		}
 		close(inSrv.err)
 		close(inSrv.recv)
 	}()
@@ -88,15 +90,13 @@ func (s *inProcessClientStream) CloseSend() error {
 
 func (s *inProcessClientStream) Recv() (*SeriesResponse, error) {
 	select {
-	case <-s.srv.ctx.Done():
-		return nil, s.srv.ctx.Err()
 	case r, ok := <-s.srv.recv:
 		if !ok {
 			return nil, io.EOF
 		}
 		return r, nil
-	case err := <-s.srv.err:
-		if err == nil {
+	case err, ok := <-s.srv.err:
+		if !ok {
 			return nil, io.EOF
 		}
 		return nil, err

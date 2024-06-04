@@ -127,6 +127,9 @@ func registerQuery(app *extkingpin.App) {
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
 
+	enableDedupMerge := cmd.Flag("query.dedup-merge", "Enable deduplication merge of multiple time series with the same labels.").
+		Default("false").Bool()
+
 	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
 	defaultMetadataTimeRange := cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
@@ -218,7 +221,7 @@ func registerQuery(app *extkingpin.App) {
 	storeSelectorRelabelConf := *extflag.RegisterPathOrContent(
 		cmd,
 		"selector.relabel-config",
-		"YAML with relabeling configuration that allows the Querier to select specific TSDBs by their external label. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		"YAML file with relabeling configuration that allows selecting blocks to query based on their external labels. It follows the Thanos sharding relabel-config syntax. For format details see: https://thanos.io/tip/thanos/sharding.md/#relabelling ",
 		extflag.WithEnvSubstitution(),
 	)
 
@@ -374,6 +377,7 @@ func registerQuery(app *extkingpin.App) {
 			*enforceTenancy,
 			*tenantLabel,
 			*enableGroupReplicaPartialStrategy,
+			*enableDedupMerge,
 		)
 	})
 }
@@ -457,6 +461,7 @@ func runQuery(
 	enforceTenancy bool,
 	tenantLabel string,
 	groupReplicaPartialResponseStrategy bool,
+	enableDedupMerge bool,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -566,24 +571,19 @@ func runQuery(
 		exemplarsProxy   = exemplars.NewProxy(logger, endpoints.GetExemplarsStores, selectorLset)
 		queryableCreator query.QueryableCreator
 	)
-	if groupReplicaPartialResponseStrategy {
-		level.Info(logger).Log("msg", "Enabled group-replica partial response strategy")
-		queryableCreator = query.NewQueryableCreatorWithGroupReplicaPartialResponseStrategy(
-			logger,
-			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
-			proxy,
-			maxConcurrentSelects,
-			queryTimeout,
-		)
-	} else {
-		queryableCreator = query.NewQueryableCreator(
-			logger,
-			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
-			proxy,
-			maxConcurrentSelects,
-			queryTimeout,
-		)
+	opts := query.Options{
+		GroupReplicaPartialResponseStrategy: groupReplicaPartialResponseStrategy,
+		EnableDedupMerge:                    enableDedupMerge,
 	}
+	level.Info(logger).Log("msg", "databricks querier features", "opts", opts)
+	queryableCreator = query.NewQueryableCreatorWithOptions(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_query_", reg),
+		proxy,
+		maxConcurrentSelects,
+		queryTimeout,
+		opts,
+	)
 
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
@@ -803,7 +803,7 @@ func runQuery(
 		infoSrv := info.NewInfoServer(
 			component.Query.String(),
 			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
-			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
 					return &infopb.StoreInfo{
@@ -812,9 +812,9 @@ func runQuery(
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
 						TsdbInfos:                    proxy.TSDBInfos(),
-					}
+					}, nil
 				}
-				return nil
+				return nil, errors.New("Not ready")
 			}),
 			info.WithExemplarsInfoFunc(),
 			info.WithRulesInfoFunc(),

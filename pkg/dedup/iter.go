@@ -11,13 +11,20 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/util/annotations"
-
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+// For the series we didn't pick, add a penalty twice as high as the delta of the last two
+// samples to the next seek against it.
+// This ensures that we don't pick a sample too close, which would increase the overall
+// sample frequency. It also guards against clock drift and inaccuracies during
+// timestamp assignment.
+// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
+// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
+const initialPenalty = 5000
+
 type dedupSeriesSet struct {
-	set       storage.SeriesSet
-	isCounter bool
+	set storage.SeriesSet
 
 	replicas []storage.Series
 
@@ -103,12 +110,12 @@ func (o *overlapSplitSet) Err() error {
 // NewSeriesSet returns seriesSet that deduplicates the same series.
 // The series in series set are expected be sorted by all labels.
 func NewSeriesSet(set storage.SeriesSet, f string) storage.SeriesSet {
-	// TODO: remove dependency on knowing whether it is a counter.
-	s := &dedupSeriesSet{set: set, isCounter: isCounter(f), f: f}
+	s := &dedupSeriesSet{set: set, f: f}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
 	}
+
 	return s
 }
 
@@ -153,7 +160,10 @@ func (s *dedupSeriesSet) At() storage.Series {
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
-
+	if s.f == UseMergedSeries {
+		// merge all samples which are ingested via receiver, no skips.
+		return NewMergedSeries(s.lset, repl)
+	}
 	return newDedupSeries(s.lset, repl, s.f)
 }
 
@@ -286,6 +296,7 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 		b:        b,
 		lastT:    math.MinInt64,
 		lastIter: a,
+		useA:     true,
 		aval:     a.Next(),
 		bval:     b.Next(),
 	}
@@ -336,15 +347,6 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	tb := it.b.AtT()
 
 	it.useA = ta <= tb
-
-	// For the series we didn't pick, add a penalty twice as high as the delta of the last two
-	// samples to the next seek against it.
-	// This ensures that we don't pick a sample too close, which would increase the overall
-	// sample frequency. It also guards against clock drift and inaccuracies during
-	// timestamp assignment.
-	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
-	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenalty = 5000
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
