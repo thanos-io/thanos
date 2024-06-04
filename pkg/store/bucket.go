@@ -2880,12 +2880,12 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 		return false, nil, nil
 	}
 	for _, b := range bytesLimiters {
-		if err := b.ReserveWithType(uint64(len(dataFromCache)), PostingsFetched); err != nil {
+		if err := b.ReserveWithType(uint64(len(dataFromCache)), PostingsTouched); err != nil {
 			return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
 		}
 	}
 
-	r.stats.add(PostingsFetched, 1, len(dataFromCache))
+	r.stats.add(PostingsTouched, 1, len(dataFromCache))
 	p, closeFns, err := r.decodeCachedPostings(dataFromCache)
 	defer func() {
 		for _, closeFn := range closeFns {
