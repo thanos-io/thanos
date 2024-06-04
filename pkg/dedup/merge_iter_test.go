@@ -4,12 +4,23 @@
 package dedup
 
 import (
+	"math"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 )
+
+func TestIteratorEdgeCases(t *testing.T) {
+	ms := NewMergedSeries(labels.Labels{}, []storage.Series{})
+	it := ms.Iterator(nil)
+	testutil.Ok(t, it.Err())
+	testutil.Equals(t, int64(math.MinInt64), it.AtT())
+	testutil.Equals(t, chunkenc.ValNone, it.Next())
+	testutil.Ok(t, it.Err())
+}
 
 func TestMergedSeriesIterator(t *testing.T) {
 	for _, tcase := range []struct {

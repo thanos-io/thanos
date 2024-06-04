@@ -92,18 +92,23 @@ func (m *mergedSeriesIterator) At() (t int64, v float64) {
 	return m.lastIter.At()
 }
 
-func (it *mergedSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
-	return it.lastIter.AtHistogram(h)
+func (m *mergedSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return m.lastIter.AtHistogram(h)
 }
 
-func (it *mergedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	return it.lastIter.AtFloatHistogram(fh)
+func (m *mergedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return m.lastIter.AtFloatHistogram(fh)
 }
 
-func (it *mergedSeriesIterator) AtT() int64 {
-	return it.lastT
+func (m *mergedSeriesIterator) AtT() int64 {
+	return m.lastT
 }
 
+// Err All At() funcs should panic if called after Next() or Seek() return ValNone.
+// Only Err() should return nil even after Next() or Seek() return ValNone.
 func (m *mergedSeriesIterator) Err() error {
+	if m.lastIter == nil {
+		return nil
+	}
 	return m.lastIter.Err()
 }
