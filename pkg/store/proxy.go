@@ -575,7 +575,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 
 func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) {
 	storeAddr, isLocalStore = st.Addr()
-	storeID = labelpb.PromLabelSetsToString(st.LabelSets())
+	storeID = st.String()
 	if storeID == "" {
 		storeID = "Store Gateway"
 	}
