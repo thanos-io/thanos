@@ -71,8 +71,8 @@ type Handler struct {
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
-// CacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false
-func CacheableError(statusCode int) bool {
+// isCacheableError Returns true if response code is in pre-defined cacheable errors list, else returns false
+func isCacheableError(statusCode int) bool {
 	for _, errStatusCode := range cacheableResponseCodes {
 		if errStatusCode == statusCode {
 			return true
@@ -84,15 +84,15 @@ func CacheableError(statusCode int) bool {
 // NewHandler creates a new frontend handler.
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
 	var (
-		LRU *lru.Cache
+		LruCache *lru.Cache
+		err      error
 	)
 
 	if cfg.FailedQueryCacheCapacity > 0 {
-		LRU_res, err := lru.New(cfg.FailedQueryCacheCapacity)
-		LRU = LRU_res
+		LruCache, err = lru.New(cfg.FailedQueryCacheCapacity)
 		if err != nil {
-			LRU = nil
-			level.Error(log).Log("msg", "failed to create lru cache", "err", err)
+			LruCache = nil
+			level.Error(log).Log("msg", "Failed to create LruCache", "err", err)
 		}
 	}
 
@@ -100,7 +100,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		cfg:          cfg,
 		log:          log,
 		roundTripper: roundTripper,
-		lru:          LRU,
+		lru:          LruCache,
 		regex:        regexp.MustCompile(`[\s\n\t]+`),
 		errorExtract: regexp.MustCompile(`Code\((\d+)\)`),
 	}
@@ -121,13 +121,8 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 			Help: "Size of all chunks fetched to execute a query in bytes.",
 		}, []string{"user"})
 
-		h.totalQueries = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "cortex_queries_total",
-			Help: "Total number of queries.",
-		})
-
 		h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "cortex_queries_hits_total",
+			Name: "cached_failed_queries_count",
 			Help: "Total number of queries that hit the cache.",
 		})
 
@@ -158,9 +153,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ctx context.Context
 		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
 		r = r.WithContext(ctx)
-		// Increment total queries
-		f.totalQueries.Inc()
-		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "QUERY STATS ENABLED, COUNTERS INSTANTIATED")
+		level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", "Query Stats Enabled")
 	}
 
 	defer func() {
@@ -190,7 +183,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return end - start
 		}
 
-		//Store query time range length
+		// Store query time range length
 		queryExpressionRangeLength = getQueryRangeSeconds()
 
 		// Check if query in cache and whether value exceeds time range length
@@ -224,12 +217,12 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// Checking if error code extracted properly
 				if strConvError != nil {
 					level.Error(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "STRING TO INT CONVERSION ERROR ", "response ", resp,
+						"msg", "String to int conversion error", "response ", resp,
 					)
 				}
 
 				// If error should be cached, store it in cache
-				if CacheableError(errCode) {
+				if isCacheableError(errCode) {
 					//checks if queryExpression is already in cache, and updates time range length value if it is shorter
 					if contains, _ := f.lru.ContainsOrAdd(queryExpressionNormalized, queryExpressionRangeLength); contains {
 						if oldValue, ok := f.lru.Get(queryExpressionNormalized); ok {
@@ -239,16 +232,16 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 
 					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "CACHED QUERY: CACHABLE ERROR", "response ", resp,
+						"msg", "Cached query due to cacheable error code", "response ", resp,
 					)
 				} else {
 					level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-						"msg", "DID NOT CACHE QUERY: NOT CACHABLE ERROR", "response ", resp,
+						"msg", "Did not cache query due to non-cacheable error code", "response ", resp,
 					)
 				}
 			} else {
 				level.Error(util_log.WithContext(r.Context(), f.log)).Log(
-					"msg", "REGEX CONVERSION ERROR ", "response ", resp,
+					"msg", "Error string regex conversion error", "response ", resp,
 				)
 			}
 		}
