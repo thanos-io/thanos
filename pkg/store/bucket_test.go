@@ -3866,13 +3866,13 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 		func(_ prometheus.Counter) []BytesLimiter {
 			return []BytesLimiter{
 				&bytesLimiterMock{
-					limitFunc: func(_ uint64, _ storeDataType) error {
+					limitFunc: func(_ uint64, _ StoreDataType) error {
 						firstBytesLimiterChecked = true
 						return nil
 					},
 				},
 				&bytesLimiterMock{
-					limitFunc: func(_ uint64, _ storeDataType) error {
+					limitFunc: func(_ uint64, _ StoreDataType) error {
 						secondBytesLimiterChecked = true
 						return nil
 					},
@@ -3914,9 +3914,9 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 }
 
 type bytesLimiterMock struct {
-	limitFunc func(uint64, storeDataType) error
+	limitFunc func(uint64, StoreDataType) error
 }
 
-func (m *bytesLimiterMock) ReserveWithType(num uint64, dataType storeDataType) error {
+func (m *bytesLimiterMock) ReserveWithType(num uint64, dataType StoreDataType) error {
 	return m.limitFunc(num, dataType)
 }

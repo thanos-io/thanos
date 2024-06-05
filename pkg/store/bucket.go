@@ -62,7 +62,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-type storeDataType string
+type StoreDataType string
 
 const (
 	// MaxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
@@ -109,12 +109,12 @@ const (
 	// SeriesBatchSize is the default batch size when fetching series from object storage.
 	SeriesBatchSize = 10000
 
-	PostingsFetched storeDataType = "PostingsFetched"
-	PostingsTouched storeDataType = "PostingsTouched"
-	SeriesFetched   storeDataType = "SeriesFetched"
-	SeriesTouched   storeDataType = "SeriesTouched"
-	ChunksFetched   storeDataType = "ChunksFetched"
-	ChunksTouched   storeDataType = "ChunksTouched"
+	PostingsFetched StoreDataType = "PostingsFetched"
+	PostingsTouched StoreDataType = "PostingsTouched"
+	SeriesFetched   StoreDataType = "SeriesFetched"
+	SeriesTouched   StoreDataType = "SeriesTouched"
+	ChunksFetched   StoreDataType = "ChunksFetched"
+	ChunksTouched   StoreDataType = "ChunksTouched"
 )
 
 var (
@@ -3753,7 +3753,7 @@ type queryStats struct {
 	DataDownloadedSizeSum units.Base2Bytes
 }
 
-func (s *queryStats) add(dataType storeDataType, dataCount int, dataSize int) {
+func (s *queryStats) add(dataType StoreDataType, dataCount int, dataSize int) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

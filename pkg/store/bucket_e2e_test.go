@@ -687,7 +687,7 @@ func TestBucketStore_Series_CustomBytesLimiters_e2e(t *testing.T) {
 	s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), func(_ prometheus.Counter) []BytesLimiter {
 		return []BytesLimiter{
 			&bytesLimiterMock{
-				limitFunc: func(_ uint64, dataType storeDataType) error {
+				limitFunc: func(_ uint64, dataType StoreDataType) error {
 					if dataType == PostingsFetched {
 						return fmt.Errorf("error reserving data type: PostingsFetched")
 					}
