@@ -396,6 +396,8 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		wg.Add(1)
 		go func(spec *GRPCEndpointSpec) {
 			defer wg.Done()
+			ctx, cancel := context.WithTimeout(ctx, e.endpointInfoTimeout)
+			defer cancel()
 			newRef, err := e.newEndpointRef(spec)
 			if err != nil {
 				level.Warn(e.logger).Log("msg", "new endpoint creation failed", "err", err, "address", spec.Addr())
