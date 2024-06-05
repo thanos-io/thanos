@@ -6,6 +6,18 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies"]
+    ignore:
+      - dependency-name: "objstore"
+      - dependency-name: "promql-engine"
+  - package-ecosystem: "gomod"
+    directory: "/"
+    vendor: false
+    schedule:
+      interval: "daily"
+    labels: ["dependencies"]
+    allow:
+      - dependency-name: "objstore"
+      - dependency-name: "promql-engine"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
