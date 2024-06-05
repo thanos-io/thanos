@@ -263,7 +263,7 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client(logger log.Logger) store.Client {
+func (t *tenant) client() store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -600,7 +600,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client(t.logger)
+		client := tenant.client()
 		if client != nil {
 			res = append(res, client)
 		}
