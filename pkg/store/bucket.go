@@ -397,9 +397,8 @@ type BucketStore struct {
 	// seriesLimiterFactory creates a new limiter used to limit the number of touched series by each Series() call,
 	// or LabelName and LabelValues calls when used with matchers.
 	seriesLimiterFactory SeriesLimiterFactory
-
-	// bytesLimitersFactory creates new limiters used to limit the amount of bytes fetched/touched by each Series() call.
-	bytesLimitersFactory BytesLimiterFactory
+	// bytesLimiterFactory creates new limiters used to limit the amount of bytes fetched/touched by each Series() call.
+	bytesLimiterFactory BytesLimiterFactory
 
 	partitioner Partitioner
 
@@ -573,7 +572,7 @@ func NewBucketStore(
 	dir string,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
-	bytesLimitersFactory BytesLimiterFactory,
+	bytesLimiterFactory BytesLimiterFactory,
 	partitioner Partitioner,
 	blockSyncConcurrency int,
 	enableCompatibilityLabel bool,
@@ -600,7 +599,7 @@ func NewBucketStore(
 		queryGate:                       gate.NewNoop(),
 		chunksLimiterFactory:            chunksLimiterFactory,
 		seriesLimiterFactory:            seriesLimiterFactory,
-		bytesLimitersFactory:            bytesLimitersFactory,
+		bytesLimiterFactory:             bytesLimiterFactory,
 		partitioner:                     partitioner,
 		enableCompatibilityLabel:        enableCompatibilityLabel,
 		postingOffsetsInMemSampling:     postingOffsetsInMemSampling,
@@ -1482,7 +1481,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		bytesLimiters    = s.bytesLimitersFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+		bytesLimiter     = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 		ctx              = srv.Context()
 		stats            = &queryStats{}
 		respSets         []respSet
@@ -1554,7 +1553,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				req,
 				seriesLimiter,
 				chunksLimiter,
-				bytesLimiters,
+				bytesLimiter,
 				sortedBlockMatchers,
 				shardMatcher,
 				s.enableChunkHashCalculation,
@@ -1789,7 +1788,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-	var bytesLimiters = s.bytesLimitersFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
@@ -1859,7 +1858,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					seriesReq,
 					seriesLimiter,
 					nil,
-					bytesLimiters,
+					bytesLimiter,
 					reqSeriesMatchersNoExtLabels,
 					nil,
 					true,
@@ -2000,7 +1999,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
-	var bytesLimiters = s.bytesLimitersFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
@@ -2073,7 +2072,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					seriesReq,
 					seriesLimiter,
 					nil,
-					bytesLimiters,
+					bytesLimiter,
 					reqSeriesMatchersNoExtLabels,
 					nil,
 					true,

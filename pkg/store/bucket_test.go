@@ -1792,7 +1792,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		queryGate:            gate.NewNoop(),
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
-		bytesLimitersFactory: DefaultBytesLimiterFactory(0),
+		bytesLimiterFactory:  DefaultBytesLimiterFactory(0),
 		seriesBatchSize:      SeriesBatchSize,
 		requestLoggerFunc:    NoopRequestLoggerFunc,
 	}
