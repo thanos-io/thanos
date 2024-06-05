@@ -337,10 +337,8 @@ func runSidecar(
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 		g.Add(func() error {
-			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
-			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
 	}
