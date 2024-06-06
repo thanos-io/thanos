@@ -166,10 +166,35 @@ type CloseDelegator interface {
 	Delegate(io.Closer)
 }
 
+type noopUpstream struct {
+	ctx context.Context
+	storepb.Store_SeriesServer
+}
+
+func (n *noopUpstream) Context() context.Context {
+	return n.ctx
+}
+
+func (s *TSDBStore) SeriesLocal(ctx context.Context, r *storepb.SeriesRequest) ([]*storepb.Series, error) {
+	srv := newFlushableServer(&noopUpstream{ctx: ctx}, sortingStrategyStoreSendNoop)
+	if err := s.Series(r, srv); err != nil {
+		return nil, err
+	}
+
+	rs := srv.(*resortingServer)
+
+	return rs.series, nil
+}
+
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
-	srv := newFlushableServer(seriesSrv, sortingStrategyStore)
+	var srv flushableServer
+	if fs, ok := seriesSrv.(flushableServer); !ok {
+		srv = newFlushableServer(seriesSrv, sortingStrategyStore)
+	} else {
+		srv = fs
+	}
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
