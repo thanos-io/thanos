@@ -97,8 +97,8 @@ func NewSeriesLimiterFactory(limit uint64) SeriesLimiterFactory {
 	}
 }
 
-// DefaultBytesLimiterFactory makes a new BytesLimiterFactory with a static limit.
-func DefaultBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
+// NewBytesLimiterFactory makes a new BytesLimiterFactory with a static limit.
+func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 	return func(failedCounter prometheus.Counter) BytesLimiter {
 		return NewLimiter(uint64(limit), failedCounter)
 	}

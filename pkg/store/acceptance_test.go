@@ -921,7 +921,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 				"",
 				NewChunksLimiterFactory(10e6),
 				NewSeriesLimiterFactory(10e6),
-				DefaultBytesLimiterFactory(10e6),
+				NewBytesLimiterFactory(10e6),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
 				20,
 				true,
