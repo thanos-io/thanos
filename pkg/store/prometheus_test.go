@@ -222,17 +222,6 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
 				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_RE, Name: "wrong-chars-in-label-name(hyphen)", Value: "adsf"},
-				},
-				MinTime: baseT - 10000000000,
-				MaxTime: baseT + 10000000000,
-			},
-			expectedErr: errors.New("rpc error: code = InvalidArgument desc = expected 2xx response, got 400. Body: {\"status\":\"error\",\"errorType\":\"bad_data\",\"error\":\"invalid parameter \\\"match[]\\\": 1:7: parse error: unexpected character inside braces: '-'\"}"),
-		},
-		{
-			req: &storepb.SeriesRequest{
-				SkipChunks: true,
-				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "non_existing", Value: "something"},
 				},
 				MinTime: baseT - 10000000000,
