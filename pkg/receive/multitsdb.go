@@ -103,16 +103,29 @@ type localClient struct {
 }
 
 type seriesClientMapper struct {
-	s   []*storepb.Series
-	ctx context.Context
+	ctx    context.Context
+	series []*storepb.Series
+
+	initiated bool
+
+	store *store.TSDBStore
+	req   storepb.SeriesRequest
 }
 
 func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
-	if len(m.s) == 0 {
+	if !m.initiated {
+		series, err := m.store.SeriesLocal(m.ctx, &m.req)
+		if err != nil {
+			return nil, err
+		}
+		m.series = series
+		m.initiated = true
+	}
+	if len(m.series) == 0 {
 		return nil, io.EOF
 	}
-	s := m.s[0]
-	m.s = m.s[1:]
+	s := m.series[0]
+	m.series = m.series[1:]
 	return storepb.NewSeriesResponse(s), nil
 }
 
@@ -145,11 +158,7 @@ func (l *localClient) Info(ctx context.Context, in *storepb.InfoRequest, opts ..
 }
 
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	series, err := l.store.SeriesLocal(ctx, in)
-	if err != nil {
-		return nil, err
-	}
-	return &seriesClientMapper{s: series, ctx: ctx}, nil
+	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
 }
 
 func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
