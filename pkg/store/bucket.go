@@ -62,7 +62,16 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-type StoreDataType string
+type StoreDataType int
+
+const (
+	PostingsFetched StoreDataType = iota
+	PostingsTouched
+	SeriesFetched
+	SeriesTouched
+	ChunksFetched
+	ChunksTouched
+)
 
 const (
 	// MaxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
@@ -107,14 +116,7 @@ const (
 	enableChunkHashCalculation = true
 
 	// SeriesBatchSize is the default batch size when fetching series from object storage.
-	SeriesBatchSize = 10000
-
-	PostingsFetched StoreDataType = "PostingsFetched"
-	PostingsTouched StoreDataType = "PostingsTouched"
-	SeriesFetched   StoreDataType = "SeriesFetched"
-	SeriesTouched   StoreDataType = "SeriesTouched"
-	ChunksFetched   StoreDataType = "ChunksFetched"
-	ChunksTouched   StoreDataType = "ChunksTouched"
+	SeriesBatchSize = 1000
 )
 
 var (

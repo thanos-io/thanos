@@ -64,7 +64,7 @@ func NewLimiter(limit uint64, ctr prometheus.Counter) *Limiter {
 
 // Reserve implements ChunksLimiter.
 func (l *Limiter) Reserve(num uint64) error {
-	return l.ReserveWithType(num, "")
+	return l.ReserveWithType(num, 0)
 }
 
 func (l *Limiter) ReserveWithType(num uint64, _ StoreDataType) error {
