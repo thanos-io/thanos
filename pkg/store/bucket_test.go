@@ -68,6 +68,12 @@ import (
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
 
+func TestRawChunkReset(t *testing.T) {
+	r := rawChunk([]byte{1, 2})
+	r.Reset([]byte{3, 4})
+	testutil.Equals(t, []byte(r), []byte{3, 4})
+}
+
 func TestBucketBlock_Property(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.Rng.Seed(2000)

@@ -3625,7 +3625,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// There is also crc32 after the chunk, but we ignore that.
 		chunkLen = n + 1 + int(chunkDataLen)
 		if chunkLen <= len(cb) {
-			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save, calculateChunkChecksum)
+			c := rawChunk(cb[n:chunkLen])
+			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
@@ -3654,7 +3655,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 
 		stats.chunksFetchCount++
 		stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
-		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
+		c := rawChunk((*nb)[n:])
+		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")
@@ -3691,24 +3693,28 @@ func (r *bucketChunkReader) save(b []byte) ([]byte, error) {
 // It is used to Store API responses which don't need to introspect and validate the chunk's contents.
 type rawChunk []byte
 
-func (b rawChunk) Encoding() chunkenc.Encoding {
-	return chunkenc.Encoding(b[0])
+func (b *rawChunk) Reset(stream []byte) {
+	(*b) = stream
 }
 
-func (b rawChunk) Bytes() []byte {
-	return b[1:]
+func (b *rawChunk) Encoding() chunkenc.Encoding {
+	return chunkenc.Encoding((*b)[0])
 }
-func (b rawChunk) Compact() {}
 
-func (b rawChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
+func (b *rawChunk) Bytes() []byte {
+	return (*b)[1:]
+}
+func (b *rawChunk) Compact() {}
+
+func (b *rawChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	panic("invalid call")
 }
 
-func (b rawChunk) Appender() (chunkenc.Appender, error) {
+func (b *rawChunk) Appender() (chunkenc.Appender, error) {
 	panic("invalid call")
 }
 
-func (b rawChunk) NumSamples() int {
+func (b *rawChunk) NumSamples() int {
 	panic("invalid call")
 }
 
