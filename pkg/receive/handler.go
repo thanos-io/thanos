@@ -1309,7 +1309,7 @@ func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, as
 		dialOpts:                 dialOpts,
 		connections:              map[string]*peerWorker{},
 		m:                        sync.RWMutex{},
-		dialer:                   grpc.DialContext,
+		dialer:                   grpc.NewClient,
 		peerStates:               make(map[string]*retryState),
 		expBackoff:               backoff,
 		forwardDelay:             forwardDelay,
@@ -1361,7 +1361,7 @@ type peerGroup struct {
 	m sync.RWMutex
 
 	// dialer is used for testing.
-	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
+	dialer func(target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
 }
 
 func (p *peerGroup) close(addr string) error {
@@ -1404,7 +1404,7 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	if ok {
 		return c, nil
 	}
-	conn, err := p.dialer(ctx, addr, p.dialOpts...)
+	conn, err := p.dialer(addr, p.dialOpts...)
 	if err != nil {
 		p.markPeerUnavailableUnlocked(addr)
 		dialError := errors.Wrap(err, "failed to dial peer")
