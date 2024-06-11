@@ -116,7 +116,7 @@ const (
 	enableChunkHashCalculation = true
 
 	// SeriesBatchSize is the default batch size when fetching series from object storage.
-	SeriesBatchSize = 1000
+	SeriesBatchSize = 10000
 )
 
 var (
