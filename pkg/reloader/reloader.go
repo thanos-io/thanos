@@ -75,7 +75,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/minio/sha256-simd"
-	ps "github.com/mitchellh/go-ps"
+	"github.com/mitchellh/go-ps"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -87,14 +87,15 @@ import (
 // It optionally substitutes environment variables in the configuration.
 // Referenced environment variables must be of the form `$(var)` (not `$var` or `${var}`).
 type Reloader struct {
-	logger        log.Logger
-	cfgFile       string
-	cfgOutputFile string
-	cfgDirs       []CfgDirOption
-	watchInterval time.Duration
-	retryInterval time.Duration
-	watchedDirs   []string
-	watcher       *watcher
+	logger                        log.Logger
+	cfgFile                       string
+	cfgOutputFile                 string
+	cfgDirs                       []CfgDirOption
+	tolerateEnvVarExpansionErrors bool
+	retryInterval                 time.Duration
+	watchInterval                 time.Duration
+	watchedDirs                   []string
+	watcher                       *watcher
 
 	tr TriggerReloader
 
@@ -104,13 +105,14 @@ type Reloader struct {
 	lastCfgDirFiles     []map[string]struct{}
 	forceReload         bool
 
-	reloads                    prometheus.Counter
-	reloadErrors               prometheus.Counter
-	lastReloadSuccess          prometheus.Gauge
-	lastReloadSuccessTimestamp prometheus.Gauge
-	configApplyErrors          prometheus.Counter
-	configApply                prometheus.Counter
-	reloaderInfo               *prometheus.GaugeVec
+	reloads                     prometheus.Counter
+	reloadErrors                prometheus.Counter
+	lastReloadSuccess           prometheus.Gauge
+	lastReloadSuccessTimestamp  prometheus.Gauge
+	configApplyErrors           prometheus.Counter
+	configEnvVarExpansionErrors prometheus.Gauge
+	configApply                 prometheus.Counter
+	reloaderInfo                *prometheus.GaugeVec
 }
 
 // TriggerReloader reloads the configuration of the process.
@@ -172,6 +174,9 @@ type Options struct {
 	// RetryInterval controls how often the reloader retries a reloading of the
 	// configuration in case the reload operation returned an error.
 	RetryInterval time.Duration
+	// TolerateEnvVarExpansionErrors suppresses errors when expanding environment variables in the config file, and
+	// leaves the unset variables as is. All found environment variables are still expanded.
+	TolerateEnvVarExpansionErrors bool
 }
 
 var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
@@ -183,15 +188,16 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 		logger = log.NewNopLogger()
 	}
 	r := &Reloader{
-		logger:          logger,
-		cfgFile:         o.CfgFile,
-		cfgOutputFile:   o.CfgOutputFile,
-		cfgDirs:         o.CfgDirs,
-		lastCfgDirFiles: make([]map[string]struct{}, len(o.CfgDirs)),
-		watcher:         newWatcher(logger, reg, o.DelayInterval),
-		watchedDirs:     o.WatchedDirs,
-		watchInterval:   o.WatchInterval,
-		retryInterval:   o.RetryInterval,
+		logger:                        logger,
+		cfgFile:                       o.CfgFile,
+		cfgOutputFile:                 o.CfgOutputFile,
+		cfgDirs:                       o.CfgDirs,
+		lastCfgDirFiles:               make([]map[string]struct{}, len(o.CfgDirs)),
+		watcher:                       newWatcher(logger, reg, o.DelayInterval),
+		watchedDirs:                   o.WatchedDirs,
+		watchInterval:                 o.WatchInterval,
+		retryInterval:                 o.RetryInterval,
+		tolerateEnvVarExpansionErrors: o.TolerateEnvVarExpansionErrors,
 
 		reloads: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
@@ -227,6 +233,12 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 			prometheus.CounterOpts{
 				Name: "reloader_config_apply_operations_failed_total",
 				Help: "Total number of config apply operations that failed.",
+			},
+		),
+		configEnvVarExpansionErrors: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "reloader_config_environment_variable_expansion_errors",
+				Help: "Number of environment variable expansions that failed during the last operation.",
 			},
 		),
 		reloaderInfo: promauto.With(reg).NewGaugeVec(
@@ -348,7 +360,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	}
 }
 
-func normalize(logger log.Logger, inputFile, outputFile string) error {
+func (r *Reloader) normalize(inputFile, outputFile string) error {
 	b, err := os.ReadFile(inputFile)
 	if err != nil {
 		return errors.Wrap(err, "read file")
@@ -360,7 +372,7 @@ func normalize(logger log.Logger, inputFile, outputFile string) error {
 		if err != nil {
 			return errors.Wrap(err, "create gzip reader")
 		}
-		defer runutil.CloseWithLogOnErr(logger, zr, "gzip reader close")
+		defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
 
 		b, err = io.ReadAll(zr)
 		if err != nil {
@@ -368,7 +380,7 @@ func normalize(logger log.Logger, inputFile, outputFile string) error {
 		}
 	}
 
-	b, err = expandEnv(b)
+	b, err = r.expandEnv(b)
 	if err != nil {
 		return errors.Wrap(err, "expand environment variables")
 	}
@@ -402,7 +414,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		}
 		cfgHash = h.Sum(nil)
 		if r.cfgOutputFile != "" {
-			if err := normalize(r.logger, r.cfgFile, r.cfgOutputFile); err != nil {
+			if err := r.normalize(r.cfgFile, r.cfgOutputFile); err != nil {
 				return err
 			}
 		}
@@ -446,7 +458,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 
 			outFile := filepath.Join(outDir, targetFile.Name())
 			cfgDirFiles[outFile] = struct{}{}
-			if err := normalize(r.logger, path, outFile); err != nil {
+			if err := r.normalize(path, outFile); err != nil {
 				return errors.Wrapf(err, "move file: %s", path)
 			}
 		}
@@ -692,21 +704,30 @@ func RuntimeInfoURLFromBase(u *url.URL) *url.URL {
 
 var envRe = regexp.MustCompile(`\$\(([a-zA-Z_0-9]+)\)`)
 
-func expandEnv(b []byte) (r []byte, err error) {
-	r = envRe.ReplaceAllFunc(b, func(n []byte) []byte {
+func (r *Reloader) expandEnv(b []byte) (replaced []byte, err error) {
+	configEnvVarExpansionErrorsCount := 0
+	replaced = envRe.ReplaceAllFunc(b, func(n []byte) []byte {
 		if err != nil {
 			return nil
 		}
+		m := n
 		n = n[2 : len(n)-1]
 
 		v, ok := os.LookupEnv(string(n))
 		if !ok {
-			err = errors.Errorf("found reference to unset environment variable %q", n)
+			configEnvVarExpansionErrorsCount++
+			errStr := errors.Errorf("found reference to unset environment variable %q", n)
+			if r.tolerateEnvVarExpansionErrors {
+				level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
+				return m
+			}
+			err = errStr
 			return nil
 		}
 		return []byte(v)
 	})
-	return r, err
+	r.configEnvVarExpansionErrors.Set(float64(configEnvVarExpansionErrorsCount))
+	return replaced, err
 }
 
 type watcher struct {
