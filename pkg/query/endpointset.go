@@ -643,6 +643,7 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 				metadata:    er.metadata,
 				groupKey:    er.GroupKey(),
 				replicaKey:  er.ReplicaKey(),
+				status:      er.status,
 			})
 			er.mtx.RUnlock()
 		}
@@ -913,7 +914,7 @@ func (er *endpointRef) LabelSets() []labels.Labels {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.labelSets()
+	return er.status.LabelSets
 }
 
 func (er *endpointRef) labelSets() []labels.Labels {
