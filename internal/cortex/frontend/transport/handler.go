@@ -173,11 +173,14 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
-		// Check if caching is enabled.
-		if f.failedQueryCache != nil {
-			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, f.failedQueryCache.LruCache)
-			if success {
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
+		// Try to update cache.
+		success, message := f.failedQueryCache.CallUpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength)
+
+		if success {
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
+		} else {
+			if message == "Failed query cache is not enabled" {
+				level.Debug(util_log.WithContext(r.Context(), f.log)).Log(message)
 			} else {
 				level.Error(util_log.WithContext(r.Context(), f.log)).Log(message)
 			}

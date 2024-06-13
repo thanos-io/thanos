@@ -139,3 +139,11 @@ func GetQueryRangeSeconds(query url.Values) int {
 func (f *FailedQueryCache) NormalizeQueryString(query url.Values) string {
 	return f.regex.ReplaceAllString(query.Get("query"), " ")
 }
+
+func (f *FailedQueryCache) CallUpdateFailedQueryCache(err error, queryExpressionNormalized string, queryExpressionRangeLength int) (bool, string) {
+	if f == nil {
+		return false, "Failed query cache is not enabled"
+	}
+	success, message := f.UpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, f.LruCache)
+	return success, message
+}
