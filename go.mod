@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/trace v1.10.7
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.8.3
 	github.com/alecthomas/units v0.0.0-20231202071711-9a357b53e9c9
-	github.com/alicebob/miniredis/v2 v2.22.0
+	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
@@ -247,7 +247,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/weaveworks/promrus v1.2.0 // indirect
-	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.elastic.co/apm/module/apmhttp v1.11.0 // indirect
 	go.elastic.co/fastjson v1.1.0 // indirect
