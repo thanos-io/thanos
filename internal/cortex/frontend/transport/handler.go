@@ -18,9 +18,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/hashicorp/golang-lru"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/internal/cortex/frontend/transport/utils"
 	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -53,10 +53,10 @@ type HandlerConfig struct {
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
 // but all other logic is inside the RoundTripper.
 type Handler struct {
-	cfg          HandlerConfig
-	log          log.Logger
-	roundTripper http.RoundTripper
-	lruCache     *lru.Cache
+	cfg              HandlerConfig
+	log              log.Logger
+	roundTripper     http.RoundTripper
+	failedQueryCache *utils.FailedQueryCache
 
 	// Metrics.
 	querySeconds *prometheus.CounterVec
@@ -69,23 +69,22 @@ type Handler struct {
 // NewHandler creates a new frontend handler.
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
 	var (
-		LruCache *lru.Cache
-		err      error
+		FailedQueryCache *utils.FailedQueryCache
+		message          string
 	)
 
 	if cfg.FailedQueryCacheCapacity > 0 {
-		LruCache, err = lru.New(cfg.FailedQueryCacheCapacity)
-		if err != nil {
-			LruCache = nil
-			level.Warn(log).Log("msg", "Failed to create LruCache", "error", err)
-		}
+		FailedQueryCache, message = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
+		level.Warn(log).Log(message)
+	} else {
+		FailedQueryCache = nil
 	}
 
 	h := &Handler{
-		cfg:          cfg,
-		log:          log,
-		roundTripper: roundTripper,
-		lruCache:     LruCache,
+		cfg:              cfg,
+		log:              log,
+		roundTripper:     roundTripper,
+		failedQueryCache: FailedQueryCache,
 	}
 
 	if cfg.QueryStatsEnabled {
@@ -148,21 +147,19 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	// Check if caching is enabled.
-	if f.lruCache != nil {
+	if f.failedQueryCache != nil {
+		//Store query.
+		query := r.URL.Query()
 		// Store query expression.
-		queryExpressionNormalized = regex.ReplaceAllString(r.URL.Query().Get("query"), " ")
-
+		queryExpressionNormalized = f.failedQueryCache.NormalizeQueryString(query)
 		// Store query time range length.
-		queryExpressionRangeLength = getQueryRangeSeconds(r)
+		queryExpressionRangeLength = utils.GetQueryRangeSeconds(query)
 
-		// Check if query in cache and whether value exceeds time range length.
-		if value, ok := f.lruCache.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
+		// Check if query in cache and whether value exceeds time range length. Log and increment counter appropriately.
+		cached, message := f.failedQueryCache.QueryHitCache(queryExpressionNormalized, queryExpressionRangeLength, f.failedQueryCache.LruCache)
+		if cached {
 			w.WriteHeader(http.StatusForbidden)
-			level.Info(util_log.WithContext(r.Context(), f.log)).Log(
-				"msg", "Retrieved query from cache",
-				"normalized_query", queryExpressionNormalized,
-				"range_seconds", queryExpressionRangeLength,
-			)
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
 			f.cachedHits.Inc()
 			return
 		}
@@ -177,8 +174,13 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		queryString = f.parseRequestQueryString(r, buf)
 
 		// Check if caching is enabled.
-		if f.lruCache != nil {
-			f.updateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, r)
+		if f.failedQueryCache != nil {
+			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, f.failedQueryCache.LruCache)
+			if success {
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
+			} else {
+				level.Error(util_log.WithContext(r.Context(), f.log)).Log(message)
+			}
 		}
 
 		if f.cfg.LogFailedQueries {
