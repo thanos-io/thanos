@@ -5,7 +5,7 @@ go 1.21
 require (
 	cloud.google.com/go/storage v1.40.0 // indirect
 	cloud.google.com/go/trace v1.10.7
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.8.3
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.24.0
 	github.com/alecthomas/units v0.0.0-20231202071711-9a357b53e9c9
 	github.com/alicebob/miniredis/v2 v2.22.0
 	github.com/blang/semver/v4 v4.0.0
@@ -159,7 +159,7 @@ require (
 
 require (
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.32.3 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.0 // indirect
 	github.com/KimMachineGun/automemlimit v0.6.1
 	github.com/OneOfOne/xxhash v1.2.6 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
