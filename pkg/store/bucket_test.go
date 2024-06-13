@@ -3852,6 +3852,9 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
+	firstBytesLimiterChecked := false
+	secondBytesLimiterChecked := false
+
 	// Set series limit to 2. Only pass if series limiter applies
 	// for lazy postings only.
 	bucketStore, err := NewBucketStore(
@@ -3860,7 +3863,24 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 		"",
 		NewChunksLimiterFactory(10e6),
 		NewSeriesLimiterFactory(2),
-		NewBytesLimiterFactory(10e6),
+		func(_ prometheus.Counter) BytesLimiter {
+			return &compositeBytesLimiterMock{
+				limiters: []BytesLimiter{
+					&bytesLimiterMock{
+						limitFunc: func(_ uint64, _ StoreDataType) error {
+							firstBytesLimiterChecked = true
+							return nil
+						},
+					},
+					&bytesLimiterMock{
+						limitFunc: func(_ uint64, _ StoreDataType) error {
+							secondBytesLimiterChecked = true
+							return nil
+						},
+					},
+				},
+			}
+		},
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
 		true,
@@ -3891,4 +3911,27 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	srv := newStoreSeriesServer(context.Background())
 	testutil.Ok(t, bucketStore.Series(req, srv))
 	testutil.Equals(t, 2, len(srv.SeriesSet))
+	testutil.Equals(t, true, firstBytesLimiterChecked)
+	testutil.Equals(t, true, secondBytesLimiterChecked)
+}
+
+type bytesLimiterMock struct {
+	limitFunc func(uint64, StoreDataType) error
+}
+
+func (m *bytesLimiterMock) ReserveWithType(num uint64, dataType StoreDataType) error {
+	return m.limitFunc(num, dataType)
+}
+
+type compositeBytesLimiterMock struct {
+	limiters []BytesLimiter
+}
+
+func (m *compositeBytesLimiterMock) ReserveWithType(num uint64, dataType StoreDataType) error {
+	for _, l := range m.limiters {
+		if err := l.ReserveWithType(num, dataType); err != nil {
+			return err
+		}
+	}
+	return nil
 }
