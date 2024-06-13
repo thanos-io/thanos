@@ -39,7 +39,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 			queryExpressionNormalized:  "test_query",
 			queryExpressionRangeLength: 60,
 			expectedResult:             false,
-			expectedMessageContains:    "String regex conversion error",
+			expectedMessageContains:    "msg: String regex conversion error, normalized query: test_query, query range seconds: 60, updating cache for error: no error code here",
 		},
 		{
 			name:                       "Non-cacheable error code",
@@ -47,7 +47,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 			queryExpressionNormalized:  "test_query",
 			queryExpressionRangeLength: 60,
 			expectedResult:             false,
-			expectedMessageContains:    "Query not cached due to non-cacheable error code",
+			expectedMessageContains:    "msg: Query not cached due to non-cacheable error code, normalized query: test_query, query range seconds: 60, updating cache for error: Code(500)",
 		},
 		{
 			name:                       "Cacheable error code",
@@ -55,7 +55,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 			queryExpressionNormalized:  "test_query",
 			queryExpressionRangeLength: 60,
 			expectedResult:             true,
-			expectedMessageContains:    "Cached a failed query",
+			expectedMessageContains:    "msg: Cached a failed query, normalized query: test_query, range seconds: 60, updating cache for error: Code(408)",
 		},
 	}
 
@@ -91,7 +91,7 @@ func TestQueryHitCache(t *testing.T) {
 			queryExpressionNormalized:  "test_query",
 			queryExpressionRangeLength: 60,
 			expectedResult:             true,
-			expectedMessageContains:    "Retrieved query from cache",
+			expectedMessageContains:    "msg: Retrieved query from cache, normalized query: test_query, range seconds: 60",
 		},
 		{
 			name:                       "Cache miss",
