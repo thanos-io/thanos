@@ -1,5 +1,7 @@
-// Monitoring platform team helper resources for frontend
+// Copyright (c) The Cortex Authors.
+// Licensed under the Apache License 2.0.
 
+// Package utils Monitoring platform team helper resources for frontend
 package utils
 
 import (
