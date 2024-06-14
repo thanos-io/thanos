@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// TestNewFailedQueryCache tests the NewFailedQueryCache function
 func TestNewFailedQueryCache(t *testing.T) {
 	cache, msg := NewFailedQueryCache(2)
 	if cache == nil {
@@ -20,7 +19,6 @@ func TestNewFailedQueryCache(t *testing.T) {
 	}
 }
 
-// TestUpdateFailedQueryCache tests the UpdateFailedQueryCache method
 func TestUpdateFailedQueryCache(t *testing.T) {
 	cache, _ := NewFailedQueryCache(2)
 	lruCache := cache.LruCache

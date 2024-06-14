@@ -70,12 +70,14 @@ type Handler struct {
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
 	var (
 		FailedQueryCache *utils.FailedQueryCache
-		message          string
+		err              error
 	)
 
 	if cfg.FailedQueryCacheCapacity > 0 {
-		FailedQueryCache, message = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
-		level.Warn(log).Log(message)
+		FailedQueryCache, err = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
+		if err != nil {
+			level.Warn(log).Log(err.Error())
+		}
 	}
 
 	h := &Handler{
@@ -121,10 +123,9 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		stats                      *querier_stats.Stats
-		queryString                url.Values
-		queryExpressionNormalized  string
-		queryExpressionRangeLength int
+		stats       *querier_stats.Stats
+		queryString url.Values
+		urlQuery    url.Values
 	)
 
 	// Initialise the stats in the context and make sure it's propagated
@@ -144,17 +145,11 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	// Check if caching is enabled.
-	if f.failedQueryCache != nil {
-		//Store query.
-		query := r.URL.Query()
-		// Store query expression.
-		queryExpressionNormalized = f.failedQueryCache.NormalizeQueryString(query)
-		// Store query time range length.
-		queryExpressionRangeLength = utils.GetQueryRangeSeconds(query)
+	urlQuery = r.URL.Query()
 
-		// Check if query in cache and whether value exceeds time range length. Log and increment counter appropriately.
-		cached, message := f.failedQueryCache.QueryHitCache(queryExpressionNormalized, queryExpressionRangeLength, f.failedQueryCache.LruCache)
+	// Check if query is cached
+	if f.failedQueryCache != nil {
+		cached, message := f.failedQueryCache.CallQueryHitCache(urlQuery)
 		if cached {
 			w.WriteHeader(http.StatusForbidden)
 			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
@@ -171,9 +166,15 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		queryString = f.parseRequestQueryString(r, buf)
 
-		// Try to update cache.
-		_, message := f.failedQueryCache.CallUpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength)
-		level.Debug(util_log.WithContext(r.Context(), f.log)).Log(message)
+		// Update cache for failed queries.
+		if f.failedQueryCache != nil {
+			success, message := f.failedQueryCache.CallUpdateFailedQueryCache(err, urlQuery)
+			if success {
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
+			} else {
+				level.Debug(util_log.WithContext(r.Context(), f.log)).Log(message)
+			}
+		}
 
 		if f.cfg.LogFailedQueries {
 			f.reportFailedQuery(r, queryString, err)
