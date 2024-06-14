@@ -41,7 +41,7 @@ func NewFailedQueryCache(capacity int) (*FailedQueryCache, error) {
 }
 
 // UpdateFailedQueryCache returns true if query is cached so that callsite can increase counter, returns message as a string for callsite to log outcome
-func updateFailedQueryCache(err error, queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache) (bool, string) {
+func (f *FailedQueryCache) updateFailedQueryCache(err error, queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache) (bool, string) {
 	// Extracting error code from error string.
 	codeExtract := f.errorExtract.FindStringSubmatch(err.Error())
 
@@ -104,7 +104,7 @@ func updateFailedQueryCache(err error, queryExpressionNormalized string, queryEx
 
 // QueryHitCache checks if the lru cache is hit and returns whether to increment counter for cache hits along with appropriate message.
 func queryHitCache(queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache) (bool, string) {
-	if value, ok := lruCache.Get(queryExpressionNormalized); ok && value.(int) >= queryExpressionRangeLength {
+	if value, ok := lruCache.Get(queryExpressionNormalized); ok && value.(int) <= queryExpressionRangeLength {
 		message := fmt.Sprintf(
 			`%s: %s, %s: %s, %s: %d`, "msg", "Retrieved query from cache",
 			"normalized query", queryExpressionNormalized,
@@ -139,19 +139,19 @@ func getQueryRangeSeconds(query url.Values) int {
 	return end - start
 }
 
-func normalizeQueryString(query url.Values) string {
+func (f *FailedQueryCache) normalizeQueryString(query url.Values) string {
 	return f.regex.ReplaceAllString(query.Get("query"), " ")
 }
 
 func (f *FailedQueryCache) CallUpdateFailedQueryCache(err error, query url.Values) (bool, string) {
-	queryExpressionNormalized := normalizeQueryString(query)
+	queryExpressionNormalized := f.normalizeQueryString(query)
 	queryExpressionRangeLength := getQueryRangeSeconds(query)
-	success, message := updateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, f.lruCache)
+	success, message := f.updateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, f.lruCache)
 	return success, message
 }
 
 func (f *FailedQueryCache) CallQueryHitCache(query url.Values) (bool, string) {
-	queryExpressionNormalized := normalizeQueryString(query)
+	queryExpressionNormalized := f.normalizeQueryString(query)
 	queryExpressionRangeLength := getQueryRangeSeconds(query)
 	cached, message := queryHitCache(queryExpressionNormalized, queryExpressionRangeLength, f.lruCache)
 	return cached, message
