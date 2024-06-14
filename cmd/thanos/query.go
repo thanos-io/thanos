@@ -575,7 +575,7 @@ func runQuery(
 		GroupReplicaPartialResponseStrategy: groupReplicaPartialResponseStrategy,
 		EnableDedupMerge:                    enableDedupMerge,
 	}
-	level.Info(logger).Log("msg", "databricks querier features", "opts", opts)
+	level.Info(logger).Log("msg", "databricks querier features", "opts", fmt.Sprintf("%+v", opts))
 	queryableCreator = query.NewQueryableCreatorWithOptions(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_", reg),

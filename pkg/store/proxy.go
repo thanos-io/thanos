@@ -389,7 +389,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			level.Error(reqLogger).Log(
 				"msg", "Multipel replicas have failures for the same group",
 				"group", st.GroupKey(),
-				"replicas", failedStores[st.GroupKey()],
+				"replicas", fmt.Sprintf("%+v", failedStores[st.GroupKey()]),
 			)
 			return err
 		}
@@ -397,7 +397,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			level.Error(reqLogger).Log(
 				"msg", "A single replica group has multiple failures",
 				"group", st.GroupKey(),
-				"replicas", failedStores[st.GroupKey()],
+				"replicas", fmt.Sprintf("%+v", failedStores[st.GroupKey()]),
 			)
 			return err
 		}
@@ -422,6 +422,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
+			// NB: respSet is nil in case of error.
 			level.Error(reqLogger).Log("err", err)
 			level.Warn(s.logger).Log("msg", "Store failure", "group", st.GroupKey(), "replica", st.ReplicaKey())
 			bumpCounter(st.GroupKey(), st.ReplicaKey(), failedStores)
@@ -430,6 +431,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 				if checkGroupReplicaErrors(st, err) != nil {
 					return err
 				}
+				continue
 			} else if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
