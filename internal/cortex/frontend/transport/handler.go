@@ -70,13 +70,13 @@ type Handler struct {
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
 	var (
 		FailedQueryCache *utils.FailedQueryCache
-		err              error
+		errQueryCache    error
 	)
 
 	if cfg.FailedQueryCacheCapacity > 0 {
-		FailedQueryCache, err = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
-		if err != nil {
-			level.Warn(log).Log(err.Error())
+		FailedQueryCache, errQueryCache = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
+		if errQueryCache != nil {
+			level.Warn(log).Log(errQueryCache.Error())
 		}
 	}
 
