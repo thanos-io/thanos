@@ -76,8 +76,6 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 	if cfg.FailedQueryCacheCapacity > 0 {
 		FailedQueryCache, message = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
 		level.Warn(log).Log(message)
-	} else {
-		FailedQueryCache = nil
 	}
 
 	h := &Handler{
@@ -174,17 +172,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		queryString = f.parseRequestQueryString(r, buf)
 
 		// Try to update cache.
-		success, message := f.failedQueryCache.CallUpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength)
-
-		if success {
-			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
-		} else {
-			if message == "Failed query cache is not enabled" {
-				level.Debug(util_log.WithContext(r.Context(), f.log)).Log(message)
-			} else {
-				level.Error(util_log.WithContext(r.Context(), f.log)).Log(message)
-			}
-		}
+		_, message := f.failedQueryCache.CallUpdateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength)
+		level.Debug(util_log.WithContext(r.Context(), f.log)).Log(message)
 
 		if f.cfg.LogFailedQueries {
 			f.reportFailedQuery(r, queryString, err)
