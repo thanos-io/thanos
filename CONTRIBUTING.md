@@ -185,7 +185,6 @@ It is a good practice to keep your branch updated by rebasing your branch to mai
 * If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 * If you are a new contributor with no write access, you can tag in the respective maintainer for the changes, but be patient enough for the reviews. *Remember, good things take time :)*
 
-
 ### Pull Request Guidelines
 
 To ensure a consistent and meaningful naming convention for pull requests (PRs), please follow these guidelines:
@@ -211,7 +210,6 @@ Where `type` is one of the following:
 - `docs: Update contributing guidelines`
 
 Failure to follow this convention will result in a failing check on your PR.
-
 
 ### Dependency management
 
