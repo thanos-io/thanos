@@ -1,0 +1,27 @@
+name: PR Title Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  pr-title-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Run PR title linter
+        run: |
+          TITLE=$(jq -r .pull_request.title "$GITHUB_EVENT_PATH")
+          if [[ ! "$TITLE" =~ ^(fix|feat|docs|style|refactor|perf|test|chore):\ .{1,50}$ ]]; then
+            echo "Invalid PR title: $TITLE"
+            echo "PR titles must start with one of the following types: fix, feat, docs, style, refactor, perf, test, chore."
+            echo "Followed by a colon and space, and a brief description (1-50 characters)."
+            exit 1
+          fi
