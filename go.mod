@@ -61,7 +61,7 @@ require (
 	github.com/prometheus/prometheus v0.52.2-0.20240606174736-edd558884b24
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
-	github.com/thanos-io/objstore v0.0.0-20240309075357-e8336a5fd5f3
+	github.com/thanos-io/objstore v0.0.0-20240613135658-39f40b8d97f7
 	github.com/thanos-io/promql-engine v0.0.0-20240515161521-93aa311933cf
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -218,7 +218,7 @@ require (
 	github.com/joeshaw/multierror v0.0.0-20140124173710-69b34d4ec901 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lightstep/lightstep-tracer-common/golang/gogo v0.0.0-20210210170715-a8dfcb80d3a7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
