@@ -1,27 +1,26 @@
-name: PR Title Lint
+name: Verify PR Title
 
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [opened, edited, reopened]
 
 jobs:
-  pr-title-check:
+  verify-title:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Check out the repository
         uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '14'
-
-      - name: Run PR title linter
+      - name: Verify PR Title
+        id: verify
         run: |
-          TITLE=$(jq -r .pull_request.title "$GITHUB_EVENT_PATH")
-          if [[ ! "$TITLE" =~ ^(fix|feat|docs|style|refactor|perf|test|chore):\ .{1,50}$ ]]; then
-            echo "Invalid PR title: $TITLE"
-            echo "PR titles must start with one of the following types: fix, feat, docs, style, refactor, perf, test, chore."
-            echo "Followed by a colon and space, and a brief description (1-50 characters)."
+          PREFIXES="query:|.*:"
+
+          if [[ ! "${{ github.event.pull_request.title }}" =~ ^(${PREFIXES}) ]]; then
+            echo "PR title does not follow the required format: 'prefix: description'"
+            echo "::error::PR title must start with one of the following prefixes: query:, .*:"
             exit 1
+          else
+            echo "PR title is valid."
           fi

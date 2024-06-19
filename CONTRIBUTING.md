@@ -185,29 +185,24 @@ It is a good practice to keep your branch updated by rebasing your branch to mai
 * If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 * If you are a new contributor with no write access, you can tag in the respective maintainer for the changes, but be patient enough for the reviews. *Remember, good things take time :)*
 
-### Pull Request Guidelines
+### Pull Request Title Format
 
 To ensure a consistent and meaningful naming convention for pull requests (PRs), please follow these guidelines:
 
 #### PR Title Format
 
 PR titles should follow this pattern:
-- `type: brief description`
+- `prefix: brief description`
 
-Where `type` is one of the following:
-- `fix`: A bug fix
-- `feat`: A new feature
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, missing semi-colons, etc.)
-- `refactor`: Code refactoring without changing functionality
-- `perf`: Performance improvements
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks (dependency updates, tool changes, etc.)
+Where `prefix` can be:
+- `query`: If your PR is related to queries.
+- `something`: A general prefix indicating the component or part of the system affected by your PR. This should be specific to the area of the codebase you are changing.
 
 #### Examples
-- `fix: Correct typo in README`
-- `feat: Add new storage backend support`
-- `docs: Update contributing guidelines`
+- `query: Optimize search query performance`
+- `query: Add new filters to the query module`
+- `store: Improve data storage efficiency`
+- `api: Update API endpoint for user data`
 
 Failure to follow this convention will result in a failing check on your PR.
 
