@@ -2131,8 +2131,8 @@ github.com/prometheus/common v0.29.0/go.mod h1:vu+V0TpY+O6vW9J44gczi3Ap/oXXR10b+
 github.com/prometheus/common v0.32.1/go.mod h1:vu+V0TpY+O6vW9J44gczi3Ap/oXXR10b+M/gUGO4Hls=
 github.com/prometheus/common v0.37.0/go.mod h1:phzohg0JFMnBEFGxTDbfu3QyL5GI8gTQJFhYO5B3mfA=
 github.com/prometheus/common v0.42.0/go.mod h1:xBwqVerjNdUDjgODMpudtOMwlOwf2SaTr1yjz4b7Zbc=
-github.com/prometheus/common v0.53.0 h1:U2pL9w9nmJwJDa4qqLQ3ZaePJ6ZTwt7cMD3AG3+aLCE=
-github.com/prometheus/common v0.53.0/go.mod h1:BrxBKv3FWBIGXw89Mg1AeBq7FSyRzXWI3l3e7W3RN5U=
+github.com/prometheus/common v0.54.1-0.20240615204547-04635d2962f9 h1:WTZ/GBRTImL1HgRTEnJJcM2FuII7PXX1idCIEUJ8/r8=
+github.com/prometheus/common v0.54.1-0.20240615204547-04635d2962f9/go.mod h1:1Yn/UzXoahbVLk1sn6wsGiSiemz3XQejcaz9FIA1r+I=
 github.com/prometheus/common/sigv4 v0.1.0 h1:qoVebwtwwEhS85Czm2dSROY5fTo2PAPEVdDeppTwGX4=
 github.com/prometheus/common/sigv4 v0.1.0/go.mod h1:2Jkxxk9yYvCkE5G1sQT7GuEXm57JrvHu9k5YwTjsNtI=
 github.com/prometheus/exporter-toolkit v0.8.2/go.mod h1:00shzmJL7KxcsabLWcONwpyNEuWhREOnFqZW7vadFS0=
@@ -2150,8 +2150,8 @@ github.com/prometheus/procfs v0.8.0/go.mod h1:z7EfXMXOkbkqb9IINtpCn86r/to3BnA0ua
 github.com/prometheus/procfs v0.9.0/go.mod h1:+pB4zwohETzFnmlpe6yd2lSc+0/46IYZRB/chUwxUZY=
 github.com/prometheus/procfs v0.15.1 h1:YagwOFzUgYfKKHX6Dr+sHT7km/hxC76UB0learggepc=
 github.com/prometheus/procfs v0.15.1/go.mod h1:fB45yRUv8NstnjriLhBQLuOUt+WW4BsoGhij/e3PBqk=
-github.com/prometheus/prometheus v0.52.2-0.20240606174736-edd558884b24 h1:h7ScWoH/UHp/Fz6eo/cJva/CbsyQjYtMOtAgIhTUBBE=
-github.com/prometheus/prometheus v0.52.2-0.20240606174736-edd558884b24/go.mod h1:RZDkzs+ShMBDkAPQkLEaLBXpjmDcjhNxU2drUVPgKUU=
+github.com/prometheus/prometheus v0.52.2-0.20240614130246-4c1e71fa0b3d h1:FFA2droSZiHghpHgKHefUCZLJnJQo+ZrKkBkcgZ0xp4=
+github.com/prometheus/prometheus v0.52.2-0.20240614130246-4c1e71fa0b3d/go.mod h1:5AuUoK+n3jJUhhlc7C2DKdhI+dUx93eJvTYpvE0A3jE=
 github.com/redis/rueidis v1.0.14-go1.18 h1:dGir5z8w8X1ex7JWO/Zx2FMBrZgQ8Yjm+lw9fPLSNGw=
 github.com/redis/rueidis v1.0.14-go1.18/go.mod h1:HGekzV3HbmzFmRK6j0xic8Z9119+ECoGMjeN1TV1NYU=
 github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
@@ -2226,8 +2226,8 @@ github.com/tencentyun/cos-go-sdk-v5 v0.7.40 h1:W6vDGKCHe4wBACI1d2UgE6+50sJFhRWU4
 github.com/tencentyun/cos-go-sdk-v5 v0.7.40/go.mod h1:4dCEtLHGh8QPxHEkgq+nFaky7yZxQuYwgSJM87icDaw=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e h1:f1Zsv7OAU9iQhZwigp50Yl38W10g/vd5NC8Rdk1Jzng=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e/go.mod h1:jXcofnrSln/cLI6/dhlBxPQZEEQHVPCcFaH75M+nSzM=
-github.com/thanos-io/objstore v0.0.0-20240613135658-39f40b8d97f7 h1:Mu/VxwijVceWmzyHnpYrDBpdsrX4iREVnnB3wX3f1Pg=
-github.com/thanos-io/objstore v0.0.0-20240613135658-39f40b8d97f7/go.mod h1:OdoR9ITIuwn4ldouL24CC3zg8J+fPMb8gg9fdQKQDYE=
+github.com/thanos-io/objstore v0.0.0-20240617083302-124528d695c2 h1:F4NVi0NjsasbC86dtLdxUyWq6F0CFqH26Y5Y6hQFJec=
+github.com/thanos-io/objstore v0.0.0-20240617083302-124528d695c2/go.mod h1:OdoR9ITIuwn4ldouL24CC3zg8J+fPMb8gg9fdQKQDYE=
 github.com/thanos-io/promql-engine v0.0.0-20240515161521-93aa311933cf h1:R6of9adrCWXhETBstsFzNqrZou5UqeY3fh3k5yv5POY=
 github.com/thanos-io/promql-engine v0.0.0-20240515161521-93aa311933cf/go.mod h1:FEPnabuTql1bDA4OUM41mwcZOJ20R436k8vq+xtGEG0=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab h1:7ZR3hmisBWw77ZpO1/o86g+JV3VKlk3d48jopJxzTjU=
