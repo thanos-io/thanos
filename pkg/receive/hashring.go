@@ -287,6 +287,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 			if mt, ok := t[tenant]; ok && isExactMatcher(mt) {
 				found = true
 			} else {
+			loopTenants:
 				for tenantPattern, matcherType := range t {
 					switch matcherType {
 					case TenantMatcherGlob:
@@ -294,7 +295,10 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 						if err != nil {
 							return "", fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
 						}
-						found = matches
+						if matches {
+							found = true
+							break loopTenants
+						}
 					case TenantMatcherTypeExact:
 						// Already checked above, skipping.
 						fallthrough
