@@ -69,23 +69,20 @@ type Handler struct {
 // NewHandler creates a new frontend handler.
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
 	var (
-		FailedQueryCache *utils.FailedQueryCache
-		errQueryCache    error
+		h = &Handler{}
 	)
 
 	if cfg.FailedQueryCacheCapacity > 0 {
-		FailedQueryCache, errQueryCache = utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
+		FailedQueryCache, errQueryCache := utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
 		if errQueryCache != nil {
 			level.Warn(log).Log(errQueryCache.Error())
 		}
+		h.failedQueryCache = FailedQueryCache
 	}
 
-	h := &Handler{
-		cfg:              cfg,
-		log:              log,
-		roundTripper:     roundTripper,
-		failedQueryCache: FailedQueryCache,
-	}
+	h.cfg = cfg
+	h.log = log
+	h.roundTripper = roundTripper
 
 	if cfg.QueryStatsEnabled {
 		h.querySeconds = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -149,7 +146,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Check if query is cached
 	if f.failedQueryCache != nil {
-		cached, message := f.failedQueryCache.CallQueryHitCache(urlQuery)
+		cached, message := f.failedQueryCache.QueryHitCache(urlQuery)
 		if cached {
 			w.WriteHeader(http.StatusForbidden)
 			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
@@ -168,7 +165,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Update cache for failed queries.
 		if f.failedQueryCache != nil {
-			success, message := f.failedQueryCache.CallUpdateFailedQueryCache(err, urlQuery)
+			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, urlQuery)
 			if success {
 				level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
 			} else {

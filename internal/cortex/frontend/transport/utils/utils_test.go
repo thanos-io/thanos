@@ -103,7 +103,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, message := cache.CallUpdateFailedQueryCache(tt.err, tt.query)
+			result, message := cache.UpdateFailedQueryCache(tt.err, tt.query)
 			if result != tt.expectedResult {
 				t.Errorf("expected result %v, got %v", tt.expectedResult, result)
 			}
@@ -185,7 +185,7 @@ func TestQueryHitCache(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, message := cache.CallQueryHitCache(tt.query)
+			result, message := cache.QueryHitCache(tt.query)
 			if result != tt.expectedResult {
 				t.Errorf("expected result %v, got %v", tt.expectedResult, result)
 			}

@@ -143,14 +143,14 @@ func (f *FailedQueryCache) normalizeQueryString(query url.Values) string {
 	return f.regex.ReplaceAllString(query.Get("query"), " ")
 }
 
-func (f *FailedQueryCache) CallUpdateFailedQueryCache(err error, query url.Values) (bool, string) {
+func (f *FailedQueryCache) UpdateFailedQueryCache(err error, query url.Values) (bool, string) {
 	queryExpressionNormalized := f.normalizeQueryString(query)
 	queryExpressionRangeLength := getQueryRangeSeconds(query)
 	success, message := f.updateFailedQueryCache(err, queryExpressionNormalized, queryExpressionRangeLength, f.lruCache)
 	return success, message
 }
 
-func (f *FailedQueryCache) CallQueryHitCache(query url.Values) (bool, string) {
+func (f *FailedQueryCache) QueryHitCache(query url.Values) (bool, string) {
 	queryExpressionNormalized := f.normalizeQueryString(query)
 	queryExpressionRangeLength := getQueryRangeSeconds(query)
 	cached, message := queryHitCache(queryExpressionNormalized, queryExpressionRangeLength, f.lruCache)
