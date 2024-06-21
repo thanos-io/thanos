@@ -9,8 +9,11 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/rules"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
@@ -42,7 +45,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/reloader"
-	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -173,6 +175,7 @@ func runSidecar(
 	readyToStartGRPC := make(chan struct{})
 
 	// Setup Prometheus Heartbeats.
+	promAgentModeEnabled := false
 	{
 		promUp := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_prometheus_up",
@@ -189,7 +192,7 @@ func runSidecar(
 					iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 					defer iterCancel()
 
-					if err := validatePrometheus(iterCtx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
+					if err := validatePrometheus(iterCtx, m.client, logger, conf.shipper.ignoreBlockSize, m, &promAgentModeEnabled); err != nil {
 						level.Warn(logger).Log(
 							"msg", "failed to validate prometheus flags. Is Prometheus running? Retrying",
 							"err", err,
@@ -310,34 +313,38 @@ func runSidecar(
 
 		exemplarSrv := exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels)
 
-		infoSrv := info.NewInfoServer(
-			component.Sidecar.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
-				return promStore.LabelSet()
-			}),
-			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
-				if httpProbe.IsReady() {
-					mint, maxt := promStore.Timestamps()
-					return &infopb.StoreInfo{
-						MinTime:                      mint,
-						MaxTime:                      maxt,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-						TsdbInfos:                    promStore.TSDBInfos(),
-					}, nil
-				}
-				return nil, errors.New("Not ready")
-			}),
-			info.WithExemplarsInfoFunc(),
+		var infoOptions []info.ServerOptionFunc
+		if !promAgentModeEnabled {
+			infoOptions = append(infoOptions,
+				info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+					return promStore.LabelSet()
+				}),
+				info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
+					if httpProbe.IsReady() {
+						mint, maxt := promStore.Timestamps()
+						return &infopb.StoreInfo{
+							MinTime:                      mint,
+							MaxTime:                      maxt,
+							SupportsSharding:             true,
+							SupportsWithoutReplicaLabels: true,
+							TsdbInfos:                    promStore.TSDBInfos(),
+						}, nil
+					}
+					return nil, errors.New("Not ready")
+				}),
+				info.WithExemplarsInfoFunc(),
+			)
+		}
+		infoOptions = append(infoOptions,
 			info.WithRulesInfoFunc(),
 			info.WithTargetsInfoFunc(),
 			info.WithMetricMetadataInfoFunc(),
 		)
+		infoSrv := info.NewInfoServer(
+			component.Sidecar.String(), infoOptions...,
+		)
 
-		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
-			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+		opts := []grpcserver.Option{
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
@@ -346,7 +353,16 @@ func runSidecar(
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
-		)
+		}
+		if !promAgentModeEnabled {
+			storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
+			opts = append(opts,
+				grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
+				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
+				grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			)
+		}
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe, opts...)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -427,7 +443,7 @@ func runSidecar(
 	return nil
 }
 
-func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
+func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata, promAgentModeEnabled *bool) error {
 	var (
 		flagErr error
 		flags   promclient.Flags
@@ -446,6 +462,11 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 	if flagErr != nil {
 		level.Warn(logger).Log("msg", "failed to check Prometheus flags, due to potentially older Prometheus. No extra validation is done.", "err", flagErr)
 		return nil
+	}
+
+	if strings.Contains(flags.PromFeature, "agent") {
+		*promAgentModeEnabled = true
+		return errors.New("Prometheus is running in agent mode. StoreAPI will be disabled.")
 	}
 
 	// Check if compaction is disabled.
