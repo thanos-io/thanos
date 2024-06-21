@@ -175,7 +175,6 @@ func runSidecar(
 	readyToStartGRPC := make(chan struct{})
 
 	// Setup Prometheus Heartbeats.
-	promAgentModeEnabled := false
 	{
 		promUp := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_prometheus_up",
@@ -184,32 +183,6 @@ func runSidecar(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			// Only check Prometheus's flags when upload is enabled.
-			if uploads {
-				// Check prometheus's flags to ensure same sidecar flags.
-				// We retry infinitely until we validated prometheus flags
-				err := runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
-					iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
-					defer iterCancel()
-
-					if err := validatePrometheus(iterCtx, m.client, logger, conf.shipper.ignoreBlockSize, m, &promAgentModeEnabled); err != nil {
-						level.Warn(logger).Log(
-							"msg", "failed to validate prometheus flags. Is Prometheus running? Retrying",
-							"err", err,
-						)
-						return err
-					}
-
-					level.Info(logger).Log(
-						"msg", "successfully validated prometheus flags",
-					)
-					return nil
-				})
-				if err != nil {
-					return errors.Wrap(err, "failed to validate prometheus flags")
-				}
-			}
-
 			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
 			err := runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
@@ -286,7 +259,7 @@ func runSidecar(
 		})
 	}
 
-	// Setup the Reloader.
+	// Set up the Reloader.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -296,8 +269,36 @@ func runSidecar(
 		})
 	}
 
-	// Setup the gRPC server.
+	// Set up the gRPC server.
 	{
+		promAgentModeEnabled := false
+		ctx, cancel := context.WithCancel(context.Background())
+		// Only check Prometheus's flags when upload is enabled.
+		if uploads {
+			// Check prometheus's flags to ensure same sidecar flags.
+			// We retry infinitely until we validated prometheus flags
+			err := runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
+				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
+				defer iterCancel()
+
+				if err := validatePrometheus(iterCtx, m.client, logger, conf.shipper.ignoreBlockSize, m, &promAgentModeEnabled); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to validate prometheus flags. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
+				level.Info(logger).Log(
+					"msg", "successfully validated prometheus flags",
+				)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to validate prometheus flags")
+			}
+		}
+
 		c := promclient.NewWithTracingClient(logger, httpClient, clientconfig.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
@@ -347,7 +348,6 @@ func runSidecar(
 		opts := []grpcserver.Option{
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
-			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
@@ -364,7 +364,6 @@ func runSidecar(
 		}
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe, opts...)
 
-		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			select {
 			case <-ctx.Done():
