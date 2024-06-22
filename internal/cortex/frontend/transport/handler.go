@@ -68,9 +68,11 @@ type Handler struct {
 
 // NewHandler creates a new frontend handler.
 func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logger, reg prometheus.Registerer) http.Handler {
-	var (
-		h = &Handler{}
-	)
+	h := &Handler{
+		cfg:          cfg,
+		log:          log,
+		roundTripper: roundTripper,
+	}
 
 	if cfg.FailedQueryCacheCapacity > 0 {
 		FailedQueryCache, errQueryCache := utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
@@ -79,10 +81,6 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		}
 		h.failedQueryCache = FailedQueryCache
 	}
-
-	h.cfg = cfg
-	h.log = log
-	h.roundTripper = roundTripper
 
 	if cfg.QueryStatsEnabled {
 		h.querySeconds = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
