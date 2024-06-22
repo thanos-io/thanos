@@ -1033,7 +1033,7 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 			}
 
 			for _, extLset := range extLsets {
-				id := createBlockFromHead(tt, auxDir, h)
+				id := storetestutil.CreateBlockFromHead(tt, auxDir, h)
 
 				auxBlockDir := filepath.Join(auxDir, id.String())
 				meta, err := metadata.ReadFromDir(auxBlockDir)
