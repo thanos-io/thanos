@@ -1660,10 +1660,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		s.metrics.cachedPostingsCompressedSizeBytes.WithLabelValues(tenant).Add(float64(stats.CachedPostingsCompressedSizeSum))
 		s.metrics.postingsSizeBytes.WithLabelValues(tenant).Observe(float64(int(stats.PostingsFetchedSizeSum) + int(stats.PostingsTouchedSizeSum)))
 
-		level.Debug(logger).Log("msg", "stats query processed",
-			"request", req,
-			"tenant", tenant,
-			"stats", fmt.Sprintf("%+v", stats), "err", err)
+		if s.debugLogging {
+			level.Debug(logger).Log("msg", "stats query processed",
+				"request", req,
+				"tenant", tenant,
+				"stats", fmt.Sprintf("%+v", stats), "err", err)
+		}
 	}()
 
 	// Concurrently get data from all blocks.

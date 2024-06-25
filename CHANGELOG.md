@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7361](https://github.com/thanos-io/thanos/pull/7361) Query: *breaking :warning:* pass query stats from remote execution from server to client. We changed the protobuf of the QueryAPI, if you use `query.mode=distributed` you need to update your client (upper level Queriers) first, before updating leaf Queriers (servers).
 - [#7363](https://github.com/thanos-io/thanos/pull/7363) Query-frontend: set value of remote_user field in Slow Query Logs from HTTP header
 - [#7335](https://github.com/thanos-io/thanos/pull/7335) Dependency: Update minio-go to v7.0.70 which includes support for EKS Pod Identity.
+- [#7477](https://github.com/thanos-io/thanos/pull/7477) *: Bump objstore to `20240622095743-1afe5d4bc3cd`
 
 ### Changed
 
