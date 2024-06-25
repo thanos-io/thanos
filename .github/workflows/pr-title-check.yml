@@ -15,11 +15,11 @@ jobs:
       - name: Verify PR Title
         id: verify
         run: |
-          PREFIXES="query:|.*:"
+          PREFIXES="query:|compactor:|query-frontend:|receiver:|rule:|sidecar:|store:|tools:|\.\*:"
 
           if [[ ! "${{ github.event.pull_request.title }}" =~ ^(${PREFIXES}) ]]; then
             echo "PR title does not follow the required format: 'prefix: description'"
-            echo "::error::PR title must start with one of the following prefixes: query:, .*:"
+            echo "::error::PR title must start with one of the following prefixes: query:, compactor:, query-frontend:, receiver:, rule:, sidecar:, store:, tools:, .*:"
             exit 1
           else
             echo "PR title is valid."
