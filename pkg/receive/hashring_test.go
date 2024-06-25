@@ -138,6 +138,34 @@ func TestHashringGet(t *testing.T) {
 				"node6": {},
 			},
 		},
+		{
+			name: "exact matcher type",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}},
+					Tenants:           []string{"tenant1", "tenant2"},
+					TenantMatcherType: TenantMatcherTypeExact,
+				},
+			},
+			nodes: map[string]struct{}{
+				"node1": {},
+			},
+			tenant: "tenant1",
+		},
+		{
+			name: "glob matcher type",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}},
+					Tenants:           []string{"tenant*", "*bar"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+			},
+			nodes: map[string]struct{}{
+				"node1": {},
+			},
+			tenant: "tenant1",
+		},
 	} {
 		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
 		require.NoError(t, err)
