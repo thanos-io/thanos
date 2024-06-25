@@ -108,7 +108,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	go.opentelemetry.io/contrib/samplers/jaegerremote v0.7.0
-	go.opentelemetry.io/otel/exporters/jaeger v1.16.0
+	go.opentelemetry.io/otel/exporters/jaeger v1.17.0
 )
 
 require (
