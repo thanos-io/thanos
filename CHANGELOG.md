@@ -821,11 +821,11 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 ### Changed
 
--
+- 
 
 ### Removed
 
--
+- 
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
