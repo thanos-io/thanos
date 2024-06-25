@@ -647,8 +647,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		t.mtx.Unlock()
 		return err
 	}
-	level.Info(logger).Log("msg", "disable auto compactions to avoid failures", "tenant", tenantID)
-	s.DisableCompactions()
 	var ship *shipper.Shipper
 	if t.bucket != nil {
 		ship = shipper.New(
