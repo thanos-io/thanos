@@ -15,7 +15,7 @@ jobs:
       - name: Verify PR Title
         id: verify
         run: |
-          PREFIXES="query|compactor|query-frontend|receiver|rule|sidecar|store|tools|\.\*"
+          PREFIXES="query|compactor|query-frontend|receiver|rule|sidecar|store|tools|\\.\*"
 
           IFS=',' read -ra PREFIX_ARRAY <<< "${PREFIXES}"
           VALID=0
