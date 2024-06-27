@@ -59,10 +59,10 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	met := grpc_prometheus.NewServerMetrics(
 		grpc_prometheus.WithServerHandlingTimeHistogram(
-			grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120}),
 			grpc_prometheus.WithHistogramOpts(&prometheus.HistogramOpts{
-				NativeHistogramBucketFactor:    1.1,
+				Buckets:                        []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 				NativeHistogramMaxBucketNumber: 256,
+				NativeHistogramBucketFactor:    1.1,
 			}),
 		),
 	)
