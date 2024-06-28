@@ -61,6 +61,8 @@ You can configure an S3 bucket as an object store with YAML, either by passing t
 NOTE: Minio client was mainly for AWS S3, but it can be configured against other S3-compatible object storages e.g Ceph
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=s3.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: S3
 config:
   bucket: ""
@@ -282,6 +284,8 @@ To configure Google Cloud Storage bucket as an object store you need to set `buc
 For example:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""
@@ -374,6 +378,8 @@ To configure Azure Storage account as an object store you need to provide a path
 Config file format is the following:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=azure.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: AZURE
 config:
   storage_account: ""
@@ -434,6 +440,8 @@ Below is an example configuration file for thanos to use OpenStack swift contain
 By default, OpenStack Swift has a limit for maximum file size of 5 GiB. Thanos index files are often larger than that. To resolve this issue, Thanos uses [Static Large Objects (SLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html) which are uploaded as segments. These are by default put into the `segments` directory of the same container. The default limit for using SLO is 1 GiB which is also the maximum size of the segment. If you don't want to use the same container for the segments (best practise is to use `<container_name>_segments` to avoid polluting listing of the container objects) you can use the `large_file_segments_container_name` option to override the default and put the segments to other container. *In rare cases you can switch to [Dynamic Large Objects (DLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html) by setting the `use_dynamic_large_objects` to true, but use it with caution since it even more relies on eventual consistency.*
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=swift.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: SWIFT
 config:
   auth_version: 0
@@ -486,6 +494,8 @@ To use Tencent COS as storage store, you should apply a Tencent Account to creat
 To configure Tencent Account to use COS as storage store you need to set these parameters in yaml format stored in a file:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cos.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: COS
 config:
   bucket: ""
@@ -526,6 +536,8 @@ In order to use AliYun OSS object storage, you should first create a bucket with
 To use AliYun OSS object storage, please specify following yaml configuration file in `objstore.config*` flag.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=oss.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: ALIYUNOSS
 config:
   endpoint: ""
@@ -542,6 +554,8 @@ Use --objstore.config-file to reference to this configuration file.
 In order to use Baidu BOS object storage, you should apply for a Baidu Account and create an object storage bucket first. Refer to [Baidu Cloud Documents](https://cloud.baidu.com/doc/BOS/index.html) for more details. To use Baidu BOS object storage, please specify the following yaml configuration file in `--objstore.config*` flag.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=bos.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: BOS
 config:
   bucket: ""
@@ -558,6 +572,8 @@ This storage type is used when user wants to store and access the bucket in the 
 NOTE: This storage type is experimental and might be inefficient. It is NOT advised to use it as the main storage for metrics in production environment. Particularly there is no planned support for distributed filesystems like NFS. This is mainly useful for testing and demos.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=filesystem.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: FILESYSTEM
 config:
   directory: ""
