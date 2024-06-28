@@ -19,6 +19,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#7494](https://github.com/thanos-io/thanos/pull/7494) Ruler: remove trailing period from SRV records returned by discovery `dnsnosrva` lookups
+
 ### Removed
 
 ## [v0.36.0](https://github.com/thanos-io/thanos/tree/release-0.36) - in progress
