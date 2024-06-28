@@ -5,6 +5,7 @@ package dns
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -108,6 +109,7 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			}
 
 			if qtype == SRVNoA {
+				fmt.Printf("Hello: %s", rec.Target)
 				res = append(res, appendScheme(scheme, net.JoinHostPort(rec.Target, resPort)))
 				continue
 			}
