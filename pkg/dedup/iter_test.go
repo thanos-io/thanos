@@ -555,10 +555,137 @@ func TestDedupSeriesSet(t *testing.T) {
 	}
 }
 
+func TestDedupSeriesFailsWithShortDefaultPenalty(t *testing.T) {
+	for _, tcase := range []struct {
+		name      string
+		input     []series
+		exp       []series
+		isCounter bool
+	}{
+		{
+			name:      "Test Dedup when large scrape lag between endpoints",
+			isCounter: true,
+			input: []series{
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}},
+					samples: []sample{
+						{1714665427092, 2583033},
+						{1714665487092, 2588869},
+						{1714665547092, 2594666},
+						{1714665607092, 2600461},
+						{1714665667092, 2606298},
+					},
+				}, {
+					lset: labels.Labels{{Name: "a", Value: "1"}},
+					samples: []sample{
+						{1714665450205, 2583033},
+						{1714665510205, 2588869},
+						{1714665570205, 2594666},
+						{1714665630205, 2600461},
+						{1714665690205, 2606298},
+					},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					samples: []sample{{1714665427092, 2583033}, {1714665487092, 2588869}, {1714665547092, 2594666}, {1714665607092, 2600461}, {1714665667092, 2606298}},
+				},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			InitialPenalty(5000)
+			// If it is a counter then pass a function which expects a counter.
+			f := ""
+			if tcase.isCounter {
+				f = "rate"
+			}
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
+			var ats []storage.Series
+			for dedupSet.Next() {
+				ats = append(ats, dedupSet.At())
+			}
+			testutil.Ok(t, dedupSet.Err())
+			testutil.Equals(t, len(tcase.exp), len(ats))
+
+			for i, s := range ats {
+				testutil.Equals(t, tcase.exp[i].lset, s.Labels(), "labels mismatch for series %v", i)
+				res := expandSeries(t, s.Iterator(nil))
+				testutil.Assert(t, len(tcase.exp[i].samples) != len(res), fmt.Sprintf("expected deduplication to fail expected: %d, actual: %d, pen: %d", len(tcase.exp[i].samples), len(res), initialPenalty))
+			}
+		})
+	}
+}
+
+func TestDedupSeriesWithCustomDefaultPenalty(t *testing.T) {
+	for _, tcase := range []struct {
+		name      string
+		input     []series
+		exp       []series
+		isCounter bool
+	}{
+		{
+			name:      "Test Dedup when large scrape lag between endpoints",
+			isCounter: true,
+			input: []series{
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}},
+					samples: []sample{
+						{1714665427092, 2583033},
+						{1714665487092, 2588869},
+						{1714665547092, 2594666},
+						{1714665607092, 2600461},
+						{1714665667092, 2606298},
+					},
+				}, {
+					lset: labels.Labels{{Name: "a", Value: "1"}},
+					samples: []sample{
+						{1714665450205, 2583033},
+						{1714665510205, 2588869},
+						{1714665570205, 2594666},
+						{1714665630205, 2600461},
+						{1714665690205, 2606298},
+					},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					samples: []sample{{1714665427092, 2583033}, {1714665487092, 2588869}, {1714665547092, 2594666}, {1714665607092, 2600461}, {1714665667092, 2606298}},
+				},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			InitialPenalty(25000)
+			// If it is a counter then pass a function which expects a counter.
+			f := ""
+			if tcase.isCounter {
+				f = "rate"
+			}
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
+			var ats []storage.Series
+			for dedupSet.Next() {
+				ats = append(ats, dedupSet.At())
+			}
+			testutil.Ok(t, dedupSet.Err())
+			testutil.Equals(t, len(tcase.exp), len(ats))
+
+			for i, s := range ats {
+				testutil.Equals(t, tcase.exp[i].lset, s.Labels(), "labels mismatch for series %v", i)
+				res := expandSeries(t, s.Iterator(nil))
+				testutil.Equals(t, tcase.exp[i].samples, res, "values mismatch for series :%v", i)
+			}
+		})
+	}
+}
+
 func TestDedupSeriesIterator(t *testing.T) {
 	// The deltas between timestamps should be at least 10000 to not be affected
 	// by the initial penalty of 5000, that will cause the second iterator to seek
 	// ahead this far at least once.
+	InitialPenalty(5000)
 	cases := []struct {
 		a, b, exp []sample
 	}{
@@ -614,6 +741,7 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 		},
 	}
 
+	initialPenalty := 5000
 	for i, c := range casesMixed {
 		c := c
 		t.Run(fmt.Sprintf("mixed-%d", i), func(t *testing.T) {
@@ -623,7 +751,7 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
 			)
 			res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
-			require.EqualValues(t, c.exp, res)
+			require.EqualValues(t, c.exp, res, "initial penalty: %d", initialPenalty)
 
 			it = newDedupSeriesIterator(
 				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
