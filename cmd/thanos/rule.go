@@ -293,7 +293,7 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 		prometheus.CounterOpts{
 			Name: "thanos_rule_evaluation_with_warnings_total",
 			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
-			}, []string{"strategy", "file","group"},
+		}, []string{"strategy", "file", "group"},
 	)
 	// TODO(Amandaguan): intiilize when group is available at the time of initialization
 	// m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
@@ -949,7 +949,7 @@ func queryFuncCreator(
 					if len(warns) > 0 {
 						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String()), group, file).Inc()
 						// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", qs, "group", group, "file", file)					
+						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", qs, "group", group, "file", file)
 					}
 					return v, nil
 				}
