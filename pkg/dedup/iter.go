@@ -15,6 +15,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+var initialPenalty int64 = 5000
+
+func InitialPenalty(value int64) {
+	initialPenalty = value
+}
+
 type dedupSeriesSet struct {
 	set       storage.SeriesSet
 	isCounter bool
@@ -345,7 +351,6 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	// timestamp assignment.
 	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
 	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenalty = 5000
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
