@@ -924,24 +924,14 @@ func queryFuncCreator(
 
 		return func(ctx context.Context, qs string, t time.Time) (promql.Vector, error) {
 			// This context value is set by Prometheus. For details on how it's populated, see:https://github.com/prometheus/prometheus/blob/main/rules/group.go#L181
-			origin, ok := ctx.Value(promql.QueryOrigin{}).(map[string]interface{})
-			if !ok {
-				return nil, fmt.Errorf("query origin context not found")
-			}
+			origin := ctx.Value(promql.QueryOrigin{}).(map[string]interface{})
+			ruleGroup := origin["ruleGroup"].(map[string]string)
 
-			ruleGroup, ok := origin["ruleGroup"].(map[string]string)
-			if !ok {
-				return nil, fmt.Errorf("rule group information not found or of unexpected type")
-			}
-
-			group, ok := ruleGroup["name"]
-			if !ok {
-				return nil, fmt.Errorf("group name not found in rule group information")
-			}
-
-			file, ok := ruleGroup["file"]
-			if !ok {
-				return nil, fmt.Errorf("file name not found in rule group information")
+			group := ""
+			file := ""
+			if ruleGroup != nil {
+				group = ruleGroup["name"]
+				file = ruleGroup["file"]
 			}
 
 			for _, i := range rand.Perm(len(queriers)) {
