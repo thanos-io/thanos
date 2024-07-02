@@ -65,6 +65,7 @@ func NewQueryableCreator(
 	proxy storepb.StoreServer,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
+	dedupDefaultPenalty time.Duration,
 ) QueryableCreator {
 	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
 
@@ -78,6 +79,7 @@ func NewQueryableCreator(
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
 	) storage.Queryable {
+		dedup.InitialPenalty(dedupDefaultPenalty.Milliseconds())
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,

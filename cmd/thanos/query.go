@@ -231,6 +231,7 @@ func registerQuery(app *extkingpin.App) {
 	tenantCertField := cmd.Flag("query.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query.tenant-header flag value to be ignored.").Default("").Enum("", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 	enforceTenancy := cmd.Flag("query.enforce-tenancy", "Enforce tenancy on Query APIs. Responses are returned only if the label value of the configured tenant-label-name and the value of the tenant header matches.").Default("false").Bool()
 	tenantLabel := cmd.Flag("query.tenant-label-name", "Label name to use when enforcing tenancy (if --query.enforce-tenancy is enabled).").Default(tenancy.DefaultTenantLabel).String()
+	dedupDefaultPenalty := extkingpin.ModelDuration(cmd.Flag("query.dedup-penalty", "Initial penalty value for deduplication in the query engine.").Default("5s"))
 
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
@@ -369,6 +370,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantCertField,
 			*enforceTenancy,
 			*tenantLabel,
+			time.Duration(*dedupDefaultPenalty),
 		)
 	})
 }
@@ -451,6 +453,7 @@ func runQuery(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	dedupDefaultPenalty time.Duration,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -562,6 +565,7 @@ func runQuery(
 			proxy,
 			maxConcurrentSelects,
 			queryTimeout,
+			dedupDefaultPenalty,
 		)
 	)
 
