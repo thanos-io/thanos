@@ -9,6 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#7495](https://github.com/thanos-io/thanos/pull/7495) *breaking :warning:* Rule: Added a `source` label to the `thanos_rule_evaluation_with_warnings_total` metric. This change may cause some pre-existing queries or alerts using this metric to require updates.
 
 ### Fixed
 
