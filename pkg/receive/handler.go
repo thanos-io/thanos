@@ -837,9 +837,17 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		}
 
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
-			if err != nil {
-				return nil, nil, err
+			var endpoint string
+			if h.options.ReceiverMode != IngestorOnly {
+				var err error
+				endpoint, err = h.hashring.GetN(tenant, &ts, rn)
+				if err != nil {
+					return nil, nil, err
+				}
+			} else {
+				// In IngestorOnly mode, directly use the h.options.endpoint,
+				// and then we still can use other config in the hashring such as tenant-specific external labels.
+				endpoint = h.options.Endpoint
 			}
 			endpointReplica := endpointReplica{endpoint: endpoint, replica: rn}
 			var writeDestination = remoteWrites

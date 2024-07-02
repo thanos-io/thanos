@@ -97,7 +97,10 @@ func registerReceive(app *extkingpin.App) {
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
-		receiveMode := conf.determineMode()
+		receiveMode, err := conf.runMode()
+		if err != nil {
+			return errors.Wrap(err, "run mode")
+		}
 
 		return runReceive(
 			g,
@@ -799,6 +802,8 @@ type receiveConfig struct {
 	objStoreConfig *extflag.PathOrContent
 	retention      *model.Duration
 
+	mode string
+
 	hashringsFilePath    string
 	hashringsFileContent string
 	hashringsAlgorithm   string
@@ -881,6 +886,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
 	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables the retention policy (i.e. infinite retention). For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
+
+	modeHelptext := strings.Join([]string{string(receive.RouterIngestor), string(receive.RouterOnly), string(receive.IngestorOnly)}, ", ")
+	cmd.Flag("receive.mode", "The mode to run in. Must be one of "+modeHelptext+". If not, auto determine the mode.").Hidden().StringVar(&rc.mode)
 
 	cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").StringVar(&rc.hashringsFilePath)
 
@@ -1005,5 +1013,33 @@ func (rc *receiveConfig) determineMode() receive.ReceiverMode {
 	default:
 		// hashring configuration has not been provided so we ingest all metrics locally.
 		return receive.IngestorOnly
+	}
+}
+
+func (rc *receiveConfig) runMode() (receive.ReceiverMode, error) {
+	// Has the user provided some kind of hashring configuration?
+	hashringSpecified := rc.hashringsFileContent != "" || rc.hashringsFilePath != ""
+	// Has the user specified the --receive.local-endpoint flag?
+	localEndpointSpecified := rc.endpoint != ""
+
+	runMode := receive.ReceiverMode(rc.mode)
+	switch runMode {
+	case receive.RouterIngestor:
+		if !hashringSpecified || !localEndpointSpecified {
+			return runMode, errors.Errorf("The hashring configuration and local endpoint must be specified in %s mode", runMode)
+		}
+		return runMode, nil
+	case receive.RouterOnly:
+		if !hashringSpecified {
+			return runMode, errors.Errorf("The hashring configuration must be specified in %s mode", runMode)
+		}
+		return runMode, nil
+	case receive.IngestorOnly:
+		if !localEndpointSpecified {
+			return runMode, errors.Errorf("The local endpoint must be specified in %s mode", runMode)
+		}
+		return runMode, nil
+	default:
+		return rc.determineMode(), nil
 	}
 }
