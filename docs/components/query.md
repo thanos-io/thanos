@@ -374,6 +374,8 @@ Flags:
       --query.conn-metric.label=external_labels... ...
                                  Optional selection of query connection metric
                                  labels to be collected from endpoint set
+      --query.dedup-penalty=5s   Initial penalty value for deduplication in the
+                                 query engine.
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
