@@ -826,6 +826,7 @@ func runQuery(
 		}, func(error) {
 			statusProber.NotReady(err)
 			s.Shutdown(err)
+			endpoints.Close()
 		})
 	}
 
@@ -919,7 +920,6 @@ func prepareEndpointSet(
 			})
 		}, func(error) {
 			cancel()
-			endpointSet.Close()
 		})
 	}
 
