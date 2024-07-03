@@ -13,10 +13,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#7493](https://github.com/thanos-io/thanos/pull/7493) *: fix server grpc histograms
-- [#7341] (https://github.com/thanos-io/thanos/issues/7341) *: fix query: different results for rate function when not dedup or using implicit step interval #7341
+- [#7341](https://github.com/thanos-io/thanos/issues/7341) *: fix query: different results for rate function when not dedup or using implicit step interval #7341
 
 ### Added
-- [#7341] (https://github.com/thanos-io/thanos/issues/7341) *: Query: Add `--query.dedup-penalty` flag to control the initial penalty value for deduplication in the query engine.
+- [#7341](https://github.com/thanos-io/thanos/issues/7341) *: Query: Add `--query.dedup-penalty` flag to control the initial penalty value for deduplication in the query engine.
 
 ### Changed
 
