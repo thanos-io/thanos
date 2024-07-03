@@ -264,3 +264,20 @@ transport_config:
   disable_compression: false
   tls_handshake_timeout: 0
 ```
+
+## Metrics
+
+### List of Metrics Exported By Sidecar
+
+| Metric Name         | Type | Description          | 
+| ------------ | -------------- | ----------- |
+| thanos_sidecar_prometheus_up | gauge | Boolean indicator whether the sidecar can reach its Prometheus peer. |
+| thanos_sidecar_reloader_config_apply_operations | counter | Total number of config apply operations. |
+| thanos_sidecar_reloader_config_apply_operations_failed | counter | Total number of config apply operations that failed. |
+| thanos_sidecar_reloader_last_reload_success_timestamp_seconds | gauge | Timestamp of the last successful reload. |
+| thanos_sidecar_reloader_last_reload_successful | gauge | Whether the last reload attempt was successful. |
+| thanos_sidecar_reloader_reloads | counter | Total number of reload requests. |
+| thanos_sidecar_reloader_reloads_failed | counter | Total number of reload requests that failed. |
+| thanos_sidecar_reloader_watch_errors | counter | Total number of errors received by the reloader from the watcher. |
+| thanos_sidecar_reloader_watch_events | counter | Total number of events received by the reloader from the watcher. |
+| thanos_sidecar_reloader_watches | gauge | Number of resources watched by the reloader. |
