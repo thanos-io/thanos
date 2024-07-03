@@ -29,7 +29,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
 	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
-	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, 5*time.Second)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
 	engineFactory := &QueryEngineFactory{
 		thanosEngine: &engineStub{},
@@ -75,7 +75,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
 	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
-	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, 5*time.Second)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
 	tests := []struct {
 		name   string

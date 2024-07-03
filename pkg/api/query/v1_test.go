@@ -185,6 +185,7 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
+	dedupDefaultPenalty := 5 * time.Second
 	ef := NewQueryEngineFactory(promql.EngineOpts{
 		Logger:     nil,
 		Reg:        nil,
@@ -195,7 +196,7 @@ func TestQueryEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedupDefaultPenalty),
 		engineFactory:         ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -638,6 +639,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
+	dedupDefaultPenalty := 5 * time.Second
 	ef := NewQueryEngineFactory(promql.EngineOpts{
 		Logger:     nil,
 		Reg:        nil,
@@ -648,7 +650,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedupDefaultPenalty),
 		engineFactory:         ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -707,6 +709,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
+	dedupDefaultPenalty := 5 * time.Second
 	ef := NewQueryEngineFactory(promql.EngineOpts{
 		Logger:     nil,
 		Reg:        nil,
@@ -717,7 +720,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedupDefaultPenalty),
 		engineFactory:         ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -881,6 +884,7 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
+	dedupDefaultPenalty := 5 * time.Second
 	ef := NewQueryEngineFactory(promql.EngineOpts{
 		Logger:     nil,
 		Reg:        nil,
@@ -891,7 +895,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedupDefaultPenalty),
 		engineFactory:       ef,
 		defaultEngine:       PromqlEnginePrometheus,
 		lookbackDeltaCreate: func(m int64) time.Duration { return time.Duration(0) },
@@ -907,7 +911,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedupDefaultPenalty),
 		engineFactory:            ef,
 		defaultEngine:            PromqlEnginePrometheus,
 		lookbackDeltaCreate:      func(m int64) time.Duration { return time.Duration(0) },
