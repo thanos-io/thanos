@@ -45,7 +45,7 @@ type sample struct {
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
 	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second)
+	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second, 5*time.Second)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
 	queryable := queryableCreator(
@@ -84,12 +84,14 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	}
 
 	timeout := 10 * time.Second
+	dedupDefaultPenalty := 5 * time.Second
 	q := NewQueryableCreator(
 		nil,
 		nil,
 		newProxyStore(testProxy),
 		2,
 		timeout,
+		dedupDefaultPenalty,
 	)(false,
 		nil,
 		nil,

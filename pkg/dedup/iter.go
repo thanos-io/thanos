@@ -5,6 +5,7 @@ package dedup
 
 import (
 	"math"
+	"sync"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -14,6 +15,17 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
+
+var (
+	initialPenalty int64 = 5000
+	mutex          sync.Mutex
+)
+
+func InitialPenalty(value int64) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	initialPenalty = value
+}
 
 type dedupSeriesSet struct {
 	set       storage.SeriesSet
@@ -345,7 +357,6 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	// timestamp assignment.
 	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
 	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenalty = 5000
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
