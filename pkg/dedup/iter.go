@@ -5,6 +5,7 @@ package dedup
 
 import (
 	"math"
+	"sync"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -15,9 +16,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-var initialPenalty int64 = 5000
+var (
+	initialPenalty int64 = 5000
+	mutex          sync.Mutex
+)
 
 func InitialPenalty(value int64) {
+	mutex.Lock()
+	defer mutex.Unlock()
 	initialPenalty = value
 }
 
