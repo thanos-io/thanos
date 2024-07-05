@@ -216,6 +216,10 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
+		if detectCorruptLabels(completeLabelset, r.Matchers) {
+			return status.Errorf(codes.DataLoss, "corrupt prometheus tsdb index detected: requesting %s, got unmatched series %s",
+				requestMatches(r.Matchers), completeLabelset.String())
+		}
 
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
