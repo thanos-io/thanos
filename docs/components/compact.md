@@ -497,7 +497,7 @@ Flags:
 
 ## Metrics
 
-### List of Metrics Exported By Sidecar
+### List of Metrics Exported By Compactor
 
 | Metric Name                                              | Type      | Description                                                                                                                |
 |----------------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------|
