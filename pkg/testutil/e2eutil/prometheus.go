@@ -534,14 +534,14 @@ func createBlock(
 	tombstones bool,
 	hashFunc metadata.HashFunc,
 	sampleType chunkenc.ValueType,
-) (id ulid.ULID, err error) {
+) (uid ulid.ULID, err error) {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
 	headOpts.ChunkRange = 10000000000
 	headOpts.EnableNativeHistograms = *atomic.NewBool(true)
 	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
 	if err != nil {
-		return id, errors.Wrap(err, "create head block")
+		return uid, errors.Wrap(err, "create head block")
 	}
 	defer func() {
 		runutil.CloseWithErrCapture(&err, h, "TSDB Head")
@@ -598,27 +598,26 @@ func createBlock(
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return id, err
+		return uid, err
 	}
 	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
-		return id, errors.Wrap(err, "create compactor")
+		return uid, errors.Wrap(err, "create compactor")
 	}
 
-	ids, err := c.Write(dir, h, mint, maxt, nil)
+	uid, err = c.Write(dir, h, mint, maxt, nil)
 	if err != nil {
-		return id, errors.Wrap(err, "write block")
+		return uid, errors.Wrap(err, "write block")
 	}
-	if len(ids) == 0 {
-		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
+	if uid == (ulid.ULID{}) {
+		return uid, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
-	id = ids[0]
 
-	blockDir := filepath.Join(dir, id.String())
+	blockDir := filepath.Join(dir, uid.String())
 	logger := log.NewNopLogger()
 	seriesSize, err := gatherMaxSeriesSize(ctx, filepath.Join(blockDir, "index"))
 	if err != nil {
-		return id, errors.Wrap(err, "gather max series size")
+		return uid, errors.Wrap(err, "gather max series size")
 	}
 
 	files := []metadata.File{}
@@ -631,13 +630,13 @@ func createBlock(
 			paths = append(paths, path)
 			return nil
 		}); err != nil {
-			return id, errors.Wrapf(err, "walking %s", dir)
+			return uid, errors.Wrapf(err, "walking %s", dir)
 		}
 
 		for _, p := range paths {
 			pHash, err := metadata.CalculateHash(p, metadata.SHA256Func, log.NewNopLogger())
 			if err != nil {
-				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
+				return uid, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
 			}
 			files = append(files, metadata.File{
 				RelPath: strings.TrimPrefix(p, blockDir+"/"),
@@ -653,16 +652,16 @@ func createBlock(
 		Files:      files,
 		IndexStats: metadata.IndexStats{SeriesMaxSize: seriesSize},
 	}, nil); err != nil {
-		return id, errors.Wrap(err, "finalize block")
+		return uid, errors.Wrap(err, "finalize block")
 	}
 
 	if !tombstones {
-		if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
-			return id, errors.Wrap(err, "remove tombstones")
+		if err = os.Remove(filepath.Join(dir, uid.String(), "tombstones")); err != nil {
+			return uid, errors.Wrap(err, "remove tombstones")
 		}
 	}
 
-	return id, nil
+	return uid, nil
 }
 
 func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
@@ -769,15 +768,14 @@ func CreateBlockWithChurn(
 		return id, errors.Wrap(err, "create compactor")
 	}
 
-	ids, err := c.Write(dir, h, mint, maxt, nil)
+	id, err = c.Write(dir, h, mint, maxt, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "write block")
 	}
 
-	if len(ids) == 0 {
+	if id == (ulid.ULID{}) {
 		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
-	id = ids[0]
 
 	blockDir := filepath.Join(dir, id.String())
 	logger := log.NewNopLogger()
