@@ -71,7 +71,7 @@ func CreateBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
 	ulids, err := compactor.Write(dir, head, head.MinTime(), head.MaxTime()+1, nil)
 	testutil.Ok(t, err)
 	testutil.Assert(t, len(ulids) > 0)
-	return ulids[0]
+	return ulids
 }
 
 // CreateHeadWithSeries returns head filled with given samples and same series returned in separate list for assertion purposes.
