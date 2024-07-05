@@ -389,7 +389,7 @@ func runCompact(
 		sy,
 		grouper,
 		planner,
-		comp,
+		compact.NewTSDBCompactorAdapter(comp),
 		compactDir,
 		insBkt,
 		conf.compactionConcurrency,

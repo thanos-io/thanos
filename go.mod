@@ -1,6 +1,8 @@
 module github.com/thanos-io/thanos
 
-go 1.21
+go 1.22.0
+
+toolchain go1.22.3
 
 require (
 	cloud.google.com/go/storage v1.40.0 // indirect
@@ -58,11 +60,11 @@ require (
 	github.com/prometheus/common v0.54.1-0.20240615204547-04635d2962f9
 	github.com/prometheus/exporter-toolkit v0.11.0
 	// Prometheus maps version 2.x.y to tags v0.x.y.
-	github.com/prometheus/prometheus v0.52.2-0.20240614130246-4c1e71fa0b3d
+	github.com/prometheus/prometheus v0.53.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
 	github.com/thanos-io/objstore v0.0.0-20240622095743-1afe5d4bc3cd
-	github.com/thanos-io/promql-engine v0.0.0-20240515161521-93aa311933cf
+	github.com/thanos-io/promql-engine v0.0.0-20240626193953-2881dff79d2d
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -102,9 +104,9 @@ require (
 require (
 	cloud.google.com/go v0.114.0 // indirect
 	cloud.google.com/go/iam v1.1.8 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.11.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.2 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.6.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.12.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.9.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	go.opentelemetry.io/contrib/samplers/jaegerremote v0.7.0
@@ -112,7 +114,7 @@ require (
 )
 
 require (
-	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5
+	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/mitchellh/go-ps v1.0.0
@@ -120,7 +122,7 @@ require (
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.38.0
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
-	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
+	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
 )
 
 require (
@@ -154,10 +156,10 @@ require (
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
-	k8s.io/apimachinery v0.29.3 // indirect
-	k8s.io/client-go v0.29.3 // indirect
-	k8s.io/klog/v2 v2.120.1 // indirect
-	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
+	k8s.io/apimachinery v0.30.2 // indirect
+	k8s.io/client-go v0.30.2 // indirect
+	k8s.io/klog/v2 v2.130.1 // indirect
+	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0 // indirect
 )
 
 require (
@@ -170,7 +172,7 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.2+incompatible // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/aws-sdk-go v1.53.16 // indirect
+	github.com/aws/aws-sdk-go v1.54.7 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.16.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.15.1 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.11.0 // indirect
@@ -194,7 +196,7 @@ require (
 	github.com/elastic/go-windows v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
-	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/analysis v0.22.2 // indirect
@@ -266,7 +268,7 @@ require (
 	golang.org/x/oauth2 v0.21.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
-	gonum.org/v1/gonum v0.12.0 // indirect
+	gonum.org/v1/gonum v0.15.0 // indirect
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
