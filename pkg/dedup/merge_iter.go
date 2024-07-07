@@ -77,9 +77,17 @@ func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 			}
 		}
 		currT := it.AtT()
-		if currT >= t && currT < picked {
-			picked = currT
-			m.lastIter = it
+		if currT >= t {
+			if currT < picked {
+				picked = currT
+				m.lastIter = it
+			} else if currT == picked {
+				_, currV := it.At()
+				_, pickedV := m.lastIter.At()
+				if currV < pickedV {
+					m.lastIter = it
+				}
+			}
 		}
 	}
 	if picked == math.MaxInt64 {
