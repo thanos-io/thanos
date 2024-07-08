@@ -6,6 +6,9 @@ package block
 import (
 	"context"
 	"encoding/json"
+	"github.com/hashicorp/go-multierror"
+	"github.com/minio/minio-go/v7"
+	"golang.org/x/exp/slices"
 	"io"
 	"os"
 	"path"
@@ -231,14 +234,26 @@ func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReade
 	}
 }
 
+func (f *ConcurrentLister) IsRetryableError(err error) bool {
+	switch err.(type) {
+	case minio.ErrorResponse:
+		minioError := err.(minio.ErrorResponse)
+		if slices.Contains([]int{408, 425, 429, 500, 502, 503, 504}, minioError.StatusCode) {
+			return true
+		}
+	}
+	return false
+}
+
 func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
 	const concurrency = 64
 
 	partialBlocks = make(map[ulid.ULID]bool)
 	var (
-		metaChan = make(chan ulid.ULID, concurrency)
-		eg, gCtx = errgroup.WithContext(ctx)
-		mu       sync.Mutex
+		metaChan   = make(chan ulid.ULID, concurrency)
+		eg, gCtx   = errgroup.WithContext(ctx)
+		mu, memu   sync.Mutex
+		multiError error
 	)
 	for i := 0; i < concurrency; i++ {
 		eg.Go(func() error {
@@ -247,9 +262,24 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 				// For 1y and 100 block sources this generates ~1.5-3k HEAD RPM. AWS handles 330k RPM per prefix.
 				// TODO(bwplotka): Consider filtering by consistency delay here (can't do until compactor healthyOverride work).
 				metaFile := path.Join(uid.String(), MetaFilename)
-				ok, err := f.bkt.Exists(gCtx, metaFile)
+
+				var ok bool
+				var err error
+				runutil.Retry(time.Second*5, nil, func() error {
+					ok, err = f.bkt.Exists(gCtx, metaFile)
+					if f.IsRetryableError(err) {
+						level.Error(f.logger).Log("msg", "Retryable error occurred, retrying after 5 seconds", "err", err)
+						return err
+					}
+					// non retryable error, let it pass through
+					return nil
+				})
+
 				if err != nil {
-					return errors.Wrapf(err, "meta.json file exists: %v", uid)
+					memu.Lock()
+					multiError = multierror.Append(multiError, errors.Wrapf(err, "meta.json file exists: %v", uid))
+					memu.Unlock()
+					continue
 				}
 				if !ok {
 					mu.Lock()
@@ -279,8 +309,10 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 	}
 	close(metaChan)
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	multiError = multierror.Append(eg.Wait(), multiError)
+
+	if multiError != nil {
+		return nil, multiError
 	}
 	return partialBlocks, nil
 }

@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#7493](https://github.com/thanos-io/thanos/pull/7493) *: fix server grpc histograms
+- [#7514](https://github.com/thanos-io/thanos/pull/7518) *: Fix channel deadlock in meta sync fetcher, Exists calls now retry if failing with a retryable minio error
 
 ### Added
 
