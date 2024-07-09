@@ -560,14 +560,32 @@ Flags:
 
 ```
 
-## Exported metrics
+## Metrics
 
-Thanos Query also exports metrics about its own performance. You can find a list with these metrics below.
+### List of Metrics Exported By Query
 
-**Disclaimer**: this list is incomplete. The remaining metrics will be added over time.
-
-| Name                                    | Type      | Labels                                          | Description                                                                                                       |
-|-----------------------------------------|-----------|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| grpc_client_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC client requests handled by this query instance (including errors)                                  |
-| grpc_server_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC server requests handled by this query instance (including errors)                                  |
-| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le                           | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
+| Metric Name                                                   | Type      | Description                                                                                       |
+|---------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------|
+| thanos_query_duplicated_store_addresses_total                 | Counter   | The number of times a duplicated store addresses is detected from the different configs in query. |
+| thanos_query_concurrent_gate_queries                          | Counter   | Total number of queries.                                                                          |
+| thanos_query_concurrent_gate_queries_duration_seconds         | Histogram | How many seconds it took for queries to wait at the gate.                                         |
+| thanos_query_concurrent_gate_queries_in_flight                | Gauge     | Number of queries that are currently in flight.                                                   |
+| thanos_query_concurrent_gate_queries_max                      | Gauge     | Maximum number of concurrent queries.                                                             |
+| thanos_query_concurrent_selects_gate_selects                  | Counter   | Total number of selects.                                                                          |
+| thanos_query_concurrent_selects_gate_selects_duration_seconds | Histogram | How many seconds it took for selects to wait at the gate.                                         |
+| thanos_query_concurrent_selects_gate_selects_in_flight        | Gauge     | Number of selects that are currently in flight.                                                   |
+| thanos_query_concurrent_selects_gate_selects_max              | Gauge     | Maximum number of concurrent selects.                                                             |
+| thanos_query_endpoints_dns_failures                           | Counter   | The number of DNS lookup failures of Thanos query endpoints.                                      |
+| thanos_query_endpoints_dns_lookups                            | Counter   | The number of DNS lookups resolutions attempts of Thanos query endpoints.                         |
+| thanos_query_exemplar_apis_dns_failures                       | Counter   | The number of DNS lookup failures of Thanos query exemplar apis.                                  |
+| thanos_query_exemplar_apis_dns_lookups                        | Counter   | The number of DNS lookups resolutions attempts of Thanos query exemplar apis.                     |
+| thanos_query_metadata_apis_dns_failures                       | Counter   | The number of DNS lookup failures of Thanos query metadata apis.                                  |
+| thanos_query_metadata_apis_dns_lookups                        | Counter   | The number of DNS lookups resolutions attempts of Thanos query metadata apis.                     |
+| thanos_query_range_requested_timespan_duration_seconds        | Histogram | A histogram of the query range window in seconds.                                                 |
+| thanos_query_rule_apis_dns_failures                           | Counter   | The number of DNS lookup failures of Thanos query rule apis.                                      |
+| thanos_query_rule_apis_dns_lookups                            | Counter   | The number of DNS lookups resolutions attempts of Thanos query rule apis.                         |
+| thanos_query_store_apis_dns_failures                          | Counter   | The number of DNS lookup failures of Thanos query store apis.                                     |
+| thanos_query_store_apis_dns_lookups                           | Counter   | The number of DNS lookups resolutions attempts of Thanos query store apis.                        |
+| thanos_query_store_apis_dns_provider_results                  | Gauge     | The number of resolved endpoints for each configured address.                                     |
+| thanos_query_target_apis_dns_failures                         | Counter   | The number of DNS lookup failures of Thanos query target apis.                                    |
+| thanos_query_target_apis_dns_lookups                          | Counter   | The number of DNS lookups resolutions attempts of Thanos query target apis.                       |
