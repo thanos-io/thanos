@@ -19,7 +19,6 @@ import (
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -788,7 +787,7 @@ func runQuery(
 			return srv.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)
-			defer statusProber.NotHealthy(err)
+			defer httpProbe.NotHealthy(err)
 
 			srv.Shutdown(err)
 		})
@@ -845,6 +844,7 @@ func runQuery(
 			return s.ListenAndServe()
 		}, func(error) {
 			statusProber.NotReady(err)
+			defer grpcProbe.NotHealthy(err)
 			s.Shutdown(err)
 		})
 	}
