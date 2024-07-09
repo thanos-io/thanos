@@ -569,3 +569,25 @@ If timeout is set to zero then there is no timeout for fetching and fetching's l
 In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build by downloading specific pieces of original block's index, stored on local disk and then mmaped and used by Store Gateway.
 
 For more information, please refer to the [Binary index-header](../operating/binary-index-header.md) operational guide.
+
+## Metrics
+
+### List of Metrics Exported By Store
+
+| Metric Name                                  | Type      | Description                                                                                                |
+|----------------------------------------------|-----------|------------------------------------------------------------------------------------------------------------|
+| thanos_store_api_query_duration_seconds      | histogram | Duration of the Thanos Store API select phase for a query.                                                 |
+| thanos_store_index_cache_hits                | counter   | Total number of requests to the cache that were a hit.                                                     |
+| thanos_store_index_cache_items               | gauge     | Current number of items in the index cache.                                                                |
+| thanos_store_index_cache_items_added         | counter   | Total number of items that were added to the index cache.                                                  |
+| thanos_store_index_cache_items_evicted       | counter   | Total number of items that were evicted from the index cache.                                              |
+| thanos_store_index_cache_items_overflowed    | counter   | Total number of items that could not be added to the cache due to being too big.                           |
+| thanos_store_index_cache_items_size_bytes    | gauge     | Current byte size of items in the index cache.                                                             |
+| thanos_store_index_cache_max_item_size_bytes | gauge     | Maximum number of bytes for single entry to be held in the index cache.                                    |
+| thanos_store_index_cache_max_size_bytes      | gauge     | Maximum number of bytes to be held in the index cache.                                                     |
+| thanos_store_index_cache_requests            | counter   | Total number of requests to the cache.                                                                     |
+| thanos_store_index_cache_total_size_bytes    | gauge     | Current byte size of items (both value and key) in the index cache.                                        |
+| thanos_store_nodes_grpc_connections          | gauge     | Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier. |
+| thanos_store_selects_dropped                 | counter   | Number of select queries that were dropped due to configured limits.                                       |
+| thanos_store_server_chunks_requested         | histogram | Number of requested chunks for Series calls.                                                               |
+| thanos_store_server_series_requested         | histogram | Number of requested series for Series calls.                                                               |
