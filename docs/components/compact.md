@@ -520,3 +520,14 @@ Flags:
 | thanos_compact_group_compactions                               | counter   | Total number of group compaction attempts that resulted in a new block.                                                    |
 | thanos_compact_group_compactions_failures                      | counter   | Total number of failed group compactions.                                                                                  |
 | thanos_compact_group_vertical_compactions                      | counter   | Total number of group compaction attempts that resulted in a new block based on overlapping blocks.                        |
+| thanos_compact_garbage_collection_total                        | counter   | Total number of garbage collection operations.                                                                             |
+| thanos_compact_garbage_collection_failures_total               | counter   | Total number of failed garbage collection operations.                                                                      |
+| thanos_compact_group_compactions_total                         | counter   | Total number of group compaction attempts that resulted in a new block.                                                    |
+| thanos_compact_group_compaction_runs_started_total             | counter   | Total number of group compaction attempts.                                                                                 |
+| thanos_compact_group_compaction_runs_completed_total           | counter   | Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction. |
+| thanos_compact_group_compactions_failures_total                | counter   | Total number of failed group compactions.                                                                                  |
+| thanos_compact_group_vertical_compactions_total                | counter   | Total number of group compaction attempts that resulted in a new block based on overlapping blocks.                        |
+| thanos_compact_todo_compactions                                | gauge     | number of compactions to be done.                                                                                          |
+| thanos_compact_todo_compaction_blocks                          | gauge     | number of blocks planned to be compacted.                                                                                  |
+| thanos_compact_todo_downsample_blocks                          | gauge     | number of blocks to be downsampled.                                                                                        |
+| thanos_compact_todo_deletion_blocks                            | gauge     | number of blocks that have crossed their retention period.                                                                 |
