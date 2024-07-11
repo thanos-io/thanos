@@ -589,3 +589,5 @@ Flags:
 | thanos_query_store_apis_dns_provider_results                  | Gauge     | The number of resolved endpoints for each configured address.                                     |
 | thanos_query_target_apis_dns_failures                         | Counter   | The number of DNS lookup failures of Thanos query target apis.                                    |
 | thanos_query_target_apis_dns_lookups                          | Counter   | The number of DNS lookups resolutions attempts of Thanos query target apis.                       |
+| grpc_client_handled_total                                     | Counter   | Number of gRPC client requests handled by the query instance (including errors).                  |
+| grpc_server_handled_total                                     | Counter   | Number of gRPC server requests handled by the query instance (including errors).                  |
