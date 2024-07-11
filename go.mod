@@ -107,7 +107,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.6.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
-	go.opentelemetry.io/contrib/samplers/jaegerremote v0.7.0
+	go.opentelemetry.io/contrib/samplers/jaegerremote v0.22.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.16.0
 )
 
@@ -153,8 +153,8 @@ require (
 	go.opentelemetry.io/contrib/propagators/ot v1.28.0 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240701130421-f6361c86f094 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d // indirect
 	k8s.io/apimachinery v0.29.3 // indirect
 	k8s.io/client-go v0.29.3 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
