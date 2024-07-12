@@ -13,10 +13,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#7493](https://github.com/thanos-io/thanos/pull/7493) *: fix server grpc histograms
+* [#7511](https://github.com/thanos-io/thanos/pull/7511) Query Frontend: fix doubled gzip compression for response body.
 
 ### Added
 
 ### Changed
+
+- [#7494](https://github.com/thanos-io/thanos/pull/7494) Ruler: remove trailing period from SRV records returned by discovery `dnsnosrva` lookups
 
 ### Removed
 
