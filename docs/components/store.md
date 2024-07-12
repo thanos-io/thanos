@@ -572,7 +572,7 @@ For more information, please refer to the [Binary index-header](../operating/bin
 
 ## Metrics
 
-### List of Metrics Exported By Store
+### List of metrics exported by Bucket Store
 
 | Metric Name                                  | Type      | Description                                                                                                                                         |
 |----------------------------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -591,3 +591,4 @@ For more information, please refer to the [Binary index-header](../operating/bin
 | thanos_store_server_chunks_requested         | histogram | Number of requested chunks for Series calls.                                                                                                        |
 | thanos_store_server_series_requested         | histogram | Number of requested series for Series calls.                                                                                                        |
 | thanos_store_node_info                       | gauge     | Number of nodes with the same external labels identified by their hash. If any time-series is larger than 1, external label uniqueness is not true. |
+| _store_node_info                             | gauge     | Number of nodes with the same external labels identified by their hash. If any time-series is larger than 1, external label uniqueness is not true. |
