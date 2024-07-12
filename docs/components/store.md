@@ -572,11 +572,10 @@ For more information, please refer to the [Binary index-header](../operating/bin
 
 ## Metrics
 
-### List of Metrics Exported By Store
+### List of metrics exported By Bucket Store
 
 | Metric Name                                  | Type      | Description                                                                                                                                         |
 |----------------------------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| thanos_store_api_query_duration_seconds      | histogram | Duration of the Thanos Store API select phase for a query.                                                                                          |
 | thanos_store_index_cache_hits                | counter   | Total number of requests to the cache that were a hit.                                                                                              |
 | thanos_store_index_cache_items               | gauge     | Current number of items in the index cache.                                                                                                         |
 | thanos_store_index_cache_items_added         | counter   | Total number of items that were added to the index cache.                                                                                           |
