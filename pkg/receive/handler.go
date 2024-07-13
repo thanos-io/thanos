@@ -215,7 +215,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Subsystem: "receive",
 				Name:      "write_e2e_latency_seconds",
 				Help:      "The end-to-end latency of the oldest sample in write requests.",
-				Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0, 30.0},
+				Buckets:   []float64{1, 5, 10, 20, 30, 40, 50, 60, 90, 120, 300, 600},
 			}, []string{"code", "tenant"},
 		),
 	}
