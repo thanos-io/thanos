@@ -627,9 +627,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
 	}
-	if h.receiverMode != RouterOnly {
-		return
-	}
 	for _, ts := range wreq.Timeseries {
 		if lat := secondsSinceOldestSample(ts); lat > 0 {
 			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Observe(secondsSinceOldestSample(ts))
