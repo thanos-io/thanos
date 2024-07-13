@@ -128,6 +128,7 @@ type Handler struct {
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
+	writeE2eLatency      *prometheus.HistogramVec
 
 	Limiter *Limiter
 }
@@ -206,6 +207,15 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Name:      "write_samples",
 				Help:      "The number of sampled received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeE2eLatency: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_e2e_latency_seconds",
+				Help:      "The end-to-end latency of the oldest sample in write requests.",
+				Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0, 30.0},
 			}, []string{"code", "tenant"},
 		),
 	}
@@ -462,6 +472,17 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
+func secondsSinceOldestSample(ts prompb.TimeSeries) float64 {
+	now := time.Now().UnixNano() / int64(time.Millisecond)
+	oldestTs := now
+	for _, s := range ts.Samples {
+		if s.Timestamp < oldestTs {
+			oldestTs = s.Timestamp
+		}
+	}
+	return float64(now-oldestTs) / 1000
+}
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -605,6 +626,11 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for tenant, stats := range tenantStats {
 		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+	}
+	for _, ts := range wreq.Timeseries {
+		if lat := secondsSinceOldestSample(ts); lat > 0 {
+			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Observe(secondsSinceOldestSample(ts))
+		}
 	}
 }
 
