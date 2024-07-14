@@ -472,15 +472,14 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
-func secondsSinceOldestSample(ts prompb.TimeSeries) float64 {
-	now := time.Now().UnixNano() / int64(time.Millisecond)
-	oldestTs := now
+func secondsSinceOldestSample(toMS int64, ts prompb.TimeSeries) float64 {
+	fromMS := toMS
 	for _, s := range ts.Samples {
-		if s.Timestamp < oldestTs {
-			oldestTs = s.Timestamp
+		if s.Timestamp < fromMS {
+			fromMS = s.Timestamp
 		}
 	}
-	return float64(now-oldestTs) / 1000
+	return float64(toMS-fromMS) / 1000
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -627,9 +626,10 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
 	}
+	nowMS := time.Now().UnixNano() / int64(time.Millisecond)
 	for _, ts := range wreq.Timeseries {
-		if lat := secondsSinceOldestSample(ts); lat > 0 {
-			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Observe(secondsSinceOldestSample(ts))
+		if lat := secondsSinceOldestSample(nowMS, ts); lat > 0 {
+			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Observe(lat)
 		}
 	}
 }
