@@ -572,7 +572,7 @@ For more information, please refer to the [Binary index-header](../operating/bin
 
 ### Metrics
 
-### List of Metrics Exported By Bucket Store
+### List of Metrics Exported By Store Gateway
 
 | Metric Name                                  | Type      | Description                                                                                                                                         |
 |----------------------------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
