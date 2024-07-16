@@ -128,6 +128,7 @@ type Handler struct {
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
+	writeE2eLatency      *prometheus.HistogramVec
 
 	Limiter *Limiter
 }
@@ -206,6 +207,15 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Name:      "write_samples",
 				Help:      "The number of sampled received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeE2eLatency: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_e2e_latency_seconds",
+				Help:      "The end-to-end latency of the oldest sample in write requests.",
+				Buckets:   []float64{1, 5, 10, 20, 30, 40, 50, 60, 90, 120, 300, 600, 900, 1200, 1800, 3600},
 			}, []string{"code", "tenant"},
 		),
 	}
@@ -462,6 +472,16 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
+func secondsSinceOldestSample(toMS int64, ts prompb.TimeSeries) float64 {
+	fromMS := toMS
+	for _, s := range ts.Samples {
+		if s.Timestamp < fromMS {
+			fromMS = s.Timestamp
+		}
+	}
+	return float64(toMS-fromMS) / 1000
+}
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -605,6 +625,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for tenant, stats := range tenantStats {
 		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+	}
+	nowMS := time.Now().UnixNano() / int64(time.Millisecond)
+	for _, ts := range wreq.Timeseries {
+		if lat := secondsSinceOldestSample(nowMS, ts); lat > 0 {
+			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Observe(lat)
+		}
 	}
 }
 
