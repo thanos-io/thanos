@@ -44,11 +44,11 @@ func (b *base) Unwrap() error {
 // Whenever error is printed with %+v format verb, stacktrace info gets dumped to the output.
 func (b *base) Format(s fmt.State, verb rune) {
 	if verb == 'v' && s.Flag('+') {
-		s.Write([]byte(formatErrorChain(b)))
+		_, _ = s.Write([]byte(formatErrorChain(b)))
 		return
 	}
 
-	s.Write([]byte(b.Error()))
+	_, _ = s.Write([]byte(b.Error()))
 }
 
 // Newf formats according to a format specifier and returns a new error with a stacktrace
