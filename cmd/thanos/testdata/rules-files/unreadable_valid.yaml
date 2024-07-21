@@ -1,0 +1,18 @@
+groups:
+  - name: test-alert-group
+    partial_response_strategy: "warn"
+    interval: 2m
+    rules:
+      - alert: TestAlert
+        expr: 1
+        labels:
+          key: value
+        annotations:
+          key: value
+
+  - name: test-rule-group
+    partial_response_strategy: "warn"
+    interval: 2m
+    rules:
+      - record: test_metric
+        expr: 1
