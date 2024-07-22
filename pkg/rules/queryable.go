@@ -118,12 +118,12 @@ func (q *promClientsQuerier) Select(ctx context.Context, _ bool, _ *storage.Sele
 }
 
 // LabelValues implements storage.LabelQuerier interface.
-func (q *promClientsQuerier) LabelValues(ctx context.Context, name string, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
+func (q *promClientsQuerier) LabelValues(ctx context.Context, name string, _ *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	return nil, nil, nil
 }
 
 // LabelNames implements storage.LabelQuerier interface.
-func (q *promClientsQuerier) LabelNames(ctx context.Context, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
+func (q *promClientsQuerier) LabelNames(ctx context.Context, _ *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	return nil, nil, nil
 }
 
