@@ -82,6 +82,9 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
+	RuleNameParam            = "rule_name[]"
+	RuleGroupParam           = "rule_group[]"
+	FileParam                = "file[]"
 )
 
 type PromqlEngineType string
@@ -1402,6 +1405,9 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			Type:                    rulespb.RulesRequest_Type(typ),
 			PartialResponseStrategy: ps,
 			MatcherString:           r.Form[MatcherParam],
+			RuleName:                r.Form[RuleNameParam],
+			RuleGroup:               r.Form[RuleGroupParam],
+			File:                    r.Form[FileParam],
 		}
 		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
 			groups, warnings, err = client.Rules(ctx, req)
