@@ -1,161 +1,20 @@
-## Thanos General Metrics
+### General Metrics
 
-### List of General Metrics Exported By Thanos
+| Metric Name                                       | Type      | Description                                                                                                                                                |
+|---------------------------------------------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| thanos_build_info                                 | gauge     | A metric with a constant '1' value labeled by version, revision, branch, goversion from which thanos was built, and the `goos` and `goarch` for the build. |
+| thanos_status                                     | gauge     | Represents status (0 indicates failure, 1 indicates success) of the component.                                                                             |
+| thanos_proxy_store_empty_stream_responses         | counter   | Total number of empty responses received.                                                                                                                  |
+| thanos_consistency_delay_seconds                  | gauge     | Configured consistency delay in seconds.                                                                                                                   |
+| thanos_delete_delay_seconds                       | gauge     | Configured delete delay in seconds.                                                                                                                        |
+| thanos_replicate_blocks_already_replicated_total  | counter   | Total number of blocks skipped due to already being replicated.                                                                                            |
+| thanos_replicate_blocks_replicated_total          | counter   | Total number of blocks replicated.                                                                                                                         |
+| thanos_replicate_objects_replicated_total         | counter   | Total number of objects replicated.                                                                                                                        |
+| thanos_replicate_replication_runs_total           | counter   | The number of replication runs split by success and error.                                                                                                 |
+| thanos_replicate_replication_run_duration_seconds | histogram | The Duration of replication runs split by success and error.                                                                                               |
 
-| Metric Name                               | Type    | Description                                                                                                                                                |
-|-------------------------------------------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| thanos_build_info                         | gauge   | A metric with a constant '1' value labeled by version, revision, branch, goversion from which thanos was built, and the `goos` and `goarch` for the build. |
-| thanos_status                             | gauge   | Represents status (0 indicates failure, 1 indicates success) of the component.                                                                             |
-| thanos_proxy_store_empty_stream_responses | counter | Total number of empty responses received.                                                                                                                  |
-| thanos_consistency_delay_seconds          | gauge   | Configured consistency delay in seconds.                                                                                                                   |
-| thanos_delete_delay_seconds               | gauge   | Configured delete delay in seconds.                                                                                                                        |
+### Metrics Exported By Store API
 
-### List of Metrics Exported By Store API
-- The Thanos Sidecar component implements and exposes a gRPC [Store API](https://github.com/thanos-io/thanos/blob/main/docs/quick-tutorial.md#store-api); this implementation allows one to query the metric data stored in Prometheus.
-
-  | Metric Name                             | Type      | Description                                                |
-  |-----------------------------------------|-----------|------------------------------------------------------------|
-  | thanos_store_api_query_duration_seconds | histogram | Duration of the Thanos Store API select phase for a query. |
-
-### List of Metrics Exported By Alert
-- Alert sends alert notifications to Alertmanager clusters.
-- Queue is a queue of alert notifications waiting to be sent; the queue is consumed in batches and entries are dropped at the front if it runs full.
-
-  | Metric Name                              | Type      | Description                                                                    |
-  |------------------------------------------|-----------|--------------------------------------------------------------------------------|
-  | thanos_alert_queue_alerts_dropped_total  | counter   | Total number of alerts that were dropped from the queue.                       |
-  | thanos_alert_queue_alerts_popped_total   | counter   | Total number of alerts popped from the queue.                                  |
-  | thanos_alert_queue_alerts_pushed_total   | counter   | Total number of alerts pushed to the queue.                                    |
-  | thanos_alert_queue_capacity              | gauge     | Capacity of the alert queue.                                                   |
-  | thanos_alert_queue_length                | gauge     | Length of the alert queue.                                                     |
-  | thanos_alert_sender_alerts_dropped_total | counter   | Total number of alerts dropped in case of all sends to alertmanagers failed.   |
-  | thanos_alert_sender_errors               | counter   | Total number of errors while sending alerts to alertmanager.                   |
-  | thanos_alert_sender_alerts_sent_total    | counter   | Total number of alerts sent by alertmanager.                                   |
-  | thanos_alert_sender_errors_total         | counter   | Total number of errors while sending alerts to alertmanager.                   |
-  | thanos_alert_sender_latency_seconds      | histogram | Latency for sending alert notifications (not including dropped notifications). |
-
-### List of Metrics Exported By Bucket
-- Bucket refers to a standard object storage bucket, not a special type created by Thanos itself.
-
-  | Metric Name                                                  | Type      | Description                                                                                                                                                                         |
-  |--------------------------------------------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | thanos_bucket_blocks_meta_base_syncs_total                   | counter   | Total blocks metadata synchronization attempts by base Fetcher.                                                                                                                     |
-  | thanos_bucket_blocks_meta_modified                           | gauge     | Number of blocks whose metadata changed.                                                                                                                                            |
-  | thanos_bucket_blocks_meta_sync_duration_seconds              | histogram | Duration of the blocks metadata synchronization in seconds.                                                                                                                         |
-  | thanos_bucket_blocks_meta_sync_failures                      | counter   | Total blocks metadata synchronization failures.                                                                                                                                     |
-  | thanos_bucket_blocks_meta_synced                             | gauge     | Number of block metadata synced.                                                                                                                                                    |
-  | thanos_bucket_blocks_meta_syncs_total                        | counter   | Total blocks metadata synchronization attempts.                                                                                                                                     |
-  | thanos_bucket_store_block_drop_failures                      | counter   | Total number of local blocks that failed to be dropped.                                                                                                                             |
-  | thanos_bucket_store_block_drops                              | counter   | Total number of local blocks that were dropped.                                                                                                                                     |
-  | thanos_bucket_store_block_load_failures                      | counter   | Total number of failed remote block loading attempts.                                                                                                                               |
-  | thanos_bucket_store_block_loads                              | counter   | Total number of remote block loading attempts.                                                                                                                                      |
-  | thanos_bucket_store_blocks_last_loaded_timestamp_seconds     | gauge     | Timestamp when last block got loaded.                                                                                                                                               |
-  | thanos_bucket_store_blocks_loaded                            | gauge     | Number of currently loaded blocks.                                                                                                                                                  |
-  | thanos_bucket_store_cached_postings_compressed_size_bytes    | counter   | Compressed size of postings stored into cache.                                                                                                                                      |
-  | thanos_bucket_store_cached_postings_compression_errors       | counter   | Number of postings compression errors.                                                                                                                                              |
-  | thanos_bucket_store_cached_postings_compression_time_seconds | counter   | Time spent compressing postings before storing them into postings cache.                                                                                                            |
-  | thanos_bucket_store_cached_postings_compressions             | counter   | Number of postings compressions before storing to index cache.                                                                                                                      |
-  | thanos_bucket_store_cached_postings_fetch_duration_seconds   | histogram | The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses. |
-  | thanos_bucket_store_cached_postings_original_size_bytes      | counter   | Original size of postings stored into cache.                                                                                                                                        |
-  | thanos_bucket_store_cached_series_fetch_duration_seconds     | histogram | The time it takes to fetch series to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.   |
-  | thanos_bucket_store_chunks_fetch_duration_seconds            | histogram | The total time spent fetching chunks within a single request a store gateway.                                                                                                       |
-  | thanos_bucket_store_empty_postings                           | counter   | Total number of empty postings when fetching block series.                                                                                                                          |
-  | thanos_bucket_store_indexheader_lazy_load                    | counter   | Total number of index-header lazy load operations.                                                                                                                                  |
-  | thanos_bucket_store_indexheader_lazy_load_duration_seconds   | histogram | Duration of the index-header lazy loading in seconds.                                                                                                                               |
-  | thanos_bucket_store_indexheader_lazy_load_failed             | counter   | Total number of failed index-header lazy load operations.                                                                                                                           |
-  | thanos_bucket_store_indexheader_lazy_unload                  | counter   | Total number of index-header lazy unload operations.                                                                                                                                |
-  | thanos_bucket_store_indexheader_lazy_unload_failed           | counter   | Total number of failed index-header lazy unload operations.                                                                                                                         |
-  | thanos_bucket_store_postings_size_bytes                      | histogram | Size in bytes of the postings for a single series call.                                                                                                                             |
-  | thanos_bucket_store_sent_chunk_size_bytes                    | histogram | Size in bytes of the chunks for the single series, which is adequate to the gRPC message size sent to querier.                                                                      |
-  | thanos_bucket_store_series_blocks_queried                    | histogram | Number of blocks in a bucket store that were touched to satisfy a query.                                                                                                            |
-  | thanos_bucket_store_series_gate_queries                      | counter   | Total number of queries.                                                                                                                                                            |
-  | thanos_bucket_store_series_gate_queries_duration_seconds     | histogram | How many seconds it took for queries to wait at the gate.                                                                                                                           |
-  | thanos_bucket_store_series_gate_queries_in_flight            | gauge     | Number of queries that are currently in flight.                                                                                                                                     |
-  | thanos_bucket_store_series_gate_queries_max                  | gauge     | Maximum number of concurrent queries.                                                                                                                                               |
-  | thanos_bucket_store_series_get_all_duration_seconds          | histogram | Time it takes until all per-block prepares and loads for a query are finished.                                                                                                      |
-  | thanos_bucket_store_series_merge_duration_seconds            | histogram | Time it takes to merge sub-results from all queried blocks into a single result.                                                                                                    |
-  | thanos_bucket_store_series_refetches                         | counter   | Total number of cases where 65536 bytes was not enough was to fetch series from index, resulting in refetch.                                                                        |
-  | thanos_bucket_store_series_result_series                     | histogram | Number of series observed in the final result of a query.                                                                                                                           |
-  | thanos_bucket_uiblocks_meta_modified                         | gauge     | Number of blocks whose metadata changed.                                                                                                                                            |
-  | thanos_bucket_uiblocks_meta_sync_duration_seconds            | histogram | Duration of the blocks metadata synchronization in seconds.                                                                                                                         |
-  | thanos_bucket_uiblocks_meta_sync_failures                    | counter   | Total blocks metadata synchronization failures.                                                                                                                                     |
-  | thanos_bucket_uiblocks_meta_synced                           | gauge     | Number of block metadata synced.                                                                                                                                                    |
-  | thanos_bucket_uiblocks_meta_syncs                            | counter   | Total blocks metadata synchronization attempts.                                                                                                                                     |
-
-### List of Metrics Exported By Object Storage
-- Thanos leverages object storage solutions such as Minio, Amazon S3, Google Cloud Storage, etc.
-
-  | Metric Name                                        | Type      | Description                                                                                                                                                          |
-  |----------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | thanos_objstore_bucket_last_successful_upload_time | gauge     | Second timestamp of the last successful upload to the bucket.                                                                                                        |
-  | thanos_objstore_bucket_operation_duration_seconds  | histogram | Duration of successful operations against the bucket.                                                                                                                |
-  | thanos_objstore_bucket_operation_failures_total    | counter   | Total number of operations against a bucket that failed, but were not expected to fail in certain way from caller perspective. Those errors have to be investigated. |
-  | thanos_objstore_bucket_operations_total            | counter   | Total number of all attempted operations against a bucket.                                                                                                           |
-
-### List of Metrics Exported By Thanos Replicator
-- The Thanos Replicator manages the replication of Thanos block data across different object storage systems.
-
-  | Metric Name                                       | Type      | Description                                                     |
-  |---------------------------------------------------|-----------|-----------------------------------------------------------------|
-  | thanos_replicate_blocks_already_replicated_total  | counter   | Total number of blocks skipped due to already being replicated. |
-  | thanos_replicate_blocks_replicated_total          | counter   | Total number of blocks replicated.                              |
-  | thanos_replicate_objects_replicated_total         | counter   | Total number of objects replicated.                             |
-  | thanos_replicate_replication_runs_total           | counter   | The number of replication runs split by success and error.      |
-  | thanos_replicate_replication_run_duration_seconds | histogram | The Duration of replication runs split by success and error.    |
-
-### List of Metrics Exported By Thanos Store Gateway Cache
-- The Thanos Store Gateway supports an [index cache](https://github.com/thanos-io/thanos/blob/main/docs/components/store.md#index-cache) to speed up postings and series lookups from TSDB blocks indexes; three types of caches are supported: `in-memory (default)`, `memcached`, and `redis`.
-
-  | Metric Name                                       | Type      | Description                                                                                                     |
-  |---------------------------------------------------|-----------|-----------------------------------------------------------------------------------------------------------------|
-  | thanos_cache_groupcache_bytes                     | gauge     | The number of bytes in the main cache.                                                                          |
-  | thanos_cache_groupcache_evictions_total           | counter   | The number items evicted from the cache.                                                                        |
-  | thanos_cache_groupcache_items                     | gauge     | The number of items in the cache.                                                                               |
-  | thanos_cache_groupcache_max_bytes                 | gauge     | The max number of bytes in the cache.                                                                           |
-  | thanos_cache_groupcache_get_requests_total        | counter   | Total number of get requests, including from peers.                                                             |
-  | thanos_cache_groupcache_loads_total               | counter   | Total number of loads from backend (gets - cacheHits).                                                          |
-  | thanos_cache_groupcache_peer_loads_total          | counter   | Total number of loads from peers (remote load or remote cache hit).                                             |
-  | thanos_cache_groupcache_peer_load_errors_total    | counter   | Total number of errors from peer loads.                                                                         |
-  | thanos_cache_groupcache_backend_loads_total       | counter   | Total number of direct backend loads.                                                                           |
-  | thanos_cache_groupcache_backend_load_errors_total | counter   | Total number of errors on direct backend loads.                                                                 |
-  | thanos_cache_groupcache_hits_total                | counter   | Total number of cache hits.                                                                                     |
-  | thanos_cache_inmemory_items_added_total           | counter   | Total number of items that were added to the inmemory cache.                                                    |
-  | thanos_cache_inmemory_items_evicted_total         | counter   | Total number of items that were evicted from the inmemory cache.                                                |
-  | thanos_cache_inmemory_hits_on_expired_data_total  | counter   | Total number of requests to the inmemory cache that were a hit but needed to be evicted due to TTL.             |
-  | thanos_cache_inmemory_hits_total                  | counter   | Total number of requests to the inmemory cache that were a hit.                                                 |
-  | thanos_cache_inmemory_items                       | gauge     | Current number of items in the inmemory cache.                                                                  |
-  | thanos_cache_inmemory_items_size_bytes            | gauge     | Current byte size of items in the inmemory cache.                                                               |
-  | thanos_cache_inmemory_max_size_bytes              | gauge     | Maximum number of bytes to be held in the inmemory cache.                                                       |
-  | thanos_cache_inmemory_total_size_bytes            | gauge     | Current byte size of items (both value and key) in the inmemory cache.                                          |
-  | thanos_cache_inmemory_max_item_size_bytes         | gauge     | Maximum number of bytes for single entry to be held in the inmemory cache.                                      |
-  | thanos_cache_inmemory_items_overflowed_total      | counter   | Total number of items that could not be added to the inmemory cache due to being too big.                       |
-  | thanos_cache_inmemory_requests_total              | counter   | Total number of requests to the inmemory cache.                                                                 |
-  | thanos_cache_memcached_hits_total                 | counter   | Total number of items requests to the cache that were a hit.                                                    |
-  | thanos_cache_memcached_requests_total             | counter   | Total number of items requests to memcached.                                                                    |
-  | thanos_cache_redis_hits_total                     | counter   | Total number of items requests to the cache that were a hit.                                                    |
-  | thanos_cache_redis_requests_total                 | counter   | Total number of items requests to redis.                                                                        |
-  | thanos_memcached_client_info                      | gauge     | A metric with a constant '1' value labeled by configuration options from which memcached client was configured. |
-  | thanos_memcached_operations_total                 | counter   | Total number of operations against memcached.                                                                   |
-  | thanos_memcached_operation_failures_total         | counter   | Total number of operations against memcached that failed.                                                       |
-  | thanos_memcached_operation_skipped_total          | counter   | Total number of operations against memcached that have been skipped.                                            |
-  | thanos_memcached_operation_duration_seconds       | histogram | Duration of operations against memcached.                                                                       |
-  | thanos_memcached_operation_data_size_bytes        | histogram | Tracks the size of the data stored in and fetched from memcached.                                               |
-  | thanos_redis_operation_duration_seconds           | histogram | Duration of operations against redis.                                                                           |
-
-### List of Metrics Exported By Thanos Sidecar Shipper
-- When the Thanos Sidecar is run with the `--shipper.upload-compacted` flag, it will sync all older existing blocks from Prometheus local storage on startup.
-
-  | Metric Name                            | Type    | Description                                                              |
-  |----------------------------------------|---------|--------------------------------------------------------------------------|
-  | thanos_shipper_upload_compacted_done   | gauge   | If 1 it means shipper uploaded all compacted blocks from the filesystem. |
-  | thanos_shipper_dir_sync_failures_total | counter | Total number of failed dir syncs.                                        |
-  | thanos_shipper_dir_syncs_total         | counter | Total number of dir syncs.                                               |
-  | thanos_shipper_upload_failures_total   | counter | Total number of block upload failures.                                   |
-  | thanos_shipper_uploads_total           | counter | Total number of uploaded blocks.                                         |
-
-### List of Metrics Exported By Thanos Verifier
-- The Thanos Verifier is a [Bucket tooling functionality](https://github.com/thanos-io/thanos/blob/main/docs/components/tools.md#bucket-verify) used to verify and optionally repair blocks within the specified bucket.
-
-  | Metric Name                                    | Type    | Description                                           |
-  |------------------------------------------------|---------|-------------------------------------------------------|
-  | thanos_verify_blocks_marked_for_deletion_total | counter | Total number of blocks marked for deletion by verify. |
+| Metric Name                             | Type      | Description                                                |
+|-----------------------------------------|-----------|------------------------------------------------------------|
+| thanos_store_api_query_duration_seconds | histogram | Duration of the Thanos Store API select phase for a query. |
