@@ -164,3 +164,16 @@ func (p *Provider) Addresses() []string {
 	}
 	return result
 }
+
+// AddressesForHost returns the latest addresses present for the host in the Provider.
+func (p *Provider) AddressesForHost(host string) []string {
+	p.RLock()
+	defer p.RUnlock()
+
+	addrs := p.resolved[host]
+
+	res := make([]string, len(addrs))
+	copy(res, addrs)
+
+	return res
+}
