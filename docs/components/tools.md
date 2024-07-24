@@ -1065,3 +1065,22 @@ Flags:
   - `/-/ready` starts after all the bootstrapping completed (e.g object store bucket connection) and ready to serve traffic.
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
+
+## Metrics
+
+### Metrics Exported By Bucket
+
+| Metric Name                                       | Type      | Description                                                     |
+|---------------------------------------------------|-----------|-----------------------------------------------------------------|
+| thanos_bucket_blocks_meta_base_syncs_total        | counter   | Total blocks metadata synchronization attempts by base Fetcher. |
+| thanos_bucket_blocks_meta_modified                | gauge     | Number of blocks whose metadata changed.                        |
+| thanos_bucket_blocks_meta_sync_duration_seconds   | histogram | Duration of the blocks metadata synchronization in seconds.     |
+| thanos_bucket_blocks_meta_sync_failures           | counter   | Total blocks metadata synchronization failures.                 |
+| thanos_bucket_blocks_meta_synced                  | gauge     | Number of block metadata synced.                                |
+| thanos_bucket_blocks_meta_syncs_total             | counter   | Total blocks metadata synchronization attempts.                 |
+| thanos_replicate_blocks_already_replicated_total  | counter   | Total number of blocks skipped due to already being replicated. |
+| thanos_replicate_blocks_replicated_total          | counter   | Total number of blocks replicated.                              |
+| thanos_replicate_objects_replicated_total         | counter   | Total number of objects replicated.                             |
+| thanos_replicate_replication_runs_total           | counter   | The number of replication runs split by success and error.      |
+| thanos_replicate_replication_run_duration_seconds | histogram | The Duration of replication runs split by success and error.    |
+| thanos_verify_blocks_marked_for_deletion_total    | counter   | Total number of blocks marked for deletion by verify.           |
