@@ -47,13 +47,7 @@ func (f *FailedQueryCache) updateFailedQueryCache(err error, queryExpressionNorm
 
 	// Checking if error code extracted successfully.
 	if codeExtract == nil || len(codeExtract) < 2 {
-		message := fmt.Sprintf(
-			`%s: %s, %s: %s, %s: %d, %s: %s`,
-			"msg", "String regex conversion error",
-			"normalized query", queryExpressionNormalized,
-			"query range seconds", queryExpressionRangeLength,
-			"updating cache for error", err,
-		)
+		message := createLogMessage("String to regex conversion error", queryExpressionNormalized, -1, queryExpressionRangeLength, err)
 		return false, message
 	}
 
@@ -62,25 +56,13 @@ func (f *FailedQueryCache) updateFailedQueryCache(err error, queryExpressionNorm
 
 	// Checking if error code extracted properly from string.
 	if strConvError != nil {
-		message := fmt.Sprintf(
-			`%s: %s, %s: %s, %s: %d, %s: %s`,
-			"msg", "String to int conversion error",
-			"normalized query", queryExpressionNormalized,
-			"query range seconds", queryExpressionRangeLength,
-			"updating cache for error", err,
-		)
+		message := createLogMessage("String to int conversion error", queryExpressionNormalized, -1, queryExpressionRangeLength, err)
 		return false, message
 	}
 
 	// If error should be cached, store it in cache.
 	if !isCacheableError(errCode) {
-		message := fmt.Sprintf(
-			`%s: %s, %s: %s, %s: %d, %s: %s`,
-			"msg", "Query not cached due to non-cacheable error code",
-			"normalized query", queryExpressionNormalized,
-			"query range seconds", queryExpressionRangeLength,
-			"updating cache for error", err,
-		)
+		message := createLogMessage("Query not cached due to non-cacheable error code", queryExpressionNormalized, -1, queryExpressionRangeLength, err)
 		return false, message
 	}
 
@@ -92,26 +74,16 @@ func (f *FailedQueryCache) updateFailedQueryCache(err error, queryExpressionNorm
 		lruCache.Add(queryExpressionNormalized, queryExpressionRangeLength)
 	}
 
-	message := fmt.Sprintf(
-		`%s: %s, %s: %s, %s: %d, %s: %s`,
-		"msg", "Cached a failed query",
-		"normalized query", queryExpressionNormalized,
-		"range seconds", queryExpressionRangeLength,
-		"updating cache for error", err,
-	)
+	message := createLogMessage("Cached a failed query", queryExpressionNormalized, -1, queryExpressionRangeLength, err)
 	return true, message
 }
 
 // QueryHitCache checks if the lru cache is hit and returns whether to increment counter for cache hits along with appropriate message.
 func queryHitCache(queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache) (bool, string) {
 	if value, ok := lruCache.Get(queryExpressionNormalized); ok && value.(int) <= queryExpressionRangeLength {
-		message := fmt.Sprintf(
-			`%s: %s, %s: %s, %s: %d`, "msg", "Retrieved query from cache",
-			"normalized query", queryExpressionNormalized,
-			"range seconds", queryExpressionRangeLength)
-
+		cachedQueryRangeSeconds := value.(int)
+		message := createLogMessage("Retrieved query from cache", queryExpressionNormalized, cachedQueryRangeSeconds, queryExpressionRangeLength, nil)
 		return true, message
-
 	}
 	return false, ""
 }
@@ -141,6 +113,21 @@ func getQueryRangeSeconds(query url.Values) int {
 
 func (f *FailedQueryCache) normalizeQueryString(query url.Values) string {
 	return f.regex.ReplaceAllString(query.Get("query"), " ")
+}
+
+func createLogMessage(message string, queryExpressionNormalized string, cachedQueryRangeSeconds int, queryExpressionRangeLength int, err error) string {
+	if err == nil {
+		return fmt.Sprintf(
+			`%s: %s, %s: %s, %s: %d, %s: %d`, "msg", message,
+			"cached_query", queryExpressionNormalized,
+			"cached_range_seconds", cachedQueryRangeSeconds,
+			"query_range_seconds", queryExpressionRangeLength)
+	}
+	return fmt.Sprintf(
+		`%s: %s, %s: %s, %s: %d, %s: %s`, "msg", message,
+		"cached_query", queryExpressionNormalized,
+		"query_range_seconds", queryExpressionRangeLength,
+		"cached_error", err)
 }
 
 func (f *FailedQueryCache) UpdateFailedQueryCache(err error, query url.Values) (bool, string) {

@@ -39,7 +39,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  false,
-			expectedMessage: "msg: String regex conversion error, normalized query: test_query, query range seconds: 100, updating cache for error: no error code here",
+			expectedMessage: "msg: String to regex conversion error, cached_query: test_query, query_range_seconds: 100, cached_error: no error code here",
 		},
 		{
 			name: "Non-cacheable error code",
@@ -50,7 +50,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  false,
-			expectedMessage: "msg: Query not cached due to non-cacheable error code, normalized query: test_query, query range seconds: 100, updating cache for error: serads;ajkvsd( Code(500) code)asd",
+			expectedMessage: "msg: Query not cached due to non-cacheable error code, cached_query: test_query, query_range_seconds: 100, cached_error: serads;ajkvsd( Code(500) code)asd",
 		},
 		{
 			name: "Cacheable error code",
@@ -61,7 +61,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, normalized query: test_query, range seconds: 100, updating cache for error: This is a random error Code(408). It is random.",
+			expectedMessage: "msg: Cached a failed query, cached_query: test_query, query_range_seconds: 100, cached_error: This is a random error Code(408). It is random.",
 		},
 
 		{
@@ -73,7 +73,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"\n \t tes \t  t query  \n"},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, normalized query:  tes t query , range seconds: 100, updating cache for error: Adding error with query that has whitespace and tabs Code(408). Let's see what happens.",
+			expectedMessage: "msg: Cached a failed query, cached_query:  tes t query , query_range_seconds: 100, cached_error: Adding error with query that has whitespace and tabs Code(408). Let's see what happens.",
 		},
 
 		{
@@ -85,7 +85,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, normalized query: test_query, range seconds: 80, updating cache for error: error code( Code(408) error.)",
+			expectedMessage: "msg: Cached a failed query, cached_query: test_query, query_range_seconds: 80, cached_error: error code( Code(408) error.)",
 		},
 
 		{
@@ -97,7 +97,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, normalized query: test_query, range seconds: 0, updating cache for error: error code( Code(408) error.)",
+			expectedMessage: "msg: Cached a failed query, cached_query: test_query, query_range_seconds: 0, cached_error: error code( Code(408) error.)",
 		},
 	}
 
@@ -136,7 +136,7 @@ func TestQueryHitCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Retrieved query from cache, normalized query: test_query, range seconds: 100",
+			expectedMessage: "msg: Retrieved query from cache, cached_query: test_query, cached_range_seconds: 100, query_range_seconds: 100",
 		},
 		{
 			name: "Cache miss",
@@ -168,7 +168,7 @@ func TestQueryHitCache(t *testing.T) {
 				"query": {" \n\ttes \tt \n   query \t\n  "},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Retrieved query from cache, normalized query:  tes t query , range seconds: 100",
+			expectedMessage: "msg: Retrieved query from cache, cached_query:  tes t query , cached_range_seconds: 100, query_range_seconds: 100",
 		},
 
 		{
