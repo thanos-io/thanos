@@ -501,6 +501,11 @@ Flags:
 
 | Metric Name                                                    | Type      | Description                                                                                                                |
 |----------------------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------|
+| thanos_bucket_uiblocks_meta_modified                           | gauge     | Number of blocks whose metadata changed.                                                                                   |
+| thanos_bucket_uiblocks_meta_sync_duration_seconds              | histogram | Duration of the blocks metadata synchronization in seconds.                                                                |
+| thanos_bucket_uiblocks_meta_sync_failures                      | counter   | Total blocks metadata synchronization failures.                                                                            |
+| thanos_bucket_uiblocks_meta_synced                             | gauge     | Number of block metadata synced.                                                                                           |
+| thanos_bucket_uiblocks_meta_syncs                              | counter   | Total blocks metadata synchronization attempts.                                                                            |
 | thanos_compact_halted                                          | gauge     | Set to 1 if the compactor halted due to an unexpected error.                                                               |
 | thanos_compact_retries_total                                   | counter   | Total number of retries after retriable compactor error.                                                                   |
 | thanos_compact_iterations_total                                | counter   | Total number of iterations that were executed successfully.                                                                |
