@@ -12,6 +12,8 @@ import (
 	"strconv"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
@@ -23,9 +25,10 @@ type FailedQueryCache struct {
 	regex        *regexp.Regexp
 	errorExtract *regexp.Regexp
 	lruCache     *lru.Cache
+	cachedHits   *prometheus.CounterVec
 }
 
-func NewFailedQueryCache(capacity int) (*FailedQueryCache, error) {
+func NewFailedQueryCache(capacity int, reg prometheus.Registerer) (*FailedQueryCache, error) {
 	regex := regexp.MustCompile(`[\s\n\t]+`)
 	errorExtract := regexp.MustCompile(`Code\((\d+)\)`)
 	lruCache, err := lru.New(capacity)
@@ -34,10 +37,17 @@ func NewFailedQueryCache(capacity int) (*FailedQueryCache, error) {
 		err = fmt.Errorf("Failed to create lru cache: %s", err)
 		return nil, err
 	}
+	cachedHits := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "cached_failed_queries_count",
+		Help: "Total number of queries that hit the failed query cache.",
+	}, []string{})
+
 	return &FailedQueryCache{
 		regex:        regex,
 		errorExtract: errorExtract,
-		lruCache:     lruCache}, err
+		lruCache:     lruCache,
+		cachedHits:   cachedHits,
+	}, err
 }
 
 // UpdateFailedQueryCache returns true if query is cached so that callsite can increase counter, returns message as a string for callsite to log outcome
@@ -79,10 +89,11 @@ func (f *FailedQueryCache) updateFailedQueryCache(err error, queryExpressionNorm
 }
 
 // QueryHitCache checks if the lru cache is hit and returns whether to increment counter for cache hits along with appropriate message.
-func queryHitCache(queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache) (bool, string) {
+func queryHitCache(queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache, cachedHits *prometheus.CounterVec) (bool, string) {
 	if value, ok := lruCache.Get(queryExpressionNormalized); ok && value.(int) <= queryExpressionRangeLength {
 		cachedQueryRangeSeconds := value.(int)
 		message := createLogMessage("Retrieved query from cache", queryExpressionNormalized, cachedQueryRangeSeconds, queryExpressionRangeLength, nil)
+		cachedHits.WithLabelValues().Inc()
 		return true, message
 	}
 	return false, ""
@@ -140,6 +151,6 @@ func (f *FailedQueryCache) UpdateFailedQueryCache(err error, query url.Values) (
 func (f *FailedQueryCache) QueryHitCache(query url.Values) (bool, string) {
 	queryExpressionNormalized := f.normalizeQueryString(query)
 	queryExpressionRangeLength := getQueryRangeSeconds(query)
-	cached, message := queryHitCache(queryExpressionNormalized, queryExpressionRangeLength, f.lruCache)
+	cached, message := queryHitCache(queryExpressionNormalized, queryExpressionRangeLength, f.lruCache, f.cachedHits)
 	return cached, message
 }
