@@ -1066,10 +1066,6 @@ Flags:
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
 
-## Metrics
-
-### Metrics Exported By Bucket
-
 | Metric Name                                       | Type      | Description                                                     |
 |---------------------------------------------------|-----------|-----------------------------------------------------------------|
 | thanos_bucket_blocks_meta_base_syncs_total        | counter   | Total blocks metadata synchronization attempts by base Fetcher. |
