@@ -8,6 +8,10 @@ import (
 	"errors"
 	"net/url"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func TestNewFailedQueryCache(t *testing.T) {
@@ -193,5 +197,31 @@ func TestQueryHitCache(t *testing.T) {
 				t.Errorf("expected message to contain %s, got %s", tt.expectedMessage, message)
 			}
 		})
+	}
+}
+
+func TestCacheCounterVec(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	cachedHits := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "cached_failed_queries_count",
+		Help: "Total number of queries that hit the failed query cache.",
+	}, []string{"total"})
+
+	cachedHits.WithLabelValues("total").Inc()
+	expectedValue := 1.0
+	value := testutil.ToFloat64(cachedHits.WithLabelValues("total"))
+	if value != expectedValue {
+		t.Errorf("expected %v, got %v", expectedValue, value)
+	}
+	cachedHits.WithLabelValues("total").Inc()
+	expectedValue = 2.0
+	value = testutil.ToFloat64(cachedHits.WithLabelValues("total"))
+	if value != expectedValue {
+		t.Errorf("expected %v, got %v", expectedValue, value)
+	}
+	expectedValue = 0.0
+	value = testutil.ToFloat64(cachedHits.WithLabelValues("incorrect_label"))
+	if value != expectedValue {
+		t.Errorf("expected %v, got %v", expectedValue, value)
 	}
 }

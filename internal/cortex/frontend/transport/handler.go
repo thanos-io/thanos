@@ -62,7 +62,7 @@ type Handler struct {
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
-	cachedHits   prometheus.Counter
+	cachedHits   *prometheus.CounterVec
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
@@ -108,10 +108,10 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		_ = h.activeUsers.StartAsync(context.Background())
 	}
 
-	h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+	h.cachedHits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "cached_failed_queries_count",
 		Help: "Total number of queries that hit the failed query cache.",
-	})
+	}, []string{"total"})
 
 	return h
 }
@@ -148,7 +148,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if cached {
 			w.WriteHeader(http.StatusForbidden)
 			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
-			f.cachedHits.Inc()
+			f.cachedHits.WithLabelValues("total").Inc()
 			return
 		}
 	}
