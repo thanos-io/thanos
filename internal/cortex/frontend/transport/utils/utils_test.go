@@ -8,10 +8,14 @@ import (
 	"errors"
 	"net/url"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func TestNewFailedQueryCache(t *testing.T) {
-	cache, err := NewFailedQueryCache(2)
+	reg := prometheus.NewRegistry()
+	cache, err := NewFailedQueryCache(2, reg)
 	if cache == nil {
 		t.Fatalf("Expected cache to be created, but got nil")
 	}
@@ -21,7 +25,8 @@ func TestNewFailedQueryCache(t *testing.T) {
 }
 
 func TestUpdateFailedQueryCache(t *testing.T) {
-	cache, _ := NewFailedQueryCache(2)
+	reg := prometheus.NewRegistry()
+	cache, _ := NewFailedQueryCache(2, reg)
 
 	tests := []struct {
 		name            string
@@ -116,7 +121,8 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 
 // TestQueryHitCache tests the QueryHitCache method
 func TestQueryHitCache(t *testing.T) {
-	cache, _ := NewFailedQueryCache(2)
+	reg := prometheus.NewRegistry()
+	cache, _ := NewFailedQueryCache(2, reg)
 	lruCache := cache.lruCache
 
 	lruCache.Add("test_query", 100)
@@ -192,6 +198,89 @@ func TestQueryHitCache(t *testing.T) {
 			if message != tt.expectedMessage {
 				t.Errorf("expected message to contain %s, got %s", tt.expectedMessage, message)
 			}
+		})
+	}
+}
+
+func TestCacheCounterVec(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	cache, _ := NewFailedQueryCache(2, reg)
+	lruCache := cache.lruCache
+
+	lruCache.Add("test_query", 100)
+	lruCache.Add(" tes t query ", 100)
+
+	tests := []struct {
+		name            string
+		query           url.Values
+		expectedCounter int
+	}{
+		{
+			name: "Cache miss",
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"2000"},
+				"query": {"miss_query_counter_test"},
+			},
+			expectedCounter: 0,
+		}, {
+			name: "Cache hit",
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"200"},
+				"query": {"test_query"},
+			},
+			expectedCounter: 1,
+		},
+		{
+			name: "Cache miss",
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"200"},
+				"query": {"miss"},
+			},
+			expectedCounter: 1,
+		},
+
+		{
+			name: "Cache miss due to shorter range length",
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"150"},
+				"query": {"test_query"},
+			},
+			expectedCounter: 1,
+		},
+
+		{
+			name: "Cache hit whitespace",
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"200"},
+				"query": {" \n\ttes \tt \n   query \t\n  "},
+			},
+			expectedCounter: 2,
+		},
+
+		{
+			name: "Cache miss whitespace",
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"200"},
+				"query": {" \n\tte s \tt \n   query \t\n  "},
+			},
+			expectedCounter: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cache.QueryHitCache(tt.query)
+			result := int(testutil.ToFloat64(cache.cachedHits.WithLabelValues()))
+			if result != tt.expectedCounter {
+				t.Errorf("expected counter value to be %v, got %v", tt.expectedCounter, result)
+			}
+
 		})
 	}
 }

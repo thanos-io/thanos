@@ -62,7 +62,6 @@ type Handler struct {
 	querySeconds *prometheus.CounterVec
 	querySeries  *prometheus.CounterVec
 	queryBytes   *prometheus.CounterVec
-	cachedHits   prometheus.Counter
 	activeUsers  *util.ActiveUsersCleanupService
 }
 
@@ -75,7 +74,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 	}
 
 	if cfg.FailedQueryCacheCapacity > 0 {
-		FailedQueryCache, errQueryCache := utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity)
+		FailedQueryCache, errQueryCache := utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity, reg)
 		if errQueryCache != nil {
 			level.Warn(log).Log(errQueryCache.Error())
 		}
@@ -107,11 +106,6 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
 		_ = h.activeUsers.StartAsync(context.Background())
 	}
-
-	h.cachedHits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "cached_failed_queries_count",
-		Help: "Total number of queries that hit the failed query cache.",
-	})
 
 	return h
 }
@@ -148,7 +142,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if cached {
 			w.WriteHeader(http.StatusForbidden)
 			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
-			f.cachedHits.Inc()
 			return
 		}
 	}
