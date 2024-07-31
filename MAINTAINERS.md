@@ -30,15 +30,16 @@ We also have some nice souls that help triaging issues and PRs. See [here](https
 
 Full list of triage persons is displayed below:
 
-| Name           | Slack            | GitHub                                             | Company |
-|----------------|------------------|----------------------------------------------------|---------|
-| Adrien Fillon  | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)           |         |
-| Ian Billett    | `@billett`       | [@bill3tt](https://github.com/bill3tt)             | Red Hat |
-| Martin Chodur  | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)             |         |
-| Michael Dai    | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)         |         |
-| Xiang Dai      | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)         |         |
-| Jimmie Han     | `@hanjm`         | [@hanjm](https://github.com/hanjm)                 | Tencent |
-| Douglas Camata | `@douglascamata` | [@douglascamata](https://github.com/douglascamata) | Red Hat |
+| Name           | Slack            | GitHub                                             | Company             |
+|----------------|------------------|----------------------------------------------------|---------------------|
+| Adrien Fillon  | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)           |                     |
+| Ian Billett    | `@billett`       | [@bill3tt](https://github.com/bill3tt)             | Red Hat             |
+| Martin Chodur  | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)             |                     |
+| Michael Dai    | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)         |                     |
+| Xiang Dai      | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)         |                     |
+| Jimmie Han     | `@hanjm`         | [@hanjm](https://github.com/hanjm)                 | Tencent             |
+| Douglas Camata | `@douglascamata` | [@douglascamata](https://github.com/douglascamata) | Red Hat             |
+| Harry John     | `@harry671003`   | [@harry671003](https://github.com/harry671003)     | Amazon Web Services |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
