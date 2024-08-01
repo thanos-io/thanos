@@ -74,6 +74,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 	}
 
 	if cfg.FailedQueryCacheCapacity > 0 {
+		level.Info(log).Log("msg", "Creating failed query cache", "capacity", cfg.FailedQueryCacheCapacity)
 		FailedQueryCache, errQueryCache := utils.NewFailedQueryCache(cfg.FailedQueryCacheCapacity, reg)
 		if errQueryCache != nil {
 			level.Warn(log).Log(errQueryCache.Error())
@@ -114,7 +115,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		stats       *querier_stats.Stats
 		queryString url.Values
-		urlQuery    url.Values
 	)
 
 	// Initialise the stats in the context and make sure it's propagated
@@ -134,14 +134,14 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	urlQuery = r.URL.Query()
+	queryString = f.parseRequestQueryString(r, buf)
 
 	// Check if query is cached
 	if f.failedQueryCache != nil {
-		cached, message := f.failedQueryCache.QueryHitCache(urlQuery)
+		cached, message := f.failedQueryCache.QueryHitCache(queryString)
 		if cached {
 			w.WriteHeader(http.StatusForbidden)
-			level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
+			level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", message)
 			return
 		}
 	}
@@ -152,20 +152,19 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		writeError(w, err)
-		queryString = f.parseRequestQueryString(r, buf)
 
 		// Update cache for failed queries.
 		if f.failedQueryCache != nil {
-			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, urlQuery)
+			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, queryString, queryResponseTime)
 			if success {
-				level.Info(util_log.WithContext(r.Context(), f.log)).Log(message)
+				level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", message)
 			} else {
-				level.Debug(util_log.WithContext(r.Context(), f.log)).Log(message)
+				level.Debug(util_log.WithContext(r.Context(), f.log)).Log("msg", message)
 			}
 		}
 
 		if f.cfg.LogFailedQueries {
-			f.reportFailedQuery(r, queryString, err)
+			f.reportFailedQuery(r, queryString, err, queryResponseTime)
 		}
 		return
 	}
@@ -200,7 +199,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err error) {
+func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err error, queryResponseTime time.Duration) {
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -222,6 +221,7 @@ func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err
 		"error", err.Error(),
 		"grafana_dashboard_uid", grafanaDashboardUID,
 		"grafana_panel_id", grafanaPanelID,
+		"query_response_time", queryResponseTime.String(),
 	}, formatQueryString(queryString)...)
 
 	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
