@@ -8,10 +8,29 @@ import (
 	"errors"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
+
+func verifyMetricCount(t *testing.T, reg *prometheus.Registry, expectedCount int) {
+	var (
+		mChan = make(chan prometheus.Metric)
+	)
+
+	go func() {
+		reg.Collect(mChan)
+		close(mChan)
+	}()
+	cnt := 0
+	for range mChan {
+		cnt++
+	}
+	if cnt != expectedCount {
+		t.Fatalf("Expected %d metrics, got %d", expectedCount, cnt)
+	}
+}
 
 func TestNewFailedQueryCache(t *testing.T) {
 	reg := prometheus.NewRegistry()
@@ -22,18 +41,20 @@ func TestNewFailedQueryCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error message, but got: %s", err.Error())
 	}
+	verifyMetricCount(t, reg, 2)
 }
 
 func TestUpdateFailedQueryCache(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	cache, _ := NewFailedQueryCache(2, reg)
+	cache, _ := NewFailedQueryCache(3, reg)
 
 	tests := []struct {
-		name            string
-		err             error
-		query           url.Values
-		expectedResult  bool
-		expectedMessage string
+		name              string
+		err               error
+		query             url.Values
+		expectedResult    bool
+		expectedMessage   string
+		expectedCacheSize int
 	}{
 		{
 			name: "No error code in error message",
@@ -44,7 +65,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  false,
-			expectedMessage: "msg: String to regex conversion error, cached_query: test_query, query_range_seconds: 100, cached_error: no error code here",
+			expectedMessage: "String to regex conversion error, cached_query: test_query, query_range_seconds: 100, cached_error: no error code here",
 		},
 		{
 			name: "Non-cacheable error code",
@@ -55,7 +76,7 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  false,
-			expectedMessage: "msg: Query not cached due to non-cacheable error code, cached_query: test_query, query_range_seconds: 100, cached_error: serads;ajkvsd( Code(500) code)asd",
+			expectedMessage: "Query not cached due to non-cacheable error code, cached_query: test_query, query_range_seconds: 100, cached_error: serads;ajkvsd( Code(500) code)asd",
 		},
 		{
 			name: "Cacheable error code",
@@ -65,8 +86,9 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"end":   {"200"},
 				"query": {"test_query"},
 			},
-			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, cached_query: test_query, query_range_seconds: 100, cached_error: This is a random error Code(408). It is random.",
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query: test_query, query_range_seconds: 100, cached_error: This is a random error Code(408). It is random.",
+			expectedCacheSize: 1,
 		},
 
 		{
@@ -77,8 +99,9 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"end":   {"200"},
 				"query": {"\n \t tes \t  t query  \n"},
 			},
-			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, cached_query:  tes t query , query_range_seconds: 100, cached_error: Adding error with query that has whitespace and tabs Code(408). Let's see what happens.",
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query:  tes t query , query_range_seconds: 100, cached_error: Adding error with query that has whitespace and tabs Code(408). Let's see what happens.",
+			expectedCacheSize: 2,
 		},
 
 		{
@@ -89,8 +112,9 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"end":   {"180"},
 				"query": {"test_query"},
 			},
-			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, cached_query: test_query, query_range_seconds: 80, cached_error: error code( Code(408) error.)",
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query: test_query, query_range_seconds: 80, cached_error: error code( Code(408) error.)",
+			expectedCacheSize: 2,
 		},
 
 		{
@@ -101,22 +125,82 @@ func TestUpdateFailedQueryCache(t *testing.T) {
 				"end":   {"100"},
 				"query": {"test_query"},
 			},
-			expectedResult:  true,
-			expectedMessage: "msg: Cached a failed query, cached_query: test_query, query_range_seconds: 0, cached_error: error code( Code(408) error.)",
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query: test_query, query_range_seconds: 0, cached_error: error code( Code(408) error.)",
+			expectedCacheSize: 2,
+		},
+		{
+			name: "Successful update to range length",
+			err:  errors.New("error code( Code(408) error.)"),
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"100"},
+				"query": {"test_query"},
+			},
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query: test_query, query_range_seconds: 0, cached_error: error code( Code(408) error.)",
+			expectedCacheSize: 2,
+		},
+		{
+			name: "Successful update to range length",
+			err:  errors.New("rpc error: code = Code(400) desc = {\"status"),
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"100"},
+				"query": {"test_query"},
+			},
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query: test_query, query_range_seconds: 0, cached_error: rpc error: code = Code(400) desc = {\"status",
+			expectedCacheSize: 2,
+		},
+		{
+			name: "Emtpy query",
+			err:  errors.New("error code( Code(400) error.)"),
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"200"},
+				"query": {""},
+			},
+			expectedResult:    false,
+			expectedMessage:   "Query parameter is empty",
+			expectedCacheSize: 2,
+		},
+		{
+			name: "Successful update to range length",
+			err:  errors.New("rpc error: code = Code(400) desc = {\"status"),
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"100"},
+				"query": {"test_query1"},
+			},
+			expectedResult:    true,
+			expectedMessage:   "Cached a failed query, cached_query: test_query1, query_range_seconds: 0, cached_error: rpc error: code = Code(400) desc = {\"status",
+			expectedCacheSize: 3,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, message := cache.UpdateFailedQueryCache(tt.err, tt.query)
+			result, message := cache.UpdateFailedQueryCache(tt.err, tt.query, time.Second*60)
 			if result != tt.expectedResult {
 				t.Errorf("expected result %v, got %v", tt.expectedResult, result)
 			}
 			if message != tt.expectedMessage {
 				t.Errorf("expected message to contain %s, got %s", tt.expectedMessage, message)
 			}
+			expectedCacheSize := tt.expectedCacheSize
+			cacheSize := cache.lruCache.Len()
+			if cacheSize != expectedCacheSize {
+				t.Errorf("expected cache size to be %d, got %d", expectedCacheSize, cacheSize)
+			}
+
+			cacheSizeGauge := int(testutil.ToFloat64(cache.cachedQueries))
+			if cacheSizeGauge != expectedCacheSize {
+				t.Errorf("expected cache size gauge to be %d, got %d", expectedCacheSize, cacheSizeGauge)
+			}
 		})
 	}
+	verifyMetricCount(t, reg, 2)
 }
 
 // TestQueryHitCache tests the QueryHitCache method
@@ -142,7 +226,7 @@ func TestQueryHitCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Retrieved query from cache, cached_query: test_query, cached_range_seconds: 100, query_range_seconds: 100",
+			expectedMessage: "Retrieved query from cache, cached_query: test_query, cached_range_seconds: 100, query_range_seconds: 100",
 		},
 		{
 			name: "Cache miss",
@@ -174,7 +258,7 @@ func TestQueryHitCache(t *testing.T) {
 				"query": {" \n\ttes \tt \n   query \t\n  "},
 			},
 			expectedResult:  true,
-			expectedMessage: "msg: Retrieved query from cache, cached_query:  tes t query , cached_range_seconds: 100, query_range_seconds: 100",
+			expectedMessage: "Retrieved query from cache, cached_query:  tes t query , cached_range_seconds: 100, query_range_seconds: 100",
 		},
 
 		{
@@ -189,6 +273,7 @@ func TestQueryHitCache(t *testing.T) {
 		},
 	}
 
+	verifyMetricCount(t, reg, 2)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, message := cache.QueryHitCache(tt.query)
@@ -272,15 +357,55 @@ func TestCacheCounterVec(t *testing.T) {
 			expectedCounter: 2,
 		},
 	}
-
+	verifyMetricCount(t, reg, 2)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache.QueryHitCache(tt.query)
-			result := int(testutil.ToFloat64(cache.cachedHits.WithLabelValues()))
+			result := int(testutil.ToFloat64(cache.cachedHits))
 			if result != tt.expectedCounter {
 				t.Errorf("expected counter value to be %v, got %v", tt.expectedCounter, result)
 			}
-
 		})
 	}
+}
+
+func TestCacheLongRunningFailedQuery(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	cache, _ := NewFailedQueryCache(3, reg)
+
+	tests := []struct {
+		name              string
+		err               error
+		query             url.Values
+	}{
+		{
+			name: "No error code in error message",
+			err:  errors.New("no error code here"),
+			query: url.Values{
+				"start": {"100"},
+				"end":   {"200"},
+				"query": {"test_query"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Short running failed query without an error code
+			cached, _ := cache.UpdateFailedQueryCache(tt.err, tt.query, time.Second*60)
+			if cached {
+				t.Errorf("Shouldn't cache short running failed query without an error code")
+			}
+		})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Long running failed query without an error code
+			cached, _ := cache.UpdateFailedQueryCache(tt.err, tt.query, time.Second*(5 * 60 - 1))
+			if !cached {
+				t.Errorf("Should cache short running failed query without an error code")
+			}
+		})
+	}
+	verifyMetricCount(t, reg, 2)
 }
