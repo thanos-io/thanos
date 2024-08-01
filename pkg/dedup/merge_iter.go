@@ -71,22 +71,26 @@ func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 			continue
 		}
 		if it == m.lastIter || it.AtT() <= m.lastT {
-			m.oks[i] = it.Seek(t) != chunkenc.ValNone // move forward for last iterator.
+			m.oks[i] = it.Seek(t) != chunkenc.ValNone
 			if !m.oks[i] {
 				continue
 			}
 		}
+
 		currT := it.AtT()
-		if currT >= t {
-			if currT < picked {
-				picked = currT
+		if currT < picked && currT >= t {
+			// Detect and handle gaps
+			//if m.lastT != math.MinInt64 && (currT-m.lastT) > gapThreshold {
+			//	// Skip the gap or handle accordingly
+			//	continue
+			//}
+			picked = currT
+			m.lastIter = it
+		} else if currT == picked {
+			_, currV := it.At()
+			_, pickedV := m.lastIter.At()
+			if currV < pickedV {
 				m.lastIter = it
-			} else if currT == picked {
-				_, currV := it.At()
-				_, pickedV := m.lastIter.At()
-				if currV < pickedV {
-					m.lastIter = it
-				}
 			}
 		}
 	}
