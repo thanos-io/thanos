@@ -30,8 +30,9 @@ type BlocksAPI struct {
 	logger           log.Logger
 	globalBlocksInfo *BlocksInfo
 	loadedBlocksInfo *BlocksInfo
+	plannedBlocksInfo *BlocksInfo
 
-	globalLock, loadedLock sync.Mutex
+	globalLock, loadedLock, plannedLock sync.Mutex// Question: whether is plannedLock needed?
 	disableCORS            bool
 	bkt                    objstore.Bucket
 	disableAdminOperations bool
@@ -90,6 +91,7 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
+	r.Get("/blocks/plan", instr("blocks_plan", bapi.plannedBlocks))
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -146,6 +148,12 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 	return bapi.globalBlocksInfo, nil, nil, func() {}
 }
 
+func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	// TODO: fetch from planner.plan then mock data
+
+	return bapi.plannedBlocksInfo, nil, nil, func() {}
+}
+
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
 	if err != nil {
 		// Last view is maintained.
@@ -173,4 +181,9 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 	defer bapi.loadedLock.Unlock()
 
 	bapi.loadedBlocksInfo.set(blocks, err)
+}
+// TODO: call setPlanned when needed
+func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
+
+	bapi.plannedBlocksInfo.set(blocks, err)
 }
