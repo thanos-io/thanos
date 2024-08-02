@@ -82,6 +82,9 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
+	RuleNameParam            = "rule_name[]"
+	RuleGroupParam           = "rule_group[]"
+	FileParam                = "file[]"
 )
 
 type PromqlEngineType string
@@ -1093,7 +1096,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		var callWarnings annotations.Annotations
 		labelValuesSet := make(map[string]struct{})
 		for _, matchers := range matcherSets {
-			vals, callWarnings, err = q.LabelValues(ctx, name, matchers...)
+			vals, callWarnings, err = q.LabelValues(ctx, name, nil, matchers...)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 			}
@@ -1109,7 +1112,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		}
 		sort.Strings(vals)
 	} else {
-		vals, warnings, err = q.LabelValues(ctx, name)
+		vals, warnings, err = q.LabelValues(ctx, name, nil)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 		}
@@ -1242,7 +1245,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		var callWarnings annotations.Annotations
 		labelNamesSet := make(map[string]struct{})
 		for _, matchers := range matcherSets {
-			names, callWarnings, err = q.LabelNames(ctx, matchers...)
+			names, callWarnings, err = q.LabelNames(ctx, nil, matchers...)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 			}
@@ -1258,7 +1261,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		sort.Strings(names)
 	} else {
-		names, warnings, err = q.LabelNames(ctx)
+		names, warnings, err = q.LabelNames(ctx, nil)
 	}
 
 	if err != nil {
@@ -1397,6 +1400,9 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			Type:                    rulespb.RulesRequest_Type(typ),
 			PartialResponseStrategy: ps,
 			MatcherString:           r.Form[MatcherParam],
+			RuleName:                r.Form[RuleNameParam],
+			RuleGroup:               r.Form[RuleGroupParam],
+			File:                    r.Form[FileParam],
 		}
 		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
 			groups, warnings, err = client.Rules(ctx, req)

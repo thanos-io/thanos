@@ -21,7 +21,6 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
-	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
 	"github.com/thanos-io/thanos/pkg/clientconfig"
@@ -401,12 +400,12 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 
 	for i, fh := range floatHistograms {
 		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
-		prompbHistograms = append(prompbHistograms, remote.FloatHistogramToHistogramProto(ts, fh))
+		prompbHistograms = append(prompbHistograms, prompb.FromFloatHistogram(ts, fh))
 	}
 
 	for i, h := range histograms {
 		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
-		prompbHistograms = append(prompbHistograms, remote.HistogramToHistogramProto(ts, h))
+		prompbHistograms = append(prompbHistograms, prompb.FromIntHistogram(ts, h))
 	}
 
 	timeSeriespb := prompb.TimeSeries{

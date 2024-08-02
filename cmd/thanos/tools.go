@@ -55,7 +55,6 @@ func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 		if err != nil || matches == nil {
 			err = errors.New("matching file not found")
 			level.Error(logger).Log("result", "FAILED", "error", err)
-			level.Info(logger).Log()
 			failed.Add(err)
 			continue
 		}
@@ -64,8 +63,7 @@ func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 			f, er := os.Open(fn)
 			if er != nil {
 				level.Error(logger).Log("result", "FAILED", "error", er)
-				level.Info(logger).Log()
-				failed.Add(err)
+				failed.Add(er)
 				continue
 			}
 			defer func() { _ = f.Close() }()
@@ -77,7 +75,6 @@ func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 					level.Error(logger).Log("error", e.Error())
 					failed.Add(e)
 				}
-				level.Info(logger).Log()
 				continue
 			}
 			level.Info(logger).Log("result", "SUCCESS", "rules found", n)
