@@ -270,6 +270,12 @@ type aggrChunkIterator struct {
 	err error
 }
 
+// DefaultChunkEncoderSplit sets the max num of samples per chunk
+// The storage.NewSeriesToChunkEncoder below creates a new chunk if there's more than 120 samples in the current one.
+// The aggrChunkIterator must implement the same split to avoid emitting a value newer than the chunk.max when the chunk in countChkIter is full
+// https://github.com/prometheus/prometheus/blob/v2.53.1/storage/series.go#L285
+const DefaultChunkEncoderSplit = 120
+
 func newAggrChunkIterator(iters [5]chunkenc.Iterator) chunks.Iterator {
 	return &aggrChunkIterator{
 		iters: iters,
@@ -337,7 +343,7 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 		return nil, err
 	}
 
-	it := NewBoundedSeriesIterator(a.iters[at], minTime, maxTime)
+	it := NewBoundedSeriesIteratorWithChunkSplit(a.iters[at], minTime, maxTime, DefaultChunkEncoderSplit)
 
 	var (
 		lastT int64
