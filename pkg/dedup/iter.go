@@ -439,12 +439,18 @@ func (it *dedupSeriesIterator) Err() error {
 // boundedSeriesIterator wraps a series iterator and ensures that it only emits
 // samples within a fixed time range.
 type boundedSeriesIterator struct {
-	it         chunkenc.Iterator
-	mint, maxt int64
+	it                chunkenc.Iterator
+	count             int64
+	chunkEncoderSplit int64
+	mint, maxt        int64
 }
 
 func NewBoundedSeriesIterator(it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
-	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
+	return NewBoundedSeriesIteratorWithChunkSplit(it, mint, maxt, 0)
+}
+
+func NewBoundedSeriesIteratorWithChunkSplit(it chunkenc.Iterator, mint, maxt, chunkEncoderSplit int64) *boundedSeriesIterator {
+	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt, chunkEncoderSplit: chunkEncoderSplit}
 }
 
 func (it *boundedSeriesIterator) Seek(t int64) chunkenc.ValueType {
@@ -474,6 +480,10 @@ func (it *boundedSeriesIterator) AtT() int64 {
 }
 
 func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
+	it.count++
+	if it.chunkEncoderSplit > 0 && it.count > it.chunkEncoderSplit {
+		return chunkenc.ValNone
+	}
 	valueType := it.it.Next()
 	if valueType == chunkenc.ValNone {
 		return chunkenc.ValNone

@@ -146,6 +146,66 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 	}
 }
 
+func TestChunkSeriesMergerDownsampledAggregationChunks(t *testing.T) {
+	m := NewChunkSeriesMerger()
+
+	defaultLabels := labels.FromStrings("bar", "baz")
+
+	// sets with different data and enough samples to require more than one chunk each
+	samples1 := downsample.SamplesFromTSDBSamples(createSamplesWithStepValue(0, 700, 60*1000, 0))
+	samples2 := downsample.SamplesFromTSDBSamples(createSamplesWithStepValue(0, 700, 60*1000, 3))
+
+	for _, tc := range []struct {
+		name  string
+		input []storage.ChunkSeries
+	}{
+		{
+			name: "two overlapping series with more than one chunk",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+					},
+				},
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples2, downsample.ResLevel1)...)
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := m(tc.input...)
+			chks, err := storage.ExpandChunks(merged.Iterator(nil))
+			testutil.Equals(t, err, nil)
+
+			for _, m := range chks {
+				ch := m.Chunk.(*downsample.AggrChunk)
+				iters := [4]chunkenc.Iterator{}
+				for i := downsample.AggrCount; i <= downsample.AggrMax; i++ {
+					agg, _ := ch.Get(i)
+					iters[i] = agg.Iterator(nil)
+				}
+
+				// use the first iterator (count) as the reference for expected timestamps
+				cnt := iters[0]
+				for cnt.Next() != chunkenc.ValNone {
+					cntT, _ := cnt.At()
+					for i := downsample.AggrSum; i <= downsample.AggrMax; i++ {
+						agg := iters[i]
+						agg.Next()
+						aggT, _ := agg.At()
+						testutil.Equals(t, cntT, aggT)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 	m := NewChunkSeriesMerger()
 
@@ -456,10 +516,14 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 }
 
 func createSamplesWithStep(start, numOfSamples, step int) []chunks.Sample {
+	return createSamplesWithStepValue(start, numOfSamples, step, 0)
+}
+
+func createSamplesWithStepValue(start, numOfSamples, step, delta int) []chunks.Sample {
 	res := make([]chunks.Sample, numOfSamples)
 	cur := start
 	for i := 0; i < numOfSamples; i++ {
-		res[i] = sample{t: int64(cur), f: float64(cur)}
+		res[i] = sample{t: int64(cur), f: float64(cur + delta)}
 		cur += step
 	}
 
