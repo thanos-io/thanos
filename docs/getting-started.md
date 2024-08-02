@@ -89,6 +89,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 ## Talks
 
 * 2024
+  * [Enlightning - Scaling Your Metrics with Thanos](https://www.youtube.com/live/1qvcVJiVx7M)
   * [6 Learnings from Building Thanos Project](https://www.youtube.com/watch?v=ur8dDFaNEFg)
   * [Monitoring the World: Scaling Thanos in Dynamic Prometheus Environments](https://www.youtube.com/watch?v=ofhvbG0iTjU)
   * [Scaling Thanos at Reddit](https://www.youtube.com/watch?v=c18RGbAxCfI)
