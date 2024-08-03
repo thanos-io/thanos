@@ -8,8 +8,9 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/util/annotations"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 func Test_parseFlagLabels(t *testing.T) {
@@ -117,7 +118,7 @@ func Test_tableLinkForExpression(t *testing.T) {
 func TestFilterOutPromQLWarnings(t *testing.T) {
 	logger := log.NewNopLogger()
 	query := "foo"
-	expr, err := parser.ParseExpr(`rate(prometheus_build_info[5m])`)
+	expr, err := extpromql.ParseExpr(`rate(prometheus_build_info[5m])`)
 	testutil.Ok(t, err)
 	possibleCounterInfo := annotations.NewPossibleNonCounterInfo("foo", expr.PositionRange())
 	badBucketLabelWarning := annotations.NewBadBucketLabelWarning("foo", "0.99", expr.PositionRange())
