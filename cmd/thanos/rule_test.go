@@ -4,12 +4,12 @@
 package main
 
 import (
-	"github.com/go-kit/log"
-	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/prometheus/prometheus/util/annotations"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/util/annotations"
 )
 
 func Test_parseFlagLabels(t *testing.T) {
