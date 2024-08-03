@@ -108,16 +108,26 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 
 	probe := e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200)
 	args := e2e.BuildArgs(map[string]string{
-		"--config.file":                     filepath.Join(f.InternalDir(), "prometheus.yml"),
-		"--storage.tsdb.path":               f.InternalDir(),
-		"--storage.tsdb.max-block-duration": "2h",
-		"--log.level":                       infoLogLevel,
-		"--web.listen-address":              ":9090",
+		"--config.file":        filepath.Join(f.InternalDir(), "prometheus.yml"),
+		"--log.level":          infoLogLevel,
+		"--web.listen-address": ":9090",
 	})
 
 	if len(enableFeatures) > 0 {
 		args = append(args, fmt.Sprintf("--enable-feature=%s", strings.Join(enableFeatures, ",")))
 	}
+
+	if strings.Contains(strings.Join(enableFeatures, ","), "agent") {
+		args = append(args, e2e.BuildArgs(map[string]string{
+			"--storage.agent.path": f.InternalDir(),
+		})...)
+	} else {
+		args = append(args, e2e.BuildArgs(map[string]string{
+			"--storage.tsdb.path":               f.InternalDir(),
+			"--storage.tsdb.max-block-duration": "2h",
+		})...)
+	}
+
 	if len(webConfig) > 0 {
 		args = append(args, fmt.Sprintf("--web.config.file=%s", filepath.Join(f.InternalDir(), "web-config.yml")))
 		// If auth is enabled then prober would get 401 error.
