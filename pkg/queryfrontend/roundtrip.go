@@ -62,7 +62,8 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryRangeLimits,
 		queryRangeCodec,
 		config.NumShards,
-		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders)
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders, config.QueryRangeConfig.Timeout)
+
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +166,7 @@ func newQueryRangeTripperware(
 	reg prometheus.Registerer,
 	logger log.Logger,
 	forwardHeaders []string,
+	timeout time.Duration,
 ) (queryrange.Tripperware, error) {
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.NewLimitsMiddleware(limits)}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -192,7 +194,7 @@ func newQueryRangeTripperware(
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", m),
-			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
+			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg, timeout),
 		)
 	}
 
@@ -286,7 +288,7 @@ func newLabelsTripperware(
 		labelsMiddleware = append(
 			labelsMiddleware,
 			queryrange.InstrumentMiddleware("split_interval", m),
-			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
+			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg, config.Timeout),
 		)
 	}
 
