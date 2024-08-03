@@ -4,6 +4,9 @@
 package main
 
 import (
+	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/util/annotations"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -108,5 +111,61 @@ func Test_tableLinkForExpression(t *testing.T) {
 		resStr, err := tableLinkForExpression(td.template, td.expr)
 		testutil.Equals(t, err != nil, td.expectErr)
 		testutil.Equals(t, resStr, td.expectStr)
+	}
+}
+
+func TestFilterOutPromQLWarnings(t *testing.T) {
+	logger := log.NewNopLogger()
+	query := "foo"
+	expr, err := parser.ParseExpr(`rate(prometheus_build_info[5m])`)
+	testutil.Ok(t, err)
+	possibleCounterInfo := annotations.NewPossibleNonCounterInfo("foo", expr.PositionRange())
+	badBucketLabelWarning := annotations.NewBadBucketLabelWarning("foo", "0.99", expr.PositionRange())
+	for _, tc := range []struct {
+		name     string
+		warnings []string
+		expected []string
+	}{
+		{
+			name:     "nil warning",
+			expected: make([]string, 0),
+		},
+		{
+			name:     "empty warning",
+			warnings: make([]string, 0),
+			expected: make([]string, 0),
+		},
+		{
+			name: "no PromQL warning",
+			warnings: []string{
+				"some_warning_message",
+			},
+			expected: []string{
+				"some_warning_message",
+			},
+		},
+		{
+			name: "PromQL warning",
+			warnings: []string{
+				possibleCounterInfo.Error(),
+			},
+			expected: make([]string, 0),
+		},
+		{
+			name: "filter out all PromQL warnings",
+			warnings: []string{
+				possibleCounterInfo.Error(),
+				badBucketLabelWarning.Error(),
+				"some_warning_message",
+			},
+			expected: []string{
+				"some_warning_message",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := filterOutPromQLWarnings(tc.warnings, logger, query)
+			testutil.Equals(t, tc.expected, output)
+		})
 	}
 }

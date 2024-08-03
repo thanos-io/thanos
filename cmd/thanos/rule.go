@@ -40,6 +40,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -79,6 +80,11 @@ import (
 )
 
 const dnsSDResolver = "miekgdns"
+
+var (
+	promQLInfo    = annotations.PromQLInfo.Error()
+	promQLWarning = annotations.PromQLWarning.Error()
+)
 
 type ruleConfig struct {
 	http    httpConfig
@@ -292,7 +298,7 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	m.ruleEvalWarnings = factory.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "thanos_rule_evaluation_with_warnings_total",
-			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
+			Help: "The total number of rule evaluation that were successful but had non PromQL warnings which can indicate partial error.",
 		}, []string{"strategy"},
 	)
 	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
@@ -939,6 +945,8 @@ func queryFuncCreator(
 						level.Error(logger).Log("err", err, "query", qs)
 						continue
 					}
+
+					warns = filterOutPromQLWarnings(warns, logger, qs)
 					if len(warns) > 0 {
 						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
 						// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
@@ -970,12 +978,13 @@ func queryFuncCreator(
 						continue
 					}
 
-					if len(result.Warnings) > 0 {
+					warnings := make([]string, 0, len(result.Warnings))
+					for _, warn := range result.Warnings {
+						warnings = append(warnings, warn.Error())
+					}
+					warnings = filterOutPromQLWarnings(warnings, logger, qs)
+					if len(warnings) > 0 {
 						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
-						warnings := make([]string, 0, len(result.Warnings))
-						for _, w := range result.Warnings {
-							warnings = append(warnings, w.Error())
-						}
 						level.Warn(logger).Log("warnings", strings.Join(warnings, ", "), "query", qs)
 					}
 
@@ -1080,4 +1089,17 @@ func validateTemplate(tmplStr string) error {
 		return fmt.Errorf("failed to execute the template: %w", err)
 	}
 	return nil
+}
+
+// Filter out PromQL related warnings from warning response and keep store related warnings only.
+func filterOutPromQLWarnings(warns []string, logger log.Logger, query string) []string {
+	storeWarnings := make([]string, 0, len(warns))
+	for _, warn := range warns {
+		if strings.Contains(warn, promQLInfo) || strings.Contains(warn, promQLWarning) {
+			level.Warn(logger).Log("warning", warn, "query", query)
+			continue
+		}
+		storeWarnings = append(storeWarnings, warn)
+	}
+	return storeWarnings
 }
