@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"sync"
 	"time"
 
@@ -47,6 +48,7 @@ type requestLimiter interface {
 	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
 	AllowSeries(tenant string, amount int64) bool
 	AllowSamples(tenant string, amount int64) bool
+	AllowNativeHistogram(tenant string, h prompb.Histogram) (prompb.Histogram, bool)
 }
 
 // fileContent is an interface to avoid a direct dependency on kingpin or extkingpin.
