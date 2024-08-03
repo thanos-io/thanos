@@ -6,19 +6,19 @@ package receive
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"sync"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/thanos-io/thanos/pkg/extkingpin"
-
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 // Limiter is responsible for managing the configuration and initialization of

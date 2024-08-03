@@ -7,6 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/histogram"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
