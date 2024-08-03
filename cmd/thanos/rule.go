@@ -40,8 +40,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/tsdb/wlog"
-	"github.com/prometheus/prometheus/util/annotations"
-
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
@@ -55,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -80,11 +79,6 @@ import (
 )
 
 const dnsSDResolver = "miekgdns"
-
-var (
-	promQLInfo    = annotations.PromQLInfo.Error()
-	promQLWarning = annotations.PromQLWarning.Error()
-)
 
 type ruleConfig struct {
 	http    httpConfig
@@ -1095,7 +1089,7 @@ func validateTemplate(tmplStr string) error {
 func filterOutPromQLWarnings(warns []string, logger log.Logger, query string) []string {
 	storeWarnings := make([]string, 0, len(warns))
 	for _, warn := range warns {
-		if strings.Contains(warn, promQLInfo) || strings.Contains(warn, promQLWarning) {
+		if extannotations.IsPromQLAnnotation(warn) {
 			level.Warn(logger).Log("warning", warn, "query", query)
 			continue
 		}
