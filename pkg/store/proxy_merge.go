@@ -333,6 +333,9 @@ func newLazyRespSet(
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
+			if len(seriesStats.ChunkSt) > 0 {
+				l.span.SetTag("processed.chunk_stats", seriesStats.ChunkSt)
+			}
 			l.span.Finish()
 		}()
 
@@ -491,6 +494,7 @@ func newAsyncRespSet(
 
 	switch retrievalStrategy {
 	case LazyRetrieval:
+		span.SetTag("retrival_strategy", LazyRetrieval)
 		return newLazyRespSet(
 			span,
 			frameTimeout,
@@ -503,6 +507,7 @@ func newAsyncRespSet(
 			emptyStreamResponses,
 		), nil
 	case EagerRetrieval:
+		span.SetTag("retrival_strategy", EagerRetrieval)
 		return newEagerRespSet(
 			span,
 			frameTimeout,
@@ -596,6 +601,9 @@ func newEagerRespSet(
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
+			if len(seriesStats.ChunkSt) > 0 {
+				l.span.SetTag("processed.chunk_stats", seriesStats.ChunkSt)
+			}
 			l.span.Finish()
 			ret.wg.Done()
 		}()
