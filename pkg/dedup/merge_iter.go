@@ -48,6 +48,34 @@ func (m *mergedSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	}
 }
 
+type quorumValuePicker struct {
+	currentValue  int64
+	cnt 		  int
+}
+
+func NewQuorumValuePicker(v float64) *quorumValuePicker {
+	return &quorumValuePicker{
+		currentValue: int64(v),
+		cnt:          1,
+	}
+}
+
+// Return true if this is the new majority value.
+func (q *quorumValuePicker) addValue(v float64) bool {
+	iv := int64(v)
+	if q.currentValue == iv {
+		q.cnt++
+	} else {
+		q.cnt--
+		if q.cnt == 0 {
+			q.currentValue = iv
+			q.cnt = 1
+			return true
+		}
+	}
+	return false
+}
+
 type mergedSeriesIterator struct {
 	iters []chunkenc.Iterator
 	oks   []bool
@@ -57,45 +85,52 @@ type mergedSeriesIterator struct {
 }
 
 func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
-	return m.Seek(m.lastT + initialPenalty) // apply penalty to avoid selecting samples too close
-}
-
-func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
-	if len(m.iters) == 0 {
-		return chunkenc.ValNone
-	}
-
-	picked := int64(math.MaxInt64)
+	// m.lastIter points to the last iterator that has the latest timestamp.
+	// m.lastT always aligns with m.lastIter unless when m.lastIter is nil.
+	// m.lastIter is nil only in the following cases:
+	//   1. Next()/Seek() is never called. m.lastT is math.MinInt64 in this case.
+	//   2. The iterator runs out of values. m.lastT is the last timestamp in this case.
+	minT := int64(math.MaxInt64)
+	var lastIter chunkenc.Iterator
+	quoramValue := NewQuorumValuePicker(0)
 	for i, it := range m.iters {
 		if !m.oks[i] {
 			continue
 		}
-		if it == m.lastIter || it.AtT() <= m.lastT {
-			m.oks[i] = it.Seek(t) != chunkenc.ValNone // move forward for last iterator.
-			if !m.oks[i] {
-				continue
-			}
-		}
-		currT := it.AtT()
-		if currT >= t {
-			if currT < picked {
-				picked = currT
-				m.lastIter = it
-			} else if currT == picked {
-				_, currV := it.At()
-				_, pickedV := m.lastIter.At()
-				if currV < pickedV {
-					m.lastIter = it
+		// apply penalty to avoid selecting samples too close
+		m.oks[i] = it.Seek(m.lastT + initialPenalty) != chunkenc.ValNone
+		// The it.Seek() call above should garantee that it.AtT() > m.lastT.
+		if m.oks[i] {
+			t, v := it.At()
+			if t < minT {
+				minT = t
+				lastIter = it
+				quoramValue = NewQuorumValuePicker(v)
+			} else if t == minT {
+				if quoramValue.addValue(v) {
+					lastIter = it
 				}
 			}
 		}
 	}
-	if picked == math.MaxInt64 {
+	m.lastIter = lastIter
+	if m.lastIter == nil {
 		return chunkenc.ValNone
 	}
-	m.lastT = picked
+	m.lastT = minT
 	return chunkenc.ValFloat
 }
+
+func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	// Don't use underlying Seek, but iterate over next to not miss gaps.
+	for m.lastT < t && m.Next() != chunkenc.ValNone {}
+	// Don't call m.Next() again!
+	if m.lastIter == nil {
+		return chunkenc.ValNone
+	}
+	return chunkenc.ValFloat
+}
+
 func (m *mergedSeriesIterator) At() (t int64, v float64) {
 	return m.lastIter.At()
 }

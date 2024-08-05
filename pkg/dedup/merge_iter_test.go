@@ -187,8 +187,7 @@ func TestMergedSeriesIterator(t *testing.T) {
 				}, {
 					lset:    labels.Labels{{Name: "a", Value: "5"}, {Name: "c", Value: "6"}},
 					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {50000, 5}},
-				},
-				{
+				}, {
 					lset:    labels.Labels{{Name: "b", Value: "5"}, {Name: "c", Value: "6"}},
 					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {50000, 5}},
 				}, {
