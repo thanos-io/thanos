@@ -327,6 +327,7 @@ func newLazyRespSet(
 	go func(st string, l *lazyRespSet) {
 		bytesProcessed := 0
 		seriesStats := &storepb.SeriesStatsCounter{}
+		fmt.Printf("merge_itr: lazy streaming from store %v %v\n", storeName, storeLabelSets[:1])
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
@@ -337,6 +338,10 @@ func newLazyRespSet(
 				l.span.SetTag("processed.chunk_stats", seriesStats.ChunkSt)
 			}
 			l.span.Finish()
+			if seriesStats.Chunks > 0 {
+				fmt.Printf("merge_itr: got %v chunks from store %v %v: %v\n",
+					seriesStats.Chunks, storeName, storeLabelSets[:1], seriesStats.ChunkSt)
+			}
 		}()
 
 		numResponses := 0
@@ -593,6 +598,7 @@ func newEagerRespSet(
 
 	// Start a goroutine and immediately buffer everything.
 	go func(l *eagerRespSet) {
+		fmt.Printf("merge_itr: eager streaming from store %v %v\n", storeName, storeLabelSets[:1])
 		seriesStats := &storepb.SeriesStatsCounter{}
 		bytesProcessed := 0
 
@@ -605,6 +611,10 @@ func newEagerRespSet(
 				l.span.SetTag("processed.chunk_stats", seriesStats.ChunkSt)
 			}
 			l.span.Finish()
+			if seriesStats.Chunks > 0 {
+				fmt.Printf("merge_itr: got %v chunks from store %v %v: %v\n",
+					seriesStats.Chunks, storeName, storeLabelSets[:1], seriesStats.ChunkSt)
+			}
 			ret.wg.Done()
 		}()
 

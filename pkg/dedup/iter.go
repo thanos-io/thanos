@@ -141,6 +141,7 @@ func (s *dedupSeriesSet) next() bool {
 	}
 	s.peek = s.set.At()
 	nextLset := s.peek.Labels()
+	debug("Peeked next labelset: %v\n%v", nextLset.Hash(), nextLset)
 
 	// If the label set modulo the replica label is equal to the current label set
 	// look for more replicas, otherwise a series is complete.
@@ -155,6 +156,7 @@ func (s *dedupSeriesSet) next() bool {
 
 func (s *dedupSeriesSet) At() storage.Series {
 	if len(s.replicas) == 1 {
+		debug("Single series %v\n%v", s.lset.Hash(), s.lset)
 		return seriesWithLabels{Series: s.replicas[0], lset: s.lset}
 	}
 	// Clients may store the series, so we must make a copy of the slice before advancing.
@@ -162,8 +164,10 @@ func (s *dedupSeriesSet) At() storage.Series {
 	copy(repl, s.replicas)
 	if s.f == UseMergedSeries {
 		// merge all samples which are ingested via receiver, no skips.
+		debug("NewMergedSeries(%v, %v)\n\v", s.lset.Hash(), len(repl), s.lset)
 		return NewMergedSeries(s.lset, repl)
 	}
+	debug("NewDedupSeries(%v, %v)", s.lset, len(repl))
 	return newDedupSeries(s.lset, repl, s.f)
 }
 
@@ -191,6 +195,7 @@ type dedupSeries struct {
 }
 
 func newDedupSeries(lset labels.Labels, replicas []storage.Series, f string) *dedupSeries {
+	debug("dedup for a counter? %v", isCounter(f))
 	return &dedupSeries{lset: lset, isCounter: isCounter(f), replicas: replicas, f: f}
 }
 
@@ -199,9 +204,10 @@ func (s *dedupSeries) Labels() labels.Labels {
 }
 
 func (s *dedupSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
+	debug("Iterator() of length %v", len(s.replicas))
 	var it adjustableSeriesIterator
 	if s.isCounter {
-		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
+		it = newCounterErrAdjustSeriesIterator(s.replicas[0].Iterator(nil))
 	} else {
 		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 	}
@@ -209,7 +215,7 @@ func (s *dedupSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	for _, o := range s.replicas[1:] {
 		var replicaIter adjustableSeriesIterator
 		if s.isCounter {
-			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
+			replicaIter = newCounterErrAdjustSeriesIterator(o.Iterator(nil))
 		} else {
 			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 		}
@@ -261,6 +267,15 @@ type counterErrAdjustSeriesIterator struct {
 	chunkenc.Iterator
 
 	errAdjust float64
+
+	id int
+}
+
+var gId int
+
+func newCounterErrAdjustSeriesIterator(itr chunkenc.Iterator) *counterErrAdjustSeriesIterator {
+	gId++
+	return &counterErrAdjustSeriesIterator{Iterator: itr, id: gId}
 }
 
 func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) {
@@ -273,6 +288,7 @@ func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) 
 
 func (it *counterErrAdjustSeriesIterator) At() (int64, float64) {
 	t, v := it.Iterator.At()
+	debug(" one replica original value #%d: %v %v", it.id, t/1000, v)
 	return t, v + it.errAdjust
 }
 

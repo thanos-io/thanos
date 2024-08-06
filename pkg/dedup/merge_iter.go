@@ -4,6 +4,7 @@
 package dedup
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/prometheus/prometheus/model/histogram"
@@ -21,7 +22,12 @@ type mergedSeries struct {
 	replicas []storage.Series
 }
 
+func debug(format string, args ...interface{}) {
+	fmt.Printf("merge_itr: " + format + "\n", args...)
+}
+
 func NewMergedSeries(lset labels.Labels, replicas []storage.Series) storage.Series {
+	debug("NewMergedSeries(%v, %v)", lset, replicas)
 	return &mergedSeries{
 		lset:     lset,
 		replicas: replicas,
@@ -40,6 +46,7 @@ func (m *mergedSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 		iters = append(iters, it)
 		oks = append(oks, ok)
 	}
+	debug("Iterator() of length %v", len(iters))
 	return &mergedSeriesIterator{
 		iters:    iters,
 		oks:      oks,
@@ -90,6 +97,10 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 	// m.lastIter is nil only in the following cases:
 	//   1. Next()/Seek() is never called. m.lastT is math.MinInt64 in this case.
 	//   2. The iterator runs out of values. m.lastT is the last timestamp in this case.
+	var prev float64
+	if m.lastIter != nil {
+		_, prev = m.lastIter.At()
+	}
 	minT := int64(math.MaxInt64)
 	var lastIter chunkenc.Iterator
 	quoramValue := NewQuorumValuePicker(0)
@@ -102,6 +113,7 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 		// The it.Seek() call above should guarantee that it.AtT() > m.lastT.
 		if m.oks[i] {
 			t, v := it.At()
+			debug("child #%v value %v %v %0f", i, t/1000, v, v - prev)
 			if t < minT {
 				minT = t
 				lastIter = it
@@ -115,20 +127,30 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 	}
 	m.lastIter = lastIter
 	if m.lastIter == nil {
+		debug("Next() returns ValNone with prev %v", prev)
 		return chunkenc.ValNone
 	}
 	m.lastT = minT
+	t, v := m.lastIter.At()
+	debug("Next() returns %v %v %v", t/1000, v, v - prev)
 	return chunkenc.ValFloat
 }
 
 func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	var prev float64
+	if m.lastIter != nil {
+		_, prev = m.lastIter.At()
+	}
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for m.lastT < t && m.Next() != chunkenc.ValNone {
 	}
 	// Don't call m.Next() again!
 	if m.lastIter == nil {
+		debug("Seek(%v) returns ValNone with lastT %v", t, m.lastT)
 		return chunkenc.ValNone
 	}
+	vt, v := m.lastIter.At()
+	debug("Seek(%v) to %v %v %v", t/1000, vt/1000, v, v - prev)
 	return chunkenc.ValFloat
 }
 

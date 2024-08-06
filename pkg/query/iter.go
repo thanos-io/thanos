@@ -4,6 +4,8 @@
 package query
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -46,8 +48,8 @@ func (s *promSeriesSet) At() storage.Series {
 	if s.set.Err() != nil {
 		return nil
 	}
-
 	currLset, currChunks := s.set.At()
+	fmt.Printf("merge_itr: promSeriesSet.At() %v %v %v %v %v %v\n", currLset.Hash(), currLset, currChunks, s.mint, s.maxt, s.aggrs)
 	return newChunkSeries(currLset, currChunks, s.mint, s.maxt, s.aggrs)
 }
 
@@ -83,6 +85,7 @@ func (*storeSeriesSet) Err() error {
 }
 
 func (s *storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+	fmt.Printf("merge_itr: storeSeriesSet.At() %v %v\n", s.series[s.i].Labels, s.series[s.i].Chunks)
 	return s.series[s.i].PromLabels(), s.series[s.i].Chunks
 }
 

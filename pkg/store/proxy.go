@@ -445,6 +445,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		storeResponses = append(storeResponses, respSet)
 		defer respSet.Close()
 	}
+	fmt.Printf("merge_itr: got %v async store responses\n", len(storeResponses))
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 

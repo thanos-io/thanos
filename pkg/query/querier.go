@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -276,6 +277,7 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetSeries() != nil {
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
+		fmt.Printf("merge_itr: Appended a new series to seriesSet %v: %v\n", len(s.seriesSet), r.GetSeries().String())
 		s.seriesSetStats.Count(r)
 		return nil
 	}
@@ -442,6 +444,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	if q.enableDedupMerge {
 		f = dedup.UseMergedSeries
 	}
+	fmt.Printf("dedup.MergeSeriesSet(%v, %v) on %v series\n", set, f, len(resp.seriesSet))
 	return dedup.NewSeriesSet(set, f), resp.seriesSetStats, nil
 }
 
