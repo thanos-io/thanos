@@ -49,8 +49,8 @@ func (m *mergedSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 }
 
 type quorumValuePicker struct {
-	currentValue  int64
-	cnt 		  int
+	currentValue int64
+	cnt          int
 }
 
 func NewQuorumValuePicker(v float64) *quorumValuePicker {
@@ -98,8 +98,8 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 			continue
 		}
 		// apply penalty to avoid selecting samples too close
-		m.oks[i] = it.Seek(m.lastT + initialPenalty) != chunkenc.ValNone
-		// The it.Seek() call above should garantee that it.AtT() > m.lastT.
+		m.oks[i] = it.Seek(m.lastT+initialPenalty) != chunkenc.ValNone
+		// The it.Seek() call above should guarantee that it.AtT() > m.lastT.
 		if m.oks[i] {
 			t, v := it.At()
 			if t < minT {
@@ -123,7 +123,8 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 
 func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
-	for m.lastT < t && m.Next() != chunkenc.ValNone {}
+	for m.lastT < t && m.Next() != chunkenc.ValNone {
+	}
 	// Don't call m.Next() again!
 	if m.lastIter == nil {
 		return chunkenc.ValNone
