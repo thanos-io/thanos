@@ -12,8 +12,23 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#7493](https://github.com/thanos-io/thanos/pull/7493) *: fix server grpc histograms
 * [#7511](https://github.com/thanos-io/thanos/pull/7511) Query Frontend: fix doubled gzip compression for response body.
+* [#7592](https://github.com/thanos-io/thanos/pull/7592) Ruler: Only increment `thanos_rule_evaluation_with_warnings_total` metric for non PromQL warnings.
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.36.0](https://github.com/thanos-io/thanos/tree/release-0.36)
+
+### Fixed
+
+- [#7326](https://github.com/thanos-io/thanos/pull/7326) Query: fixing exemplars proxy when querying stores with multiple tenants.
+- [#7403](https://github.com/thanos-io/thanos/pull/7403) Sidecar: fix startup sequence
+- [#7484](https://github.com/thanos-io/thanos/pull/7484) Proxy: fix panic in lazy response set
+- [#7493](https://github.com/thanos-io/thanos/pull/7493) *: fix server grpc histograms
 
 ### Added
 
