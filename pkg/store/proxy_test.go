@@ -2373,6 +2373,64 @@ func TestDedupRespHeap_QuorumChunkDedup(t *testing.T) {
 			},
 		},
 		{
+			tname: "keep 2 identical series + a corrupted one",
+			responses: []*storepb.SeriesResponse{
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Hash: xxhash.Sum64([]byte(`abcdefgh`)),
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Hash: xxhash.Sum64([]byte(`corrupted`)),
+										Data: []byte(`corrupted`),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			testFn: func(responses []*storepb.SeriesResponse, h *responseDeduplicator) {
+				testutil.Equals(t, true, h.Next())
+				resp := h.At()
+				testutil.Equals(t, 3, len(resp.GetSeries().Chunks))
+				testutil.Equals(t, false, h.Next())
+			},
+		},
+		{
 			tname: "dedup 3 identical series",
 			responses: []*storepb.SeriesResponse{
 				{
