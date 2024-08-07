@@ -293,10 +293,11 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 		prometheus.CounterOpts{
 			Name: "thanos_rule_evaluation_with_warnings_total",
 			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
-		}, []string{"strategy"},
+		}, []string{"strategy", "file", "group"},
 	)
-	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
-	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
+	// TODO(Amandaguan): intiilize when group is available at the time of initialization
+	// m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
+	// m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
 
 	return m
 }
@@ -922,6 +923,17 @@ func queryFuncCreator(
 		}
 
 		return func(ctx context.Context, qs string, t time.Time) (promql.Vector, error) {
+			// This context value is set by Prometheus. For details on how it's populated, see:https://github.com/prometheus/prometheus/blob/main/rules/group.go#L181
+			origin := ctx.Value(promql.QueryOrigin{}).(map[string]interface{})
+			ruleGroup := origin["ruleGroup"].(map[string]string)
+
+			group := ""
+			file := ""
+			if ruleGroup != nil {
+				group = ruleGroup["name"]
+				file = ruleGroup["file"]
+			}
+
 			for _, i := range rand.Perm(len(queriers)) {
 				promClient := promClients[i]
 				endpoints := thanosrules.RemoveDuplicateQueryEndpoints(logger, duplicatedQuery, queriers[i].Endpoints())
@@ -940,9 +952,9 @@ func queryFuncCreator(
 						continue
 					}
 					if len(warns) > 0 {
-						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String()), group, file).Inc()
 						// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", qs)
+						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", qs, "group", group, "file", file)
 					}
 					return v, nil
 				}
@@ -971,12 +983,12 @@ func queryFuncCreator(
 					}
 
 					if len(result.Warnings) > 0 {
-						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String()), group, file).Inc()
 						warnings := make([]string, 0, len(result.Warnings))
 						for _, w := range result.Warnings {
 							warnings = append(warnings, w.Error())
 						}
-						level.Warn(logger).Log("warnings", strings.Join(warnings, ", "), "query", qs)
+						level.Warn(logger).Log("warnings", strings.Join(warnings, ", "), "query", qs, "group", group, "file", file)
 					}
 
 					return v, nil
