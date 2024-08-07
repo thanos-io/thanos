@@ -94,6 +94,7 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
+	quorumChunkDedup  bool
 }
 
 type proxyStoreMetrics struct {
@@ -124,6 +125,12 @@ type ProxyStoreOption func(s *ProxyStore)
 func WithProxyStoreDebugLogging(enable bool) ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.debugLogging = enable
+	}
+}
+
+func WithQuorumChunkDedup(enable bool) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.quorumChunkDedup = enable
 	}
 }
 
@@ -449,6 +456,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
 	respHeap := NewResponseDeduplicator(NewProxyResponseLoserTree(storeResponses...))
+	if s.quorumChunkDedup {
+		respHeap.quorumChunkDedup = true
+	}
 	for respHeap.Next() {
 		resp := respHeap.At()
 

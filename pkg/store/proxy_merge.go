@@ -34,8 +34,9 @@ type responseDeduplicator struct {
 	bufferedResp []*storepb.SeriesResponse
 	buffRespI    int
 
-	prev *storepb.SeriesResponse
-	ok   bool
+	prev             *storepb.SeriesResponse
+	ok               bool
+	quorumChunkDedup bool
 }
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
@@ -73,7 +74,7 @@ func (d *responseDeduplicator) Next() bool {
 			d.ok = d.h.Next()
 			if !d.ok {
 				if len(d.bufferedSameSeries) > 0 {
-					d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+					d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries, d.quorumChunkDedup))
 				}
 				return len(d.bufferedResp) > 0
 			}
@@ -101,15 +102,16 @@ func (d *responseDeduplicator) Next() bool {
 			continue
 		}
 
-		d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+		d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries, d.quorumChunkDedup))
 		d.prev = s
 
 		return true
 	}
 }
 
-func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
+func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse, quorum bool) *storepb.SeriesResponse {
 	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
+	chunckCountMap := map[uint64]int{}
 
 	for _, s := range series {
 		for _, chk := range s.GetSeries().Chunks {
@@ -127,7 +129,10 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 				if _, ok := chunkDedupMap[hash]; !ok {
 					chk := chk
 					chunkDedupMap[hash] = &chk
+					chunckCountMap[hash] = 1
 					break
+				} else {
+					chunckCountMap[hash]++
 				}
 			}
 		}
@@ -139,8 +144,24 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 	}
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
-	for _, chk := range chunkDedupMap {
-		finalChunks = append(finalChunks, *chk)
+	for hash, chk := range chunkDedupMap {
+		if quorum {
+			// NB: this is specific to Databricks' setup where each time series is written to at least 2 out of 3 replicas.
+			// Each chunk should have 3 replicas in most cases, and 2 replicas in the worst acceptable cases.
+			// Quorum-based deduplication is used to pick the majority value among 3 replicas.
+			// If a chunck has only 2 identical replicas, there might be another chunk with corrupt data.
+			// We want to send those two identical replicas to the later quorum-based deduplication process to dominate any corrupt third replica.
+			if chunckCountMap[hash] >= 3 {
+				// Most of cases should hit this branch.
+				finalChunks = append(finalChunks, *chk)
+			} else {
+				for i := 0; i < chunckCountMap[hash]; i++ {
+					finalChunks = append(finalChunks, *chk)
+				}
+			}
+		} else {
+			finalChunks = append(finalChunks, *chk)
+		}
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
