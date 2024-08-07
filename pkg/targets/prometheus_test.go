@@ -11,13 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
-
-	"github.com/efficientgo/core/testutil"
+	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -46,17 +45,11 @@ scrape_configs:
     regex: '^.+:80$'
     action: drop
 `, e2eutil.PromAddrPlaceHolder))
-	testutil.Ok(t, p.Start())
+	logger := log.NewNopLogger()
+	testutil.Ok(t, p.Start(context.Background(), logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
-	defer upcancel()
-
-	logger := log.NewNopLogger()
-	err = p.WaitPrometheusUp(upctx, logger)
-	testutil.Ok(t, err)
 
 	u, err := url.Parse("http://" + p.Addr())
 	testutil.Ok(t, err)
@@ -136,7 +129,7 @@ scrape_configs:
 			targets, w, err := grpcClient.Targets(context.Background(), &targetspb.TargetsRequest{
 				State: tcase.requestedState,
 			})
-			testutil.Equals(t, storage.Warnings(nil), w)
+			testutil.Equals(t, annotations.Annotations(nil), w)
 			if tcase.expectedErr != nil {
 				testutil.NotOk(t, err)
 				testutil.Equals(t, tcase.expectedErr.Error(), err.Error())

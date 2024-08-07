@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,22 +16,28 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
+	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
+	gmetadata "google.golang.org/grpc/metadata"
+
+	"google.golang.org/grpc"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"go.uber.org/atomic"
-	"golang.org/x/sync/errgroup"
-
-	"github.com/thanos-io/thanos/pkg/api/status"
 
 	"github.com/thanos-io/objstore"
 
+	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/exemplars"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -40,7 +47,7 @@ import (
 type TSDBStats interface {
 	// TenantStats returns TSDB head stats for the given tenants.
 	// If no tenantIDs are provided, stats for all tenants are returned.
-	TenantStats(statsByLabelName string, tenantIDs ...string) []status.TenantStats
+	TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats
 }
 
 type MultiTSDB struct {
@@ -56,6 +63,7 @@ type MultiTSDB struct {
 	tenants               map[string]*tenant
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
+	hashringConfigs       []HashringConfig
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -91,30 +99,108 @@ func NewMultiTSDB(
 }
 
 type localClient struct {
-	storepb.StoreClient
-
-	labelSetFunc  func() []labelpb.ZLabelSet
-	timeRangeFunc func() (int64, int64)
+	store *store.TSDBStore
 }
 
-func newLocalClient(
-	c storepb.StoreClient,
-	labelSetFunc func() []labelpb.ZLabelSet,
-	timeRangeFunc func() (int64, int64),
-) *localClient {
-	return &localClient{c, labelSetFunc, timeRangeFunc}
+type seriesClientMapper struct {
+	ctx    context.Context
+	series []*storepb.Series
+
+	initiated bool
+
+	store *store.TSDBStore
+	req   storepb.SeriesRequest
+}
+
+func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
+	if !m.initiated {
+		series, err := m.store.SeriesLocal(m.ctx, &m.req)
+		if err != nil {
+			return nil, err
+		}
+		m.series = series
+		m.initiated = true
+	}
+	if len(m.series) == 0 {
+		return nil, io.EOF
+	}
+	s := m.series[0]
+	m.series = m.series[1:]
+	return storepb.NewSeriesResponse(s), nil
+}
+
+func (m *seriesClientMapper) Header() (gmetadata.MD, error) {
+	return nil, nil
+}
+
+func (m *seriesClientMapper) Trailer() gmetadata.MD {
+	return nil
+}
+
+func (m *seriesClientMapper) CloseSend() error {
+	return nil
+}
+
+func (m *seriesClientMapper) Context() context.Context {
+	return m.ctx
+}
+
+func (m *seriesClientMapper) RecvMsg(_ interface{}) error {
+	return nil
+}
+
+func (m *seriesClientMapper) SendMsg(_ interface{}) error {
+	return nil
+}
+
+func (l *localClient) Info(ctx context.Context, in *storepb.InfoRequest, opts ...grpc.CallOption) (*storepb.InfoResponse, error) {
+	return l.store.Info(ctx, in)
+}
+
+func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
+	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
+}
+
+func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
+	return l.store.LabelNames(ctx, in)
+}
+
+func (l *localClient) LabelValues(ctx context.Context, in *storepb.LabelValuesRequest, opts ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
+	return l.store.LabelValues(ctx, in)
+}
+
+func newLocalClient(store *store.TSDBStore) *localClient {
+	return &localClient{
+		store: store,
+	}
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.ZLabelSetsToPromLabelSets(l.labelSetFunc()...)
+	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
-	return l.timeRangeFunc()
+	return l.store.TimeRange()
+}
+
+func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
+	labelsets := l.store.LabelSet()
+	if len(labelsets) == 0 {
+		return []infopb.TSDBInfo{}
+	}
+
+	mint, maxt := l.store.TimeRange()
+	return []infopb.TSDBInfo{
+		{
+			Labels:  labelsets[0],
+			MinTime: mint,
+			MaxTime: maxt,
+		},
+	}
 }
 
 func (l *localClient) String() string {
-	mint, maxt := l.timeRangeFunc()
+	mint, maxt := l.store.TimeRange()
 	return fmt.Sprintf(
 		"LabelSets: %v MinTime: %d MaxTime: %d",
 		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
@@ -139,7 +225,34 @@ type tenant struct {
 	exemplarsTSDB *exemplars.TSDB
 	ship          *shipper.Shipper
 
-	mtx *sync.RWMutex
+	mtx  *sync.RWMutex
+	tsdb *tsdb.DB
+
+	// For tests.
+	blocksToDeleteFn func(db *tsdb.DB) tsdb.BlocksToDeleteFunc
+}
+
+func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	if t.tsdb == nil {
+		return nil
+	}
+
+	deletable := t.blocksToDeleteFn(t.tsdb)(blocks)
+	if t.ship == nil {
+		return deletable
+	}
+
+	uploaded := t.ship.UploadedBlocks()
+	for deletableID := range deletable {
+		if _, ok := uploaded[deletableID]; !ok {
+			delete(deletable, deletableID)
+		}
+	}
+
+	return deletable
 }
 
 func newTenant() *tenant {
@@ -159,7 +272,7 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client(logger log.Logger) store.Client {
+func (t *tenant) client() store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -167,8 +280,8 @@ func (t *tenant) client(logger log.Logger) store.Client {
 	if tsdbStore == nil {
 		return nil
 	}
-	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
-	return newLocalClient(client, tsdbStore.LabelSet, tsdbStore.TimeRange)
+
+	return newLocalClient(tsdbStore)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -186,14 +299,15 @@ func (t *tenant) shipper() *shipper.Shipper {
 func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
-	t.setComponents(storeTSDB, ship, exemplarsTSDB)
+	t.setComponents(storeTSDB, ship, exemplarsTSDB, tenantTSDB)
 	t.mtx.Unlock()
 }
 
-func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
+func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB) {
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
+	t.tsdb = tenantTSDB
 }
 
 func (t *MultiTSDB) Open() error {
@@ -238,8 +352,7 @@ func (t *MultiTSDB) Flush() error {
 		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
 		wg.Add(1)
 		go func() {
-			head := db.Head()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+			if err := t.flushHead(db); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -250,6 +363,20 @@ func (t *MultiTSDB) Flush() error {
 
 	wg.Wait()
 	return merr.Err()
+}
+
+func (t *MultiTSDB) flushHead(db *tsdb.DB) error {
+	head := db.Head()
+	if head.MinTime() == head.MaxTime() {
+		return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()))
+	}
+	blockAlignedMaxt := head.MaxTime() - (head.MaxTime() % t.tsdbOpts.MaxBlockDuration)
+	// Flush a well aligned TSDB block.
+	if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), blockAlignedMaxt-1)); err != nil {
+		return err
+	}
+	// Flush the remainder of the head.
+	return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1))
 }
 
 func (t *MultiTSDB) Close() error {
@@ -276,6 +403,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 	if t.tsdbOpts.RetentionDuration == 0 {
 		return nil
 	}
+	level.Info(t.logger).Log("msg", "Running pruning job")
 
 	var (
 		wg   sync.WaitGroup
@@ -284,7 +412,6 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		prunedTenants []string
 		pmtx          sync.Mutex
 	)
-
 	t.mtx.RLock()
 	for tenantID, tenantInstance := range t.tenants {
 		wg.Add(1)
@@ -324,7 +451,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 
 // pruneTSDB removes a TSDB if its past the retention period.
 // It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
-func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (bool, error) {
+func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (pruned bool, rerr error) {
 	tenantTSDB := tenantInstance.readyStorage()
 	if tenantTSDB == nil {
 		return false, nil
@@ -354,9 +481,21 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	tenantTSDB.mtx.Lock()
 	defer tenantTSDB.mtx.Unlock()
 
-	// Lock the entire tenant to make sure the shipper is not running in parallel.
+	// Make sure the shipper is not running in parallel.
 	tenantInstance.mtx.Lock()
-	defer tenantInstance.mtx.Unlock()
+	shipper := tenantInstance.ship
+	tenantInstance.ship = nil
+	tenantInstance.mtx.Unlock()
+
+	defer func() {
+		if pruned {
+			return
+		}
+		// If the tenant was not pruned, re-enable the shipper.
+		tenantInstance.mtx.Lock()
+		tenantInstance.ship = shipper
+		tenantInstance.mtx.Unlock()
+	}()
 
 	sinceLastAppendMillis = time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	if sinceLastAppendMillis <= compactThreshold {
@@ -364,7 +503,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Compacting tenant")
-	if err := tdb.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+	if err := t.flushHead(tdb); err != nil {
 		return false, err
 	}
 
@@ -373,8 +512,9 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Pruning tenant")
-	if tenantInstance.ship != nil {
-		uploaded, err := tenantInstance.ship.Sync(ctx)
+	if shipper != nil {
+		// No other code can reach this shipper anymore so enable it again to be able to sync manually.
+		uploaded, err := shipper.Sync(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -392,8 +532,10 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, err
 	}
 
+	tenantInstance.mtx.Lock()
 	tenantInstance.readyS.set(nil)
-	tenantInstance.setComponents(nil, nil, nil)
+	tenantInstance.setComponents(nil, nil, nil, nil)
+	tenantInstance.mtx.Unlock()
 
 	return true, nil
 }
@@ -467,7 +609,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client(t.logger)
+		client := tenant.client()
 		if client != nil {
 			res = append(res, client)
 		}
@@ -490,7 +632,7 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	return res
 }
 
-func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []status.TenantStats {
+func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	if len(tenantIDs) == 0 {
@@ -517,7 +659,7 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 			if db == nil {
 				return
 			}
-			stats := db.Head().Stats(statsByLabelName)
+			stats := db.Head().Stats(statsByLabelName, limit)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -539,11 +681,20 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
 	reg = NewUnRegisterer(reg)
 
-	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+	lset := t.extractTenantsLabels(tenantID, initialLset)
 	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
+	opts.BlocksToDelete = tenant.blocksToDelete
+	tenant.blocksToDeleteFn = tsdb.DefaultBlocksToDelete
+
+	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL
+	// which gets later converted into a block. Without setting this flag to false, the block would get compacted
+	// into other ones. This presents a race between compaction and the shipper (if it is configured to upload compacted blocks).
+	// Hence, avoid this situation by disabling overlapping compaction. Vertical compaction must be enabled on the compactor.
+	opts.EnableOverlappingCompaction = false
 	s, err := tsdb.Open(
 		dataDir,
 		logger,
@@ -566,9 +717,10 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.bucket,
 			func() labels.Labels { return lset },
 			metadata.ReceiveSource,
-			false,
+			nil,
 			t.allowOutOfOrderUpload,
 			t.hashFunc,
+			shipper.DefaultMetaFilename,
 		)
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
@@ -623,6 +775,38 @@ func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
 	return tenant.readyStorage(), nil
 }
 
+func (t *MultiTSDB) SetHashringConfig(cfg []HashringConfig) error {
+	t.hashringConfigs = cfg
+
+	// If a tenant's already existed in MultiTSDB, update its label set
+	// from the latest []HashringConfig.
+	// In case one tenant appears in multiple hashring configs,
+	// only the label set from the first hashring config is applied.
+	// This is the same logic as startTSDB.
+	updatedTenants := make([]string, 0)
+	for _, hc := range t.hashringConfigs {
+		for _, tenantID := range hc.Tenants {
+			if slices.Contains(updatedTenants, tenantID) {
+				continue
+			}
+			if t.tenants[tenantID] != nil {
+				updatedTenants = append(updatedTenants, tenantID)
+
+				lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+				lset = labelpb.ExtendSortedLabels(hc.ExternalLabels, lset)
+
+				if t.tenants[tenantID].ship != nil {
+					t.tenants[tenantID].ship.SetLabels(lset)
+				}
+				t.tenants[tenantID].storeTSDB.SetExtLset(lset)
+				t.tenants[tenantID].exemplarsTSDB.SetExtLabels(lset)
+			}
+		}
+	}
+
+	return nil
+}
+
 // ErrNotReady is returned if the underlying storage is not ready yet.
 var ErrNotReady = errors.New("TSDB not ready")
 
@@ -667,9 +851,9 @@ func (s *ReadyStorage) StartTime() (int64, error) {
 }
 
 // Querier implements the Storage interface.
-func (s *ReadyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+func (s *ReadyStorage) Querier(mint, maxt int64) (storage.Querier, error) {
 	if x := s.get(); x != nil {
-		return x.Querier(ctx, mint, maxt)
+		return x.Querier(mint, maxt)
 	}
 	return nil, ErrNotReady
 }
@@ -708,8 +892,8 @@ func (a adapter) StartTime() (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
-func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return a.db.Querier(ctx, mint, maxt)
+func (a adapter) Querier(mint, maxt int64) (storage.Querier, error) {
+	return a.db.Querier(mint, maxt)
 }
 
 func (a adapter) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, error) {
@@ -776,4 +960,19 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 			panic(err)
 		}
 	}
+}
+
+// extractTenantsLabels extracts tenant's external labels from hashring configs.
+// If one tenant appears in multiple hashring configs,
+// only the external label set from the first hashring config is applied.
+func (t *MultiTSDB) extractTenantsLabels(tenantID string, initialLset labels.Labels) labels.Labels {
+	for _, hc := range t.hashringConfigs {
+		for _, tenant := range hc.Tenants {
+			if tenant != tenantID {
+				continue
+			}
+			return labelpb.ExtendSortedLabels(hc.ExternalLabels, initialLset)
+		}
+	}
+	return initialLset
 }

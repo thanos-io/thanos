@@ -88,6 +88,22 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Talks
 
+* 2024
+  * [Enlightning - Scaling Your Metrics with Thanos](https://www.youtube.com/live/1qvcVJiVx7M)
+  * [6 Learnings from Building Thanos Project](https://www.youtube.com/watch?v=ur8dDFaNEFg)
+  * [Monitoring the World: Scaling Thanos in Dynamic Prometheus Environments](https://www.youtube.com/watch?v=ofhvbG0iTjU)
+  * [Scaling Thanos at Reddit](https://www.youtube.com/watch?v=c18RGbAxCfI)
+  * [Thanos Project Updates](https://www.youtube.com/watch?v=wmNtCj5D4_A)
+  * [Connecting Thanos to the Outer Rim via Query API](https://www.youtube.com/watch?v=E8L8fuRj66o)
+  * [Multiverse of Thanos: Making Thanos Multi-Tenanted](https://www.youtube.com/watch?v=SAyPQ2d8v4Q)
+  * [Thanos Receiver Deep Dive](https://www.youtube.com/watch?v=jn_zIfBuUyE)
+  * [From UI to Storage: Unraveling the Magic of Thanos Query Processing](https://www.youtube.com/watch?v=ZGQIitaKoTM)
+  * [Thanos’ Infinity Stones and How You Can Operate Them!](https://www.youtube.com/watch?v=e8kvX6mRlyE)
+
+* 2023
+  * [Planetscale monitoring: Handling billions of active series with Prometheus and Thanos](https://www.youtube.com/watch?v=Or8r46fSaOg)
+  * [Taming the Tsunami: low latency ingestion of push-based metrics in Prometheus](https://www.youtube.com/watch?v=W81x1j765hc)
+
 * 2022
   * [Story of Correlation: Integrating Thanos Metrics with Observability Signals](https://www.youtube.com/watch?v=rWFb01GW0mQ)
   * [Running the Observability As a Service For Your Teams With Thanos](https://www.youtube.com/watch?v=I4Mfyfd_4M8)
@@ -121,6 +137,12 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Blog posts
 
+* 2024:
+  * [Streamlining Long-Term Storage Query Performance for Metrics With Thanos.](https://blog.devops.dev/streamlining-long-term-storage-query-performance-for-metrics-with-thanos-b44419c70cc4)
+
+* 2023:
+  * [Thanos Ruler and Prometheus Rules — a match made in heaven.](https://medium.com/@helia.barroso/thanos-ruler-and-prometheus-rules-a-match-made-in-heaven-a4f08f2399ac)
+
 * 2022:
   * [Thanos at Medallia: A Hybrid Architecture Scaled to Support 1 Billion+ Series Across 40+ Data Centers](https://thanos.io/blog/2022-09-08-thanos-at-medallia/)
   * [Deploy Thanos Receive with native OCI Object Storage on Oracle Kubernetes Engine](https://medium.com/@lmukadam/deploy-thanos-receive-with-native-oci-object-storage-on-kubernetes-829326ea0bc6)
@@ -130,7 +152,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
   * [Adopting Thanos at LastPass](https://krisztianfekete.org/adopting-thanos-at-lastpass/)
 
 * 2020:
-  * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
+  * [Banzai Cloud user story](https://outshift.cisco.com/blog/multi-cluster-monitoring)
   * [Monitoring the Beat microservices: A tale of evolution](https://build.thebeat.co/monitoring-the-beat-microservices-a-tale-of-evolution-4e246882606e)
 
 * 2019:
@@ -145,7 +167,6 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 * 2018:
   * [Introduction blog post](https://improbable.io/blog/thanos-prometheus-at-scale)
   * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
-  * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
   * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)
   * [Thanos usage](https://www.infracloud.io/blogs/thanos-ha-scalable-prometheus/)
 

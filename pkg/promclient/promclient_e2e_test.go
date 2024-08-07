@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
@@ -27,10 +28,10 @@ import (
 
 func TestIsWALFileAccessible_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		testutil.Ok(t, p.Start())
-
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
+		testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
+
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error { return IsWALDirAccessible(p.Dir()) }))
 
 		testutil.NotOk(t, IsWALDirAccessible(path.Join(p.Dir(), "/non-existing")))
@@ -41,15 +42,15 @@ func TestIsWALFileAccessible_e2e(t *testing.T) {
 func TestExternalLabels_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		// Keep consistent with the config processing in function (*Client).ExternalLabels.
-		cfg := config.Config{GlobalConfig: config.GlobalConfig{ExternalLabels: []labels.Label{
-			{Name: "region", Value: "eu-west"},
-			{Name: "az", Value: "1"},
-		}}}
+		cfg := config.Config{GlobalConfig: config.GlobalConfig{ExternalLabels: labels.FromMap(map[string]string{
+			"region": "eu-west",
+			"az":     "1",
+		})}}
 		cfgData, err := yaml.Marshal(cfg)
 		testutil.Ok(t, err)
 		p.SetConfig(string(cfgData))
 
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -57,7 +58,7 @@ func TestExternalLabels_e2e(t *testing.T) {
 		ext, err := NewDefaultClient().ExternalLabels(context.Background(), u)
 		testutil.Ok(t, err)
 
-		testutil.Equals(t, 2, len(ext))
+		testutil.Equals(t, 2, ext.Len())
 		testutil.Equals(t, "eu-west", ext.Get("region"))
 		testutil.Equals(t, "1", ext.Get("az"))
 	})
@@ -65,7 +66,7 @@ func TestExternalLabels_e2e(t *testing.T) {
 
 func TestConfiguredFlags_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -95,13 +96,13 @@ func TestSnapshot_e2e(t *testing.T) {
 			10,
 			timestamp.FromTime(now.Add(-6*time.Hour)),
 			timestamp.FromTime(now.Add(-4*time.Hour)),
-			nil,
+			labels.EmptyLabels(),
 			0,
 			metadata.NoneFunc,
 		)
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -166,18 +167,18 @@ func TestQueryRange_e2e(t *testing.T) {
 			10,
 			timestamp.FromTime(now.Add(-2*time.Hour)),
 			timestamp.FromTime(now),
-			nil,
+			labels.EmptyLabels(),
 			0,
 			metadata.NoneFunc,
 		)
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, p.Start())
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		res, _, err := NewDefaultClient().QueryRange(
+		res, _, _, err := NewDefaultClient().QueryRange(
 			ctx,
 			u,
 			`{a="b"}`,

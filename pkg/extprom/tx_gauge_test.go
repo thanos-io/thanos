@@ -4,13 +4,14 @@
 package extprom
 
 import (
-	"strings"
+	"sort"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestTxGaugeVec(t *testing.T) {
@@ -18,17 +19,54 @@ func TestTxGaugeVec(t *testing.T) {
 		Name: "metric",
 	}, []string{"a", "b"}, []string{"a1", "b1"}, []string{"a2", "b2"})
 
+	strPtr := func(s string) *string {
+		return &s
+	}
+
+	floatPtr := func(f float64) *float64 {
+		return &f
+	}
+
 	for _, tcase := range []struct {
-		name  string
-		txUse func()
-		exp   map[string]float64
+		name   string
+		txUse  func()
+		exp    map[string]float64
+		expDto []proto.Message
 	}{
 		{
 			name:  "nothing",
 			txUse: func() {},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
@@ -37,9 +75,37 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a1", "b1").Inc()
 				g.WithLabelValues("a1", "b1").Add(0.3)
 			},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1.3,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(1.3),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
@@ -49,9 +115,37 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a1", "b1").Add(-10)
 				g.WithLabelValues("a1", "b1").Add(10.3)
 			},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1.3000000000000007, // Say hi to float comparisons.
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(1.3000000000000007),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
@@ -61,17 +155,73 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a1", "b1").Add(-10)
 				g.WithLabelValues("a1", "b1").Set(1.3)
 			},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1.3,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(1.3),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
 			name:  "nothing again",
 			txUse: func() {},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
@@ -79,10 +229,52 @@ func TestTxGaugeVec(t *testing.T) {
 			txUse: func() {
 				g.WithLabelValues("aX", "b1").Set(500.2)
 			},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
-				"name:\"a\" value:\"aX\" ,name:\"b\" value:\"b1\" ": 500.2,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(500.2),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("aX"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
 			},
 		},
 		{
@@ -90,18 +282,88 @@ func TestTxGaugeVec(t *testing.T) {
 			txUse: func() {
 				g.WithLabelValues("aX", "b1").Set(500.2)
 			},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
-				"name:\"a\" value:\"aX\" ,name:\"b\" value:\"b1\" ": 500.2,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(500.2),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("aX"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
 			name:  "nothing again",
 			txUse: func() {},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 		{
@@ -111,18 +373,88 @@ func TestTxGaugeVec(t *testing.T) {
 				g.WithLabelValues("a2", "b2").Add(-2)
 				g.WithLabelValues("a3", "b3").Set(1.1)
 			},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 1,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": -2,
-				"name:\"a\" value:\"a3\" ,name:\"b\" value:\"b3\" ": 1.1,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(1),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(-2),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(1.1),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a3"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b3"),
+						},
+					},
+				},
 			},
 		},
 		{
 			name:  "nothing again",
 			txUse: func() {},
-			exp: map[string]float64{
-				"name:\"a\" value:\"a1\" ,name:\"b\" value:\"b1\" ": 0,
-				"name:\"a\" value:\"a2\" ,name:\"b\" value:\"b2\" ": 0,
+			expDto: []proto.Message{
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a1"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b1"),
+						},
+					},
+				},
+				&dto.Metric{
+					Gauge: &dto.Gauge{
+						Value: floatPtr(0),
+					},
+					Label: []*dto.LabelPair{
+						{
+							Name:  strPtr("a"),
+							Value: strPtr("a2"),
+						},
+						{
+							Name:  strPtr("b"),
+							Value: strPtr("b2"),
+						},
+					},
+				},
 			},
 		},
 	} {
@@ -132,20 +464,42 @@ func TestTxGaugeVec(t *testing.T) {
 			tcase.txUse()
 			g.Submit()
 
-			testutil.Equals(t, tcase.exp, toFloat64(t, g))
+			got := toProtoMessage(t, g)
+			testutil.Equals(t, len(tcase.expDto), len(got))
 
+			sortDtoMessages(got)
+			sortDtoMessages(tcase.expDto)
+			for i := 0; i < len(tcase.expDto); i++ {
+				testutil.Equals(t, true, proto.Equal(got[i], tcase.expDto[i]))
+			}
 		}); !ok {
 			return
 		}
 	}
 }
 
-// toFloat64 is prometheus/client_golang/prometheus/testutil.ToFloat64 version that works with multiple labelnames.
-// NOTE: Be careful on float comparison.
-func toFloat64(t *testing.T, c prometheus.Collector) map[string]float64 {
+func sortDtoMessages(msgs []proto.Message) {
+	sort.Slice(msgs, func(i, j int) bool {
+		m1 := msgs[i].(*dto.Metric)
+		m2 := msgs[j].(*dto.Metric)
+
+		lbls1 := labels.Labels{}
+		for _, p := range m1.GetLabel() {
+			lbls1 = append(lbls1, labels.Label{Name: *p.Name, Value: *p.Value})
+		}
+		lbls2 := labels.Labels{}
+		for _, p := range m2.GetLabel() {
+			lbls2 = append(lbls2, labels.Label{Name: *p.Name, Value: *p.Value})
+		}
+
+		return labels.Compare(lbls1, lbls2) < 0
+	})
+}
+
+func toProtoMessage(t *testing.T, c prometheus.Collector) []proto.Message {
 	var (
-		mChan = make(chan prometheus.Metric)
-		exp   = map[string]float64{}
+		mChan    = make(chan prometheus.Metric)
+		messages = make([]proto.Message, 0)
 	)
 
 	go func() {
@@ -156,27 +510,9 @@ func toFloat64(t *testing.T, c prometheus.Collector) map[string]float64 {
 	for m := range mChan {
 		pb := &dto.Metric{}
 		testutil.Ok(t, m.Write(pb))
-		if pb.Gauge != nil {
-			exp[lbToString(pb.GetLabel())] = pb.Gauge.GetValue()
-			continue
-		}
-		if pb.Counter != nil {
-			exp[lbToString(pb.GetLabel())] = pb.Counter.GetValue()
-			continue
-		}
-		if pb.Untyped != nil {
-			exp[lbToString(pb.GetLabel())] = pb.Untyped.GetValue()
-		}
-		panic(errors.Errorf("collected a non-gauge/counter/untyped metric: %s", pb))
+
+		messages = append(messages, pb)
 	}
 
-	return exp
-}
-
-func lbToString(pairs []*dto.LabelPair) string {
-	var ret []string
-	for _, r := range pairs {
-		ret = append(ret, r.String())
-	}
-	return strings.Join(ret, ",")
+	return messages
 }

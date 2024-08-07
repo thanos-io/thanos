@@ -15,10 +15,10 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -228,34 +228,6 @@ func TestTSDBStore_Series(t *testing.T) {
 	}
 }
 
-func TestTSDBStore_LabelAPIs(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
-	testLabelAPIs(t, func(extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		db, err := e2eutil.NewTSDB()
-		testutil.Ok(t, err)
-		t.Cleanup(func() { testutil.Ok(t, db.Close()) })
-
-		tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
-
-		appendFn(db.Appender(context.Background()))
-		return tsdbStore
-	})
-}
-
-// Regression test for https://github.com/thanos-io/thanos/issues/1038.
-func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, db.Appender(context.Background()), func() storepb.StoreServer {
-		return NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
-	})
-}
-
 type delegatorServer struct {
 	*storetestutil.SeriesServer
 
@@ -285,7 +257,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		Random:           random,
 		SkipChunks:       true,
 	})
-	_ = createBlockFromHead(t, tmpDir, head)
+	_ = storetestutil.CreateBlockFromHead(t, tmpDir, head)
 	testutil.Ok(t, head.Close())
 
 	head, _ = storetestutil.CreateHeadWithSeries(t, 1, storetestutil.HeadGenOptions{
@@ -298,7 +270,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 	})
 	testutil.Ok(t, head.Close())
 
-	db, err := tsdb.OpenDBReadOnly(tmpDir, logger)
+	db, err := tsdb.OpenDBReadOnly(tmpDir, "", logger)
 	testutil.Ok(t, err)
 
 	dbToClose := make(chan *tsdb.DBReadOnly, 1)
@@ -454,7 +426,7 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 		Random:           random,
 		SkipChunks:       true,
 	})
-	_ = createBlockFromHead(t, tmpDir, head)
+	_ = storetestutil.CreateBlockFromHead(t, tmpDir, head)
 	testutil.Ok(t, head.Close())
 
 	head, _ = storetestutil.CreateHeadWithSeries(t, 1, storetestutil.HeadGenOptions{
@@ -467,7 +439,7 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 	})
 	testutil.Ok(t, head.Close())
 
-	db, err := tsdb.OpenDBReadOnly(tmpDir, logger)
+	db, err := tsdb.OpenDBReadOnly(tmpDir, "", logger)
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
 		if db != nil {
@@ -594,11 +566,8 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i]))
 		}
 
-		_ = createBlockFromHead(t, tmpDir, head)
-		t.Cleanup(func() {
-			testutil.Ok(t, head.Close())
-		})
-
+		_ = storetestutil.CreateBlockFromHead(t, tmpDir, head)
+		testutil.Ok(t, head.Close())
 	}
 
 	head2, created := storetestutil.CreateHeadWithSeries(t, 3, storetestutil.HeadGenOptions{
@@ -608,15 +577,13 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 		WithWAL:          true,
 		Random:           random,
 	})
-	t.Cleanup(func() {
-		testutil.Ok(t, head2.Close())
-	})
+	testutil.Ok(t, head2.Close())
 
 	for i := 0; i < len(created); i++ {
 		resps[3] = append(resps[3], storepb.NewSeriesResponse(created[i]))
 	}
 
-	db, err := tsdb.OpenDBReadOnly(tmpDir, logger)
+	db, err := tsdb.OpenDBReadOnly(tmpDir, "", logger)
 	testutil.Ok(t, err)
 
 	defer func() { testutil.Ok(t, db.Close()) }()
@@ -630,7 +597,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+len(extLabels))
+			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+extLabels.Len())
 			for _, l := range s.Labels {
 				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
@@ -638,13 +605,13 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
 			}
-			for _, l := range extLabels {
+			extLabels.Range(func(l labels.Label) {
 				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
 					Value: l.Value,
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
-			}
+			})
 			sort.Slice(lbls, func(i, j int) bool {
 				return lbls[i].Name < lbls[j].Name
 			})

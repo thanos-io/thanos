@@ -11,8 +11,8 @@ Example command to run Querier:
 ```bash
 thanos query \
     --http-address     "0.0.0.0:9090" \
-    --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>"
+    --endpoint         "<store-api>:<grpc-port>" \
+    --endpoint         "<store-api2>:<grpc-port>"
 ```
 
 ## Querier use cases, why do I need this component?
@@ -71,8 +71,8 @@ If we configure Querier like this:
 thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --endpoint            "<store-api>:<grpc-port>" \
+    --endpoint            "<store-api2>:<grpc-port>" \
 ```
 
 And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
@@ -97,13 +97,13 @@ thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --query.replica-label "replicaX" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --endpoint            "<store-api>:<grpc-port>" \
+    --endpoint            "<store-api2>:<grpc-port>" \
 ```
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
-## Experimental PromQL Engine
+## Thanos PromQL Engine (experimental)
 
 By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
 
@@ -112,6 +112,14 @@ To learn more, see [the introduction talk](https://youtu.be/pjkWzDVxWk4?t=3609) 
 This feature is still **experimental** given active development. All queries should be supported due to bulit-in fallback to old PromQL if something is not yet implemented.
 
 For new engine bugs/issues, please use https://github.com/thanos-community/promql-engine GitHub issues.
+
+### Distributed execution mode
+
+When using Thanos PromQL Engine the distributed execution mode can be enabled using `--query.mode=distributed`. When this mode is enabled, the Querier will break down each query into independent fragments and delegate them to components which implement the Query API.
+
+This mode is particularly useful in architectures where multiple independent Queriers are deployed in separate environments (different regions or different Kubernetes clusters) and are federated through a separate central Querier. A Querier running in the distributed mode will only talk to Queriers, or other components which implement the Query API. Endpoints which only act as Stores (e.g. Store Gateways or Rulers), and are directly connected to a distributed Querier, will not be included in the execution of a distributed query. This constraint should help with keeping the distributed query execution simple and efficient, but could be removed in the future if there are good use cases for it.
+
+For further details on the design and use cases of this feature, see the [official design document](https://thanos.io/tip/proposals-done/202301-distributed-query-execution.md/).
 
 ## Query API Overview
 
@@ -182,7 +190,7 @@ Available options:
 
 ### Partial Response Strategy
 
-// TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto)
+ <!-- TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto) -->
 
 | HTTP URL/FORM parameter | Type      | Default                                       | Example                                |
 |-------------------------|-----------|-----------------------------------------------|----------------------------------------|
@@ -260,6 +268,20 @@ Example file SD file in YAML:
 
 `--query.active-query-path` is an option which allows the user to specify a directory which will contain a `queries.active` file to track active queries. To enable this feature, the user has to specify a directory other than "", since that is skipped being the default.
 
+## Tenancy
+
+### Tenant Metrics
+
+Tenant information is captured in relevant Thanos exported metrics in the Querier, Query Frontend and Store. In order make use of this functionality requests to the Query/Query Frontend component should include the tenant-id in the appropriate HTTP request header as configured with `--query.tenant-header`. The tenant information is passed through components (including Query Frontend), down to the Thanos Store, enabling per-tenant metrics in these components also. If no tenant header is set to requests to the query component, the default tenant as defined by `--query.tenant-default-id` will be used.
+
+### Tenant Enforcement
+
+Enforcement of tenancy can be enabled using `--query.enforce-tenancy`. If enabled, queries will only fetch series containing a specific matcher, while evaluating PromQL expressions. The matcher label name is `--query.tenant-label-name` and the matcher value matches the tenant, as sent to the querier in the HTTP header configured with `--query-tenant-header`. This functionality requires that metrics are injected with a tenant label when ingested into Thanos. This can be done for example by enabling tenancy in the Thanos Receive component.
+
+In case of nested Thanos Query components, it's important to note that tenancy enforcement will only occur in the querier which the initial request is sent to, the layered queriers will not perform any enforcement.
+
+Further, note that there are no authentication mechanisms in Thanos, so anyone can set an arbitrary tenant in the HTTP header. It is recommended to use a proxy in front of the querier in case an authentication mechanism is needed. The Query UI also includes an option to set an arbitrary tenant, and should therefore not be exposed to end-users if users should not be able to see each others data.
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
@@ -272,9 +294,11 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field.
-      --enable-feature= ...      Comma separated experimental feature names
-                                 to enable.The current list of features is
-                                 query-pushdown.
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
@@ -341,15 +365,6 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would
-                                 be soon deprecated, and replaced with
-                                 `request.logging-config`. Request Logging
-                                 for logging the start and end of requests. By
-                                 default this flag is disabled. LogFinishCall:
-                                 Logs the finish call of the requests.
-                                 LogStartAndFinishCall: Logs the start and
-                                 finish call of the requests. NoLogCall: Disable
-                                 request logging.
       --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
@@ -369,6 +384,17 @@ Flags:
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
+      --query.default-tenant-id="default-tenant"
+                                 Default tenant ID to use if tenant header is
+                                 not present
+      --query.enable-x-functions
+                                 Whether to enable extended rate functions
+                                 (xrate, xincrease and xdelta). Only has effect
+                                 when used with Thanos engine.
+      --query.enforce-tenancy    Enforce tenancy on Query APIs. Responses
+                                 are returned only if the label value of the
+                                 configured tenant-label-name and the value of
+                                 the tenant header matches.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
@@ -393,6 +419,7 @@ Flags:
                                  when the range parameters are not specified.
                                  The zero value means range covers the time
                                  since the beginning.
+      --query.mode=local         PromQL query mode. One of: local, distributed.
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
@@ -413,6 +440,17 @@ Flags:
       --query.telemetry.request-series-seconds-quantiles=10... ...
                                  The quantiles for exporting metrics about the
                                  series count quantiles.
+      --query.tenant-certificate-field=
+                                 Use TLS client's certificate field to determine
+                                 tenant for write requests. Must be one of
+                                 organization, organizationalUnit or commonName.
+                                 This setting will cause the query.tenant-header
+                                 flag value to be ignored.
+      --query.tenant-header="THANOS-TENANT"
+                                 HTTP header to determine tenant.
+      --query.tenant-label-name="tenant_id"
+                                 Label name to use when enforcing tenancy (if
+                                 --query.enforce-tenancy is enabled).
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
@@ -427,6 +465,21 @@ Flags:
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
+      --selector.relabel-config=<content>
+                                 Alternative to 'selector.relabel-config-file'
+                                 flag (mutually exclusive). Content of YAML
+                                 file with relabeling configuration that allows
+                                 selecting blocks to query based on their
+                                 external labels. It follows the Thanos sharding
+                                 relabel-config syntax. For format details see:
+                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
+      --selector.relabel-config-file=<file-path>
+                                 Path to YAML file with relabeling
+                                 configuration that allows selecting blocks
+                                 to query based on their external labels.
+                                 It follows the Thanos sharding relabel-config
+                                 syntax. For format details see:
+                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
       --store=<store> ...        Deprecation Warning - This flag is deprecated
                                  and replaced with `endpoint`. Addresses of
                                  statically configured store API servers
@@ -513,6 +566,8 @@ Thanos Query also exports metrics about its own performance. You can find a list
 
 **Disclaimer**: this list is incomplete. The remaining metrics will be added over time.
 
-| Name                                    | Type      | Labels                | Description                                                                                                       |
-|-----------------------------------------|-----------|-----------------------|-------------------------------------------------------------------------------------------------------------------|
-| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
+| Name                                    | Type      | Labels                                          | Description                                                                                                       |
+|-----------------------------------------|-----------|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| grpc_client_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC client requests handled by this query instance (including errors)                                  |
+| grpc_server_handled_total               | Counter   | grpc_code, grpc_method, grpc_service, grpc_type | Number of gRPC server requests handled by this query instance (including errors)                                  |
+| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le                           | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |

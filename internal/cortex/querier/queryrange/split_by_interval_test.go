@@ -5,7 +5,7 @@ package queryrange
 
 import (
 	"context"
-	"io/ioutil"
+	io "io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weaveworks/common/httpgrpc"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
+	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/middleware"
 	"github.com/weaveworks/common/user"
 	"go.uber.org/atomic"
@@ -273,7 +273,7 @@ func TestSplitByDay(t *testing.T) {
 	mergedHTTPResponse, err := PrometheusCodec.EncodeResponse(context.Background(), mergedResponse)
 	require.NoError(t, err)
 
-	mergedHTTPResponseBody, err := ioutil.ReadAll(mergedHTTPResponse.Body)
+	mergedHTTPResponseBody, err := io.ReadAll(mergedHTTPResponse.Body)
 	require.NoError(t, err)
 
 	for i, tc := range []struct {
@@ -313,7 +313,7 @@ func TestSplitByDay(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 200, resp.StatusCode)
 
-			bs, err := ioutil.ReadAll(resp.Body)
+			bs, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedBody, string(bs))
 			require.Equal(t, tc.expectedQueryCount, actualCount.Load())
@@ -332,6 +332,11 @@ func Test_evaluateAtModifier(t *testing.T) {
 		{
 			in:       "topk(5, rate(http_requests_total[1h] @ start()))",
 			expected: "topk(5, rate(http_requests_total[1h] @ 1546300.800))",
+		},
+		{
+			// extended functions
+			in:       "topk(5, xrate(http_requests_total[1h] @ start()))",
+			expected: "topk(5, xrate(http_requests_total[1h] @ 1546300.800))",
 		},
 		{
 			in:       "topk(5, rate(http_requests_total[1h] @ 0))",
@@ -370,11 +375,6 @@ func Test_evaluateAtModifier(t *testing.T) {
 			[10m:])`,
 		},
 		{
-			// parse error: missing unit character in duration
-			in:                "http_requests_total[5] @ 10.001",
-			expectedErrorCode: http.StatusBadRequest,
-		},
-		{
 			// parse error: @ modifier must be preceded by an instant vector selector or range vector selector or a subquery
 			in:                "sum(http_requests_total[5m]) @ 10.001",
 			expectedErrorCode: http.StatusBadRequest,
@@ -391,7 +391,7 @@ func Test_evaluateAtModifier(t *testing.T) {
 				require.Equal(t, tt.expectedErrorCode, int(httpResp.Code))
 			} else {
 				require.NoError(t, err)
-				expectedExpr, err := parser.ParseExpr(tt.expected)
+				expectedExpr, err := extpromql.ParseExpr(tt.expected)
 				require.NoError(t, err)
 				require.Equal(t, expectedExpr.String(), out)
 			}

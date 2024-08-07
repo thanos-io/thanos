@@ -118,14 +118,12 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 	   @echo ">> building React app"
 	   @scripts/build-react-app.sh
 
-.PHONY: assets
-assets: # Repacks all static assets into go file for easier deploy.
-assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
-	@echo ">> deleting asset file"
-	@rm pkg/ui/bindata.go || true
-	@echo ">> writing assets"
-	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go  pkg/ui/static/...
-	@$(MAKE) format
+.PHONY: react-app
+react-app: $(REACT_APP_OUTPUT_DIR)
+
+.PHONY: check-react-app
+check-react-app: react-app
+	$(call require_clean_work_tree,'all generated files should be committed, run make react-app and commit changes.')
 
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
@@ -133,7 +131,7 @@ react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   cd $(REACT_APP_PATH) && npm run lint:ci
 
 .PHONY: react-app-lint-fix
-react-app-lint-fix:
+react-app-lint-fix: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app linting and fixing errors where possible"
 	cd $(REACT_APP_PATH) && npm run lint
 
@@ -226,6 +224,12 @@ $(TEST_DOCKER_ARCHS): docker-test-%:
 	@echo ">> testing image"
 	@docker run "thanos-linux-$*" --help
 
+.PHONY: docker-e2e
+docker-e2e: ## Builds 'thanos' docker for e2e tests
+docker-e2e:
+	@echo ">> building docker image 'thanos' with Dockerfile.e2e-tests"
+	@docker build -f Dockerfile.e2e-tests -t "thanos" .
+
 # docker-manifest push docker manifest to support multiple architectures.
 .PHONY: docker-manifest
 docker-manifest:
@@ -307,18 +311,18 @@ test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
-	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
-	@go test -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
+	@go test -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
-test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI
+test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 test-local:
 	$(MAKE) test
 
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-test-e2e: docker $(GOTESPLIT)
+test-e2e: docker-e2e $(GOTESPLIT)
 	@echo ">> cleaning docker environment."
 	@docker system prune -f --volumes
 	@echo ">> cleaning e2e test garbage."
@@ -326,11 +330,14 @@ test-e2e: docker $(GOTESPLIT)
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 (Wiard note: to the GOTEST_OPTS arg) to limit to single CPU to reproduce small 1CPU machine.
+	# NOTE(GiedriusS):
+	# * If you want to limit CPU time available in e2e tests then pass E2E_DOCKER_CPUS environment variable. For example, E2E_DOCKER_CPUS=0.05 limits CPU time available
+	#   to spawned Docker containers to 0.05 cores.
 	@$(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
-test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI
+test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 test-e2e-local:
 	$(MAKE) test-e2e
 
@@ -395,7 +402,9 @@ github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUn
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
+github.com/NYTimes/gziphandler.{GzipHandler}=github.com/klauspost/compress/gzhttp.{GzipHandler},\
 sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex,\
+github.com/prometheus/prometheus/promql/parser.{ParseExpr,ParseMetricSelector}=github.com/thanos-io/thanos/pkg/extpromql.{ParseExpr,ParseMetricSelector},\
 io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v "internal/cortex")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"

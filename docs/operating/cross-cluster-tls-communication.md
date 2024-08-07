@@ -72,15 +72,15 @@ metadata:
             - '--http-address=0.0.0.0:10902'
             - '--query.replica-label=replica'
             - >-
-              --store=dnssrv+_grpc._tcp.thanos-global-test-storegateway.thanos-global.svc.cluster.local
+              --endpoint=dnssrv+_grpc._tcp.thanos-global-test-storegateway.thanos-global.svc.cluster.local
             - >-
-              --store=dnssrv+_grpc._tcp.thanos-global-test-sidecar.thanos-global.svc.cluster.local
+              --endpoint=dnssrv+_grpc._tcp.thanos-global-test-sidecar.thanos-global.svc.cluster.local
             - >-
-              --store=dnssrv+_grpc._tcp.thanos-global-test-ruler.thanos-global.svc.cluster.local
+              --endpoint=dnssrv+_grpc._tcp.thanos-global-test-ruler.thanos-global.svc.cluster.local
             - >-
-              --store=dnssrv+_[port_name]._tcp.[service-name].[namespace].svc.cluster.local
+              --endpoint=dnssrv+_[port_name]._tcp.[service-name].[namespace].svc.cluster.local
             - >-
-              --store=dnssrv+_[port_name_2]._tcp.[service-name].[namespace].svc.cluster.local
+              --endpoint=dnssrv+_[port_name_2]._tcp.[service-name].[namespace].svc.cluster.local
           ports:
             - name: http
               containerPort: 10902

@@ -45,4 +45,16 @@ func TestAggrChunk(t *testing.T) {
 		}
 	}
 	testutil.Equals(t, input, res)
+
+	// Test reset
+	nc := &AggrChunk{}
+	nc.Reset(ac.Bytes())
+	res = [5][]sample{}
+	for _, at := range []AggrType{AggrCount, AggrSum, AggrMin, AggrMax, AggrCounter} {
+		if c, err := nc.Get(at); err != ErrAggrNotExist {
+			testutil.Ok(t, err)
+			testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &res[at]))
+		}
+	}
+	testutil.Equals(t, input, res)
 }

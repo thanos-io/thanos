@@ -5,7 +5,10 @@ package otlp
 
 import (
 	"context"
+	"strconv"
 	"strings"
+
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 
@@ -23,8 +26,14 @@ import (
 )
 
 const (
-	TracingClientGRPC string = "grpc"
-	TracingClientHTTP string = "http"
+	TracingClientGRPC                  string = "grpc"
+	TracingClientHTTP                  string = "http"
+	AlwaysSample                       string = "alwayssample"
+	NeverSample                        string = "neversample"
+	TraceIDRatioBasedSample            string = "traceidratiobased"
+	ParentBasedAlwaysSample            string = "parentbasedalwayssample"
+	ParentBasedNeverSample             string = "parentbasedneversample"
+	ParentBasedTraceIDRatioBasedSample string = "parentbasedtraceidratiobased"
 )
 
 // NewOTELTracer returns an OTLP exporter based tracer.
@@ -59,25 +68,38 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	}
 
 	processor := tracesdk.NewBatchSpanProcessor(exporter)
-	tp := newTraceProvider(ctx, processor, logger, config.ServiceName)
+	sampler, err := getSampler(config)
+	if err != nil {
+		logger.Log(err)
+	}
+	tp := newTraceProvider(ctx, processor, logger, config.ServiceName, config.ResourceAttributes, sampler)
 
 	return tp, nil
 }
 
-func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, logger log.Logger, serviceName string) *tracesdk.TracerProvider {
-	resource, err := resource.New(
-		ctx,
-		resource.WithAttributes(semconv.ServiceNameKey.String(serviceName)),
-	)
+func newTraceProvider(
+	ctx context.Context,
+	processor tracesdk.SpanProcessor,
+	logger log.Logger,
+	serviceName string,
+	attrs map[string]string,
+	sampler tracesdk.Sampler,
+) *tracesdk.TracerProvider {
+	resourceAttrs := make([]attribute.KeyValue, 0, len(attrs)+1)
+	if serviceName != "" {
+		resourceAttrs = append(resourceAttrs, semconv.ServiceNameKey.String(serviceName))
+	}
+	for k, v := range attrs {
+		resourceAttrs = append(resourceAttrs, attribute.String(k, v))
+	}
+	r, err := resource.New(ctx, resource.WithAttributes(resourceAttrs...))
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}
 
-	sampler := tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0))
-
 	tp := tracesdk.NewTracerProvider(
 		tracesdk.WithSpanProcessor(processor),
-		tracesdk.WithResource(resource),
+		tracesdk.WithResource(r),
 		tracesdk.WithSampler(
 			migration.SamplerWithOverride(
 				sampler, migration.ForceTracingAttributeKey,
@@ -85,4 +107,31 @@ func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, log
 		),
 	)
 	return tp
+}
+
+func getSampler(config Config) (tracesdk.Sampler, error) {
+	switch strings.ToLower(config.SamplerType) {
+	case AlwaysSample:
+		return tracesdk.AlwaysSample(), nil
+	case NeverSample:
+		return tracesdk.NeverSample(), nil
+	case TraceIDRatioBasedSample:
+		arg, err := strconv.ParseFloat(config.SamplerParam, 64)
+		if err != nil {
+			return tracesdk.TraceIDRatioBased(1.0), err
+		}
+		return tracesdk.TraceIDRatioBased(arg), nil
+	case ParentBasedAlwaysSample:
+		return tracesdk.ParentBased(tracesdk.AlwaysSample()), nil
+	case ParentBasedNeverSample:
+		return tracesdk.ParentBased(tracesdk.NeverSample()), nil
+	case ParentBasedTraceIDRatioBasedSample:
+		arg, err := strconv.ParseFloat(config.SamplerParam, 64)
+		if err != nil {
+			return tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0)), err
+		}
+		return tracesdk.ParentBased(tracesdk.TraceIDRatioBased(arg)), nil
+	}
+
+	return tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0)), nil
 }

@@ -22,13 +22,12 @@ import (
 	"github.com/efficientgo/e2e/monitoring/promconfig/discovery/targetgroup"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	common_cfg "github.com/prometheus/common/config"
-	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -80,7 +79,7 @@ func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy st
 		},
 		RemoteWriteConfigs: []*promconfig.RemoteWriteConfig{
 			{
-				URL: &config_util.URL{URL: rwURL},
+				URL: &common_cfg.URL{URL: rwURL},
 			},
 		},
 		ScrapeConfigs: []*promconfig.ScrapeConfig{
@@ -199,7 +198,7 @@ func TestAlertCompliance(t *testing.T) {
 		rFuture := e2ethanos.NewRulerBuilder(e, "1")
 		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{compliance.InternalEndpoint("http")},
 					Scheme:          "http",
 				},
@@ -211,13 +210,15 @@ func TestAlertCompliance(t *testing.T) {
 			WithResendDelay("1m").
 			WithEvalInterval("1m").
 			WithReplicaLabel("").
-			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
+			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []clientconfig.Config{
 				{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
-							querierBuilder.InternalEndpoint("http"),
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+							StaticAddresses: []string{
+								querierBuilder.InternalEndpoint("http"),
+							},
+							Scheme: "http",
 						},
-						Scheme: "http",
 					},
 				},
 			})
@@ -280,7 +281,7 @@ func TestAlertCompliance(t *testing.T) {
 
 		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{compliance.InternalEndpoint("http")},
 					Scheme:          "http",
 				},
@@ -293,13 +294,15 @@ func TestAlertCompliance(t *testing.T) {
 			WithEvalInterval("1m").
 			WithReplicaLabel("").
 			WithRestoreIgnoredLabels("tenant_id").
-			InitStateless(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
+			InitStateless(filepath.Join(rFuture.InternalDir(), "rules"), []clientconfig.Config{
 				{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
-							query.InternalEndpoint("http"),
+					HTTPConfig: clientconfig.HTTPConfig{
+						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+							StaticAddresses: []string{
+								query.InternalEndpoint("http"),
+							},
+							Scheme: "http",
 						},
-						Scheme: "http",
 					},
 				},
 			}, []*config.RemoteWriteConfig{

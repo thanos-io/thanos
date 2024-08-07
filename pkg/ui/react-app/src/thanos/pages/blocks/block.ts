@@ -21,6 +21,10 @@ export interface Block {
     };
     labels: LabelSet;
     source: string;
+    files?: {
+      rel_path: string;
+      size_bytes?: number;
+    }[];
   };
   ulid: string;
   version: number;
@@ -32,4 +36,10 @@ export interface LabelSet {
 
 export interface BlocksPool {
   [key: string]: Block[][];
+}
+
+export interface BlockSizeStats {
+  chunkBytes: number;
+  indexBytes: number;
+  totalBytes: number;
 }

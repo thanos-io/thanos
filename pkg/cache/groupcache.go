@@ -198,6 +198,26 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				}
 
 				return dest.UnmarshalBinary(encodedList, time.Now().Add(iterCfg.TTL))
+			case cachekey.IterRecursiveVerb:
+				_, iterCfg := cfg.FindIterConfig(parsedData.Name)
+				if iterCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
+
+				var list []string
+				if err := bucket.Iter(ctx, parsedData.Name, func(s string) error {
+					list = append(list, s)
+					return nil
+				}, objstore.WithRecursiveIter); err != nil {
+					return err
+				}
+
+				encodedList, err := json.Marshal(list)
+				if err != nil {
+					return err
+				}
+
+				return dest.UnmarshalBinary(encodedList, time.Now().Add(iterCfg.TTL))
 			case cachekey.ContentVerb:
 				_, contentCfg := cfg.FindGetConfig(parsedData.Name)
 				if contentCfg == nil {

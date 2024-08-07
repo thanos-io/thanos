@@ -16,13 +16,12 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
-
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -129,6 +128,13 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 	}
 
 	result.Query = r.FormValue("query")
+	if len(r.FormValue(queryv1.QueryAnalyzeParam)) > 0 {
+		result.Analyze, err = strconv.ParseBool(r.FormValue(queryv1.QueryAnalyzeParam))
+		if err != nil {
+			return nil, err
+		}
+	}
+	result.Engine = r.FormValue(queryv1.EngineParam)
 	result.Path = r.URL.Path
 
 	for _, value := range r.Header.Values(cacheControlHeader) {
@@ -159,6 +165,8 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 		"end":                        []string{encodeTime(thanosReq.End)},
 		"step":                       []string{encodeDurationMillis(thanosReq.Step)},
 		"query":                      []string{thanosReq.Query},
+		queryv1.QueryAnalyzeParam:    []string{strconv.FormatBool(thanosReq.Analyze)},
+		queryv1.EngineParam:          []string{thanosReq.Engine},
 		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
 		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
@@ -260,7 +268,7 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 func parseMatchersParam(ss url.Values, matcherParam string) ([][]*labels.Matcher, error) {
 	matchers := make([][]*labels.Matcher, 0, len(ss[matcherParam]))
 	for _, s := range ss[matcherParam] {
-		ms, err := parser.ParseMetricSelector(s)
+		ms, err := extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, matcherParam)
 		}

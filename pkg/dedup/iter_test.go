@@ -15,9 +15,14 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"github.com/prometheus/prometheus/util/annotations"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
+
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil/testiters"
 )
 
 type sample struct {
@@ -72,7 +77,7 @@ func (s *mockedSeriesSet) At() storage.Series {
 }
 func (s *mockedSeriesSet) Err() error { return nil }
 
-func (s *mockedSeriesSet) Warnings() storage.Warnings { return nil }
+func (s *mockedSeriesSet) Warnings() annotations.Annotations { return nil }
 
 type mockedSeriesIterator struct {
 	cur     int
@@ -100,11 +105,11 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (s *mockedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (s *mockedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
@@ -191,72 +196,72 @@ func toChunkedSeriesSlice(t testing.TB, set storepb.SeriesSet) []chunkedSeries {
 func TestOverlapSplitSet(t *testing.T) {
 	input := []chunkedSeries{
 		{
-			lset: labels.Labels{{Name: "a", Value: "1_empty"}},
+			lset: labels.FromStrings("a", "1_empty"),
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "2_nonoverlap"}},
+			lset:   labels.FromStrings("a", "2_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
+			lset:   labels.FromStrings("a", "3_tworeplicas"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "4_nonoverlap"}},
+			lset:   labels.FromStrings("a", "4_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
+			lset:   labels.FromStrings("a", "5_minimaloverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 55, MaxTime: 100}},
 		},
 		{
-			lset: labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset: labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 1, MaxTime: 15}, {MinTime: 2, MaxTime: 36}, {MinTime: 16, MaxTime: 200},
 				{MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
 		},
 	}
 	exp := []chunkedSeries{
 		{
-			lset: labels.Labels{{Name: "a", Value: "1_empty"}},
+			lset: labels.FromStrings("a", "1_empty"),
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "2_nonoverlap"}},
+			lset:   labels.FromStrings("a", "2_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
+			lset:   labels.FromStrings("a", "3_tworeplicas"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
+			lset:   labels.FromStrings("a", "3_tworeplicas"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "4_nonoverlap"}},
+			lset:   labels.FromStrings("a", "4_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
+			lset:   labels.FromStrings("a", "5_minimaloverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
+			lset:   labels.FromStrings("a", "5_minimaloverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 55, MaxTime: 100}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 15}, {MinTime: 16, MaxTime: 200}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 2, MaxTime: 36}},
 		},
 	}
@@ -276,46 +281,46 @@ func TestDedupSeriesSet(t *testing.T) {
 			name: "Single dedup label",
 			input: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{200000, 5}, {210000, 6}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
@@ -324,50 +329,50 @@ func TestDedupSeriesSet(t *testing.T) {
 			name: "Multi dedup label",
 			input: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{200000, 5}, {210000, 6}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
@@ -376,16 +381,16 @@ func TestDedupSeriesSet(t *testing.T) {
 			name: "Multi dedup label - some series don't have all dedup labels",
 			input: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
@@ -401,7 +406,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			isCounter: true,
 			input: []series{
 				{
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10000, 8.0}, // Smaller timestamp, this will be chosen. CurrValue = 8.0.
 						{20000, 9.0}, // Same. CurrValue = 9.0.
@@ -414,7 +419,7 @@ func TestDedupSeriesSet(t *testing.T) {
 						{100000, 9 + 6.0},
 					},
 				}, {
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10001, 8.0}, // Penalty 5000 will be added.
 						// 20001 was app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator. Penalty 2 * (20000 - 10000) will be added.
@@ -428,7 +433,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					lset:    labels.FromStrings("a", "1"),
 					samples: []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}},
 				},
 			},
@@ -439,12 +444,12 @@ func TestDedupSeriesSet(t *testing.T) {
 			isCounter: false,
 			input: []series{
 				{
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10000, 8.0}, {20000, 9.0}, {50001, 9 + 1.0}, {60000, 9 + 2.0}, {70000, 9 + 3.0}, {80000, 9 + 4.0}, {90000, 9 + 5.0}, {100000, 9 + 6.0},
 					},
 				}, {
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10001, 8.0}, {45001, 8 + 0.5}, {55001, 8 + 1.5}, {65001, 8 + 2.5},
 					},
@@ -452,7 +457,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					lset:    labels.FromStrings("a", "1"),
 					samples: []sample{{10000, 8}, {20000, 9}, {45001, 8.5}, {55001, 9.5}, {65001, 10.5}, {90000, 14}, {100000, 15}},
 				},
 			},
@@ -464,7 +469,33 @@ func TestDedupSeriesSet(t *testing.T) {
 			isCounter: true,
 			input: []series{
 				{
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{t: 1587690005791, f: 461968}, {t: 1587690020791, f: 462151}, {t: 1587690035797, f: 462336}, {t: 1587690050791, f: 462650}, {t: 1587690065791, f: 462813}, {t: 1587690080791, f: 462987}, {t: 1587690095791, f: 463095}, {t: 1587690110791, f: 463247}, {t: 1587690125791, f: 463440}, {t: 1587690140791, f: 463642}, {t: 1587690155791, f: 463811},
+						{t: 1587690170791, f: 464027}, {t: 1587690185791, f: 464308}, {t: 1587690200791, f: 464514}, {t: 1587690215791, f: 464798}, {t: 1587690230791, f: 465018}, {t: 1587690245791, f: 465215}, {t: 1587690260813, f: 465431}, {t: 1587690275791, f: 465651}, {t: 1587690290791, f: 465870}, {t: 1587690305791, f: 466070}, {t: 1587690320792, f: 466248},
+						{t: 1587690335791, f: 466506}, {t: 1587690350791, f: 466766}, {t: 1587690365791, f: 466970}, {t: 1587690380791, f: 467123}, {t: 1587690395791, f: 467265}, {t: 1587690410791, f: 467383}, {t: 1587690425791, f: 467629}, {t: 1587690440791, f: 467931}, {t: 1587690455791, f: 468097}, {t: 1587690470791, f: 468281}, {t: 1587690485791, f: 468477},
+						{t: 1587690500791, f: 468649}, {t: 1587690515791, f: 468867}, {t: 1587690530791, f: 469150}, {t: 1587690545791, f: 469268}, {t: 1587690560791, f: 469488}, {t: 1587690575791, f: 469742}, {t: 1587690590791, f: 469951}, {t: 1587690605791, f: 470131}, {t: 1587690620791, f: 470337}, {t: 1587690635791, f: 470631}, {t: 1587690650791, f: 470832},
+						{t: 1587690665791, f: 471077}, {t: 1587690680791, f: 471311}, {t: 1587690695791, f: 471473}, {t: 1587690710791, f: 471728}, {t: 1587690725791, f: 472002}, {t: 1587690740791, f: 472158}, {t: 1587690755791, f: 472329}, {t: 1587690770791, f: 472722}, {t: 1587690785791, f: 472925}, {t: 1587690800791, f: 473220}, {t: 1587690815791, f: 473460},
+						{t: 1587690830791, f: 473748}, {t: 1587690845791, f: 473968}, {t: 1587690860791, f: 474261}, {t: 1587690875791, f: 474418}, {t: 1587690890791, f: 474726}, {t: 1587690905791, f: 474913}, {t: 1587690920791, f: 475031}, {t: 1587690935791, f: 475284}, {t: 1587690950791, f: 475563}, {t: 1587690965791, f: 475762}, {t: 1587690980791, f: 475945},
+						{t: 1587690995791, f: 476302}, {t: 1587691010791, f: 476501}, {t: 1587691025791, f: 476849}, {t: 1587691040800, f: 477020}, {t: 1587691055791, f: 477280}, {t: 1587691070791, f: 477549}, {t: 1587691085791, f: 477758}, {t: 1587691100817, f: 477960}, {t: 1587691115791, f: 478261}, {t: 1587691130791, f: 478559}, {t: 1587691145791, f: 478704},
+						{t: 1587691160804, f: 478950}, {t: 1587691175791, f: 479173}, {t: 1587691190791, f: 479368}, {t: 1587691205791, f: 479625}, {t: 1587691220805, f: 479866}, {t: 1587691235791, f: 480008}, {t: 1587691250791, f: 480155}, {t: 1587691265791, f: 480472}, {t: 1587691280811, f: 480598}, {t: 1587691295791, f: 480771}, {t: 1587691310791, f: 480996},
+						{t: 1587691325791, f: 481200}, {t: 1587691340803, f: 481381}, {t: 1587691355791, f: 481584}, {t: 1587691370791, f: 481759}, {t: 1587691385791, f: 482003}, {t: 1587691400803, f: 482189}, {t: 1587691415791, f: 482457}, {t: 1587691430791, f: 482623}, {t: 1587691445791, f: 482768}, {t: 1587691460804, f: 483036}, {t: 1587691475791, f: 483322},
+						{t: 1587691490791, f: 483566}, {t: 1587691505791, f: 483709}, {t: 1587691520807, f: 483838}, {t: 1587691535791, f: 484091}, {t: 1587691550791, f: 484236}, {t: 1587691565791, f: 484454}, {t: 1587691580816, f: 484710}, {t: 1587691595791, f: 484978}, {t: 1587691610791, f: 485271}, {t: 1587691625791, f: 485476}, {t: 1587691640792, f: 485640},
+						{t: 1587691655791, f: 485921}, {t: 1587691670791, f: 486201}, {t: 1587691685791, f: 486555}, {t: 1587691700791, f: 486691}, {t: 1587691715791, f: 486831}, {t: 1587691730791, f: 487033}, {t: 1587691745791, f: 487268}, {t: 1587691760803, f: 487370}, {t: 1587691775791, f: 487571}, {t: 1587691790791, f: 487787}, {t: 1587691805791, f: 488036},
+						{t: 1587691820791, f: 488241}, {t: 1587691835791, f: 488411}, {t: 1587691850791, f: 488625}, {t: 1587691865791, f: 488868}, {t: 1587691880791, f: 489005}, {t: 1587691895791, f: 489237}, {t: 1587691910791, f: 489545}, {t: 1587691925791, f: 489750}, {t: 1587691940791, f: 489899}, {t: 1587691955791, f: 490048}, {t: 1587691970791, f: 490364},
+						{t: 1587691985791, f: 490485}, {t: 1587692000791, f: 490722}, {t: 1587692015791, f: 490866}, {t: 1587692030791, f: 491025}, {t: 1587692045791, f: 491286}, {t: 1587692060816, f: 491543}, {t: 1587692075791, f: 491787}, {t: 1587692090791, f: 492065}, {t: 1587692105791, f: 492223}, {t: 1587692120816, f: 492501}, {t: 1587692135791, f: 492767},
+						{t: 1587692150791, f: 492955}, {t: 1587692165791, f: 493194}, {t: 1587692180792, f: 493402}, {t: 1587692195791, f: 493647}, {t: 1587692210791, f: 493897}, {t: 1587692225791, f: 494117}, {t: 1587692240805, f: 494356}, {t: 1587692255791, f: 494620}, {t: 1587692270791, f: 494762}, {t: 1587692285791, f: 495001}, {t: 1587692300805, f: 495222},
+						{t: 1587692315791, f: 495393}, {t: 1587692330791, f: 495662}, {t: 1587692345791, f: 495875}, {t: 1587692360801, f: 496082}, {t: 1587692375791, f: 496196}, {t: 1587692390791, f: 496245}, {t: 1587692405791, f: 496295}, {t: 1587692420791, f: 496365}, {t: 1587692435791, f: 496401}, {t: 1587692450791, f: 496452}, {t: 1587692465791, f: 496491},
+						{t: 1587692480791, f: 496544}, {t: 1587692555791, f: 496619}, {t: 1587692570791, f: 496852}, {t: 1587692585791, f: 497052}, {t: 1587692600791, f: 497245}, {t: 1587692615791, f: 497529}, {t: 1587692630791, f: 497697}, {t: 1587692645791, f: 497909}, {t: 1587692660791, f: 498156}, {t: 1587692675803, f: 498466}, {t: 1587692690791, f: 498647},
+						{t: 1587692705791, f: 498805}, {t: 1587692720791, f: 499013}, {t: 1587692735805, f: 499169}, {t: 1587692750791, f: 499345}, {t: 1587692765791, f: 499499}, {t: 1587692780791, f: 499731}, {t: 1587692795806, f: 499972}, {t: 1587692810791, f: 500201}, {t: 1587692825791, f: 500354}, {t: 1587692840791, f: 500512}, {t: 1587692855791, f: 500739},
+						{t: 1587692870791, f: 500958}, {t: 1587692885791, f: 501190}, {t: 1587692900791, f: 501233}, {t: 1587692915791, f: 501391}, {t: 1587692930791, f: 501649}, {t: 1587692945791, f: 501853}, {t: 1587692960791, f: 502065}, {t: 1587692975791, f: 502239}, {t: 1587692990810, f: 502554}, {t: 1587693005791, f: 502754}, {t: 1587693020791, f: 502938},
+						{t: 1587693035791, f: 503141}, {t: 1587693050791, f: 503416}, {t: 1587693065791, f: 503642}, {t: 1587693080791, f: 503873}, {t: 1587693095791, f: 504014}, {t: 1587693110791, f: 504178}, {t: 1587693125821, f: 504374}, {t: 1587693140791, f: 504578}, {t: 1587693155791, f: 504753}, {t: 1587693170791, f: 505043}, {t: 1587693185791, f: 505232},
+						{t: 1587693200791, f: 505437}, {t: 1587693215791, f: 505596}, {t: 1587693230791, f: 505923}, {t: 1587693245791, f: 506088}, {t: 1587693260791, f: 506307}, {t: 1587693275791, f: 506518}, {t: 1587693290791, f: 506786}, {t: 1587693305791, f: 507008}, {t: 1587693320803, f: 507260}, {t: 1587693335791, f: 507519}, {t: 1587693350791, f: 507776},
+						{t: 1587693365791, f: 508003}, {t: 1587693380791, f: 508322}, {t: 1587693395804, f: 508551}, {t: 1587693410791, f: 508750}, {t: 1587693425791, f: 508994}, {t: 1587693440791, f: 509237}, {t: 1587693455791, f: 509452}, {t: 1587693470791, f: 509702}, {t: 1587693485791, f: 509971}, {t: 1587693500791, f: 510147}, {t: 1587693515791, f: 510471},
+						{t: 1587693530816, f: 510666}, {t: 1587693545791, f: 510871}, {t: 1587693560791, f: 511123}, {t: 1587693575791, f: 511303}, {t: 1587693590791, f: 511500},
+					},
+				}, {
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{t: 1587690007139, f: 461993}, {t: 1587690022139, f: 462164}, {t: 1587690037139, f: 462409}, {t: 1587690052139, f: 462662}, {t: 1587690067139, f: 462824}, {t: 1587690082139, f: 462987}, {t: 1587690097155, f: 463108}, {t: 1587690112139, f: 463261}, {t: 1587690127139, f: 463465}, {t: 1587690142139, f: 463642},
 						{t: 1587690157139, f: 463823}, {t: 1587690172139, f: 464065}, {t: 1587690187139, f: 464333}, {t: 1587690202139, f: 464566}, {t: 1587690217139, f: 464811}, {t: 1587690232140, f: 465032}, {t: 1587690247139, f: 465229}, {t: 1587690262139, f: 465445}, {t: 1587690277139, f: 465700}, {t: 1587690292139, f: 465884},
@@ -491,37 +522,11 @@ func TestDedupSeriesSet(t *testing.T) {
 						{t: 1587693367139, f: 507991}, {t: 1587693382139, f: 508310}, {t: 1587693397139, f: 508570}, {t: 1587693412139, f: 508770}, {t: 1587693427139, f: 508982}, {t: 1587693442163, f: 509274}, {t: 1587693457139, f: 509477}, {t: 1587693472139, f: 509713}, {t: 1587693487139, f: 509972}, {t: 1587693502139, f: 510182},
 						{t: 1587693517139, f: 510498}, {t: 1587693532139, f: 510654}, {t: 1587693547139, f: 510859}, {t: 1587693562139, f: 511124}, {t: 1587693577139, f: 511314}, {t: 1587693592139, f: 511488},
 					},
-				}, {
-					lset: labels.Labels{{Name: "a", Value: "1"}},
-					samples: []sample{
-						{t: 1587690005791, f: 461968}, {t: 1587690020791, f: 462151}, {t: 1587690035797, f: 462336}, {t: 1587690050791, f: 462650}, {t: 1587690065791, f: 462813}, {t: 1587690080791, f: 462987}, {t: 1587690095791, f: 463095}, {t: 1587690110791, f: 463247}, {t: 1587690125791, f: 463440}, {t: 1587690140791, f: 463642}, {t: 1587690155791, f: 463811},
-						{t: 1587690170791, f: 464027}, {t: 1587690185791, f: 464308}, {t: 1587690200791, f: 464514}, {t: 1587690215791, f: 464798}, {t: 1587690230791, f: 465018}, {t: 1587690245791, f: 465215}, {t: 1587690260813, f: 465431}, {t: 1587690275791, f: 465651}, {t: 1587690290791, f: 465870}, {t: 1587690305791, f: 466070}, {t: 1587690320792, f: 466248},
-						{t: 1587690335791, f: 466506}, {t: 1587690350791, f: 466766}, {t: 1587690365791, f: 466970}, {t: 1587690380791, f: 467123}, {t: 1587690395791, f: 467265}, {t: 1587690410791, f: 467383}, {t: 1587690425791, f: 467629}, {t: 1587690440791, f: 467931}, {t: 1587690455791, f: 468097}, {t: 1587690470791, f: 468281}, {t: 1587690485791, f: 468477},
-						{t: 1587690500791, f: 468649}, {t: 1587690515791, f: 468867}, {t: 1587690530791, f: 469150}, {t: 1587690545791, f: 469268}, {t: 1587690560791, f: 469488}, {t: 1587690575791, f: 469742}, {t: 1587690590791, f: 469951}, {t: 1587690605791, f: 470131}, {t: 1587690620791, f: 470337}, {t: 1587690635791, f: 470631}, {t: 1587690650791, f: 470832},
-						{t: 1587690665791, f: 471077}, {t: 1587690680791, f: 471311}, {t: 1587690695791, f: 471473}, {t: 1587690710791, f: 471728}, {t: 1587690725791, f: 472002}, {t: 1587690740791, f: 472158}, {t: 1587690755791, f: 472329}, {t: 1587690770791, f: 472722}, {t: 1587690785791, f: 472925}, {t: 1587690800791, f: 473220}, {t: 1587690815791, f: 473460},
-						{t: 1587690830791, f: 473748}, {t: 1587690845791, f: 473968}, {t: 1587690860791, f: 474261}, {t: 1587690875791, f: 474418}, {t: 1587690890791, f: 474726}, {t: 1587690905791, f: 474913}, {t: 1587690920791, f: 475031}, {t: 1587690935791, f: 475284}, {t: 1587690950791, f: 475563}, {t: 1587690965791, f: 475762}, {t: 1587690980791, f: 475945},
-						{t: 1587690995791, f: 476302}, {t: 1587691010791, f: 476501}, {t: 1587691025791, f: 476849}, {t: 1587691040800, f: 477020}, {t: 1587691055791, f: 477280}, {t: 1587691070791, f: 477549}, {t: 1587691085791, f: 477758}, {t: 1587691100817, f: 477960}, {t: 1587691115791, f: 478261}, {t: 1587691130791, f: 478559}, {t: 1587691145791, f: 478704},
-						{t: 1587691160804, f: 478950}, {t: 1587691175791, f: 479173}, {t: 1587691190791, f: 479368}, {t: 1587691205791, f: 479625}, {t: 1587691220805, f: 479866}, {t: 1587691235791, f: 480008}, {t: 1587691250791, f: 480155}, {t: 1587691265791, f: 480472}, {t: 1587691280811, f: 480598}, {t: 1587691295791, f: 480771}, {t: 1587691310791, f: 480996},
-						{t: 1587691325791, f: 481200}, {t: 1587691340803, f: 481381}, {t: 1587691355791, f: 481584}, {t: 1587691370791, f: 481759}, {t: 1587691385791, f: 482003}, {t: 1587691400803, f: 482189}, {t: 1587691415791, f: 482457}, {t: 1587691430791, f: 482623}, {t: 1587691445791, f: 482768}, {t: 1587691460804, f: 483036}, {t: 1587691475791, f: 483322},
-						{t: 1587691490791, f: 483566}, {t: 1587691505791, f: 483709}, {t: 1587691520807, f: 483838}, {t: 1587691535791, f: 484091}, {t: 1587691550791, f: 484236}, {t: 1587691565791, f: 484454}, {t: 1587691580816, f: 484710}, {t: 1587691595791, f: 484978}, {t: 1587691610791, f: 485271}, {t: 1587691625791, f: 485476}, {t: 1587691640792, f: 485640},
-						{t: 1587691655791, f: 485921}, {t: 1587691670791, f: 486201}, {t: 1587691685791, f: 486555}, {t: 1587691700791, f: 486691}, {t: 1587691715791, f: 486831}, {t: 1587691730791, f: 487033}, {t: 1587691745791, f: 487268}, {t: 1587691760803, f: 487370}, {t: 1587691775791, f: 487571}, {t: 1587691790791, f: 487787}, {t: 1587691805791, f: 488036},
-						{t: 1587691820791, f: 488241}, {t: 1587691835791, f: 488411}, {t: 1587691850791, f: 488625}, {t: 1587691865791, f: 488868}, {t: 1587691880791, f: 489005}, {t: 1587691895791, f: 489237}, {t: 1587691910791, f: 489545}, {t: 1587691925791, f: 489750}, {t: 1587691940791, f: 489899}, {t: 1587691955791, f: 490048}, {t: 1587691970791, f: 490364},
-						{t: 1587691985791, f: 490485}, {t: 1587692000791, f: 490722}, {t: 1587692015791, f: 490866}, {t: 1587692030791, f: 491025}, {t: 1587692045791, f: 491286}, {t: 1587692060816, f: 491543}, {t: 1587692075791, f: 491787}, {t: 1587692090791, f: 492065}, {t: 1587692105791, f: 492223}, {t: 1587692120816, f: 492501}, {t: 1587692135791, f: 492767},
-						{t: 1587692150791, f: 492955}, {t: 1587692165791, f: 493194}, {t: 1587692180792, f: 493402}, {t: 1587692195791, f: 493647}, {t: 1587692210791, f: 493897}, {t: 1587692225791, f: 494117}, {t: 1587692240805, f: 494356}, {t: 1587692255791, f: 494620}, {t: 1587692270791, f: 494762}, {t: 1587692285791, f: 495001}, {t: 1587692300805, f: 495222},
-						{t: 1587692315791, f: 495393}, {t: 1587692330791, f: 495662}, {t: 1587692345791, f: 495875}, {t: 1587692360801, f: 496082}, {t: 1587692375791, f: 496196}, {t: 1587692390791, f: 496245}, {t: 1587692405791, f: 496295}, {t: 1587692420791, f: 496365}, {t: 1587692435791, f: 496401}, {t: 1587692450791, f: 496452}, {t: 1587692465791, f: 496491},
-						{t: 1587692480791, f: 496544}, {t: 1587692555791, f: 496619}, {t: 1587692570791, f: 496852}, {t: 1587692585791, f: 497052}, {t: 1587692600791, f: 497245}, {t: 1587692615791, f: 497529}, {t: 1587692630791, f: 497697}, {t: 1587692645791, f: 497909}, {t: 1587692660791, f: 498156}, {t: 1587692675803, f: 498466}, {t: 1587692690791, f: 498647},
-						{t: 1587692705791, f: 498805}, {t: 1587692720791, f: 499013}, {t: 1587692735805, f: 499169}, {t: 1587692750791, f: 499345}, {t: 1587692765791, f: 499499}, {t: 1587692780791, f: 499731}, {t: 1587692795806, f: 499972}, {t: 1587692810791, f: 500201}, {t: 1587692825791, f: 500354}, {t: 1587692840791, f: 500512}, {t: 1587692855791, f: 500739},
-						{t: 1587692870791, f: 500958}, {t: 1587692885791, f: 501190}, {t: 1587692900791, f: 501233}, {t: 1587692915791, f: 501391}, {t: 1587692930791, f: 501649}, {t: 1587692945791, f: 501853}, {t: 1587692960791, f: 502065}, {t: 1587692975791, f: 502239}, {t: 1587692990810, f: 502554}, {t: 1587693005791, f: 502754}, {t: 1587693020791, f: 502938},
-						{t: 1587693035791, f: 503141}, {t: 1587693050791, f: 503416}, {t: 1587693065791, f: 503642}, {t: 1587693080791, f: 503873}, {t: 1587693095791, f: 504014}, {t: 1587693110791, f: 504178}, {t: 1587693125821, f: 504374}, {t: 1587693140791, f: 504578}, {t: 1587693155791, f: 504753}, {t: 1587693170791, f: 505043}, {t: 1587693185791, f: 505232},
-						{t: 1587693200791, f: 505437}, {t: 1587693215791, f: 505596}, {t: 1587693230791, f: 505923}, {t: 1587693245791, f: 506088}, {t: 1587693260791, f: 506307}, {t: 1587693275791, f: 506518}, {t: 1587693290791, f: 506786}, {t: 1587693305791, f: 507008}, {t: 1587693320803, f: 507260}, {t: 1587693335791, f: 507519}, {t: 1587693350791, f: 507776},
-						{t: 1587693365791, f: 508003}, {t: 1587693380791, f: 508322}, {t: 1587693395804, f: 508551}, {t: 1587693410791, f: 508750}, {t: 1587693425791, f: 508994}, {t: 1587693440791, f: 509237}, {t: 1587693455791, f: 509452}, {t: 1587693470791, f: 509702}, {t: 1587693485791, f: 509971}, {t: 1587693500791, f: 510147}, {t: 1587693515791, f: 510471},
-						{t: 1587693530816, f: 510666}, {t: 1587693545791, f: 510871}, {t: 1587693560791, f: 511123}, {t: 1587693575791, f: 511303}, {t: 1587693590791, f: 511500},
-					},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					lset:    labels.FromStrings("a", "1"),
 					samples: expectedRealSeriesWithStaleMarkerDeduplicatedForRate,
 				},
 			},
@@ -533,7 +538,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			if tcase.isCounter {
 				f = "rate"
 			}
-			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f, false)
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())
@@ -591,6 +596,42 @@ func TestDedupSeriesIterator(t *testing.T) {
 		)
 		res := expandSeries(t, noopAdjustableSeriesIterator{it})
 		testutil.Equals(t, c.exp, res)
+	}
+}
+
+func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
+	hs := tsdbutil.GenerateTestHistograms(1)
+
+	casesMixed := []struct {
+		a   []sample
+		b   []*testiters.HistogramPair
+		exp []any
+	}{
+		{
+			a:   []sample{{t: 0, f: 0}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: hs[0]}, {T: 20000, H: hs[0]}, {T: 30000, H: hs[0]}, {T: 40000, H: hs[0]}},
+			exp: []any{&sample{t: 0, f: 0}, &testiters.HistogramPair{T: 10000, H: hs[0]}, &testiters.HistogramPair{T: 20000, H: hs[0]}, &testiters.HistogramPair{T: 30000, H: hs[0]}, &testiters.HistogramPair{T: 40000, H: hs[0]}},
+		},
+	}
+
+	for i, c := range casesMixed {
+		c := c
+		t.Run(fmt.Sprintf("mixed-%d", i), func(t *testing.T) {
+			t.Parallel()
+			it := newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+			)
+			res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+			require.EqualValues(t, c.exp, res)
+
+			it = newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+			)
+			res = expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+			require.EqualValues(t, c.exp, res)
+		})
 	}
 }
 
@@ -660,37 +701,21 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	return res
 }
 
-func TestPushdownSeriesIterator(t *testing.T) {
-	cases := []struct {
-		a, b, exp []sample
-		function  string
-		tcase     string
-	}{
-		{
-			tcase:    "simple case",
-			a:        []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:        []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			exp:      []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			function: "max",
-		},
-		{
-			tcase:    "gaps but catches up",
-			a:        []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:        []sample{{10000, 20}, {40000, 23}},
-			exp:      []sample{{10000, 20}, {20000, 11}, {30000, 12}, {40000, 23}},
-			function: "max",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.tcase, func(t *testing.T) {
-			it := newPushdownSeriesIterator(
-				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
-				noopAdjustableSeriesIterator{newMockedSeriesIterator(c.b)},
-				c.function,
-			)
-			res := expandSeries(t, noopAdjustableSeriesIterator{it})
-			testutil.Equals(t, c.exp, res)
-		})
+func expandHistogramSeries(t testing.TB, it chunkenc.Iterator) (res []any) {
+	for {
+		nextVal := it.Next()
+		if nextVal == chunkenc.ValNone {
+			break
+		}
 
+		if nextVal == chunkenc.ValHistogram {
+			t, h := it.AtHistogram(nil)
+			res = append(res, &testiters.HistogramPair{T: t, H: h})
+		} else {
+			t, f := it.At()
+			res = append(res, &sample{t: t, f: f})
+		}
 	}
+	testutil.Ok(t, it.Err())
+	return res
 }

@@ -4,6 +4,8 @@
 package exemplars
 
 import (
+	"sync"
+
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -16,8 +18,10 @@ import (
 
 // TSDB allows fetching exemplars from a TSDB instance.
 type TSDB struct {
-	db        storage.ExemplarQueryable
+	db storage.ExemplarQueryable
+
 	extLabels labels.Labels
+	mtx       sync.RWMutex
 }
 
 // NewTSDB creates new exemplars.TSDB.
@@ -28,9 +32,23 @@ func NewTSDB(db storage.ExemplarQueryable, extLabels labels.Labels) *TSDB {
 	}
 }
 
+func (t *TSDB) SetExtLabels(extLabels labels.Labels) {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	t.extLabels = extLabels
+}
+
+func (t *TSDB) getExtLabels() labels.Labels {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	return t.extLabels
+}
+
 // Exemplars returns all specified exemplars from a TSDB instance.
 func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemplarspb.Exemplars_ExemplarsServer) error {
-	match, selectors := selectorsMatchesExternalLabels(matchers, t.extLabels)
+	match, selectors := selectorsMatchesExternalLabels(matchers, t.getExtLabels())
 
 	if !match {
 		return nil
@@ -53,7 +71,7 @@ func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemp
 	for _, e := range exemplars {
 		exd := exemplarspb.ExemplarData{
 			SeriesLabels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(e.SeriesLabels, t.extLabels)),
+				Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(e.SeriesLabels, t.getExtLabels())),
 			},
 			Exemplars: exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),
 		}

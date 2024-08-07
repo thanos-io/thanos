@@ -4,16 +4,21 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/oklog/ulid"
+	"github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/trace"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
-	"github.com/oklog/ulid"
+	middleware "github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
 	"google.golang.org/grpc/codes"
 )
 
@@ -129,9 +134,9 @@ func DefaultCodeToLevel(logger log.Logger, code int) log.Logger {
 func DefaultCodeToLevelGRPC(c codes.Code) grpc_logging.Level {
 	switch c {
 	case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss:
-		return grpc_logging.ERROR
+		return grpc_logging.LevelError
 	default:
-		return grpc_logging.DEBUG
+		return grpc_logging.LevelDebug
 	}
 }
 
@@ -160,8 +165,35 @@ var MapAllowedLevels = map[string][]string{
 	"WARN":  {"WARN", "ERROR"},
 }
 
+func GetTraceIDAndRequestIDAsField(ctx context.Context) grpc_logging.Fields {
+	logFields := grpc_logging.Fields{}
+
+	//get traceID from context
+	span := opentracing.SpanFromContext(ctx)
+	TraceID, _ := migration.GetTraceIDFromBridgeSpan(span)
+	if span := trace.SpanContextFromContext(ctx); span.IsSampled() {
+		logFields = logFields.AppendUnique(grpc_logging.Fields{"traceID", TraceID})
+	}
+	//get requestID from context
+	reqID, ok := middleware.RequestIDFromContext(ctx)
+	if ok {
+		logFields = logFields.AppendUnique(grpc_logging.Fields{"requestID", reqID})
+		return logFields
+	}
+
+	entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
+	newReqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
+	logFields = logFields.AppendUnique(grpc_logging.Fields{"requestID", newReqID})
+
+	// Insert into context (Note: This updated context isn't being used later, so this might be redundant)
+	_ = middleware.NewContextWithRequestID(ctx, newReqID)
+
+	return logFields
+
+}
+
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]Option, error) {
+func ParseHTTPOptions(reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 	// Default Option: No Logging.
 	logOpts := []Option{WithDecider(func(_ string, _ error) Decision {
 		return NoLogCall
@@ -173,73 +205,21 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 		return logOpts, fmt.Errorf("getting request logging config failed. %v", err)
 	}
 
-	// Check if the user enables request logging through flags and YAML.
-	if len(configYAML) != 0 && flagDecision != "" {
-		return logOpts, fmt.Errorf("both log.request.decision and request.logging have been enabled, please use only one of the flags")
-	}
-	// If old flag is enabled.
-	if len(flagDecision) > 0 {
-		logOpts := []Option{WithDecider(func(_ string, _ error) Decision {
-			return LogDecision[flagDecision]
-		})}
-		return logOpts, nil
-	}
 	return NewHTTPOption(configYAML)
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
-	// Default Option: No Logging.
-	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
-		return grpc_logging.NoLogCall
-	})}
-
+func ParsegRPCOptions(reqLogConfig *extflag.PathOrContent) ([]grpc_logging.Option, []string, error) {
+	var logOpts []grpc_logging.Option
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return []tags.Option{}, logOpts, fmt.Errorf("getting request logging config failed. %v", err)
+		return logOpts, nil, fmt.Errorf("getting request logging config failed. %v", err)
 	}
 
-	// Check if the user enables request logging through flags and YAML.
-	if len(configYAML) != 0 && flagDecision != "" {
-		return []tags.Option{}, logOpts, fmt.Errorf("both log.request.decision and request.logging-config have been enabled, please use only one of the flags")
+	logOpts, logFilterMethods, err := NewGRPCOption(configYAML)
+	if err != nil {
+		return logOpts, logFilterMethods, err
 	}
 
-	// If the old flag is empty, use the new YAML config.
-	if flagDecision == "" {
-		tagOpts, logOpts, err := NewGRPCOption(configYAML)
-		if err != nil {
-			return []tags.Option{}, logOpts, err
-		}
-		return tagOpts, logOpts, nil
-	}
-
-	tagOpts := []tags.Option{
-		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
-			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
-			// If a request-id exists for a given request.
-			if tagMap != nil {
-				if _, ok := tagMap["request-id"]; ok {
-					return tagMap
-				}
-			}
-			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
-			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-			tagMap = make(map[string]string)
-			tagMap["request-id"] = reqID.String()
-			return tagMap
-		}),
-	}
-	logOpts = []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
-		switch flagDecision {
-		case "NoLogCall":
-			return grpc_logging.NoLogCall
-		case "LogFinishCall":
-			return grpc_logging.LogFinishCall
-		case "LogStartAndFinishCall":
-			return grpc_logging.LogStartAndFinishCall
-		default:
-			return grpc_logging.NoLogCall
-		}
-	})}
-	return tagOpts, logOpts, nil
+	return logOpts, logFilterMethods, nil
 }

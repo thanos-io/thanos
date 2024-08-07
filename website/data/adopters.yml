@@ -1,5 +1,8 @@
 ---
 adopters:
+- name: Aiven
+  url: https://aiven.io
+  logo: aivenlogo.png
 - name: Infinite Devices
   url: https://infinimesh.io
   logo: infdevlogo.png
@@ -66,9 +69,9 @@ adopters:
 - name: Amadeus
   url: https://amadeus.com
   logo: amadeus.png
-- name: Grofers
-  url: https://grofers.com
-  logo: grofers.png
+- name: Blinkit
+  url: https://blinkit.com
+  logo: blinkit.png
 - name: Tencent
   url: https://github.com/tkestack/tke
   logo: tencent.png
@@ -219,3 +222,33 @@ adopters:
 - name: CarTrade Tech
   url: https://www.cartradetech.com
   logo: cartradetech.png
+- name: DE-CIX
+  url: https://www.de-cix.net
+  logo: de-cix.png
+- name: Zenduty
+  url: https://www.zenduty.com
+  logo: zenduty.png
+- name: Banco do Brasil
+  url: https://www.bb.com.br/
+  logo: bb.png
+- name: Grupo OLX
+  url: https://www.olx.com.br/
+  logo: grupo-olx.png
+- name: TrueLayer
+  url: https://truelayer.com/
+  logo: truelayer.png
+- name: Platform Engineers
+  url: https://platformengineers.io
+  logo: platformengineers.png
+- name: Shield
+  url: https://shield.com
+  logo: shield.png
+- name: Conclusion Xforce
+  url: https://conclusionxforce.com
+  logo: conclusion-xforce.png
+- name: Nirmata
+  url: https://nirmata.com/
+  logo: Nirmata.png
+- name: Synology
+  url: https://www.synology.com/
+  logo: synology.png

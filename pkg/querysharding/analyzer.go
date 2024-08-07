@@ -19,9 +19,11 @@ package querysharding
 import (
 	"fmt"
 
-	lru "github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 var (
@@ -38,14 +40,14 @@ type QueryAnalyzer struct{}
 
 type CachedQueryAnalyzer struct {
 	analyzer *QueryAnalyzer
-	cache    *lru.Cache
+	cache    *lru.Cache[string, cachedValue]
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
 func NewQueryAnalyzer() *CachedQueryAnalyzer {
 	// Ignore the error check since it throws error
 	// only if size is <= 0.
-	cache, _ := lru.New(256)
+	cache, _ := lru.New[string, cachedValue](256)
 	return &CachedQueryAnalyzer{
 		analyzer: &QueryAnalyzer{},
 		cache:    cache,
@@ -61,7 +63,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	if a.cache.Contains(query) {
 		value, ok := a.cache.Get(query)
 		if ok {
-			return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
+			return value.QueryAnalysis, value.err
 		}
 	}
 
@@ -88,7 +90,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
-	expr, err := parser.ParseExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		return nonShardableQuery(), err
 	}
@@ -108,12 +110,14 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 				} else if n.Func.Name == "absent_over_time" || n.Func.Name == "absent" || n.Func.Name == "scalar" {
 					isShardable = false
 					return notShardableErr
+				} else if n.Func.Name == "histogram_quantile" {
+					analysis = analysis.scopeToLabels([]string{"le"}, false)
 				}
 			}
 		case *parser.BinaryExpr:
 			if n.VectorMatching != nil {
-				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
-				if !n.VectorMatching.On && len(shardingLabels) > 0 {
+				shardingLabels := n.VectorMatching.MatchingLabels
+				if !n.VectorMatching.On {
 					shardingLabels = append(shardingLabels, model.MetricNameLabel)
 				}
 				analysis = analysis.scopeToLabels(shardingLabels, n.VectorMatching.On)
@@ -121,7 +125,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		case *parser.AggregateExpr:
 			shardingLabels := make([]string, 0)
 			if len(n.Grouping) > 0 {
-				shardingLabels = without(n.Grouping, []string{"le"})
+				shardingLabels = n.Grouping
 			}
 			analysis = analysis.scopeToLabels(shardingLabels, !n.Without)
 		}

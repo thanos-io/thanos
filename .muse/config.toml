@@ -1,6 +1,0 @@
-ignoreRules = [ "G103", "G104", "G110",
-    "G203", "G204", "G304",
-    "G307", "G401", "G402", "G404", "G501",
-    "ST1005"
-]
-disableTools = [ "semgrep" ]

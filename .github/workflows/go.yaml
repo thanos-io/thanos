@@ -16,14 +16,14 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.20.x
+          go-version: 1.22.x
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build
@@ -43,14 +43,14 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.20.x
+          go-version: 1.22.x
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build
@@ -70,22 +70,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        parallelism: [4]
-        index: [0, 1, 2, 3]
+        parallelism: [8]
+        index: [0, 1, 2, 3, 4, 5, 6, 7]
     runs-on: ubuntu-latest
     name: Thanos end-to-end tests
     env:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Go.
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.20.x
+          go-version: 1.22.x
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/go-build

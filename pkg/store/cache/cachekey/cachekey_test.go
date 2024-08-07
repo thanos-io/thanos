@@ -71,6 +71,24 @@ func TestParseBucketCacheKey(t *testing.T) {
 			expected:    BucketCacheKey{},
 			expectedErr: ErrInvalidBucketCacheKeyFormat,
 		},
+		// Iter could have object storage hash attached to it.
+		{
+			key: "iter::asdasdsa",
+			expected: BucketCacheKey{
+				Verb:                    IterVerb,
+				Name:                    "",
+				ObjectStorageConfigHash: "asdasdsa",
+			},
+		},
+		// Iter recursive could have object storage hash attached to it.
+		{
+			key: "iter-recursive:foo/:asdasdsa",
+			expected: BucketCacheKey{
+				Verb:                    IterRecursiveVerb,
+				Name:                    "foo/",
+				ObjectStorageConfigHash: "asdasdsa",
+			},
+		},
 		// Key must always have a name.
 		{
 			key:         "iter",
@@ -116,8 +134,10 @@ func TestParseBucketCacheKey(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		res, err := ParseBucketCacheKey(tc.key)
-		testutil.Equals(t, tc.expectedErr, err)
-		testutil.Equals(t, tc.expected, res)
+		t.Run(tc.key, func(t *testing.T) {
+			res, err := ParseBucketCacheKey(tc.key)
+			testutil.Equals(t, tc.expectedErr, err)
+			testutil.Equals(t, tc.expected, res)
+		})
 	}
 }

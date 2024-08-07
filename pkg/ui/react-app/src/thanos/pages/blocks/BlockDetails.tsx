@@ -2,17 +2,26 @@ import React, { FC, useState } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
-import { Button, Modal, ModalBody, Form, Input, ModalHeader, ModalFooter } from 'reactstrap';
-import { download } from './helpers';
+import PathPrefixProps from '../../../types/PathPrefixProps';
+import { Button, Form, Input, Modal, ModalBody, ModalFooter, ModalHeader } from 'reactstrap';
+import { download, getBlockSizeStats, humanizeBytes } from './helpers';
 
 export interface BlockDetailsProps {
   block: Block | undefined;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
+  disableAdminOperations: boolean;
 }
 
-export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
+export const BlockDetails: FC<BlockDetailsProps & PathPrefixProps> = ({
+  pathPrefix = '',
+  block,
+  selectBlock,
+  disableAdminOperations,
+}) => {
   const [modalAction, setModalAction] = useState<string>('');
   const [detailValue, setDetailValue] = useState<string | null>(null);
+
+  const sizeStats = getBlockSizeStats(block);
 
   const submitMarkBlock = async (action: string, ulid: string, detail: string | null) => {
     try {
@@ -27,7 +36,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
             action,
           });
 
-      const response = await fetch('/api/v1/blocks/mark', {
+      const response = await fetch(`${pathPrefix}/api/v1/blocks/mark`, {
         method: 'POST',
         body,
       });
@@ -73,6 +82,39 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
             <b>Chunks:</b> <span>{block.stats.numChunks}</span>
           </div>
           <hr />
+          {sizeStats && (
+            <>
+              <div data-testid="total-size">
+                <b>Total size:</b>&nbsp;
+                <span title={sizeStats.totalBytes + ' Bytes'}>{humanizeBytes(sizeStats.totalBytes)}</span>
+              </div>
+              <div data-testid="chunk-size">
+                <b>Chunks:</b>&nbsp;
+                <span title={sizeStats.chunkBytes + ' Bytes'}>
+                  {humanizeBytes(sizeStats.chunkBytes)} ({((sizeStats.chunkBytes / sizeStats.totalBytes) * 100).toFixed(2)}%)
+                </span>
+              </div>
+              <div data-testid="index-size">
+                <b>Index:</b>&nbsp;
+                <span title={sizeStats.indexBytes + ' Bytes'}>
+                  {humanizeBytes(sizeStats.indexBytes)} ({((sizeStats.indexBytes / sizeStats.totalBytes) * 100).toFixed(2)}%)
+                </span>
+              </div>
+              <div data-testid="daily-bytes">
+                <b>Daily:</b>&nbsp;
+                <span
+                  title={
+                    Math.round(sizeStats.totalBytes / moment.duration(block.maxTime - block.minTime, 'ms').as('day')) +
+                    ' Bytes / day'
+                  }
+                >
+                  {humanizeBytes(sizeStats.totalBytes / moment.duration(block.maxTime - block.minTime, 'ms').as('day'))} /
+                  day
+                </span>
+              </div>
+              <hr />
+            </>
+          )}
           <div data-testid="resolution">
             <b>Resolution:</b> <span>{block.thanos.downsample.resolution}</span>
           </div>
@@ -100,26 +142,30 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
               <Button>Download meta.json</Button>
             </a>
           </div>
-          <div style={{ marginTop: '12px' }}>
-            <Button
-              onClick={() => {
-                setModalAction('DELETION');
-                setDetailValue('');
-              }}
-            >
-              Mark Deletion
-            </Button>
-          </div>
-          <div style={{ marginTop: '12px' }}>
-            <Button
-              onClick={() => {
-                setModalAction('NO_COMPACTION');
-                setDetailValue('');
-              }}
-            >
-              Mark No Compaction
-            </Button>
-          </div>
+          {!disableAdminOperations && (
+            <div>
+              <div style={{ marginTop: '12px' }}>
+                <Button
+                  onClick={() => {
+                    setModalAction('DELETION');
+                    setDetailValue('');
+                  }}
+                >
+                  Mark Deletion
+                </Button>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <Button
+                  onClick={() => {
+                    setModalAction('NO_COMPACTION');
+                    setDetailValue('');
+                  }}
+                >
+                  Mark No Compaction
+                </Button>
+              </div>
+            </div>
+          )}
           <Modal isOpen={!!modalAction}>
             <ModalBody>
               <ModalHeader toggle={() => setModalAction('')}>

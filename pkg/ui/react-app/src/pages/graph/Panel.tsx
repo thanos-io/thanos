@@ -1,11 +1,25 @@
 import React, { Component } from 'react';
 
-import { UncontrolledAlert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane, Input, Label } from 'reactstrap';
+import {
+  UncontrolledAlert,
+  Alert,
+  Button,
+  Col,
+  Nav,
+  NavItem,
+  NavLink,
+  Row,
+  TabContent,
+  TabPane,
+  Input,
+  Label,
+} from 'reactstrap';
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
-
 import Checkbox from '../../components/Checkbox';
+import ListTree, { QueryTree } from '../../components/ListTree';
+import { ExplainTree } from './ExpressionInput';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -16,6 +30,7 @@ import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseDuration } from '../../utils';
+import { defaultTenant, tenantHeader, displayTenantBox } from '../../thanos/config';
 
 export interface PanelProps {
   id: string;
@@ -29,9 +44,12 @@ export interface PanelProps {
   stores: Store[];
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
+  usePartialResponse: boolean;
   enableLinter: boolean;
   defaultStep: string;
   defaultEngine: string;
+  queryMode: string;
+  onUsePartialResponseChange: (value: boolean) => void;
 }
 
 interface PanelState {
@@ -42,6 +60,9 @@ interface PanelState {
   warnings: string[] | null;
   stats: QueryStats | null;
   exprInputValue: string;
+  analysis: QueryTree | null;
+  explainOutput: ExplainTree | null;
+  isHovered: boolean;
 }
 
 export interface PanelOptions {
@@ -53,9 +74,13 @@ export interface PanelOptions {
   stacked: boolean;
   maxSourceResolution: string;
   useDeduplication: boolean;
+  forceTracing: boolean;
   usePartialResponse: boolean;
   storeMatches: Store[];
   engine: string;
+  analyze: boolean;
+  disableAnalyzeCheckbox: boolean;
+  tenant: string;
 }
 
 export enum PanelType {
@@ -72,9 +97,13 @@ export const PanelDefaultOptions: PanelOptions = {
   stacked: false,
   maxSourceResolution: '0s',
   useDeduplication: true,
-  usePartialResponse: false,
+  forceTracing: false,
+  usePartialResponse: true,
   storeMatches: [],
   engine: '',
+  analyze: false,
+  disableAnalyzeCheckbox: false,
+  tenant: '',
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -91,18 +120,26 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       error: null,
       stats: null,
       exprInputValue: props.options.expr,
+      explainOutput: null,
+      analysis: null,
+      isHovered: false,
     };
 
     if (this.props.options.engine === '') {
       this.props.options.engine = this.props.defaultEngine;
     }
+    this.handleEngine(this.props.options.engine);
 
     this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
+    this.handleChangeForceTracing = this.handleChangeForceTracing.bind(this); //forceTracing
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
+    this.handleChangeAnalyze = this.handleChangeAnalyze.bind(this);
+    this.handleMouseEnter = this.handleMouseEnter.bind(this);
+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
+    this.handleChangeTenant = this.handleChangeTenant.bind(this);
   }
-
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
     const {
       endTime,
@@ -111,8 +148,11 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       type,
       maxSourceResolution,
       useDeduplication,
+      forceTracing,
       usePartialResponse,
       engine,
+      analyze,
+      tenant,
       // TODO: Add support for Store Matches
     } = this.props.options;
     if (
@@ -123,7 +163,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.maxSourceResolution !== maxSourceResolution ||
       prevOpts.useDeduplication !== useDeduplication ||
       prevOpts.usePartialResponse !== usePartialResponse ||
-      prevOpts.engine !== engine
+      prevOpts.forceTracing !== forceTracing ||
+      prevOpts.engine !== engine ||
+      prevOpts.analyze !== analyze ||
+      prevOpts.tenant !== tenant
       // Check store matches
     ) {
       this.executeQuery();
@@ -132,6 +175,13 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   componentDidMount(): void {
     this.executeQuery();
+    const storedValue = localStorage.getItem('usePartialResponse');
+    if (storedValue !== null) {
+      // Set the default value in state and local storage
+      this.setOptions({ usePartialResponse: true });
+      this.props.onUsePartialResponseChange(true);
+      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+    }
   }
 
   executeQuery = (): void => {
@@ -180,29 +230,55 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('step', resolution.toString());
         params.append('max_source_resolution', this.props.options.maxSourceResolution);
         params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        params.append('tenant', this.props.options.tenant);
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
         path = '/api/v1/query';
         params.append('time', endTime.toString());
         params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        params.append('tenant', this.props.options.tenant);
         break;
       default:
         throw new Error('Invalid panel type "' + this.props.options.type + '"');
     }
 
-    fetch(`${this.props.pathPrefix}${path}?${params}`, {
+    // Create request headers
+    const requestHeaders: HeadersInit = new Headers();
+    requestHeaders.set('Content-Type', 'application/x-www-form-urlencoded');
+
+    if (this.props.options.forceTracing) {
+      requestHeaders.set('X-Thanos-Force-Tracing', 'true');
+    }
+
+    if (this.props.options.tenant.length > 0) {
+      requestHeaders.set(tenantHeader, this.props.options.tenant);
+    }
+
+    fetch(`${this.props.pathPrefix}${path}`, {
+      method: 'POST',
+      headers: requestHeaders,
+      body: params,
       cache: 'no-store',
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then((resp) => resp.json())
-      .then((json) => {
+      .then((resp) => {
+        return resp.json().then((json) => {
+          return {
+            json,
+            headers: resp.headers,
+          };
+        });
+      })
+      .then(({ json, headers }) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
-
         let resultSeries = 0;
+        let analysis = null;
         if (json.data) {
           const { resultType, result } = json.data;
           if (resultType === 'scalar') {
@@ -210,8 +286,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           } else if (result && result.length > 0) {
             resultSeries = result.length;
           }
+          analysis = json.data.analysis;
         }
-
+        const traceID = headers.get('X-Thanos-Trace-ID');
         this.setState({
           error: null,
           data: json.data,
@@ -219,14 +296,18 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             startTime,
             endTime,
             resolution,
+            traceID: traceID ? traceID : '',
           },
           warnings: json.warnings,
           stats: {
             loadTime: Date.now() - queryStart,
             resolution,
             resultSeries,
+            traceID,
           },
           loading: false,
+          analysis: analysis,
+          explainOutput: null,
         });
         this.abortInFlightFetch = null;
       })
@@ -286,9 +367,22 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   handleChangeDeduplication = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ useDeduplication: event.target.checked });
   };
+  handleChangeForceTracing = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ forceTracing: event.target.checked });
+  };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ usePartialResponse: event.target.checked });
+    let newValue = event.target.checked;
+
+    const storedValue = localStorage.getItem('usePartialResponse');
+
+    if (storedValue === 'true') {
+      newValue = true;
+    }
+    this.setOptions({ usePartialResponse: newValue });
+    this.props.onUsePartialResponseChange(newValue);
+
+    localStorage.setItem('usePartialResponse', JSON.stringify(event.target.checked));
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
@@ -304,11 +398,106 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleChangeEngine = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ engine: event.target.value });
+    this.handleEngine(event.target.value);
+  };
+
+  handleChangeAnalyze = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ analyze: event.target.checked });
+  };
+
+  handleChangeTenant = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ tenant: event.target.value });
+  };
+
+  handleMouseEnter = () => {
+    this.setState({ isHovered: true });
+  };
+
+  handleMouseLeave = () => {
+    this.setState({ isHovered: false });
+  };
+
+  handleEngine = (engine: string): void => {
+    if (engine === 'prometheus') {
+      this.setOptions({ engine: engine, analyze: false, disableAnalyzeCheckbox: true });
+    } else {
+      this.setOptions({ engine: engine, disableAnalyzeCheckbox: false });
+    }
+  };
+
+  getExplainOutput = (): void => {
+    //We need to pass the same parameters as query endpoints, to the explain endpoints.
+    const endTime = this.getEndTime().valueOf() / 1000;
+    const startTime = endTime - this.props.options.range / 1000;
+    const resolution =
+      this.props.options.resolution ||
+      Math.max(Math.floor(this.props.options.range / 250000), (parseDuration(this.props.defaultStep) || 0) / 1000);
+    const abortController = new AbortController();
+    const params: URLSearchParams = new URLSearchParams({
+      query: this.state.exprInputValue,
+      dedup: this.props.options.useDeduplication.toString(),
+      partial_response: this.props.options.usePartialResponse.toString(),
+    });
+
+    // Add storeMatches to query params.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    this.props.options.storeMatches?.forEach((store: Store) =>
+      params.append('storeMatch[]', `{__address__="${store.name}"}`)
+    );
+
+    let path: string;
+    switch (this.props.options.type) {
+      case 'graph':
+        path = '/api/v1/query_range_explain';
+        params.append('start', startTime.toString());
+        params.append('end', endTime.toString());
+        params.append('step', resolution.toString());
+        params.append('max_source_resolution', this.props.options.maxSourceResolution);
+        params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        // TODO path prefix here and elsewhere.
+        break;
+      case 'table':
+        path = '/api/v1/query_explain';
+        params.append('time', endTime.toString());
+        params.append('engine', this.props.options.engine);
+        params.append('analyze', this.props.options.analyze.toString());
+        break;
+      default:
+        throw new Error('Invalid panel type "' + this.props.options.type + '"');
+    }
+
+    fetch(`${this.props.pathPrefix}${path}?${params}`, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: abortController.signal,
+    })
+      .then((resp) => resp.json())
+      .then((json) => {
+        if (json.status !== 'success') {
+          throw new Error(json.error || 'invalid response JSON');
+        }
+        let result = null;
+        if (json.data) {
+          result = json.data;
+        }
+        this.setState({ explainOutput: result });
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') {
+          // Aborts are expected, don't show an error for them.
+          return;
+        }
+        this.setState({
+          error: 'Error getting query explaination: ' + error.message,
+          loading: false,
+        });
+      });
   };
 
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
+
     return (
       <div className="panel">
         <Row>
@@ -324,6 +513,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               enableLinter={this.props.enableLinter}
               queryHistory={pastQueries}
               metricNames={metricNames}
+              executeExplain={this.getExplainOutput}
+              disableExplain={this.props.options.engine === 'prometheus'}
             />
           </Col>
         </Row>
@@ -348,44 +539,120 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-            <Checkbox
-              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-              id={`use-deduplication-checkbox-${id}`}
-              onChange={this.handleChangeDeduplication}
-              defaultChecked={options.useDeduplication}
-            >
-              Use Deduplication
-            </Checkbox>
-            <Checkbox
-              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-              id={`use-partial-resp-checkbox-${id}`}
-              onChange={this.handleChangePartialResponse}
-              defaultChecked={options.usePartialResponse}
-            >
-              Use Partial Response
-            </Checkbox>
-            <Label
-              style={{ marginLeft: '10px', display: 'inline-block' }}
-              for={`select-engine=${id}`}
-              className="control-label"
-            >
-              Engine
-            </Label>
-            <Input
-              style={{
-                width: 'auto',
-                marginLeft: '10px',
-                display: 'inline-block',
-              }}
-              id={`select-engine=${id}`}
-              type="select"
-              value={options.engine}
-              onChange={this.handleChangeEngine}
-              bsSize="sm"
-            >
-              <option value="prometheus">Prometheus</option>
-              <option value="thanos">Thanos</option>
-            </Input>
+            <div className="float-left">
+              <Checkbox
+                disabled={this.props.queryMode != 'local' && this.props.options.engine != 'prometheus'}
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`use-deduplication-checkbox-${id}`}
+                onChange={this.handleChangeDeduplication}
+                defaultChecked={options.useDeduplication}
+              >
+                Use Deduplication
+              </Checkbox>
+              <Checkbox
+                disabled={this.props.queryMode != 'local' && this.props.options.engine != 'prometheus'}
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`use-partial-resp-checkbox-${id}`}
+                onChange={this.handleChangePartialResponse}
+                defaultChecked={options.usePartialResponse}
+              >
+                Use Partial Response
+              </Checkbox>
+              <Checkbox
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`force-tracing-checkbox-${id}`}
+                onChange={this.handleChangeForceTracing}
+                defaultChecked={options.forceTracing}
+              >
+                Force Tracing
+              </Checkbox>
+              <Label
+                style={{ marginLeft: '10px', display: 'inline-block' }}
+                for={`select-engine=${id}`}
+                className="control-label"
+              >
+                Engine
+              </Label>
+              <Input
+                style={{
+                  width: 'auto',
+                  marginLeft: '10px',
+                  display: 'inline-block',
+                }}
+                id={`select-engine=${id}`}
+                type="select"
+                value={options.engine}
+                onChange={this.handleChangeEngine}
+                bsSize="sm"
+              >
+                <option value="prometheus">Prometheus</option>
+                <option value="thanos">Thanos</option>
+              </Input>
+              <Label style={{ marginLeft: '10px', display: displayTenantBox }} className="control-label">
+                Tenant
+              </Label>
+              <Input
+                style={{
+                  width: 'auto',
+                  marginLeft: '10px',
+                  display: displayTenantBox,
+                }}
+                id={`tenant=${id}`}
+                type="text"
+                bsSize="sm"
+                onChange={this.handleChangeTenant}
+                placeholder={`${defaultTenant}`}
+                value={options.tenant}
+              ></Input>
+            </div>
+            <div className="float-right" onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave}>
+              <Checkbox
+                wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
+                id={`analyze-${id}`}
+                onChange={this.handleChangeAnalyze}
+                checked={options.analyze}
+                disabled={options.disableAnalyzeCheckbox}
+                className="analyze-checkbox"
+              >
+                Analyze
+              </Checkbox>
+              <div
+                style={{
+                  position: 'relative',
+                }}
+              >
+                <div
+                  style={{
+                    display: this.state.isHovered && options.disableAnalyzeCheckbox ? 'block' : 'none',
+                    position: 'absolute',
+                    top: '-20px',
+                    left: '-5px',
+                    backgroundColor: '#333',
+                    color: '#fff',
+                    padding: '2px',
+                    borderRadius: '3px',
+                    fontSize: '15px',
+                    zIndex: 1,
+                  }}
+                >
+                  Change engine to 'thanos'
+                </div>
+              </div>
+            </div>
+          </Col>
+        </Row>
+        <Row hidden={!(options.analyze && this.state.analysis)}>
+          <Col>
+            <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
+              <ListTree id={`analyze-tree-${id}`} node={this.state.analysis} />
+            </Alert>
+          </Col>
+        </Row>
+        <Row hidden={!(this.props.options.engine === 'thanos' && this.state.explainOutput)}>
+          <Col>
+            <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
+              <ListTree id={`explain-tree-${id}`} node={this.state.explainOutput} />
+            </Alert>
           </Col>
         </Row>
         {stores?.length > 0 && (
@@ -463,6 +730,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                       resolution={options.resolution}
                       stacked={options.stacked}
                       maxSourceResolution={options.maxSourceResolution}
+                      queryMode={this.props.queryMode}
+                      engine={options.engine}
                       onChangeRange={this.handleChangeRange}
                       onChangeEndTime={this.handleChangeEndTime}
                       onChangeResolution={this.handleChangeResolution}

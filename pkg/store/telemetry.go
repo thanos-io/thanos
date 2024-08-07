@@ -4,6 +4,7 @@
 package store
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,26 +16,60 @@ import (
 // seriesStatsAggregator aggregates results from fanned-out queries into a histogram given their
 // response's shape.
 type seriesStatsAggregator struct {
-	queryDuration *prometheus.HistogramVec
+	queryDuration    *prometheus.HistogramVec
+	seriesLeBuckets  []float64
+	samplesLeBuckets []float64
+	tenant           string
 
-	seriesLeBuckets  []int64
-	samplesLeBuckets []int64
-	seriesStats      storepb.SeriesStatsCounter
+	seriesStats storepb.SeriesStatsCounter
+}
+
+type seriesStatsAggregatorFactory struct {
+	queryDuration    *prometheus.HistogramVec
+	seriesLeBuckets  []float64
+	samplesLeBuckets []float64
+}
+
+func (f *seriesStatsAggregatorFactory) NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator {
+	return &seriesStatsAggregator{
+		queryDuration:    f.queryDuration,
+		seriesLeBuckets:  f.seriesLeBuckets,
+		samplesLeBuckets: f.samplesLeBuckets,
+		tenant:           tenant,
+		seriesStats:      storepb.SeriesStatsCounter{},
+	}
+}
+
+func NewSeriesStatsAggregatorFactory(
+	reg prometheus.Registerer,
+	durationQuantiles []float64,
+	sampleQuantiles []float64,
+	seriesQuantiles []float64,
+) *seriesStatsAggregatorFactory {
+	return &seriesStatsAggregatorFactory{
+		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "thanos_store_api_query_duration_seconds",
+			Help:    "Duration of the Thanos Store API select phase for a query.",
+			Buckets: durationQuantiles,
+		}, []string{"series_le", "samples_le", "tenant"}),
+		seriesLeBuckets:  seriesQuantiles,
+		samplesLeBuckets: sampleQuantiles,
+	}
 }
 
 // NewSeriesStatsAggregator is a constructor for seriesStatsAggregator.
 func NewSeriesStatsAggregator(
 	reg prometheus.Registerer,
 	durationQuantiles []float64,
-	sampleQuantiles []int64,
-	seriesQuantiles []int64,
+	sampleQuantiles []float64,
+	seriesQuantiles []float64,
 ) *seriesStatsAggregator {
 	return &seriesStatsAggregator{
 		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "thanos_store_api_query_duration_seconds",
 			Help:    "Duration of the Thanos Store API select phase for a query.",
 			Buckets: durationQuantiles,
-		}, []string{"series_le", "samples_le"}),
+		}, []string{"series_le", "samples_le", "tenant"}),
 		seriesLeBuckets:  seriesQuantiles,
 		samplesLeBuckets: sampleQuantiles,
 		seriesStats:      storepb.SeriesStatsCounter{},
@@ -54,11 +89,12 @@ func (s *seriesStatsAggregator) Observe(duration float64) {
 		return
 	}
 	// Bucket matching for series/labels matchSeriesBucket/matchSamplesBucket => float64, float64
-	seriesLeBucket := s.findBucket(float64(s.seriesStats.Series), s.seriesLeBuckets)
-	samplesLeBucket := s.findBucket(float64(s.seriesStats.Samples), s.samplesLeBuckets)
+	seriesLeBucket := findBucket(float64(s.seriesStats.Series), s.seriesLeBuckets)
+	samplesLeBucket := findBucket(float64(s.seriesStats.Samples), s.samplesLeBuckets)
 	s.queryDuration.With(prometheus.Labels{
-		"series_le":  strconv.Itoa(int(seriesLeBucket)),
-		"samples_le": strconv.Itoa(int(samplesLeBucket)),
+		"series_le":  seriesLeBucket,
+		"samples_le": samplesLeBucket,
+		"tenant":     s.tenant,
 	}).Observe(duration)
 	s.reset()
 }
@@ -67,18 +103,27 @@ func (s *seriesStatsAggregator) reset() {
 	s.seriesStats = storepb.SeriesStatsCounter{}
 }
 
-func (s *seriesStatsAggregator) findBucket(value float64, quantiles []int64) int64 {
+func findBucket(value float64, quantiles []float64) string {
 	if len(quantiles) == 0 {
-		return 0
+		return "+Inf"
 	}
-	var foundBucket int64
-	for _, bucket := range quantiles {
-		foundBucket = bucket
-		if value < float64(bucket) {
-			break
-		}
+
+	// If the value is bigger than the largest bucket we return +Inf
+	if value >= float64(quantiles[len(quantiles)-1]) {
+		return "+Inf"
 	}
-	return foundBucket
+
+	// SearchFloats64s gets the appropriate index in the quantiles array based on the value
+	return strconv.FormatFloat(quantiles[sort.SearchFloat64s(quantiles, value)], 'f', -1, 64)
+}
+
+type SeriesQueryPerformanceMetricsAggregatorFactory interface {
+	NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator
+}
+
+type SeriesQueryPerformanceMetricsAggregator interface {
+	Aggregate(seriesStats storepb.SeriesStatsCounter)
+	Observe(duration float64)
 }
 
 // NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.
@@ -87,6 +132,13 @@ type NoopSeriesStatsAggregator struct{}
 func (s *NoopSeriesStatsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
 func (s *NoopSeriesStatsAggregator) Observe(_ float64) {}
+
+// NoopSeriesStatsAggregatorFactory is a query performance series aggregator factory that does nothing.
+type NoopSeriesStatsAggregatorFactory struct{}
+
+func (s *NoopSeriesStatsAggregatorFactory) NewAggregator(tenant string) SeriesQueryPerformanceMetricsAggregator {
+	return &NoopSeriesStatsAggregator{}
+}
 
 // instrumentedStoreServer is a storepb.StoreServer that exposes metrics about Series requests.
 type instrumentedStoreServer struct {

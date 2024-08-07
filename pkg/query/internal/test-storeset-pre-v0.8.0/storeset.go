@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -197,6 +198,8 @@ func (s *storeRef) LabelSets() []labels.Labels {
 	return s.labelSets
 }
 
+func (s *storeRef) TSDBInfos() []infopb.TSDBInfo { return nil }
+
 func (s *storeRef) TimeRange() (int64, int64) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -323,7 +326,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				store.Update(labelSets, minTime, maxTime)
 			} else {
 				// New store or was unhealthy and was removed in the past - create new one.
-				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
+				conn, err := grpc.NewClient(addr, s.dialOpts...)
 				if err != nil {
 					s.updateStoreStatus(&storeRef{addr: addr}, err)
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)

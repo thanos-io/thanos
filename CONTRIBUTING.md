@@ -68,7 +68,7 @@ The following section explains various suggestions and procedures to note during
 
 * It is strongly recommended that you use Linux distributions systems or macOS for development.
 * Running [WSL 2 (on Windows)](https://learn.microsoft.com/en-us/windows/wsl/) is also possible. Note that if during development you run a local Kubernetes cluster and have a Service with `service.spec.sessionAffinity: ClientIP`, it will break things until it's removed[^windows_xt_recent].
-* Go 1.20.x or higher.
+* Go 1.22.x or higher.
 * Docker (to run e2e tests)
 * For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
@@ -84,7 +84,6 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 * To get started, create a codespace for this repository by clicking this 👉 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=109162639)
   * A codespace will open in a web-based version of Visual Studio Code. The [dev container](.devcontainer/devcontainer.json) is fully configured with software needed for this project.
   * **Note**: Dev containers is an open spec which is supported by [GitHub Codespaces](https://github.com/codespaces) and [other tools](https://containers.dev/supporting).
-* Spin up a prebuilt dev environment using Gitpod.io [![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
 * In case you want to develop the project locally, install **Golang** in your machine. Here is a nice [gist](https://gist.github.com/nikhita/432436d570b89cab172dcf2894465753) for this purpose.
 * You can run an interactive example, which populates some data as well, by following the steps mentioned [here](https://github.com/thanos-io/thanos/blob/main/tutorials/interactive-example/README.md).
 

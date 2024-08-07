@@ -7,8 +7,8 @@ import (
 	"context"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
+	grpc_opentracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 	"google.golang.org/grpc"
 )
 

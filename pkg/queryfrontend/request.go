@@ -55,6 +55,8 @@ type ThanosQueryRangeRequest struct {
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
 	LookbackDelta       int64
+	Analyze             bool
+	Engine              string
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -154,6 +156,8 @@ type ThanosQueryInstantRequest struct {
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
 	LookbackDelta       int64 // in milliseconds.
+	Analyze             bool
+	Engine              string
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.

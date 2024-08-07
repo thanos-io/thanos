@@ -20,12 +20,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"gopkg.in/yaml.v3"
 
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -41,6 +41,7 @@ const (
 	RulerSource           SourceType = "ruler"
 	BucketRepairSource    SourceType = "bucket.repair"
 	BucketRewriteSource   SourceType = "bucket.rewrite"
+	BucketUploadSource    SourceType = "bucket.upload"
 	TestSource            SourceType = "test"
 )
 
@@ -90,6 +91,37 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	// IndexStats contains stats info related to block index.
+	IndexStats IndexStats `json:"index_stats,omitempty"`
+
+	// Extensions are used for plugin any arbitrary additional information for block. Optional.
+	Extensions any `json:"extensions,omitempty"`
+}
+
+type IndexStats struct {
+	SeriesMaxSize int64 `json:"series_max_size,omitempty"`
+	ChunkMaxSize  int64 `json:"chunk_max_size,omitempty"`
+}
+
+func (m *Thanos) ParseExtensions(v any) (any, error) {
+	return ConvertExtensions(m.Extensions, v)
+}
+
+// ConvertExtensions converts extensions with `any` type into specific type `v`
+// that the caller expects.
+func ConvertExtensions(extensions any, v any) (any, error) {
+	if extensions == nil {
+		return nil, nil
+	}
+	extensionsContent, err := json.Marshal(extensions)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(extensionsContent, v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 type Rewrite struct {
@@ -104,7 +136,7 @@ type Rewrite struct {
 type Matchers []*labels.Matcher
 
 func (m *Matchers) UnmarshalYAML(value *yaml.Node) (err error) {
-	*m, err = parser.ParseMetricSelector(value.Value)
+	*m, err = extpromql.ParseMetricSelector(value.Value)
 	if err != nil {
 		return errors.Wrapf(err, "parse metric selector %v", value.Value)
 	}
@@ -151,10 +183,15 @@ func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *
 	return newMeta, nil
 }
 
-// Returns a unique identifier for the compaction group the block belongs to.
+// GroupKey returns a unique identifier for the compaction group the block belongs to.
 // It considers the downsampling resolution and the block's labels.
 func (m *Thanos) GroupKey() string {
 	return fmt.Sprintf("%d@%v", m.Downsample.Resolution, labels.FromMap(m.Labels).Hash())
+}
+
+// ResolutionString returns a the block's resolution as a string.
+func (m *Thanos) ResolutionString() string {
+	return fmt.Sprintf("%d", m.Downsample.Resolution)
 }
 
 // WriteToDir writes the encoded meta into <dir>/meta.json.

@@ -20,20 +20,21 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
 	"time"
 
-	"github.com/NYTimes/gziphandler"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	jsoniter "github.com/json-iterator/go"
+	"github.com/klauspost/compress/gzhttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
 
+	"github.com/thanos-io/thanos/pkg/extannotations"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -64,6 +65,11 @@ var corsHeaders = map[string]string{
 	"Access-Control-Allow-Origin":   "*",
 	"Access-Control-Expose-Headers": "Date",
 }
+
+var (
+	// Let suse the same json codec used by upstream prometheus.
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
+)
 
 // ThanosVersion contains build information about Thanos.
 type ThanosVersion struct {
@@ -220,10 +226,10 @@ func GetInstr(
 			}
 		})
 
-		return tracing.HTTPMiddleware(tracer, name, logger,
-			ins.NewHandler(name,
-				gziphandler.GzipHandler(
-					middleware.RequestID(
+		return middleware.RequestID(
+			tracing.HTTPMiddleware(tracer, name, logger,
+				ins.NewHandler(name,
+					gzhttp.GzipHandler(
 						logMiddleware.HTTPMiddleware(name, hf),
 					),
 				),
@@ -233,9 +239,19 @@ func GetInstr(
 	return instr
 }
 
+func shouldNotCacheBecauseOfWarnings(warnings []error) bool {
+	for _, w := range warnings {
+		// PromQL warnings should not prevent caching
+		if !extannotations.IsPromQLAnnotation(w.Error()) {
+			return true
+		}
+	}
+	return false
+}
+
 func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	w.Header().Set("Content-Type", "application/json")
-	if len(warnings) > 0 {
+	if shouldNotCacheBecauseOfWarnings(warnings) {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 	w.WriteHeader(http.StatusOK)

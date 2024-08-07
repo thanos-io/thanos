@@ -15,7 +15,6 @@ import (
 	"github.com/efficientgo/core/backoff"
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
-	e2emon "github.com/efficientgo/e2e/monitoring"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -30,8 +29,8 @@ import (
 	"github.com/thanos-io/objstore/exthttp"
 
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
-
+	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
@@ -91,19 +90,19 @@ func defaultPromHttpConfig() string {
 `
 }
 
-func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage string, enableFeatures ...string) *e2emon.InstrumentedRunnable {
+func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage string, enableFeatures ...string) *e2eobs.Observable {
 	f := e.Runnable(name).WithPorts(map[string]int{"http": 9090}).Future()
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create prometheus dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create prometheus dir"))}
 	}
 
 	if err := os.WriteFile(filepath.Join(f.Dir(), "prometheus.yml"), []byte(promConfig), 0600); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating prom config"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating prom config"))}
 	}
 
 	if len(webConfig) > 0 {
 		if err := os.WriteFile(filepath.Join(f.Dir(), "web-config.yml"), []byte(webConfig), 0600); err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating web-config"))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating web-config"))}
 		}
 	}
 
@@ -124,18 +123,18 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		// If auth is enabled then prober would get 401 error.
 		probe = e2e.NewHTTPReadinessProbe("http", "/-/ready", 401, 401)
 	}
-	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     promImage,
 		Command:   e2e.NewCommandWithoutEntrypoint("prometheus", args...),
 		Readiness: probe,
 	})), "http")
 }
 
-func NewPrometheusWithSidecar(e e2e.Environment, name, promConfig, webConfig, promImage, minTime string, enableFeatures ...string) (*e2emon.InstrumentedRunnable, *e2emon.InstrumentedRunnable) {
+func NewPrometheusWithSidecar(e e2e.Environment, name, promConfig, webConfig, promImage, minTime string, enableFeatures ...string) (*e2eobs.Observable, *e2eobs.Observable) {
 	return NewPrometheusWithSidecarCustomImage(e, name, promConfig, webConfig, promImage, minTime, DefaultImage(), enableFeatures...)
 }
 
-func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig, promImage, minTime string, sidecarImage string, enableFeatures ...string) (*e2emon.InstrumentedRunnable, *e2emon.InstrumentedRunnable) {
+func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig, promImage, minTime string, sidecarImage string, enableFeatures ...string) (*e2eobs.Observable, *e2eobs.Observable) {
 	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 
 	args := map[string]string{
@@ -160,7 +159,7 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
 			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		}))
-	sidecar := e2emon.AsInstrumented(sidecarRunnable, "http")
+	sidecar := e2eobs.AsObservable(sidecarRunnable, "http")
 	return prom, sidecar
 }
 
@@ -179,7 +178,7 @@ type AvalancheOptions struct {
 	TenantID string
 }
 
-func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2emon.InstrumentedRunnable {
+func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2eobs.Observable {
 	f := e.Runnable(name).WithPorts(map[string]int{"http": 9001}).Future()
 
 	args := e2e.BuildArgs(map[string]string{
@@ -196,7 +195,7 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2emon.In
 		"--remote-tenant":         o.TenantID,
 	})
 
-	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:   "quay.io/prometheuscommunity/avalanche:main",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	})), "http")
@@ -204,7 +203,7 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2emon.In
 
 func NewPrometheusWithJaegerTracingSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig,
 	promImage, minTime, sidecarImage, jaegerConfig string, enableFeatures ...string) (
-	*e2emon.InstrumentedRunnable, *e2emon.InstrumentedRunnable) {
+	*e2eobs.Observable, *e2eobs.Observable) {
 	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 
 	args := map[string]string{
@@ -231,7 +230,7 @@ func NewPrometheusWithJaegerTracingSidecarCustomImage(e e2e.Environment, name, p
 			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
 			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		}))
-	sidecar := e2emon.AsInstrumented(sidecarRunnable, "http")
+	sidecar := e2eobs.AsObservable(sidecarRunnable, "http")
 
 	return prom, sidecar
 }
@@ -248,20 +247,29 @@ type QuerierBuilder struct {
 	fileSDStoreAddresses    []string
 	ruleAddresses           []string
 	metadataAddresses       []string
+	envVars                 map[string]string
 	targetAddresses         []string
 	exemplarAddresses       []string
 	enableFeatures          []string
 	endpoints               []string
 	strictEndpoints         []string
 
-	engine    string
-	queryMode string
+	engine           apiv1.PromqlEngineType
+	queryMode        string
+	enableXFunctions bool
 
 	replicaLabels []string
 	tracingConfig string
 
+	telemetryDurationQuantiles []float64
+	telemetrySamplesQuantiles  []float64
+	telemetrySeriesQuantiles   []float64
+
+	enforceTenancy bool
+
 	e2e.Linkable
-	f e2e.FutureRunnable
+	f             e2e.FutureRunnable
+	relabelConfig string
 }
 
 func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
@@ -359,7 +367,7 @@ func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuild
 	return q
 }
 
-func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+func (q *QuerierBuilder) WithEngine(engine apiv1.PromqlEngineType) *QuerierBuilder {
 	q.engine = engine
 	return q
 }
@@ -369,16 +377,44 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	return q
 }
 
-func (q *QuerierBuilder) Init() *e2emon.InstrumentedRunnable {
+func (q *QuerierBuilder) WithEnableXFunctions() *QuerierBuilder {
+	q.enableXFunctions = true
+	return q
+}
+
+func (q *QuerierBuilder) WithEnvVars(envVars map[string]string) *QuerierBuilder {
+	q.envVars = envVars
+	return q
+}
+
+func (q *QuerierBuilder) WithTelemetryQuantiles(duration []float64, samples []float64, series []float64) *QuerierBuilder {
+	q.telemetryDurationQuantiles = duration
+	q.telemetrySamplesQuantiles = samples
+	q.telemetrySeriesQuantiles = series
+	return q
+}
+
+func (q *QuerierBuilder) WithTenancy(enforceTenancy bool) *QuerierBuilder {
+	q.enforceTenancy = enforceTenancy
+	return q
+}
+
+func (q *QuerierBuilder) WithSelectorRelabelConfig(relabelConfig string) *QuerierBuilder {
+	q.relabelConfig = relabelConfig
+	return q
+}
+
+func (q *QuerierBuilder) Init() *e2eobs.Observable {
 	args, err := q.collectArgs()
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(q.name, err)}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(q.name, err)}
 	}
 
-	return e2emon.AsInstrumented(q.f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(q.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     q.image,
 		Command:   e2e.NewCommand("query", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		EnvVars:   q.envVars,
 	})), "http")
 }
 
@@ -459,10 +495,43 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.tracingConfig != "" {
 		args = append(args, "--tracing.config="+q.tracingConfig)
 	}
+	for _, bucket := range q.telemetryDurationQuantiles {
+		args = append(args, "--query.telemetry.request-duration-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
+	}
+	for _, bucket := range q.telemetrySamplesQuantiles {
+		args = append(args, "--query.telemetry.request-samples-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
+	}
+	for _, bucket := range q.telemetrySeriesQuantiles {
+		args = append(args, "--query.telemetry.request-series-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
+	}
+	if q.enforceTenancy {
+		args = append(args, "--query.enforce-tenancy")
+	}
+	if q.enableXFunctions {
+		args = append(args, "--query.enable-x-functions")
+	}
+	if q.queryMode != "" {
+		args = append(args, "--query.mode="+q.queryMode)
+	}
+	if q.engine != "" {
+		args = append(args, "--query.promql-engine="+string(q.engine))
+	}
+	if q.relabelConfig != "" {
+		args = append(args, "--selector.relabel-config="+q.relabelConfig)
+	}
+
 	return args, nil
 }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
+
+func RemoteWriteEndpoints(addrs ...string) string {
+	var endpoints []string
+	for _, addr := range addrs {
+		endpoints = append(endpoints, RemoteWriteEndpoint(addr))
+	}
+	return strings.Join(endpoints, ",")
+}
 
 type ReceiveBuilder struct {
 	e2e.Linkable
@@ -472,6 +541,7 @@ type ReceiveBuilder struct {
 	maxExemplars        int
 	ingestion           bool
 	limit               int
+	tenantsLimits       receive.TenantsWriteLimitsConfig
 	metaMonitoring      string
 	metaMonitoringQuery string
 	hashringConfigs     []receive.HashringConfig
@@ -479,6 +549,8 @@ type ReceiveBuilder struct {
 	replication         int
 	image               string
 	nativeHistograms    bool
+	labels              []string
+	tenantSplitLabel    string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -509,9 +581,19 @@ func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
 	return r
 }
 
+func (r *ReceiveBuilder) WithLabel(name, value string) *ReceiveBuilder {
+	r.labels = append(r.labels, fmt.Sprintf(`%s="%s"`, name, value))
+	return r
+}
+
 func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive.HashringConfig) *ReceiveBuilder {
 	r.hashringConfigs = hashringConfigs
 	r.replication = replication
+	return r
+}
+
+func (r *ReceiveBuilder) WithTenantSplitLabel(splitLabel string) *ReceiveBuilder {
+	r.tenantSplitLabel = splitLabel
 	return r
 }
 
@@ -520,9 +602,10 @@ func (r *ReceiveBuilder) WithRelabelConfigs(relabelConfigs []*relabel.Config) *R
 	return r
 }
 
-func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string, query ...string) *ReceiveBuilder {
+func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string, tenantsLimits receive.TenantsWriteLimitsConfig, query ...string) *ReceiveBuilder {
 	r.limit = limit
 	r.metaMonitoring = metaMonitoring
+	r.tenantsLimits = tenantsLimits
 	if len(query) > 0 {
 		r.metaMonitoringQuery = query[0]
 	}
@@ -538,9 +621,9 @@ func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
 // If ingestion is enabled it will be configured for ingesting samples.
 // If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
 // If none, it errors out.
-func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
+func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 	if !r.ingestion && len(r.hashringConfigs) == 0 {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.New("enable ingestion or configure routing for this receiver"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.New("enable ingestion or configure routing for this receiver"))}
 	}
 
 	args := map[string]string{
@@ -553,6 +636,14 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
 		"--log.level":            infoLogLevel,
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
+	}
+
+	if r.tenantSplitLabel != "" {
+		args["--receive.split-tenant-label-name"] = r.tenantSplitLabel
+	}
+
+	if len(r.labels) > 0 {
+		args["--label"] = fmt.Sprintf("%s,%s", args["--label"], strings.Join(r.labels, ","))
 	}
 
 	hashring := r.hashringConfigs
@@ -573,30 +664,34 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 			},
 		}
 
+		if r.tenantsLimits != nil {
+			cfg.WriteLimits.TenantsLimits = r.tenantsLimits
+		}
+
 		b, err := yaml.Marshal(cfg)
 		if err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate limiting file: %v", hashring))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate limiting file: %v", hashring))}
 		}
 
 		if err := os.WriteFile(filepath.Join(r.Dir(), "limits.yaml"), b, 0600); err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "creating limitin config"))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "creating limitin config"))}
 		}
 
 		args["--receive.limits-config-file"] = filepath.Join(r.InternalDir(), "limits.yaml")
 	}
 
 	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "create receive dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "create receive dir"))}
 	}
 
 	if len(hashring) > 0 {
 		b, err := json.Marshal(hashring)
 		if err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))}
 		}
 
 		if err := os.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))}
 		}
 
 		args["--receive.hashrings-file"] = filepath.Join(r.InternalDir(), "hashrings.json")
@@ -607,7 +702,7 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 	if len(r.relabelConfigs) > 0 {
 		relabelConfigBytes, err := yaml.Marshal(r.relabelConfigs)
 		if err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))}
 		}
 		args["--receive.relabel-config"] = string(relabelConfigBytes)
 	}
@@ -616,9 +711,9 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		args["--tsdb.enable-native-histograms"] = ""
 	}
 
-	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(r.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     r.image,
-		Command:   e2e.NewCommand("receive", e2e.BuildArgs(args)...),
+		Command:   e2e.NewCommand("receive", e2e.BuildKingpinArgs(args)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	})), "http")
 }
@@ -685,29 +780,29 @@ func (r *RulerBuilder) WithRestoreIgnoredLabels(labels ...string) *RulerBuilder 
 	return r
 }
 
-func (r *RulerBuilder) InitTSDB(internalRuleDir string, queryCfg []httpconfig.Config) *e2emon.InstrumentedRunnable {
+func (r *RulerBuilder) InitTSDB(internalRuleDir string, queryCfg []clientconfig.Config) *e2eobs.Observable {
 	return r.initRule(internalRuleDir, queryCfg, nil)
 }
 
-func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2emon.InstrumentedRunnable {
+func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []clientconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2eobs.Observable {
 	return r.initRule(internalRuleDir, queryCfg, remoteWriteCfg)
 }
 
-func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2emon.InstrumentedRunnable {
+func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []clientconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) *e2eobs.Observable {
 	if err := os.MkdirAll(r.f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "create rule dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "create rule dir"))}
 	}
 
 	amCfgBytes, err := yaml.Marshal(alert.AlertingConfig{
 		Alertmanagers: r.amCfg,
 	})
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate am file: %v", r.amCfg))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate am file: %v", r.amCfg))}
 	}
 
 	queryCfgBytes, err := yaml.Marshal(queryCfg)
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate query file: %v", queryCfg))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate query file: %v", queryCfg))}
 	}
 
 	ruleArgs := map[string]string{
@@ -747,7 +842,7 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
 		}{remoteWriteCfg})
 		if err != nil {
-			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))}
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))}
 		}
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
 	}
@@ -758,20 +853,20 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 		args = append(args, "--restore-ignored-label="+label)
 	}
 
-	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(r.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     r.image,
 		Command:   e2e.NewCommand("rule", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	})), "http")
 }
 
-func NewAlertmanager(e e2e.Environment, name string) *e2emon.InstrumentedRunnable {
+func NewAlertmanager(e e2e.Environment, name string) *e2eobs.Observable {
 	f := e.Runnable(fmt.Sprintf("alertmanager-%v", name)).
 		WithPorts(map[string]int{"http": 8080}).
 		Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create am dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create am dir"))}
 	}
 	const config = `
 route:
@@ -783,10 +878,10 @@ receivers:
 - name: 'null'
 `
 	if err := os.WriteFile(filepath.Join(f.Dir(), "config.yaml"), []byte(config), 0600); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating alertmanager config file failed"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating alertmanager config file failed"))}
 	}
 
-	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image: DefaultAlertmanagerImage(),
 		Command: e2e.NewCommandWithoutEntrypoint("/bin/alertmanager", e2e.BuildArgs(map[string]string{
 			"--config.file":         filepath.Join(f.InternalDir(), "config.yaml"),
@@ -802,23 +897,23 @@ receivers:
 	})), "http")
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2emon.InstrumentedRunnable {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig, indexCacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2eobs.Observable {
 	f := e.Runnable(fmt.Sprintf("store-gw-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
 		Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
 	}
 
 	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig))}
 	}
 
 	args := append(e2e.BuildArgs(map[string]string{
@@ -841,7 +936,11 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		args = append(args, "--store.caching-bucket.config", cacheConfig)
 	}
 
-	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{
+	if indexCacheConfig != "" {
+		args = append(args, "--index-cache.config", indexCacheConfig)
+	}
+
+	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     DefaultImage(),
 		Command:   e2e.NewCommand("store", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
@@ -863,22 +962,22 @@ func NewCompactorBuilder(e e2e.Environment, name string) *CompactorBuilder {
 	}
 }
 
-func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) *e2emon.InstrumentedRunnable {
+func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) *e2eobs.Observable {
 	if err := os.MkdirAll(c.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrap(err, "create compact dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrap(err, "create compact dir"))}
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrapf(err, "generate compact config file: %v", bucketConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrapf(err, "generate compact config file: %v", bucketConfig))}
 	}
 
 	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))}
 	}
 
-	return e2emon.AsInstrumented(c.f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(c.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image: DefaultImage(),
 		Command: e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
 			"--debug.name":               c.Name(),
@@ -923,6 +1022,13 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		flags["--query-range.split-interval"] = "0"
 	}
 
+	if config.TenantHeader != "" {
+		flags["--query-frontend.tenant-header"] = config.TenantHeader
+	}
+	if config.DefaultTenant != "" {
+		flags["--query-frontend.default-tenant"] = config.DefaultTenant
+	}
+
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).
 		WithPorts(map[string]int{"http": 8080}).
 		Init(e2e.StartOptions{
@@ -934,7 +1040,7 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		}), "http")
 }
 
-func NewReverseProxy(e e2e.Environment, name, tenantID, target string) *e2emon.InstrumentedRunnable {
+func NewReverseProxy(e e2e.Environment, name, tenantID, target string) *e2eobs.Observable {
 	conf := fmt.Sprintf(`
 events {
 	worker_connections  1024;
@@ -958,22 +1064,22 @@ http {
 		Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
 	}
 
 	if err := os.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))}
 	}
 
-	return e2emon.AsInstrumented(f.Init(e2e.StartOptions{
+	return e2eobs.AsObservable(f.Init(e2e.StartOptions{
 		Image:            "docker.io/nginx:1.21.1-alpine",
 		Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
 		WaitReadyBackoff: &defaultBackoffConfig,
 	}), "http")
 }
 
-func NewMemcached(e e2e.Environment, name string) *e2emon.InstrumentedRunnable {
-	return e2emon.AsInstrumented(e.Runnable(fmt.Sprintf("memcached-%s", name)).
+func NewMemcached(e e2e.Environment, name string) *e2eobs.Observable {
+	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("memcached-%s", name)).
 		WithPorts(map[string]int{"memcached": 11211}).
 		Init(e2e.StartOptions{
 			Image:            "docker.io/memcached:1.6.3-alpine",
@@ -992,10 +1098,10 @@ func NewToolsBucketWeb(
 	minTime string,
 	maxTime string,
 	relabelConfig string,
-) *e2emon.InstrumentedRunnable {
+) *e2eobs.Observable {
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig))}
 	}
 
 	f := e.Runnable(fmt.Sprintf("toolsBucketWeb-%s", name)).
@@ -1030,7 +1136,7 @@ func NewToolsBucketWeb(
 
 	args = append([]string{"bucket", "web"}, args...)
 
-	return e2emon.AsInstrumented(f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     DefaultImage(),
 		Command:   e2e.NewCommand("tools", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
@@ -1065,7 +1171,7 @@ const LocalPrometheusTarget = "localhost:9090"
 
 // DefaultPromConfig returns Prometheus config that sets Prometheus to:
 // * expose 2 external labels, source and replica.
-// * optionallly scrape self. This will produce up == 0 metric which we can assert on.
+// * optionally scrape self. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
 func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeTargets ...string) string {
 	var targets string
@@ -1092,7 +1198,7 @@ scrape_configs:
   - targets: [%s]
   relabel_configs:
   - source_labels: ['__address__']
-    regex: '^.+:80$'
+    regex: '^localhost:80$'
     action: drop
 `, config, targets)
 	}
@@ -1100,13 +1206,16 @@ scrape_configs:
 	if remoteWriteEndpoint != "" {
 		config = fmt.Sprintf(`
 %s
-remote_write:
+remote_write:`, config)
+		for _, url := range strings.Split(remoteWriteEndpoint, ",") {
+			config = fmt.Sprintf(`
+%s
 - url: "%s"
   # Don't spam receiver on mistake.
   queue_config:
     min_backoff: 2s
-    max_backoff: 10s
-`, config, remoteWriteEndpoint)
+    max_backoff: 10s`, config, url)
+		}
 	}
 
 	if ruleFile != "" {
@@ -1129,4 +1238,34 @@ func NewRedis(e e2e.Environment, name string) e2e.Runnable {
 			WaitReadyBackoff: &defaultBackoffConfig,
 		},
 	)
+}
+
+func NewToolsBucketDownsample(e e2e.Environment, name string, bucketConfig client.BucketConfig) *e2eobs.Observable {
+	f := e.Runnable(fmt.Sprintf("downsampler-%s", name)).
+		WithPorts(map[string]int{"http": 8080}).
+		Future()
+
+	bktConfigBytes, err := yaml.Marshal(bucketConfig)
+	if err != nil {
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
+	}
+
+	args := []string{"bucket", "downsample"}
+
+	args = append(args, e2e.BuildArgs(map[string]string{
+		"--http-address":    ":8080",
+		"--log.level":       "debug",
+		"--objstore.config": string(bktConfigBytes),
+		"--data-dir":        f.InternalDir(),
+	})...)
+
+	return e2eobs.AsObservable(f.Init(
+		e2e.StartOptions{
+			Image:            DefaultImage(),
+			Command:          e2e.NewCommand("tools", args...),
+			User:             strconv.Itoa(os.Getuid()),
+			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
+	), "http")
 }

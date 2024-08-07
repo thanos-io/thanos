@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -38,15 +39,18 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 type fakeTenantAppendable struct {
@@ -160,31 +164,59 @@ func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
 
+func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
+type fakePeersGroup struct {
+	clients map[string]WriteableStoreAsyncClient
+
+	closeCalled map[string]bool
+}
+
+func (g *fakePeersGroup) markPeerUnavailable(s string) {
+}
+
+func (g *fakePeersGroup) markPeerAvailable(s string) {
+}
+
+func (g *fakePeersGroup) reset() {
+}
+
+func (g *fakePeersGroup) close(addr string) error {
+	if g.closeCalled == nil {
+		g.closeCalled = map[string]bool{}
+	}
+	g.closeCalled[addr] = true
+	return nil
+}
+
+func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (WriteableStoreAsyncClient, error) {
+	c, ok := g.clients[addr]
+	if !ok {
+		return nil, fmt.Errorf("client %s not found", addr)
+	}
+	return c, nil
+}
+
+var _ = (peersContainer)(&fakePeersGroup{})
+
 func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
 		wOpts    = &WriterOptions{}
 	)
-	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
-	// This removes the network from the tests and creates a more consistent testing harness.
-	peers := &peerGroup{
-		dialOpts: nil,
-		m:        sync.RWMutex{},
-		cache:    map[string]storepb.WriteableStoreClient{},
-		dialer: func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error) {
-			// dialer should never be called since we are creating fake clients with fake addresses
-			// this protects against some leaking test that may attempt to dial random IP addresses
-			// which may pose a security risk.
-			return nil, errors.New("unexpected dial called in testing")
-		},
+	fakePeers := &fakePeersGroup{
+		clients: map[string]WriteableStoreAsyncClient{},
 	}
 
 	ag := addrGen{}
-	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger())
+	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	logger := logging.NewLogger("debug", "logfmt", "receive_test")
 	for i := range appendables {
-		h := NewHandler(nil, &Options{
-			TenantHeader:      DefaultTenantHeader,
+		h := NewHandler(logger, &Options{
+			TenantHeader:      tenancy.DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Minute,
@@ -192,18 +224,18 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
-		h.peers = peers
 		addr := ag.newAddr()
+		h.peers = fakePeers
+		fakePeers.clients[addr] = &fakeRemoteWriteGRPCServer{h: h}
 		h.options.Endpoint = addr
-		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
-		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
+		cfg[0].Endpoints = append(cfg[0].Endpoints, Endpoint{Address: h.options.Endpoint})
 	}
 	// Use hashmod as default.
 	if hashringAlgo == "" {
 		hashringAlgo = AlgorithmHashmod
 	}
 
-	hashring, err := newMultiHashring(hashringAlgo, replicationFactor, cfg)
+	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -228,6 +260,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		replicationFactor uint64
 		wreq              *prompb.WriteRequest
 		appendables       []*fakeAppendable
+		randomNode        bool
 	}{
 		{
 			name:              "size 1 success",
@@ -585,17 +618,29 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				t.Fatalf("unable to create test handler: %v", err)
 			}
 			tenant := "test"
-			// Test from the point of view of every node
-			// so that we know status code does not depend
-			// on which node is erroring and which node is receiving.
-			for i, handler := range handlers {
-				// Test that the correct status is returned.
+
+			if tc.randomNode {
+				handler := handlers[0]
 				rec, err := makeRequest(handler, tenant, tc.wreq)
 				if err != nil {
-					t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					t.Fatalf("handler: unexpectedly failed making HTTP request: %v", err)
 				}
 				if rec.Code != tc.status {
-					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
+				}
+			} else {
+				// Test from the point of view of every node
+				// so that we know status code does not depend
+				// on which node is erroring and which node is receiving.
+				for i, handler := range handlers {
+					// Test that the correct status is returned.
+					rec, err := makeRequest(handler, tenant, tc.wreq)
+					if err != nil {
+						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					}
+					if rec.Code != tc.status {
+						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
+					}
 				}
 			}
 
@@ -606,13 +651,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			// Test that each time series is stored
 			// the correct amount of times in each fake DB.
 			for _, ts := range tc.wreq.Timeseries {
-				lset := make(labels.Labels, len(ts.Labels))
-				for j := range ts.Labels {
-					lset[j] = labels.Label{
-						Name:  ts.Labels[j].Name,
-						Value: ts.Labels[j].Value,
-					}
-				}
+				lset := labelpb.ZLabelsToPromLabels(ts.Labels)
 				for j, a := range tc.appendables {
 					if withConsistencyDelay {
 						var expected int
@@ -634,6 +673,9 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							// We have len(handlers) copies of each sample because the test case
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
+							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
 						}
 						if uint64(expectedMin) > got {
 							t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
@@ -739,7 +781,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			testutil.Ok(t, os.WriteFile(tmpLimitsPath, tenantConfig, 0666))
 			limitConfig, _ := extkingpin.NewStaticPathContent(tmpLimitsPath)
 			handler.Limiter, _ = NewLimiter(
-				limitConfig, nil, RouterIngestor, log.NewNopLogger(),
+				limitConfig, nil, RouterIngestor, log.NewNopLogger(), 1*time.Second,
 			)
 
 			wreq := &prompb.WriteRequest{
@@ -833,6 +875,16 @@ type fakeRemoteWriteGRPCServer struct {
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
+}
+
+func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+	_, err := f.h.RemoteWrite(ctx, in)
+	responses <- writeResponse{
+		er:        er,
+		err:       err,
+		seriesIDs: seriesIDs,
+	}
+	cb(err)
 }
 
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
@@ -1140,8 +1192,7 @@ func TestIsTenantValid(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			h := NewHandler(nil, &Options{})
-			err := h.isTenantValid(tcase.tenant)
+			err := tenancy.IsTenantValid(tcase.tenant)
 			if tcase.expectedErr != nil {
 				testutil.NotOk(t, err)
 				testutil.Equals(t, tcase.expectedErr.Error(), err.Error())
@@ -1519,4 +1570,219 @@ func TestRelabel(t *testing.T) {
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}
+}
+
+func TestGetStatsLimitParameter(t *testing.T) {
+	t.Run("invalid limit parameter, not integer", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, "abc")
+		r.URL.RawQuery = q.Encode()
+
+		_, err = getStatsLimitParameter(r)
+		testutil.NotOk(t, err)
+	})
+	t.Run("invalid limit parameter, too large", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, strconv.FormatUint(math.MaxInt+1, 10))
+		r.URL.RawQuery = q.Encode()
+
+		_, err = getStatsLimitParameter(r)
+		testutil.NotOk(t, err)
+	})
+	t.Run("not present returns default", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		limit, err := getStatsLimitParameter(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, limit, DefaultStatsLimit)
+	})
+	t.Run("if present and valid, the parameter is returned", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
+		testutil.Ok(t, err)
+
+		const givenLimit = 20
+
+		q := r.URL.Query()
+		q.Add(LimitStatsQueryParam, strconv.FormatUint(givenLimit, 10))
+		r.URL.RawQuery = q.Encode()
+
+		limit, err := getStatsLimitParameter(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, limit, givenLimit)
+	})
+}
+
+func TestSortedSliceDiff(t *testing.T) {
+	testutil.Equals(t, []string{"a"}, getSortedStringSliceDiff([]string{"a", "a", "foo"}, []string{"b", "b", "foo"}))
+	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{"b", "b", "foo"}))
+	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{}))
+}
+
+func TestHashringChangeCallsClose(t *testing.T) {
+	appendables := []*fakeAppendable{
+		{
+			appender: newFakeAppender(nil, nil, nil),
+		},
+		{
+			appender: newFakeAppender(nil, nil, nil),
+		},
+		{
+			appender: newFakeAppender(nil, nil, nil),
+		},
+	}
+	allHandlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+	testutil.Ok(t, err)
+
+	appendables = appendables[1:]
+
+	_, smallHashring, err := newTestHandlerHashring(appendables, 2, AlgorithmHashmod)
+	testutil.Ok(t, err)
+
+	allHandlers[0].Hashring(smallHashring)
+
+	pg := allHandlers[0].peers.(*fakePeersGroup)
+	testutil.Assert(t, len(pg.closeCalled) > 0)
+}
+
+func TestHandlerEarlyStop(t *testing.T) {
+	h := NewHandler(nil, &Options{})
+	h.Close()
+
+	err := h.Run()
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "http: Server closed", err.Error())
+}
+
+type hashringSeenTenants struct {
+	Hashring
+
+	seenTenants map[string]struct{}
+}
+
+func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+	if h.seenTenants == nil {
+		h.seenTenants = map[string]struct{}{}
+	}
+	h.seenTenants[tenant] = struct{}{}
+	return h.Hashring.GetN(tenant, ts, n)
+}
+
+func TestDistributeSeries(t *testing.T) {
+	const tenantIDLabelName = "thanos_tenant_id"
+	h := NewHandler(nil, &Options{
+		SplitTenantLabelName: tenantIDLabelName,
+	})
+
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9090",
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	_, remote, err := h.distributeTimeseriesToReplicas(
+		"foo",
+		[]uint64{0},
+		[]prompb.TimeSeries{
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
+			},
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, remote, 1)
+	require.Len(t, remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries, 1)
+	require.Len(t, remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["boo"].timeSeries, 1)
+
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries[0].Labels).Len())
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["boo"].timeSeries[0].Labels).Len())
+	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
+}
+
+func TestHandlerFlippingHashrings(t *testing.T) {
+	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
+	t.Cleanup(h.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	h1, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9090",
+		},
+	})
+	require.NoError(t, err)
+	h2, err := newSimpleHashring([]Endpoint{
+		{
+			Address: "http://localhost:9091",
+		},
+	})
+	require.NoError(t, err)
+
+	h.Hashring(h1)
+
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-time.After(50 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+
+			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+						Samples: []prompb.Sample{
+							{
+								Timestamp: time.Now().Unix(),
+								Value:     123,
+							},
+						},
+					},
+				},
+			})
+			require.Error(t, err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var flipper bool
+
+		for {
+			select {
+			case <-time.After(200 * time.Millisecond):
+			case <-ctx.Done():
+				return
+			}
+
+			if flipper {
+				h.Hashring(h2)
+			} else {
+				h.Hashring(h1)
+			}
+			flipper = !flipper
+		}
+	}()
+
+	<-time.After(1 * time.Second)
+	cancel()
+	wg.Wait()
 }

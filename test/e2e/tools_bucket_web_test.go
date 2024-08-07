@@ -35,7 +35,7 @@ import (
 func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("route-prefix")
+	e, err := e2e.NewDockerEnvironment("rt-prfx-xtprf")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -105,7 +105,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("route-prefix")
+	e, err := e2e.NewDockerEnvironment("rt-prfx-xtrtprf")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

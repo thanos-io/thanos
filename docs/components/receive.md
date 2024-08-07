@@ -32,7 +32,7 @@ The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-
 
 ## TSDB stats
 
-Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. Use the `limit` query parameter to tweak the number of stats to return (the default is 10). The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
 
 Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
 
@@ -76,6 +76,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -95,6 +113,80 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
+It is possible to only match certain `tenant`s inside of a hashring file. For example:
+
+```json
+[
+    {
+       "tenants": ["foobar"],
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+The specified endpoints will be used if the tenant is set to `foobar`. It is possible to use glob matching through the parameter `tenant_matcher_type`. It can have the value `glob`. In this case, the strings inside the array are taken as glob patterns and matched against the `tenant` inside of a remote-write request. For instance:
+
+```json
+[
+    {
+       "tenants": ["foo*"],
+       "tenant_matcher_type": "glob",
+       "endpoints": [
+            "127.0.0.1:1234",
+            "127.0.0.1:12345",
+            "127.0.0.1:1235"
+        ]
+    }
+]
+```
+
+This will still match the tenant `foobar` and any other tenant which begins with the letters `foo`.
+
+### AZ-aware Ketama hashring (experimental)
+
+In order to ensure even spread for replication over nodes in different availability-zones, you can choose to include az definition in your hashring config. If we for example have a 6 node cluster, spread over 3 different availability zones; A, B and C, we could use the following example `hashring.json`:
+
+```json
+[
+    {
+        "endpoints": [
+          {
+            "address": "127.0.0.1:10907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:11907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:12907",
+            "az": "C"
+          },
+          {
+            "address": "127.0.0.1:13907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:14907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:15907",
+            "az": "C"
+          }
+        ]
+    }
+]
+```
+
+This is only supported for the Ketama algorithm.
+
+**NOTE:** This feature is made available from v0.32 onwards. Receive can still operate with `endpoints` set to an array of IP strings in ketama mode. But to use AZ-aware hashring, you would need to migrate your existing hashring (and surrounding automation) to the new JSON structure mentioned above.
+
 ## Limits & gates (experimental)
 
 Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:
@@ -107,7 +199,7 @@ To configure the gates and limits you can use one of the two options:
 - `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file. Any modification to the indicated file will trigger a configuration reload. If the updated configuration is invalid an error will be logged and it won't replace the previous valid configuration.
 - `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
 
-By default all the limits and gates are **disabled**.
+By default all the limits and gates are **disabled**. These options should be added to the routing-receivers when using the [Routing Receive and Ingesting Receive](https://thanos.io/tip/proposals-accepted/202012-receive-split.md/).
 
 ### Understanding the configuration file
 
@@ -200,12 +292,20 @@ Under `global`:
 - `meta_monitoring_http_client`: Optional YAML field specifying HTTP client config for meta-monitoring.
 
 Under `default` and per `tenant`:
-- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive. Set to 0 for unlimited.
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
 - Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similarly to when one receiver cannot be scraped.
 - Support for different limit configuration for different tenants is planned for the future.
+
+## Asynchronous workers
+
+Instead of spawning a new goroutine each time the Receiver forwards a request to another node, it spawns a fixed number of goroutines (workers) that perform the work. This allows avoiding spawning potentially tens or even hundred thousand goroutines if someone starts sending a lot of small requests.
+
+This number of workers is controlled by `--receive.forward.async-workers=`.
+
+Please see the metric `thanos_receive_forward_delay_seconds` to see if you need to increase the number of forwarding workers.
 
 ## Flags
 
@@ -215,6 +315,11 @@ usage: thanos receive [<flags>]
 Accept Prometheus remote write API requests and write to local tsdb.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -267,6 +372,9 @@ Flags:
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
+      --receive.forward.async-workers=5
+                                 Number of concurrent workers processing
+                                 forwarding of remote-write requests.
       --receive.grpc-compression=snappy
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
@@ -307,6 +415,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.split-tenant-label-name=""
+                                 Label name through which the request will
+                                 be split into multiple tenants. This takes
+                                 precedence over the HTTP header.
       --receive.tenant-certificate-field=
                                  Use TLS client's certificate field to
                                  determine tenant for write requests.
@@ -332,6 +444,12 @@ Flags:
                                  to the server.
       --remote-write.client-tls-key=""
                                  TLS Key for the client's certificate.
+      --remote-write.client-tls-secure
+                                 Use TLS when talking to the other receivers.
+      --remote-write.client-tls-skip-verify
+                                 Disable TLS certificate verification when
+                                 talking to the other receivers i.e self signed,
+                                 signed by fake CA.
       --remote-write.server-tls-cert=""
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.
@@ -384,6 +502,11 @@ Flags:
                                  ingesting a new exemplar will evict the oldest
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
+      --tsdb.max-retention-bytes=0
+                                 Maximum number of bytes that can be stored for
+                                 blocks. A unit is required, supported units: B,
+                                 KB, MB, GB, TB, PB, EB. Ex: "512MB". Based on
+                                 powers-of-2, so 1KB is 1024B.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.

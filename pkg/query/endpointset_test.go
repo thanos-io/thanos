@@ -14,20 +14,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/thanos/pkg/store"
-
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/efficientgo/core/testutil"
-	"github.com/pkg/errors"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -1264,7 +1263,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 	testutil.Equals(t, 2, len(endpointSet.GetStoreClients()), "two static clients must remain available")
 	testutil.Equals(t, curMin, endpointSet.endpoints[staticEndpointAddr].metadata.Store.MinTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, curMax, endpointSet.endpoints[staticEndpointAddr].metadata.Store.MaxTime, "minimum time reported by the store node is different")
-	testutil.NotOk(t, endpointSet.endpoints[staticEndpointAddr].getStatus().LastError.originalErr)
+	testutil.NotOk(t, endpointSet.endpoints[staticEndpointAddr].status.LastError.originalErr)
 
 	testutil.Equals(t, updatedCurMin, endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MinTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, updatedCurMax, endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MaxTime, "minimum time reported by the store node is different")
@@ -1554,7 +1553,7 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 
 		mockEndpointRef.update(time.Now, mockEndpointRef.metadata, tc.InputError)
 
-		b, err := json.Marshal(mockEndpointRef.getStatus().LastError)
+		b, err := json.Marshal(mockEndpointRef.status.LastError)
 		testutil.Ok(t, err)
 		testutil.Equals(t, tc.ExpectedLastErr, string(b))
 	}
@@ -1570,14 +1569,14 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 
 	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, errors.New("test err"))
 
-	b, err := json.Marshal(mockEndpointRef.getStatus().LastError)
+	b, err := json.Marshal(mockEndpointRef.status.LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `"test err"`, string(b))
 
 	// updating status without and error should clear the previous one.
 	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, nil)
 
-	b, err = json.Marshal(mockEndpointRef.getStatus().LastError)
+	b, err = json.Marshal(mockEndpointRef.status.LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `null`, string(b))
 }

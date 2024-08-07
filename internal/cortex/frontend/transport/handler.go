@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -44,9 +43,10 @@ var (
 
 // Config for a Handler.
 type HandlerConfig struct {
-	LogQueriesLongerThan time.Duration `yaml:"log_queries_longer_than"`
-	MaxBodySize          int64         `yaml:"max_body_size"`
-	QueryStatsEnabled    bool          `yaml:"query_stats_enabled"`
+	LogQueriesLongerThan    time.Duration `yaml:"log_queries_longer_than"`
+	MaxBodySize             int64         `yaml:"max_body_size"`
+	QueryStatsEnabled       bool          `yaml:"query_stats_enabled"`
+	SlowQueryLogsUserHeader string        `yaml:"slow_query_logs_user_header"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -120,7 +120,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Buffer the body for later use to track slow queries.
 	var buf bytes.Buffer
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
-	r.Body = ioutil.NopCloser(io.TeeReader(r.Body, &buf))
+	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	startTime := time.Now()
 	resp, err := f.roundTripper.RoundTrip(r)
@@ -177,7 +177,13 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		thanosTraceID = traceID
 	}
 
-	remoteUser, _, _ := r.BasicAuth()
+	var remoteUser string
+	// Prefer reading remote user from header. Fall back to the value of basic authentication.
+	if f.cfg.SlowQueryLogsUserHeader != "" {
+		remoteUser = r.Header.Get(f.cfg.SlowQueryLogsUserHeader)
+	} else {
+		remoteUser, _, _ = r.BasicAuth()
+	}
 
 	logMessage := append([]interface{}{
 		"msg", "slow query detected",
@@ -231,7 +237,7 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 
 func (f *Handler) parseRequestQueryString(r *http.Request, bodyBuf bytes.Buffer) url.Values {
 	// Use previously buffered body.
-	r.Body = ioutil.NopCloser(&bodyBuf)
+	r.Body = io.NopCloser(&bodyBuf)
 
 	// Ensure the form has been parsed so all the parameters are present
 	err := r.ParseForm()

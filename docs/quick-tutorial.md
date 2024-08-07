@@ -80,6 +80,7 @@ If you are not interested in backing up any data, the `--objstore.config-file` f
 * *[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)*
 * *[Example Deploying Sidecar using official Prometheus Helm Chart](../tutorials/kubernetes-helm/README.md)*
 * *[Details & Config for other object stores](storage.md)*
+* *[Example Thanos Setup integrated with Cilium(Service Map)](../tutorials/thanos-with-cilium/README.md)*
 
 ### Store API
 
@@ -131,9 +132,9 @@ Below, we will set up a Thanos Querier to connect to our Sidecars, and expose it
 ```bash
 thanos query \
     --http-address 0.0.0.0:19192 \                                # HTTP Endpoint for Thanos Querier UI
-    --store        1.2.3.4:19090 \                                # Static gRPC Store API Address for the query node to query
-    --store        1.2.3.5:19090 \                                # Also repeatable
-    --store        dnssrv+_grpc._tcp.thanos-store.monitoring.svc  # Supports DNS A & SRV records
+    --endpoint     1.2.3.4:19090 \                                # Static gRPC Store API Address for the query node to query
+    --endpoint     1.2.3.5:19090 \                                # Also repeatable
+    --endpoint     dnssrv+_grpc._tcp.thanos-store.monitoring.svc  # Supports DNS A & SRV records
 ```
 
 Go to the configured HTTP address, which should now show a UI similar to that of Prometheus. You can now query across all Prometheus instances within the cluster. You can also check out the Stores page, which shows all of your stores.
@@ -162,8 +163,8 @@ Ensure your Prometheus instances have been reloaded with the configuration you d
 ```bash
 thanos query \
     --http-address        0.0.0.0:19192 \
-    --store               1.2.3.4:19090 \
-    --store               1.2.3.5:19090 \
+    --endpoint            1.2.3.4:19090 \
+    --endpoint            1.2.3.5:19090 \
     --query.replica-label replica          # Replica label for deduplication
     --query.replica-label replicaX         # Supports multiple replica labels for deduplication
 ```
@@ -182,9 +183,9 @@ There are various ways to tell Thanos Querier about the Store APIs it should que
 thanos query \
     --http-address 0.0.0.0:19192 \              # Endpoint for Thanos Querier UI
     --grpc-address 0.0.0.0:19092 \              # gRPC endpoint for Store API
-    --store        1.2.3.4:19090 \              # Static gRPC Store API Address for the query node to query
-    --store        1.2.3.5:19090 \              # Also repeatable
-    --store        dns+rest.thanos.peers:19092  # Use DNS lookup for getting all registered IPs as separate Store APIs
+    --endpoint     1.2.3.4:19090 \              # Static gRPC Store API Address for the query node to query
+    --endpoint     1.2.3.5:19090 \              # Also repeatable
+    --endpoint     dns+rest.thanos.peers:19092  # Use DNS lookup for getting all registered IPs as separate Store APIs
 ```
 
 Read more details [here](service-discovery.md).

@@ -25,7 +25,8 @@ import (
 type Limiter struct {
 	sync.RWMutex
 	requestLimiter            requestLimiter
-	HeadSeriesLimiter         headSeriesLimiter
+	headSeriesLimiterMtx      sync.Mutex
+	headSeriesLimiter         headSeriesLimiter
 	writeGate                 gate.Gate
 	registerer                prometheus.Registerer
 	configPathOrContent       fileContent
@@ -33,6 +34,7 @@ type Limiter struct {
 	configReloadCounter       prometheus.Counter
 	configReloadFailedCounter prometheus.Counter
 	receiverMode              ReceiverMode
+	configReloadTimer         time.Duration
 }
 
 // headSeriesLimiter encompasses active/head series limiting logic.
@@ -53,15 +55,23 @@ type fileContent interface {
 	Path() string
 }
 
+func (l *Limiter) HeadSeriesLimiter() headSeriesLimiter {
+	l.headSeriesLimiterMtx.Lock()
+	defer l.headSeriesLimiterMtx.Unlock()
+
+	return l.headSeriesLimiter
+}
+
 // NewLimiter creates a new *Limiter given a configuration and prometheus
 // registerer.
-func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) (*Limiter, error) {
+func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMode, logger log.Logger, configReloadTimer time.Duration) (*Limiter, error) {
 	limiter := &Limiter{
 		writeGate:         gate.NewNoop(),
 		requestLimiter:    &noopRequestLimiter{},
-		HeadSeriesLimiter: NewNopSeriesLimit(),
+		headSeriesLimiter: NewNopSeriesLimit(),
 		logger:            logger,
 		receiverMode:      r,
+		configReloadTimer: configReloadTimer,
 	}
 
 	if reg != nil {
@@ -116,7 +126,7 @@ func (l *Limiter) StartConfigReloader(ctx context.Context) error {
 		if reloadCounter := l.configReloadCounter; reloadCounter != nil {
 			reloadCounter.Inc()
 		}
-	}, 1*time.Second)
+	}, l.configReloadTimer)
 }
 
 func (l *Limiter) CanReload() bool {
@@ -151,9 +161,21 @@ func (l *Limiter) loadConfig() error {
 		l.registerer,
 		&config.WriteLimits,
 	)
-	seriesLimitSupported := (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && (len(config.WriteLimits.TenantsLimits) != 0 || config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
-	if seriesLimitSupported {
-		l.HeadSeriesLimiter = NewHeadSeriesLimit(config.WriteLimits, l.registerer, l.logger)
+	seriesLimitIsActivated := func() bool {
+		if config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0 {
+			return true
+		}
+		for _, tenant := range config.WriteLimits.TenantsLimits {
+			if tenant.HeadSeriesLimit != nil && *tenant.HeadSeriesLimit != 0 {
+				return true
+			}
+		}
+		return false
+	}
+	if (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && seriesLimitIsActivated() {
+		l.headSeriesLimiterMtx.Lock()
+		l.headSeriesLimiter = NewHeadSeriesLimit(config.WriteLimits, l.registerer, l.logger)
+		l.headSeriesLimiterMtx.Unlock()
 	}
 	return nil
 }

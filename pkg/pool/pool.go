@@ -35,9 +35,19 @@ type BucketedBytes struct {
 	sizes     []int
 	maxTotal  uint64
 	usedTotal uint64
-	mtx       sync.Mutex
+	mtx       sync.RWMutex
 
 	new func(s int) *[]byte
+}
+
+// MustNewBucketedBytes is like NewBucketedBytes but panics if construction fails.
+// Useful for package internal pools.
+func MustNewBucketedBytes(minSize, maxSize int, factor float64, maxTotal uint64) *BucketedBytes {
+	pool, err := NewBucketedBytes(minSize, maxSize, factor, maxTotal)
+	if err != nil {
+		panic(err)
+	}
+	return pool
 }
 
 // NewBucketedBytes returns a new Bytes with size buckets for minSize to maxSize
@@ -126,4 +136,11 @@ func (p *BucketedBytes) Put(b *[]byte) {
 	} else {
 		p.usedTotal -= uint64(sz)
 	}
+}
+
+func (p *BucketedBytes) UsedBytes() uint64 {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
+
+	return p.usedTotal
 }

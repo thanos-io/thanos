@@ -17,9 +17,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"github.com/thanos-io/thanos/internal/cortex/util/flagext"
-	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 )
 
 const (
@@ -96,10 +93,7 @@ type cacheEntry struct {
 
 // NewFifoCache returns a new initialised FifoCache of size.
 func NewFifoCache(name string, cfg FifoCacheConfig, reg prometheus.Registerer, logger log.Logger) *FifoCache {
-	util_log.WarnExperimentalUse("In-memory (FIFO) cache")
-
 	if cfg.DeprecatedSize > 0 {
-		flagext.DeprecatedFlagsUsed.Inc()
 		level.Warn(logger).Log("msg", "running with DEPRECATED flag fifocache.size, use fifocache.max-size-items or fifocache.max-size-bytes instead", "cache", name)
 		cfg.MaxSizeItems = cfg.DeprecatedSize
 	}

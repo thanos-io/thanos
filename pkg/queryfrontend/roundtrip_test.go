@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -570,7 +572,7 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 		name     string
 		req      queryrange.Request
 		err      bool
-		expected int
+		expected int64
 	}{
 		{
 			name:     "query with vertical sharding",
@@ -609,7 +611,7 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 				testutil.Ok(t, err)
 			}
 
-			testutil.Equals(t, tc.expected, *res)
+			testutil.Equals(t, tc.expected, res.Load())
 		}) {
 			break
 		}
@@ -869,8 +871,8 @@ func promqlResults(fail bool) (*int, http.Handler) {
 
 // promqlResultsWithFailures is a mock handler used to test split and cache middleware.
 // it will return a failed response numFailures times.
-func promqlResultsWithFailures(numFailures int) (*int, http.Handler) {
-	count := 0
+func promqlResultsWithFailures(numFailures int) (*atomic.Int64, http.Handler) {
+	count := &atomic.Int64{}
 	var lock sync.Mutex
 	q := queryrange.PrometheusResponse{
 		Status: "success",
@@ -890,7 +892,7 @@ func promqlResultsWithFailures(numFailures int) (*int, http.Handler) {
 
 	cond := sync.NewCond(&sync.Mutex{})
 	cond.L.Lock()
-	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lock.Lock()
 		defer lock.Unlock()
 
@@ -914,7 +916,7 @@ func promqlResultsWithFailures(numFailures int) (*int, http.Handler) {
 		if numFailures == 0 {
 			cond.Broadcast()
 		}
-		count++
+		count.Add(1)
 	})
 }
 

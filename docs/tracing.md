@@ -79,6 +79,7 @@ type: OTLP
 config:
   client_type: ""
   service_name: ""
+  resource_attributes: {}
   reconnection_period: 0s
   compression: ""
   insecure: false
@@ -97,6 +98,8 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+  sampler_type: ""
+  sampler_param: ""
 ```
 
 ### Jaeger
@@ -167,7 +170,7 @@ config:
 
 ### Lightstep
 
-Client for [Lightstep](https://lightstep.com).
+Client for [Lightstep](https://www.servicenow.com/products/observability.html).
 
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 

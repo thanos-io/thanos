@@ -8,13 +8,20 @@ package main
 
 import (
 	"net/url"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/pkg/errors"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/shipper"
 )
 
 type grpcConfig struct {
@@ -113,7 +120,17 @@ type reloaderConfig struct {
 	ruleDirectories []string
 	watchInterval   time.Duration
 	retryInterval   time.Duration
+	method          string
+	processName     string
 }
+
+const (
+	// HTTPReloadMethod reloads the configuration using the HTTP reload endpoint.
+	HTTPReloadMethod = "http"
+
+	// SignalReloadMethod reloads the configuration sending a SIGHUP signal to the process.
+	SignalReloadMethod = "signal"
+)
 
 func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfig {
 	cmd.Flag("reloader.config-file",
@@ -131,6 +148,12 @@ func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfi
 	cmd.Flag("reloader.retry-interval",
 		"Controls how often reloader retries config reload in case of error.").
 		Default("5s").DurationVar(&rc.retryInterval)
+	cmd.Flag("reloader.method",
+		"Method used to reload the configuration.").
+		Default(HTTPReloadMethod).EnumVar(&rc.method, HTTPReloadMethod, SignalReloadMethod)
+	cmd.Flag("reloader.process-name",
+		"Executable name used to match the process being reloaded when using the signal method.").
+		Default("prometheus").StringVar(&rc.processName)
 
 	return rc
 }
@@ -140,6 +163,7 @@ type shipperConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	hashFunc              string
+	metaFileName          string
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -156,6 +180,7 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
+	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)
 	return sc
 }
 
@@ -180,14 +205,15 @@ func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
 }
 
 type queryConfig struct {
-	addrs         []string
-	sdFiles       []string
-	sdInterval    time.Duration
-	configPath    *extflag.PathOrContent
-	dnsSDInterval time.Duration
-	httpMethod    string
-	dnsSDResolver string
-	step          time.Duration
+	addrs                []string
+	sdFiles              []string
+	sdInterval           time.Duration
+	configPath           *extflag.PathOrContent
+	dnsSDInterval        time.Duration
+	httpMethod           string
+	dnsSDResolver        string
+	step                 time.Duration
+	doNotAddThanosParams bool
 }
 
 func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
@@ -206,6 +232,8 @@ func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
 		Default("miekgdns").Hidden().StringVar(&qc.dnsSDResolver)
 	cmd.Flag("query.default-step", "Default range query step to use. This is only used in stateless Ruler and alert state restoration.").
 		Default("1s").DurationVar(&qc.step)
+	cmd.Flag("query.only-prometheus-params", "Disable adding Thanos parameters (e.g dedup, partial_response) when querying metrics. Some non-Thanos systems have strict API validation.").Hidden().
+		Default("false").BoolVar(&qc.doNotAddThanosParams)
 	return qc
 }
 
@@ -217,6 +245,7 @@ type alertMgrConfig struct {
 	alertExcludeLabels     []string
 	alertQueryURL          *string
 	alertRelabelConfigPath *extflag.PathOrContent
+	alertSourceTemplate    *string
 }
 
 func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
@@ -231,5 +260,66 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		StringsVar(&ac.alertExcludeLabels)
 	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", extflag.WithEnvSubstitution())
+	ac.alertSourceTemplate = cmd.Flag("alert.query-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").String()
+
 	return ac
+}
+
+func parseFlagLabels(s []string) (labels.Labels, error) {
+	var lset labels.Labels
+	for _, l := range s {
+		parts := strings.SplitN(l, "=", 2)
+		if len(parts) != 2 {
+			return nil, errors.Errorf("unrecognized label %q", l)
+		}
+		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
+			return nil, errors.Errorf("unsupported format for label %s", l)
+		}
+		val, err := strconv.Unquote(parts[1])
+		if err != nil {
+			return nil, errors.Wrap(err, "unquote label value")
+		}
+		lset = append(lset, labels.Label{Name: parts[0], Value: val})
+	}
+	sort.Sort(lset)
+	return lset, nil
+}
+
+type goMemLimitConfig struct {
+	enableAutoGoMemlimit bool
+	memlimitRatio        float64
+}
+
+func (gml *goMemLimitConfig) registerFlag(cmd extkingpin.FlagClause) *goMemLimitConfig {
+	cmd.Flag("enable-auto-gomemlimit",
+		"Enable go runtime to automatically limit memory consumption.").
+		Default("false").BoolVar(&gml.enableAutoGoMemlimit)
+
+	cmd.Flag("auto-gomemlimit.ratio",
+		"The ratio of reserved GOMEMLIMIT memory to the detected maximum container or system memory.").
+		Default("0.9").FloatVar(&gml.memlimitRatio)
+
+	return gml
+}
+
+func configureGoAutoMemLimit(common goMemLimitConfig) error {
+	if common.memlimitRatio <= 0.0 || common.memlimitRatio > 1.0 {
+		return errors.New("--auto-gomemlimit.ratio must be greater than 0 and less than or equal to 1.")
+	}
+
+	if common.enableAutoGoMemlimit {
+		if _, err := memlimit.SetGoMemLimitWithOpts(
+			memlimit.WithRatio(common.memlimitRatio),
+			memlimit.WithProvider(
+				memlimit.ApplyFallback(
+					memlimit.FromCgroup,
+					memlimit.FromSystem,
+				),
+			),
+		); err != nil {
+			return errors.Wrap(err, "Failed to set GOMEMLIMIT automatically")
+		}
+	}
+
+	return nil
 }

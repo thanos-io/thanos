@@ -3,8 +3,6 @@
 
 package querysharding
 
-var excludedLabels = []string{"le"}
-
 type QueryAnalysis struct {
 	// Labels to shard on
 	shardingLabels []string
@@ -21,8 +19,6 @@ func nonShardableQuery() QueryAnalysis {
 }
 
 func (q *QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
-	labels = without(labels, excludedLabels)
-
 	if q.shardingLabels == nil {
 		return QueryAnalysis{
 			shardBy:        by,
@@ -101,9 +97,11 @@ func without(sliceA, sliceB []string) []string {
 	if sliceA == nil {
 		return nil
 	}
-
-	if len(sliceA) == 0 || len(sliceB) == 0 {
+	if len(sliceA) == 0 {
 		return []string{}
+	}
+	if len(sliceB) == 0 {
+		return sliceA
 	}
 
 	keyMap := make(map[string]struct{}, len(sliceA))
@@ -123,8 +121,14 @@ func without(sliceA, sliceB []string) []string {
 }
 
 func union(sliceA, sliceB []string) []string {
-	if len(sliceA) == 0 || len(sliceB) == 0 {
+	if len(sliceA) == 0 && len(sliceB) == 0 {
 		return []string{}
+	}
+	if len(sliceA) == 0 {
+		return sliceB
+	}
+	if len(sliceB) == 0 {
+		return sliceA
 	}
 
 	keyMap := make(map[string]struct{}, len(sliceA))

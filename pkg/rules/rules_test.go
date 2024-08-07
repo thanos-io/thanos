@@ -10,11 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
-
-	"github.com/efficientgo/core/testutil"
+	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -69,7 +68,7 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 			Name: "thanos-receive",
 			File: filepath.Join(dir, "alerts.yaml"),
 			Rules: []*rulespb.Rule{
-				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
+				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
 			},
 			Interval:                60,
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
@@ -151,7 +150,7 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 			groups, w, err := NewGRPCClientWithDedup(server, nil).Rules(context.Background(), &rulespb.RulesRequest{
 				Type: tcase.requestedType,
 			})
-			testutil.Equals(t, storage.Warnings(nil), w)
+			testutil.Equals(t, annotations.Annotations(nil), w)
 			if tcase.expectedErr != nil {
 				testutil.NotOk(t, err)
 				testutil.Equals(t, tcase.expectedErr.Error(), err.Error())
@@ -959,9 +958,12 @@ func TestDedupGroups(t *testing.T) {
 
 func TestFilterRules(t *testing.T) {
 	for _, tc := range []struct {
-		name         string
-		matcherSets  [][]*labels.Matcher
-		groups, want []*rulespb.RuleGroup
+		name            string
+		ruleNameFilter  []string
+		ruleGroupFilter []string
+		fileFilter      []string
+		matcherSets     [][]*labels.Matcher
+		groups, want    []*rulespb.RuleGroup
 	}{
 		{
 			name:   "no groups",
@@ -1384,9 +1386,308 @@ func TestFilterRules(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:           "single group with rule name filter",
+			ruleNameFilter: []string{"a1"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "replica", Value: "1"},
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "otherlabel", Value: "bar"},
+							}},
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "replica", Value: "1"},
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+					},
+				},
+			},
+		},
+		{
+			name:            "two groups with group name filter",
+			ruleGroupFilter: []string{"group1"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+				{
+					Name: "group2",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+			},
+		},
+		{
+			name:       "two groups with group file filter",
+			fileFilter: []string{"group2.yml"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					File: "group1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+				{
+					Name: "group2",
+					File: "group2.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "group2",
+					File: "group2.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+		},
+		{
+			name:           "one group match multiple rules",
+			ruleNameFilter: []string{"r1", "r2"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					File: "group1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+				{
+					Name: "group2",
+					File: "group2.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					File: "group1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+			},
+		},
+		{
+			name:       "two groups with group file filter (no match)",
+			fileFilter: []string{"nomatch.yml"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					File: "group1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+				{
+					Name: "group2",
+					File: "group2.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{},
+		},
+		{
+			name:            "two groups with filter on group name, file and rulename",
+			ruleNameFilter:  []string{"a1"},
+			ruleGroupFilter: []string{"group1"},
+			fileFilter:      []string{"file1.yml"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					File: "file1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1",
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2",
+						}),
+					},
+				},
+				{
+					Name: "group2",
+					File: "file1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+				{
+					Name: "group3",
+					File: "file2.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "group1",
+					File: "file1.yml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+						}),
+					},
+				},
+			},
+		},
+		{
+			name:           "single group with labeled rules, matcher and rule name filter",
+			matcherSets:    [][]*labels.Matcher{{&labels.Matcher{Name: "label", Value: "foo", Type: labels.MatchEqual}}},
+			ruleNameFilter: []string{"a1"},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "replica", Value: "1"},
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r2", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "otherlabel", Value: "bar"},
+							}},
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "replica", Value: "1"},
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			testutil.Equals(t, tc.want, filterRules(tc.groups, tc.matcherSets))
+			groups := filterRulesByMatchers(tc.groups, tc.matcherSets)
+			groups = filterRulesByNamesAndFile(groups, tc.ruleNameFilter, tc.ruleGroupFilter, tc.fileFilter)
+			testutil.Equals(t, tc.want, groups)
 		})
 	}
 }

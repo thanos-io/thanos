@@ -14,6 +14,7 @@ import { sortBlocks, getBlockByUlid, getFilteredBlockPools } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
 import Checkbox from '../../../components/Checkbox';
+import { FlagMap } from '../../../pages/flags/Flags';
 
 export interface BlockListProps {
   blocks: Block[];
@@ -22,7 +23,7 @@ export interface BlockListProps {
   refreshedAt: string;
 }
 
-export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
+export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ pathPrefix = '', data }) => {
   const [selectedBlock, selectBlock] = useState<Block>();
   const [searchState, setSearchState] = useState<string>('');
 
@@ -73,6 +74,9 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const blockPools = useMemo(() => sortBlocks(blocks, label, findOverlappingBlocks), [blocks, label, findOverlappingBlocks]);
   const filteredBlocks = useMemo(() => getBlockByUlid(blocks, blockSearch), [blocks, blockSearch]);
   const filteredBlockPools = useMemo(() => getFilteredBlockPools(blockPools, filteredBlocks), [filteredBlocks, blockPools]);
+
+  const { response: flagsRes } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
+  const disableAdminOperations = flagsRes?.data?.['disable-admin-operations'] === 'true' || false;
 
   const setViewTime = (times: number[]): void => {
     setQuery({
@@ -180,7 +184,12 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
                 onChange={setViewTime}
               />
             </div>
-            <BlockDetails selectBlock={selectBlock} block={selectedBlock} />
+            <BlockDetails
+              pathPrefix={pathPrefix}
+              selectBlock={selectBlock}
+              block={selectedBlock}
+              disableAdminOperations={disableAdminOperations}
+            />
           </div>
         </>
       ) : (
@@ -205,6 +214,7 @@ export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = (
 
   return (
     <BlocksWithStatusIndicator
+      pathPrefix={pathPrefix}
       data={response.data}
       error={badResponse ? new Error(responseStatus) : error}
       isLoading={isLoading}

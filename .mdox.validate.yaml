@@ -29,3 +29,18 @@ validators:
   # 403 when curl-ed from GitHub actions, though not from a developer machine. Likely due to secondary rate limits.
   - regex: 'docs\.github\.com'
     type: 'ignore'
+  # 403 when requested my mdox in GH actions.
+  - regex: 'nginx\.com'
+    type: 'ignore'
+  # 403 when requested my mdox in GH actions.
+  - regex: 'servicenow\.com'
+    type: 'ignore'
+  # Seems like improbable.io temporarily removed their blogs.
+  - regex: 'improbable\.io'
+    type: 'ignore'
+  - regex: 'krisztianfekete\.org'
+    type: 'ignore'
+  - regex: 'twitter\.com'
+    type: 'ignore'
+  - regex: 'outshift\.cisco\.com\/blog\/multi-cluster-monitoring'
+    type: 'ignore'

@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	instr "github.com/weaveworks/common/instrument"
 
-	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 )
 
@@ -27,7 +26,6 @@ type RedisCache struct {
 
 // NewRedisCache creates a new RedisCache
 func NewRedisCache(name string, redisClient *RedisClient, reg prometheus.Registerer, logger log.Logger) *RedisCache {
-	util_log.WarnExperimentalUse("Redis cache")
 	cache := &RedisCache{
 		name:   name,
 		redis:  redisClient,
@@ -72,7 +70,7 @@ func (c *RedisCache) Fetch(ctx context.Context, keys []string) (found []string, 
 		items, err = c.redis.MGet(ctx, keys)
 		if err != nil {
 			log.Error(err)
-			level.Error(c.logger).Log("msg", "failed to get from redis", "name", c.name, "err", err)
+			level.Debug(c.logger).Log("msg", "failed to get from redis", "name", c.name, "err", err)
 			return err
 		}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/block"
 )
@@ -74,7 +75,7 @@ func (s *lazyPopulateChunkSeriesSet) Err() error {
 	return s.all.Err()
 }
 
-func (s *lazyPopulateChunkSeriesSet) Warnings() storage.Warnings { return nil }
+func (s *lazyPopulateChunkSeriesSet) Warnings() annotations.Annotations { return nil }
 
 type lazyPopulatableChunk struct {
 	m *chunks.Meta
@@ -90,8 +91,10 @@ func (e errChunkIterator) Seek(int64) chunkenc.ValueType { return chunkenc.ValNo
 func (e errChunkIterator) At() (int64, float64)          { return 0, 0 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (e errChunkIterator) AtHistogram() (int64, *histogram.Histogram) { panic("not implemented") }
-func (e errChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (e errChunkIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+func (e errChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 func (e errChunkIterator) AtT() int64               { return 0 }
@@ -106,11 +109,13 @@ func (e errChunk) Appender() (chunkenc.Appender, error)         { return nil, e.
 func (e errChunk) Iterator(chunkenc.Iterator) chunkenc.Iterator { return e.err }
 func (e errChunk) NumSamples() int                              { return 0 }
 func (e errChunk) Compact()                                     {}
+func (e errChunk) Reset(stream []byte)                          {}
 
 func (l *lazyPopulatableChunk) populate() {
 	// TODO(bwplotka): In most cases we don't need to parse anything, just copy. Extend reader/writer for this.
 	var err error
-	l.populated, err = l.cr.Chunk(*l.m)
+	// Ignore iterable as it should be nil.
+	l.populated, _, err = l.cr.ChunkOrIterable(*l.m)
 	if err != nil {
 		l.m.Chunk = errChunk{err: errChunkIterator{err: errors.Wrapf(err, "cannot populate chunk %d", l.m.Ref)}}
 		return
@@ -152,6 +157,13 @@ func (l *lazyPopulatableChunk) NumSamples() int {
 		l.populate()
 	}
 	return l.populated.NumSamples()
+}
+
+func (l *lazyPopulatableChunk) Reset(stream []byte) {
+	if l.populated == nil {
+		l.populate()
+	}
+	l.populated.Reset(stream)
 }
 
 func (l *lazyPopulatableChunk) Compact() {

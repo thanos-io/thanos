@@ -21,8 +21,11 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/promql/parser/posrange"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/teststorage"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
 var (
@@ -88,7 +91,7 @@ func (s *testStore) close(t testing.TB) {
 }
 
 // NewTest returns an initialized empty Test.
-// It's compatible with promql.Test, allowing additionally multi StoreAPIs for query pushdown testing.
+// It's compatible with promql.Test, allowing additionally multi StoreAPIs.
 // TODO(bwplotka): Move to unittest and add add support for multi-store upstream. See: https://github.com/prometheus/prometheus/pull/8300
 func newTest(t testing.TB, input string) (*test, error) {
 	cmds, err := parse(input)
@@ -260,7 +263,7 @@ func ParseStore(lines []string, i int) (int, *storeCmd, error) {
 	}
 	parts := patStore.FindStringSubmatch(lines[i])
 
-	m, err := parser.ParseMetricSelector(parts[1])
+	m, err := extpromql.ParseMetricSelector(parts[1])
 	if err != nil {
 		return i, nil, raise(i, "invalid matcher definition %q: %s", parts[1], err)
 	}
@@ -321,11 +324,11 @@ func ParseEval(lines []string, i int) (int, *evalCmd, error) {
 		at   = parts[2]
 		expr = parts[3]
 	)
-	_, err := parser.ParseExpr(expr)
+	_, err := extpromql.ParseExpr(expr)
 	if err != nil {
 		if perr, ok := err.(*parser.ParseErr); ok {
 			perr.LineOffset = i
-			posOffset := parser.Pos(strings.Index(lines[i], expr))
+			posOffset := posrange.Pos(strings.Index(lines[i], expr))
 			perr.PositionRange.Start += posOffset
 			perr.PositionRange.End += posOffset
 			perr.Query = lines[i]
@@ -556,7 +559,7 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 }
 
 func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryable storage.Queryable) error {
-	q, err := queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{}, ev.expr, ev.start)
+	q, err := queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, 0), ev.expr, ev.start)
 	if err != nil {
 		return err
 	}
@@ -580,7 +583,7 @@ func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryab
 
 	// Check query returns same result in range mode,
 	// by checking against the middle step.
-	q, err = queryEngine.NewRangeQuery(queryable, &promql.QueryOpts{}, ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
+	q, err = queryEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, 0), ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
 	if err != nil {
 		return err
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/util/annotations"
 )
 
 // ConcreteSeriesSet implements storage.SeriesSet.
@@ -62,7 +63,7 @@ func (c *ConcreteSeriesSet) Err() error {
 }
 
 // Warnings implements storage.SeriesSet.
-func (c *ConcreteSeriesSet) Warnings() storage.Warnings {
+func (c *ConcreteSeriesSet) Warnings() annotations.Annotations {
 	return nil
 }
 
@@ -123,11 +124,11 @@ func (c *concreteSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (c *concreteSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (c *concreteSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (c *concreteSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (c *concreteSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 
@@ -172,11 +173,11 @@ func (errIterator) At() (t int64, v float64) {
 	return 0, 0
 }
 
-func (errIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (errIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	return 0, nil
 }
 
-func (errIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (errIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return 0, nil
 }
 
@@ -202,17 +203,14 @@ func MatrixToSeriesSet(m model.Matrix) storage.SeriesSet {
 }
 
 func metricToLabels(m model.Metric) labels.Labels {
-	ls := make(labels.Labels, 0, len(m))
+	b := labels.NewScratchBuilder(len(m))
 	for k, v := range m {
-		ls = append(ls, labels.Label{
-			Name:  string(k),
-			Value: string(v),
-		})
+		b.Add(string(k), string(v))
 	}
 	// PromQL expects all labels to be sorted! In general, anyone constructing
 	// a labels.Labels list is responsible for sorting it during construction time.
-	sort.Sort(ls)
-	return ls
+	b.Sort()
+	return b.Labels()
 }
 
 type byLabels []storage.Series
@@ -253,11 +251,11 @@ func (d DeletedSeriesIterator) At() (t int64, v float64) {
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (d DeletedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+func (d DeletedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
 
-func (d DeletedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+func (d DeletedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
 

@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extprom"
+
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,14 +37,14 @@ import (
 
 func TestShipper_SyncBlocks_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
-		// TODO(GiedriusS): consider switching to BucketWithMetrics() everywhere?
+		// TODO(GiedriusS): consider switching to WrapWithMetrics() everywhere?
 		metrics := prometheus.NewRegistry()
-		metricsBucket := objstore.BucketWithMetrics("test", bkt, metrics)
+		metricsBucket := objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", metrics), "test")
 
 		dir := t.TempDir()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, false, false, metadata.NoneFunc)
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -99,7 +101,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			testutil.Ok(t, err)
 			testutil.Equals(t, 0, b)
 
-			shipMeta, err := ReadMetaFile(dir)
+			shipMeta, err := ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			if len(shipMeta.Uploaded) == 0 {
 				shipMeta.Uploaded = []ulid.ULID{}
@@ -162,7 +164,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 				testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, ids[4]))
 			}
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
-			shipMeta, err = ReadMetaFile(dir)
+			shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
@@ -203,21 +205,14 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
 
-		testutil.Ok(t, p.Start())
-
 		logger := log.NewNopLogger()
-		upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
-		defer upcancel()
-		testutil.Ok(t, p.WaitPrometheusUp(upctx, logger))
+		testutil.Ok(t, p.Start(context.Background(), logger))
 
 		p.DisableCompaction()
-		testutil.Ok(t, p.Restart())
+		testutil.Ok(t, p.Restart(context.Background(), logger))
 
-		upctx2, upcancel2 := context.WithTimeout(ctx, 10*time.Second)
-		defer upcancel2()
-		testutil.Ok(t, p.WaitPrometheusUp(upctx2, logger))
-
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, true, false, metadata.NoneFunc)
+		uploadCompactedFunc := func() bool { return true }
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, false, metadata.NoneFunc, DefaultMetaFilename)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
@@ -270,7 +265,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			testutil.Ok(t, err)
 			testutil.Equals(t, 0, b)
 
-			shipMeta, err := ReadMetaFile(dir)
+			shipMeta, err := ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			if len(shipMeta.Uploaded) == 0 {
 				shipMeta.Uploaded = []ulid.ULID{}
@@ -315,7 +310,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 				testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, ids[4]))
 			}
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
-			shipMeta, err = ReadMetaFile(dir)
+			shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
@@ -358,22 +353,15 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 
 	extLset := labels.FromStrings("prometheus", "prom-1")
 
-	testutil.Ok(t, p.Start())
-
 	logger := log.NewNopLogger()
-	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
-	defer upcancel()
-	testutil.Ok(t, p.WaitPrometheusUp(upctx, logger))
+	testutil.Ok(t, p.Start(context.Background(), logger))
 
 	p.DisableCompaction()
-	testutil.Ok(t, p.Restart())
+	testutil.Ok(t, p.Restart(context.Background(), logger))
 
-	upctx2, upcancel2 := context.WithTimeout(ctx, 10*time.Second)
-	defer upcancel2()
-	testutil.Ok(t, p.WaitPrometheusUp(upctx2, logger))
-
+	uploadCompactedFunc := func() bool { return true }
 	// Here, the allowOutOfOrderUploads flag is set to true, which allows blocks with overlaps to be uploaded.
-	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, true, true, metadata.NoneFunc)
+	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, true, metadata.NoneFunc, DefaultMetaFilename)
 
 	// Creating 2 overlapping blocks - both uploaded when OOO uploads allowed.
 	var (
@@ -433,7 +421,7 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, 0, b)
 
-		shipMeta, err := ReadMetaFile(dir)
+		shipMeta, err := ReadMetaFile(shipper.metadataFilePath)
 		testutil.Ok(t, err)
 		if len(shipMeta.Uploaded) == 0 {
 			shipMeta.Uploaded = []ulid.ULID{}
@@ -472,7 +460,7 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		expFiles[id[i].String()+"/chunks/0002"] = []byte("chunkcontents2")
 
 		// The shipper meta file should show all blocks as uploaded except the compacted one.
-		shipMeta, err = ReadMetaFile(dir)
+		shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 		testutil.Ok(t, err)
 		testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 	}

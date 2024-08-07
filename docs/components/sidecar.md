@@ -56,6 +56,24 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+  use_grpc: false
+  grpc_conn_pool_size: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -76,6 +94,11 @@ usage: thanos sidecar [<flags>]
 Sidecar for Prometheus server.
 
 Flags:
+      --auto-gomemlimit.ratio=0.9
+                                 The ratio of reserved GOMEMLIMIT memory to the
+                                 detected maximum container or system memory.
+      --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
+                                 consumption.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -153,6 +176,10 @@ Flags:
                                  Output file for environment variable
                                  substituted config file.
       --reloader.config-file=""  Config file watched by the reloader.
+      --reloader.method=http     Method used to reload the configuration.
+      --reloader.process-name="prometheus"
+                                 Executable name used to match the process being
+                                 reloaded when using the signal method.
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
@@ -172,6 +199,8 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
+      --shipper.meta-file-name="thanos.shipper.json"
+                                 the file to store shipper metadata in
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
