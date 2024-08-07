@@ -43,21 +43,14 @@ func TestMultiTSDB(t *testing.T) {
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("run fresh", func(t *testing.T) {
-		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:      (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
-				RetentionDuration:     (6 * time.Hour).Milliseconds(),
-				NoLockfile:            true,
-				MaxExemplars:          100,
-				EnableExemplarStorage: true,
-			},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+			RetentionDuration:     (6 * time.Hour).Milliseconds(),
+			NoLockfile:            true,
+			MaxExemplars:          100,
+			EnableExemplarStorage: true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, metadata.NoneFunc, nil)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
@@ -141,6 +134,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			nil,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -172,19 +166,12 @@ func TestMultiTSDB(t *testing.T) {
 
 	t.Run("flush with one sample produces a block", func(t *testing.T) {
 		const testTenant = "test_tenant"
-		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
-				NoLockfile:        true,
-			},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			NoLockfile:        true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, metadata.NoneFunc, nil)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
@@ -451,6 +438,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				test.bucket,
 				false,
 				metadata.NoneFunc,
+				nil,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -520,6 +508,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		objstore.NewInMemBucket(),
 		false,
 		metadata.NoneFunc,
+		nil,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -581,6 +570,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 				test.bucket,
 				false,
 				metadata.NoneFunc,
+				nil,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -655,6 +645,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				nil,
 				false,
 				metadata.NoneFunc,
+				nil,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -684,6 +675,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		nil,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -725,6 +717,7 @@ func TestProxyLabelValues(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		nil,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -815,6 +808,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		nil,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
 
