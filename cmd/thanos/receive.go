@@ -286,7 +286,7 @@ func runReceive(
 
 		level.Debug(logger).Log("msg", "setting up TSDB")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm), conf.tsdbDisableFlushOnShutdown); err != nil {
 				return err
 			}
 		}
@@ -578,6 +578,7 @@ func startTSDBAndUpload(g *run.Group,
 	statusProber prober.Probe,
 	bkt objstore.Bucket,
 	hashringAlgorithm receive.HashringAlgorithm,
+	disableFlushOnShutDown bool,
 ) error {
 
 	log.With(logger, "component", "storage")
@@ -603,10 +604,12 @@ func startTSDBAndUpload(g *run.Group,
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.
 		defer func() {
 			level.Info(logger).Log("msg", "shutting down storage")
-			if err := dbs.Flush(); err != nil {
-				level.Error(logger).Log("err", err, "msg", "failed to flush storage")
-			} else {
-				level.Info(logger).Log("msg", "storage is flushed successfully")
+			if !disableFlushOnShutDown {
+				if err := dbs.Flush(); err != nil {
+					level.Error(logger).Log("err", err, "msg", "failed to flush storage")
+				} else {
+					level.Info(logger).Log("msg", "storage is flushed successfully")
+				}
 			}
 			if err := dbs.Close(); err != nil {
 				level.Error(logger).Log("err", err, "msg", "failed to close storage")
@@ -822,6 +825,7 @@ type receiveConfig struct {
 	tsdbMaxBytes                 units.Base2Bytes
 	tsdbWriteQueueSize           int64
 	tsdbMemorySnapshotOnShutdown bool
+	tsdbDisableFlushOnShutdown   bool
 	tsdbEnableNativeHistograms   bool
 
 	walCompression       bool
@@ -957,6 +961,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.memory-snapshot-on-shutdown",
 		"[EXPERIMENTAL] Enables feature to snapshot in-memory chunks on shutdown for faster restarts.").
 		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
+
+	cmd.Flag("tsdb.disable-flush-on-shutdown",
+		"[EXPERIMENTAL] disable flush on receive shutdown for rebuilding mempostings on restart.").
+		Default("false").Hidden().BoolVar(&rc.tsdbDisableFlushOnShutdown)
 
 	cmd.Flag("tsdb.enable-native-histograms",
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
