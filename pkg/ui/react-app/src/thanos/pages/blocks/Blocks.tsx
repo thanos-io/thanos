@@ -268,10 +268,6 @@ export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = (
     isLoading: planLoading,
   } = useFetch<BlockListProps>(`${pathPrefix}/api/v1/blocks/plan`);
 
-  if (globalBlocksLoading || planLoading) return <div>Loading...</div>;
-  if (globalBlocksError) return <UncontrolledAlert color="danger">{globalBlocksError.toString()}</UncontrolledAlert>;
-  if (planError) return <UncontrolledAlert color="danger">{planError.toString()}</UncontrolledAlert>;
-
   if (!globalBlocksResponse.data && !planResponse.data)
     return <UncontrolledAlert color="warning">No blocks data available.</UncontrolledAlert>;
 
