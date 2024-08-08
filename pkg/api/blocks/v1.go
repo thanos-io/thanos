@@ -4,6 +4,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -25,18 +26,23 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 )
 
+type Planner interface {
+	Plan(ctx context.Context, metas []*metadata.Meta) ([]*metadata.Meta, error)
+}
+
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI          *api.BaseAPI
-	logger           log.Logger
-	globalBlocksInfo *BlocksInfo
-	loadedBlocksInfo *BlocksInfo
+	baseAPI           *api.BaseAPI
+	logger            log.Logger
+	globalBlocksInfo  *BlocksInfo
+	loadedBlocksInfo  *BlocksInfo
 	plannedBlocksInfo *BlocksInfo
 
-	globalLock, loadedLock, plannedLock sync.Mutex// Question: whether is plannedLock needed?
-	disableCORS            bool
-	bkt                    objstore.Bucket
-	disableAdminOperations bool
+	globalLock, loadedLock, plannedLock sync.Mutex // Question: whether is plannedLock needed?
+	disableCORS                         bool
+	bkt                                 objstore.Bucket
+	disableAdminOperations              bool
+	planner                             Planner
 }
 
 type BlocksInfo struct {
@@ -66,11 +72,12 @@ func parse(s string) ActionType {
 }
 
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
-func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket) *BlocksAPI {
+func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket, planner Planner) *BlocksAPI {
 	disableAdminOperations := flagsMap["disable-admin-operations"] == "true"
 	return &BlocksAPI{
 		baseAPI: api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:  logger,
+		planner: planner,
 		globalBlocksInfo: &BlocksInfo{
 			Blocks: []metadata.Meta{},
 			Label:  label,
@@ -179,18 +186,17 @@ func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *ap
 		},
 	}
 
-	metasByMinTime := []*metadata.Meta{&mockBlocks[0], &mockBlocks[1]}
-	plannedMetas, err := bapi.planner.Plan(context.TODO(), metasByMinTime, nil, nil)
-	if err != nil {
-		return nil, []error{err}, nil, func() {}
-	}
+    metasByMinTime := []*metadata.Meta{...} 
+    plannedMetas, err := bapi.planner.Plan(context.TODO(), metasByMinTime)
+    if err != nil {
+        return nil, []error{err}, nil, func() {}
+    }
 
-
-	return &BlocksInfo{
-		Blocks:      plannedMetas,
-		RefreshedAt: time.Now(),
-		Label:       "Planned Blocks",
-	}, nil, nil, func() {}
+    return &BlocksInfo{
+        Blocks:      plannedMetas,
+        RefreshedAt: time.Now(),
+        Label:       "Planned Blocks",
+    }, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
@@ -221,6 +227,7 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 
 	bapi.loadedBlocksInfo.set(blocks, err)
 }
+
 // TODO: call setPlanned when needed
 func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
 
