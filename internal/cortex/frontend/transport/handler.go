@@ -114,7 +114,10 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		stats       *querier_stats.Stats
+		// For failed/slow query logging and query stats.
 		queryString url.Values
+		// For failed query cache
+		urlQuery    url.Values
 	)
 
 	// Initialise the stats in the context and make sure it's propagated
@@ -134,11 +137,13 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, f.cfg.MaxBodySize)
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
-	queryString = f.parseRequestQueryString(r, buf)
-
 	// Check if query is cached
 	if f.failedQueryCache != nil {
-		cached, message := f.failedQueryCache.QueryHitCache(queryString)
+		// NB: don't call f.parseRequestQueryString(r, buf) before f.roundTripper.RoundTrip(r)
+		//     because the call closes the buffer which has content if the request is a POST with
+		//     form data in body.
+		urlQuery = r.URL.Query()
+		cached, message := f.failedQueryCache.QueryHitCache(urlQuery)
 		if cached {
 			w.WriteHeader(http.StatusForbidden)
 			level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", message)
@@ -155,7 +160,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Update cache for failed queries.
 		if f.failedQueryCache != nil {
-			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, queryString, queryResponseTime)
+			success, message := f.failedQueryCache.UpdateFailedQueryCache(err, urlQuery, queryResponseTime)
 			if success {
 				level.Info(util_log.WithContext(r.Context(), f.log)).Log("msg", message)
 			} else {
@@ -164,6 +169,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if f.cfg.LogFailedQueries {
+			queryString = f.parseRequestQueryString(r, buf)
 			f.reportFailedQuery(r, queryString, err, queryResponseTime)
 		}
 		return
