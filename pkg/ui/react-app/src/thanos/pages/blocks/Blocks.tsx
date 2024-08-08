@@ -5,7 +5,7 @@ import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } f
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
-import { Block } from './block';
+import { Block, BlocksPool } from './block';
 import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { BlockSearchInput } from './BlockSearchInput';
@@ -216,16 +216,34 @@ export const PlanBlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> =
     );
   }
 
+  const blocksPool = useMemo(() => {
+    const pool: BlocksPool = {}; 
+    blocks.forEach(block => {
+      const key = `Plan-${block.ulid}`; 
+      if (!pool[key]) {
+        pool[key] = [];  
+      }
+      pool[key].push([block]);  
+    });
+    return pool;
+  }, [blocks]);
+
   return (
-    <div>
-      <ul>
-        {blocks.map((block) => (
-          <li key={block.ulid}>
-            ULID: {block.ulid} (PathPrefix: {pathPrefix}){" "}
-            {/* Display pathPrefix for context */}
-          </li>
+    <div className={styles.container}>
+      <div className={styles.grid}>
+        {Object.keys(blocksPool).map(key => (
+          <SourceView
+            key={key}
+            data={blocksPool[key]}
+            title={`Plan View - ${key}`}
+            selectBlock={() => { }}  // No-op function if selection is not applicable
+            gridMinTime={blocksPool[key].reduce((min: number, b: { minTime: number; }[]) => Math.min(min, b[0].minTime), Infinity)}
+            gridMaxTime={blocksPool[key].reduce((max: number, b: { maxTime: number; }[]) => Math.max(max, b[0].maxTime), -Infinity)}
+            blockSearch=""  
+            compactionLevel={0}  
+          />
         ))}
-      </ul>
+      </div>
     </div>
   );
 };
