@@ -179,8 +179,15 @@ func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *ap
 		},
 	}
 
+	metasByMinTime := []*metadata.Meta{&mockBlocks[0], &mockBlocks[1]}
+	plannedMetas, err := bapi.planner.Plan(context.TODO(), metasByMinTime, nil, nil)
+	if err != nil {
+		return nil, []error{err}, nil, func() {}
+	}
+
+
 	return &BlocksInfo{
-		Blocks:      mockBlocks,
+		Blocks:      plannedMetas,
 		RefreshedAt: time.Now(),
 		Label:       "Planned Blocks",
 	}, nil, nil, func() {}
