@@ -114,6 +114,7 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		stats       *querier_stats.Stats
+		// For failed/slow query logging and query stats.
 		queryString url.Values
 		// For failed query cache
 		urlQuery    url.Values
@@ -139,7 +140,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if query is cached
 	if f.failedQueryCache != nil {
 		// NB: don't call f.parseRequestQueryString(r, buf) before f.roundTripper.RoundTrip(r)
-		//     because the call closes the buffer.
+		//     because the call closes the buffer which has content if the request is a POST with
+		//     form data in body.
 		urlQuery = r.URL.Query()
 		cached, message := f.failedQueryCache.QueryHitCache(urlQuery)
 		if cached {
@@ -166,8 +168,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		queryString = f.parseRequestQueryString(r, buf)
 		if f.cfg.LogFailedQueries {
+			queryString = f.parseRequestQueryString(r, buf)
 			f.reportFailedQuery(r, queryString, err, queryResponseTime)
 		}
 		return
