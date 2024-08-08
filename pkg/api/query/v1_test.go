@@ -1378,7 +1378,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			errType: baseAPI.ErrorBadData,
 			method:  http.MethodPost,
 		},
-		// With limit=2
+		// With limit
 		{
 			endpoint: api.series,
 			query: url.Values{
@@ -1391,7 +1391,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			method: http.MethodPost,
 		},
-		// Without
+		// Without limit
 		{
 			endpoint: api.series,
 			query: url.Values{
