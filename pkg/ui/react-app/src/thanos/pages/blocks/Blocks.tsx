@@ -199,31 +199,27 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   );
 };
 
-export const PlanBlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ data, pathPrefix }) => {
-  const { blocks = [], err } = data;
+export const PlanBlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
+  const { blocks, err } = data;
+
+  const [selectedBlock, selectBlock] = useState<Block | null>(null);
 
   if (err) {
-    return (
-      <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>
-    );
+    return <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>;
   }
 
   if (blocks.length === 0) {
-    return (
-      <UncontrolledAlert color="warning">
-        No planned blocks found.
-      </UncontrolledAlert>
-    );
+    return <UncontrolledAlert color="warning">No planned blocks found.</UncontrolledAlert>;
   }
 
   const blocksPool = useMemo(() => {
-    const pool: BlocksPool = {}; 
+    const pool: { [key: string]: Block[] } = {};
     blocks.forEach(block => {
-      const key = `Plan-${block.ulid}`; 
+      const key = `Plan-${block.ulid}`;
       if (!pool[key]) {
-        pool[key] = [];  
+        pool[key] = [];
       }
-      pool[key].push([block]);  
+      pool[key].push(block);
     });
     return pool;
   }, [blocks]);
@@ -236,11 +232,11 @@ export const PlanBlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> =
             key={key}
             data={blocksPool[key]}
             title={`Plan View - ${key}`}
-            selectBlock={() => { }}  // No-op function if selection is not applicable
-            gridMinTime={blocksPool[key].reduce((min: number, b: { minTime: number; }[]) => Math.min(min, b[0].minTime), Infinity)}
-            gridMaxTime={blocksPool[key].reduce((max: number, b: { maxTime: number; }[]) => Math.max(max, b[0].maxTime), -Infinity)}
-            blockSearch=""  
-            compactionLevel={0}  
+            selectBlock={selectBlock} 
+            gridMinTime={Math.min(...blocksPool[key].map(b => b.minTime))}
+            gridMaxTime={Math.max(...blocksPool[key].map(b => b.maxTime))}
+            blockSearch=""
+            compactionLevel={0}
           />
         ))}
       </div>
