@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -150,8 +151,39 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 
 func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	// TODO: fetch from planner.plan then mock data
+	// Mock data
+	mockBlocks := []metadata.Meta{
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(ulid.Now(), nil),
+				MinTime: time.Now().Add(-1*time.Hour).Unix() * 1000,
+				MaxTime: time.Now().Unix() * 1000,
+				Stats: tsdb.BlockStats{
+					NumSamples: 1000,
+					NumSeries:  100,
+				},
+			},
+			Thanos: metadata.Thanos{},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(ulid.Now(), nil),
+				MinTime: time.Now().Add(-2*time.Hour).Unix() * 1000,
+				MaxTime: time.Now().Add(-1*time.Hour).Unix() * 1000,
+				Stats: tsdb.BlockStats{
+					NumSamples: 2000,
+					NumSeries:  200,
+				},
+			},
+			Thanos: metadata.Thanos{},
+		},
+	}
 
-	return bapi.plannedBlocksInfo, nil, nil, func() {}
+	return &BlocksInfo{
+		Blocks:      mockBlocks,
+		RefreshedAt: time.Now(),
+		Label:       "Planned Blocks",
+	}, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {

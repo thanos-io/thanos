@@ -199,7 +199,36 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   );
 };
 
-export const PlanBlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ pathPrefix = '', data }) => {};
+export const PlanBlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ data, pathPrefix }) => {
+  const { blocks = [], err } = data;
+
+  if (err) {
+    return (
+      <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>
+    );
+  }
+
+  if (blocks.length === 0) {
+    return (
+      <UncontrolledAlert color="warning">
+        No planned blocks found.
+      </UncontrolledAlert>
+    );
+  }
+
+  return (
+    <div>
+      <ul>
+        {blocks.map((block) => (
+          <li key={block.ulid}>
+            ULID: {block.ulid} (PathPrefix: {pathPrefix}){" "}
+            {/* Display pathPrefix for context */}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
 
 const BlocksWithStatusIndicator = withStatusIndicator(BlocksContent);
 const PlanViewWithStatusIndicator = withStatusIndicator(PlanBlocksContent);
