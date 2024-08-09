@@ -4,6 +4,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -24,17 +26,23 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 )
 
+type Planner interface {
+	Plan(ctx context.Context, metas []*metadata.Meta) ([]*metadata.Meta, error)
+}
+
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI          *api.BaseAPI
-	logger           log.Logger
-	globalBlocksInfo *BlocksInfo
-	loadedBlocksInfo *BlocksInfo
+	baseAPI           *api.BaseAPI
+	logger            log.Logger
+	globalBlocksInfo  *BlocksInfo
+	loadedBlocksInfo  *BlocksInfo
+	plannedBlocksInfo *BlocksInfo
 
-	globalLock, loadedLock sync.Mutex
-	disableCORS            bool
-	bkt                    objstore.Bucket
-	disableAdminOperations bool
+	globalLock, loadedLock, plannedLock sync.Mutex // Question: whether is plannedLock needed?
+	disableCORS                         bool
+	bkt                                 objstore.Bucket
+	disableAdminOperations              bool
+	planner                             Planner
 }
 
 type BlocksInfo struct {
@@ -64,11 +72,12 @@ func parse(s string) ActionType {
 }
 
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
-func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket) *BlocksAPI {
+func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket, planner Planner) *BlocksAPI {
 	disableAdminOperations := flagsMap["disable-admin-operations"] == "true"
 	return &BlocksAPI{
 		baseAPI: api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:  logger,
+		planner: planner,
 		globalBlocksInfo: &BlocksInfo{
 			Blocks: []metadata.Meta{},
 			Label:  label,
@@ -90,6 +99,7 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
+	r.Get("/blocks/plan", instr("blocks_plan", bapi.plannedBlocks))
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -144,6 +154,49 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 	defer bapi.globalLock.Unlock()
 
 	return bapi.globalBlocksInfo, nil, nil, func() {}
+}
+
+func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	// TODO: fetch from planner.plan then mock data
+	// Mock data
+	mockBlocks := []metadata.Meta{
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(ulid.Now(), nil),
+				MinTime: time.Now().Add(-1*time.Hour).Unix() * 1000,
+				MaxTime: time.Now().Unix() * 1000,
+				Stats: tsdb.BlockStats{
+					NumSamples: 1000,
+					NumSeries:  100,
+				},
+			},
+			Thanos: metadata.Thanos{},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(ulid.Now(), nil),
+				MinTime: time.Now().Add(-2*time.Hour).Unix() * 1000,
+				MaxTime: time.Now().Add(-1*time.Hour).Unix() * 1000,
+				Stats: tsdb.BlockStats{
+					NumSamples: 2000,
+					NumSeries:  200,
+				},
+			},
+			Thanos: metadata.Thanos{},
+		},
+	}
+
+    metasByMinTime := []*metadata.Meta{...} 
+    plannedMetas, err := bapi.planner.Plan(context.TODO(), metasByMinTime)
+    if err != nil {
+        return nil, []error{err}, nil, func() {}
+    }
+
+    return &BlocksInfo{
+        Blocks:      plannedMetas,
+        RefreshedAt: time.Now(),
+        Label:       "Planned Blocks",
+    }, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {

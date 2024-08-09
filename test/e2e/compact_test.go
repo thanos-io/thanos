@@ -18,6 +18,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+	e2einteractive "github.com/efficientgo/e2e/interactive"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	"github.com/go-kit/log"
@@ -691,6 +692,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
 		c := cFuture.Init(bktConfig, nil, extArgs...)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
+
+		testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+c.Endpoint("http")))
+		time.Sleep(5 * time.Minute)
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
