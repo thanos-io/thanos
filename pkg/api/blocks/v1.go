@@ -227,9 +227,3 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 
 	bapi.loadedBlocksInfo.set(blocks, err)
 }
-
-// TODO: call setPlanned when needed
-func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
-
-	bapi.plannedBlocksInfo.set(blocks, err)
-}
