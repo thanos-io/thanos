@@ -853,9 +853,9 @@ test_metric{a="2", b="2"} 1`)
 				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "10",
-				RemoteRequestCount:  "5",
+				RemoteRequestCount:  "10",
 
 				TenantID: "exceed-tenant",
 			})
@@ -872,9 +872,9 @@ test_metric{a="2", b="2"} 1`)
 				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "5",
-				RemoteRequestCount:  "5",
+				RemoteRequestCount:  "10",
 
 				TenantID: "under-tenant",
 			})
@@ -891,9 +891,9 @@ test_metric{a="2", b="2"} 1`)
 				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "10",
-				RemoteRequestCount:  "5",
+				RemoteRequestCount:  "10",
 
 				TenantID: "unlimited-tenant",
 			})
