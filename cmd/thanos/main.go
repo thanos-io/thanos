@@ -74,7 +74,7 @@ func main() {
 	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
 	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.
 	undo, err := maxprocs.Set(maxprocs.Logger(func(template string, args ...interface{}) {
-		level.Debug(logger).Log("msg", fmt.Sprintf(template, args))
+		level.Debug(logger).Log("msg", fmt.Sprintf(template, args...))
 	}))
 	defer undo()
 	if err != nil {
