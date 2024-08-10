@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 * [#7511](https://github.com/thanos-io/thanos/pull/7511) Query Frontend: fix doubled gzip compression for response body.
 * [#7592](https://github.com/thanos-io/thanos/pull/7592) Ruler: Only increment `thanos_rule_evaluation_with_warnings_total` metric for non PromQL warnings.
+* [#7614](https://github.com/thanos-io/thanos/pull/7614) *: fix debug log formatting.
 
 ### Added
 * [7609](https://github.com/thanos-io/thanos/pull/7609) API: Add limit param to metadata APIs (series, label names, label values).
