@@ -2619,7 +2619,6 @@ func ExpandPostingsWithContext(ctx context.Context, p index.Postings) ([]storage
 			}
 		}
 		res = append(res, p.At())
-		i++
 	}
 	return res, p.Err()
 }
