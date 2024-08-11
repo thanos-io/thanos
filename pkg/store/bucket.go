@@ -117,6 +117,9 @@ const (
 
 	// SeriesBatchSize is the default batch size when fetching series from object storage.
 	SeriesBatchSize = 10000
+
+	// checkContextEveryNIterations is used in some tight loops to check if the context is done.
+	checkContextEveryNIterations = 128
 )
 
 var (
@@ -2605,12 +2608,18 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms sortedMatch
 }
 
 // ExpandPostingsWithContext returns the postings expanded as a slice and considers context.
-func ExpandPostingsWithContext(ctx context.Context, p index.Postings) (res []storage.SeriesRef, err error) {
+func ExpandPostingsWithContext(ctx context.Context, p index.Postings) ([]storage.SeriesRef, error) {
+	res := make([]storage.SeriesRef, 0, 1024) // Pre-allocate slice with initial capacity
+	i := 0
 	for p.Next() {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		i++
+		if i%checkContextEveryNIterations == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 		}
 		res = append(res, p.At())
+		i++
 	}
 	return res, p.Err()
 }
@@ -2831,8 +2840,8 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 			return nil, nil, err
 		}
 
-		for _, val := range vals {
-			if ctx.Err() != nil {
+		for i, val := range vals {
+			if (i+1)%checkContextEveryNIterations == 0 && ctx.Err() != nil {
 				return nil, nil, ctx.Err()
 			}
 			if !m.Matches(val) {
@@ -2860,8 +2869,8 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	}
 
 	var toAdd []string
-	for _, val := range vals {
-		if ctx.Err() != nil {
+	for i, val := range vals {
+		if (i+1)%checkContextEveryNIterations == 0 && ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
 		if m.Matches(val) {
@@ -2964,8 +2973,10 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
 	// Overlaps are well handled by partitioner, so we don't need to deduplicate keys.
 	for ix, key := range keys {
-		if err := ctx.Err(); err != nil {
-			return nil, closeFns, err
+		if (ix+1)%checkContextEveryNIterations == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, closeFns, err
+			}
 		}
 		// Get postings for the given key from cache first.
 		if b, ok := fromCache[key]; ok {
