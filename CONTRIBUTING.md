@@ -103,7 +103,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
     ```
 
   * Consider adding the environment variables to your host machine (e.g `/.bashrc` or [`.envrc`](https://direnv.net/)) file so that those environment variables are persisted across sessions. Replace the 
-     metacharacter '~' with the full path to your home directory. (In unix systems, the path to home directory can be with `echo $HOME` command in terminal).
+     metacharacter '~' with the full path to your home directory. (In unix systems, the path to home directory can be found with `echo $HOME` command in terminal).
 * Clone Thanos inside the `~/Repos` folder -
   * For HTTPS - `git clone https://github.com/thanos-io/thanos.git`
   * For SSH - `git clone git@github.com:thanos-io/thanos.git`
