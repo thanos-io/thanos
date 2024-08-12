@@ -158,45 +158,44 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 
 func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	// TODO: fetch from planner.plan then mock data
-	// Mock data
 	mockBlocks := []metadata.Meta{
 		{
 			BlockMeta: tsdb.BlockMeta{
-				ULID:    ulid.MustNew(ulid.Now(), nil),
-				MinTime: time.Now().Add(-1*time.Hour).Unix() * 1000,
-				MaxTime: time.Now().Unix() * 1000,
+				ULID:    ulid.MustParse("01EEB0ZRSQDJW51W11V4R6YP4T"),
+				MinTime: 1594629445222,
+				MaxTime: 1595455200000,
 				Stats: tsdb.BlockStats{
-					NumSamples: 1000,
-					NumSeries:  100,
+					NumSamples: 1189126896,
+					NumSeries:  2492,
+					NumChunks:  10093065,
+				},
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: 4,
+					Sources: []ulid.ULID{
+						ulid.MustParse("01EDBMV5FNTZXBZETENC7ZXY99"),
+						ulid.MustParse("01EE3BKGP8WSJAH3M4Y6D7XQVB"),
+						ulid.MustParse("01EDW1T6FWT1PDSE85WAGBF848"),
+						ulid.MustParse("01EEB0QH11ANV2845HJNEP1M8J"),
+					},
 				},
 			},
-			Thanos: metadata.Thanos{},
-		},
-		{
-			BlockMeta: tsdb.BlockMeta{
-				ULID:    ulid.MustNew(ulid.Now(), nil),
-				MinTime: time.Now().Add(-2*time.Hour).Unix() * 1000,
-				MaxTime: time.Now().Add(-1*time.Hour).Unix() * 1000,
-				Stats: tsdb.BlockStats{
-					NumSamples: 2000,
-					NumSeries:  200,
+			Thanos: metadata.Thanos{
+				Downsample: metadata.ThanosDownsample{
+					Resolution: 0,
 				},
+				Labels: map[string]string{
+					"monitor": "prometheus_two",
+				},
+				Source: "compactor",
 			},
-			Thanos: metadata.Thanos{},
 		},
 	}
 
-    metasByMinTime := []*metadata.Meta{...} 
-    plannedMetas, err := bapi.planner.Plan(context.TODO(), metasByMinTime)
-    if err != nil {
-        return nil, []error{err}, nil, func() {}
-    }
-
-    return &BlocksInfo{
-        Blocks:      plannedMetas,
-        RefreshedAt: time.Now(),
-        Label:       "Planned Blocks",
-    }, nil, nil, func() {}
+	return &BlocksInfo{
+		Blocks:      mockBlocks,
+		RefreshedAt: time.Now(),
+		Label:       "Planned Blocks",
+	}, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
