@@ -296,7 +296,11 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 					mu.Unlock()
 					continue
 				}
-				ch <- uid
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case ch <- uid:
+				}
 			}
 			return nil
 		})
