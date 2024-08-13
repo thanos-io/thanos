@@ -221,5 +221,12 @@ export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = (
     />
   );
 };
+export const GlobalBlocks: React.FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix }) => {
+  return <Blocks view="global" pathPrefix={pathPrefix} />;
+};
+
+export const PlannedBlocks: React.FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix }) => {
+  return <Blocks view="planned" pathPrefix={pathPrefix} />;
+};
 
 export default Blocks;
