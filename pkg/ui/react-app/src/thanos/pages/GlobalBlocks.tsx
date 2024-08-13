@@ -8,4 +8,3 @@ const GlobalBlocks: React.FC<RouteComponentProps & PathPrefixProps> = ({ pathPre
 };
 
 export default GlobalBlocks;
-
