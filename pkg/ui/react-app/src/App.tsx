@@ -5,6 +5,7 @@ import { QueryParamProvider } from 'use-query-params';
 import useMedia from 'use-media';
 
 import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList, NotFound } from './pages';
+import { GlobalBlocks, PlannedBlocks } from './thanos/pages';
 import PathPrefixProps from './types/PathPrefixProps';
 import ThanosComponentProps from './thanos/types/ThanosComponentProps';
 import Navigation from './thanos/Navbar';
@@ -17,7 +18,7 @@ const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',
   rule: '/alerts',
   bucket: '/blocks',
-  compact: '/loaded',
+  compact: '/global-blocks',
   store: '/loaded',
 };
 
@@ -61,6 +62,10 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
               <Stores path="/stores" pathPrefix={pathPrefix} />
               <Blocks path="/blocks" pathPrefix={pathPrefix} />
               <Blocks path="/loaded" pathPrefix={pathPrefix} view="loaded" />
+
+              <GlobalBlocks path="/global-blocks" pathPrefix={pathPrefix} />
+              <PlannedBlocks path="/planned-blocks" pathPrefix={pathPrefix} />
+
               <NotFound pathPrefix={pathPrefix} default defaultRoute={defaultRouteConfig[thanosComponent]} />
             </Router>
           </QueryParamProvider>

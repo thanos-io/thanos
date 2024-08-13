@@ -5,7 +5,7 @@ import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } f
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
-import { Block, BlocksPool } from './block';
+import { Block } from './block';
 import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { BlockSearchInput } from './BlockSearchInput';
@@ -199,92 +199,26 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   );
 };
 
-export const PlanBlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
-  const { blocks, err } = data;
-
-  const [selectedBlock, selectBlock] = useState<Block | null>(null);
-
-  if (err) {
-    return <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>;
-  }
-
-  if (blocks.length === 0) {
-    return <UncontrolledAlert color="warning">No planned blocks found.</UncontrolledAlert>;
-  }
-
-  const blocksPool = useMemo(() => {
-    const pool: { [key: string]: Block[] } = {};
-    blocks.forEach(block => {
-      const key = `Plan-${block.ulid}`;
-      if (!pool[key]) {
-        pool[key] = [];
-      }
-      pool[key].push(block);
-    });
-    return pool;
-  }, [blocks]);
-
-  return (
-    <div className={styles.container}>
-      <div className={styles.grid}>
-        {Object.keys(blocksPool).map(key => (
-          <SourceView
-            key={key}
-            data={blocksPool[key]}
-            title={`Plan View - ${key}`}
-            selectBlock={selectBlock} 
-            gridMinTime={Math.min(...blocksPool[key].map(b => b.minTime))}
-            gridMaxTime={Math.max(...blocksPool[key].map(b => b.maxTime))}
-            blockSearch=""
-            compactionLevel={0}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const BlocksWithStatusIndicator = withStatusIndicator(BlocksContent);
-const PlanViewWithStatusIndicator = withStatusIndicator(PlanBlocksContent);
 
 interface BlocksProps {
   view?: string;
 }
 
 export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
-  const {
-    response: globalBlocksResponse,
-    error: globalBlocksError,
-    isLoading: globalBlocksLoading,
-  } = useFetch<BlockListProps>(`${pathPrefix}/api/v1/blocks${view ? '?view=' + view : ''}`);
-
-  const {
-    response: planResponse,
-    error: planError,
-    isLoading: planLoading,
-  } = useFetch<BlockListProps>(`${pathPrefix}/api/v1/blocks/plan`);
-
-  if (!globalBlocksResponse.data && !planResponse.data)
-    return <UncontrolledAlert color="warning">No blocks data available.</UncontrolledAlert>;
+  const { response, error, isLoading } = useFetch<BlockListProps>(
+    `${pathPrefix}/api/v1/blocks${view === "planned" ? "/plan" : (view ? '?view=' + view : '')}`
+  );
+  const { status: responseStatus } = response;
+  const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
 
   return (
-    <div>
-      <h2>Planned Blocks</h2>
-      <PlanViewWithStatusIndicator
-        pathPrefix={pathPrefix}
-        data={planResponse.data || { blocks: [] }}
-        isLoading={planLoading}
-        error={planError}
-      />
-
-      <h2>Global Blocks</h2>
-      <BlocksWithStatusIndicator
-        pathPrefix={pathPrefix}
-        data={globalBlocksResponse.data || { blocks: [] }}
-        error={globalBlocksError}
-        isLoading={globalBlocksLoading}
-      />
-    </div>
+    <BlocksWithStatusIndicator
+      pathPrefix={pathPrefix}
+      data={response.data}
+      error={badResponse ? new Error(responseStatus) : error}
+      isLoading={isLoading}
+    />
   );
 };
 
