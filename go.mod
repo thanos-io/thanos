@@ -43,7 +43,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.25.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.59
-	github.com/minio/minio-go/v7 v7.0.72 // indirect
+	github.com/minio/minio-go/v7 v7.0.72
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
 	github.com/oklog/ulid v1.3.1
@@ -116,6 +116,7 @@ require (
 require (
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/onsi/gomega v1.33.1
@@ -139,6 +140,7 @@ require (
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/jcchavezs/porto v0.1.0 // indirect
 	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a // indirect

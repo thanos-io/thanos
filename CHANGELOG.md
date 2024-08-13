@@ -31,6 +31,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7403](https://github.com/thanos-io/thanos/pull/7403) Sidecar: fix startup sequence
 - [#7484](https://github.com/thanos-io/thanos/pull/7484) Proxy: fix panic in lazy response set
 - [#7493](https://github.com/thanos-io/thanos/pull/7493) *: fix server grpc histograms
+- [#7514](https://github.com/thanos-io/thanos/pull/7518) *: Fix channel deadlock in meta sync fetcher, Exists calls now retry if failing with a retryable minio error
 
 ### Added
 
