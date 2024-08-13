@@ -464,14 +464,16 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		if resp.GetWarning() != "" {
 			totalFailedStores++
-			level.Error(s.logger).Log("msg", "Series: warning from store", "warning", resp.GetWarning())
+			maxWarningBytes := 2000
+			warning := resp.GetWarning()[:min(maxWarningBytes, len(resp.GetWarning()))]
+			level.Error(s.logger).Log("msg", "Series: warning from store", "warning", warning)
 			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
 				// TODO: attribute the warning to the store(group key and replica key) that produced it.
 				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
 				if totalFailedStores > 1 {
 					level.Error(reqLogger).Log("msg", "more than one stores have failed")
 					// If we don't know which store has failed, we can tolerate at most one failed store.
-					return status.Error(codes.Aborted, resp.GetWarning())
+					return status.Error(codes.Aborted, warning)
 				}
 			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return status.Error(codes.Aborted, resp.GetWarning())

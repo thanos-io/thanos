@@ -141,7 +141,7 @@ func (l *localClient) String() string {
 	mint, maxt := l.store.TimeRange()
 	return fmt.Sprintf(
 		"LabelSets: %v MinTime: %d MaxTime: %d",
-		labelpb.PromLabelSetsToStringN(l.LabelSets(), 10), mint, maxt,
+		labelpb.PromLabelSetsToStringN(l.LabelSets(), 500), mint, maxt,
 	)
 }
 
