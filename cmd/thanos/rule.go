@@ -326,7 +326,7 @@ func runRule(
 	if len(conf.queryConfigYAML) > 0 {
 		queryCfg, err = clientconfig.LoadConfigs(conf.queryConfigYAML)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "query configuration")
 		}
 	} else {
 		queryCfg, err = clientconfig.BuildConfigFromHTTPAddresses(conf.query.addrs)
@@ -383,12 +383,12 @@ func runRule(
 			cfg.HTTPConfig.HTTPClientConfig.ClientMetrics = queryClientMetrics
 			c, err := clientconfig.NewHTTPClient(cfg.HTTPConfig.HTTPClientConfig, "query")
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create HTTP query client: %w", err)
 			}
 			c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 			queryClient, err := clientconfig.NewClient(logger, cfg.HTTPConfig.EndpointsConfig, c, queryProvider.Clone())
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create query client: %w", err)
 			}
 			queryClients = append(queryClients, queryClient)
 			promClients = append(promClients, promclient.NewClient(queryClient, logger, "thanos-rule"))
