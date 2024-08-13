@@ -385,7 +385,9 @@ func newLazyRespSet(
 				var rerr error
 				// If timer is already stopped
 				if t != nil && !t.Stop() {
-					<-t.C // Drain the channel if it was already stopped.
+					if t.C != nil {
+						<-t.C // Drain the channel if it was already stopped.
+					}
 					rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st)
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", st)
@@ -643,7 +645,9 @@ func newEagerRespSet(
 				var rerr error
 				// If timer is already stopped
 				if t != nil && !t.Stop() {
-					<-t.C // Drain the channel if it was already stopped.
+					if t.C != nil {
+						<-t.C // Drain the channel if it was already stopped.
+					}
 					rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, storeName)
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", storeName)
