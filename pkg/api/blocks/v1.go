@@ -149,7 +149,7 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 }
 
 func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
-    // TODO: fetch from planner.plan then mock data
+  // TODO: fetch from planner.plan then mock data
 	ctx := r.Context()
 	mockBlocks := []metadata.Meta{
 		{
