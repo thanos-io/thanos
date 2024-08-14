@@ -16,7 +16,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7592](https://github.com/thanos-io/thanos/pull/7592) Ruler: Only increment `thanos_rule_evaluation_with_warnings_total` metric for non PromQL warnings.
 - [#7614](https://github.com/thanos-io/thanos/pull/7614) *: fix debug log formatting.
 - [#7492](https://github.com/thanos-io/thanos/pull/7492) Compactor: update filtered blocks list before second downsample pass.
-- [#7634](https://github.com/thanos-io/thanos/pull/7634) Rule: fix Query and Alertmanager TLS configurations with CA only.
 
 ### Added
 
@@ -28,6 +27,19 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7494](https://github.com/thanos-io/thanos/pull/7494) Ruler: remove trailing period from SRV records returned by discovery `dnsnosrva` lookups
 - [#7567](https://github.com/thanos-io/thanos/pull/7565) Query: Use thanos resolver for endpoint groups.
+
+### Removed
+
+## [v0.36.1](https://github.com/thanos-io/thanos/tree/release-0.36)
+
+### Fixed
+
+- [#7634](https://github.com/thanos-io/thanos/pull/7634) Rule: fix Query and Alertmanager TLS configurations with CA only.
+- [#7618](https://github.com/thanos-io/thanos/pull/7618) Proxy: Query goroutine leak when store.response-timeout is set
+
+### Added
+
+### Changed
 
 ### Removed
 
