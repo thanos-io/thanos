@@ -492,6 +492,16 @@ func runQuery(
 		}
 	}
 
+	// Register resolver for the "thanos:///" scheme for endpoint-groups
+	dns.RegisterGRPCResolver(
+		dns.NewProvider(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_query_endpoint_groups_", reg),
+			dns.ResolverType(dnsSDResolver),
+		),
+		dnsSDInterval,
+	)
+
 	dnsEndpointProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
@@ -891,14 +901,12 @@ func prepareEndpointSet(
 			}
 
 			for _, eg := range endpointGroupAddrs {
-				addr := fmt.Sprintf("dns:///%s", eg)
-				spec := query.NewGRPCEndpointSpec(addr, false, extgrpc.EndpointGroupGRPCOpts()...)
+				spec := query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", eg), false, extgrpc.EndpointGroupGRPCOpts()...)
 				specs = append(specs, spec)
 			}
 
 			for _, eg := range strictEndpointGroups {
-				addr := fmt.Sprintf("dns:///%s", eg)
-				spec := query.NewGRPCEndpointSpec(addr, true, extgrpc.EndpointGroupGRPCOpts()...)
+				spec := query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", eg), true, extgrpc.EndpointGroupGRPCOpts()...)
 				specs = append(specs, spec)
 			}
 
