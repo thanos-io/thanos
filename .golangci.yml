@@ -51,7 +51,11 @@ linters:
 
 linters-settings:
   errcheck:
-    exclude: ./.errcheck_excludes.txt
+    # List of functions to exclude from checking, where each entry is a single function to exclude.
+    exclude-functions:
+      - (github.com/go-kit/log.Logger).Log
+      - fmt.Fprintln
+      - fmt.Fprint
   misspell:
     locale: US
   goconst:
