@@ -21,8 +21,10 @@ run:
 
 # output configuration options
 output:
-  # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
-  format: colored-line-number
+  # The formats used to render issues.
+  formats:
+    - format: colored-line-number
+      path: stdout
 
   # print lines of code with issue, default is true
   print-issued-lines: true
