@@ -30,7 +30,12 @@ var (
 	}
 )
 
-const maxInt = int(^uint(0) >> 1)
+const (
+	maxInt = int(^uint(0) >> 1)
+
+	// checkContextEveryNIterations is used in some tight loops to check if the context is done.
+	checkContextEveryNIterations = 128
+)
 
 type InMemoryIndexCache struct {
 	mtx sync.Mutex
@@ -302,11 +307,13 @@ func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID uli
 	blockIDKey := blockID.String()
 	requests := 0
 	hit := 0
-	for _, key := range keys {
-		if ctx.Err() != nil {
-			c.commonMetrics.RequestTotal.WithLabelValues(CacheTypePostings, tenant).Add(float64(requests))
-			c.commonMetrics.HitsTotal.WithLabelValues(CacheTypePostings, tenant).Add(float64(hit))
-			return hits, misses
+	for i, key := range keys {
+		if (i+1)%checkContextEveryNIterations == 0 {
+			if ctx.Err() != nil {
+				c.commonMetrics.RequestTotal.WithLabelValues(CacheTypePostings, tenant).Add(float64(requests))
+				c.commonMetrics.HitsTotal.WithLabelValues(CacheTypePostings, tenant).Add(float64(hit))
+				return hits, misses
+			}
 		}
 		requests++
 		if b, ok := c.get(CacheKey{blockIDKey, CacheKeyPostings(key), ""}); ok {
@@ -363,11 +370,13 @@ func (c *InMemoryIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.
 	blockIDKey := blockID.String()
 	requests := 0
 	hit := 0
-	for _, id := range ids {
-		if ctx.Err() != nil {
-			c.commonMetrics.RequestTotal.WithLabelValues(CacheTypeSeries, tenant).Add(float64(requests))
-			c.commonMetrics.HitsTotal.WithLabelValues(CacheTypeSeries, tenant).Add(float64(hit))
-			return hits, misses
+	for i, id := range ids {
+		if (i+1)%checkContextEveryNIterations == 0 {
+			if ctx.Err() != nil {
+				c.commonMetrics.RequestTotal.WithLabelValues(CacheTypeSeries, tenant).Add(float64(requests))
+				c.commonMetrics.HitsTotal.WithLabelValues(CacheTypeSeries, tenant).Add(float64(hit))
+				return hits, misses
+			}
 		}
 		requests++
 		if b, ok := c.get(CacheKey{blockIDKey, CacheKeySeries(id), ""}); ok {

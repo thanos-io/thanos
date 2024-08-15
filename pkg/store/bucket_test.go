@@ -2932,8 +2932,20 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 }
 
 func TestExpandPostingsWithContextCancel(t *testing.T) {
+	// Not enough number of postings to check context cancellation.
 	p := index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8})
 	ctx, cancel := context.WithCancel(context.Background())
+
+	cancel()
+	_, err := ExpandPostingsWithContext(ctx, p)
+	testutil.Ok(t, err)
+
+	refs := make([]storage.SeriesRef, 0)
+	for i := 0; i < 128; i++ {
+		refs = append(refs, storage.SeriesRef(i))
+	}
+	p = index.NewListPostings(refs)
+	ctx, cancel = context.WithCancel(context.Background())
 
 	cancel()
 	res, err := ExpandPostingsWithContext(ctx, p)
