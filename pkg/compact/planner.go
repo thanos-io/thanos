@@ -25,6 +25,7 @@ type tsdbBasedPlanner struct {
 	ranges []int64
 
 	noCompBlocksFunc func() map[ulid.ULID]*metadata.NoCompactMark
+	updateOnPlanned  func([]metadata.Meta, error)
 }
 
 var _ Planner = &tsdbBasedPlanner{}
@@ -51,6 +52,10 @@ func NewPlanner(logger log.Logger, ranges []int64, noCompBlocks *GatherNoCompact
 // TODO(bwplotka): Consider smarter algorithm, this prefers smaller iterative compactions vs big single one: https://github.com/thanos-io/thanos/issues/3405
 func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
 	return p.plan(p.noCompBlocksFunc(), metasByMinTime)
+}
+
+func (p *tsdbBasedPlanner) UpdateOnPlanned(f func([]metadata.Meta, error)) {
+	p.updateOnPlanned = f
 }
 
 func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error) {

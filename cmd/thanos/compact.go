@@ -239,6 +239,13 @@ func runCompact(
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
 
+	levels, err := compactions.levels(conf.maxCompactionLevel)
+	if err != nil {
+		return errors.Wrap(err, "get compaction levels")
+	}
+
+	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
+
 	var blockLister block.Lister
 	switch syncStrategy(conf.blockListStrategy) {
 	case concurrentDiscovery:
@@ -288,6 +295,11 @@ func runCompact(
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			api.SetLoaded(blocks, err)
 		})
+
+		tsdbPlanner.UpdateOnPlanned(func(blocks []metadata.Meta, err error) {
+			api.SetPlanned(blocks, err)
+		})
+
 		sy, err = compact.NewMetaSyncer(
 			logger,
 			reg,
@@ -301,11 +313,6 @@ func runCompact(
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
 		}
-	}
-
-	levels, err := compactions.levels(conf.maxCompactionLevel)
-	if err != nil {
-		return errors.Wrap(err, "get compaction levels")
 	}
 
 	if conf.maxCompactionLevel < compactions.maxLevel() {
@@ -371,7 +378,6 @@ func runCompact(
 	)
 	var planner compact.Planner
 
-	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	largeIndexFilterPlanner := compact.WithLargeTotalIndexSizeFilter(
 		tsdbPlanner,
 		insBkt,

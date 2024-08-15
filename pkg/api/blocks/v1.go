@@ -27,15 +27,16 @@ import (
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI          *api.BaseAPI
-	logger           log.Logger
-	globalBlocksInfo *BlocksInfo
-	loadedBlocksInfo *BlocksInfo
+	baseAPI           *api.BaseAPI
+	logger            log.Logger
+	globalBlocksInfo  *BlocksInfo
+	loadedBlocksInfo  *BlocksInfo
+	plannedBlocksInfo *BlocksInfo
 
-	globalLock, loadedLock sync.Mutex
-	disableCORS            bool
-	bkt                    objstore.Bucket
-	disableAdminOperations bool
+	globalLock, loadedLock, plannedLock sync.Mutex
+	disableCORS                         bool
+	bkt                                 objstore.Bucket
+	disableAdminOperations              bool
 }
 
 type BlocksInfo struct {
@@ -224,4 +225,12 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 	defer bapi.loadedLock.Unlock()
 
 	bapi.loadedBlocksInfo.set(blocks, err)
+}
+
+// SetPlanned updates the plan blocks' metadata in the API.
+func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
+	bapi.plannedLock.Lock()
+	defer bapi.plannedLock.Unlock()
+
+	bapi.plannedBlocksInfo.set(blocks, err)
 }
