@@ -551,7 +551,13 @@ func (e *EndpointSet) Update(ctx context.Context) {
 func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec, er *endpointRef) {
 	metadata, err := er.Metadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
 	if err != nil {
-		level.Warn(e.logger).Log("msg", "update of endpoint failed", "err", errors.Wrap(err, "getting metadata"), "address", spec.Addr())
+		level.Warn(e.logger).Log(
+			"msg", "update of endpoint failed",
+			"err", errors.Wrap(err, "getting metadata"),
+			"address", spec.Addr(),
+			"group_key", spec.groupKey,
+			"replica_key", spec.replicaKey,
+		)
 	}
 	er.update(e.now, metadata, err)
 }

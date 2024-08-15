@@ -59,10 +59,12 @@ type Handler struct {
 	failedQueryCache *utils.FailedQueryCache
 
 	// Metrics.
-	querySeconds *prometheus.CounterVec
-	querySeries  *prometheus.CounterVec
-	queryBytes   *prometheus.CounterVec
-	activeUsers  *util.ActiveUsersCleanupService
+	querySeconds     *prometheus.CounterVec
+	querySeries      *prometheus.CounterVec
+	queryBytes       *prometheus.CounterVec
+	activeUsers      *util.ActiveUsersCleanupService
+	slowQueryCount   prometheus.Counter
+	failedQueryCount prometheus.Counter
 }
 
 // NewHandler creates a new frontend handler.
@@ -108,16 +110,24 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		_ = h.activeUsers.StartAsync(context.Background())
 	}
 
+	h.slowQueryCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "cortex_slow_query_total",
+		Help: "Total number of slow queries detected.",
+	})
+	h.failedQueryCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "cortex_failed_query_total",
+		Help: "Total number of failed queries detected.",
+	})
 	return h
 }
 
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		stats       *querier_stats.Stats
+		stats *querier_stats.Stats
 		// For failed/slow query logging and query stats.
 		queryString url.Values
 		// For failed query cache
-		urlQuery    url.Values
+		urlQuery url.Values
 	)
 
 	// Initialise the stats in the context and make sure it's propagated
@@ -206,6 +216,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err error, queryResponseTime time.Duration) {
+	f.failedQueryCount.Inc()
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -235,6 +246,7 @@ func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err
 
 // reportSlowQuery reports slow queries.
 func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
+	f.slowQueryCount.Inc()
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
