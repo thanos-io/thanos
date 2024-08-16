@@ -164,7 +164,7 @@ metadata:
 
 ### Forward proxy Envoy configuration `envoy.yaml`
 
-This is a static v2 envoy configuration (v3 example below). You will need to update this configuration for every sidecar you would like to talk to. There are also several options for dynamic configuration, like envoy XDS (and other associated dynamic config modes), or using something like terraform (if thats your deployment method) to generate the configs at deployment time. NOTE: This config **does not** send a client certificate to authenticate with remote clusters, see envoy v3 config.
+This is a static v2 envoy configuration (v3 example below). You will need to update this configuration for every sidecar you would like to talk to. There are also several options for dynamic configuration, like envoy XDS (and other associated dynamic config modes), or using something like terraform (if that's your deployment method) to generate the configs at deployment time. NOTE: This config **does not** send a client certificate to authenticate with remote clusters, see envoy v3 config.
 
 ```yaml
 admin:

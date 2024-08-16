@@ -55,7 +55,7 @@ The main motivation for considering deletions in the object storage are the foll
   * **reason for deletion**
 * The entered details are processed by the CLI tool to create a tombstone file (unique for a request and irrespective of the presence of series), and the file is uploaded to the object storage making it accessible to all components.
 * **Filename optimization**: The filename is created from the hash of matchers, minTime and maxTime. This helps re-write an existing tombstone, whenever a same request is made in the future hence avoiding duplication of the same request. (NOTE: Requests which entail common deletions still creates different tombstones.)
-* Store Gateway masks the series on processing the global tombstone files from the object storage. At chunk level, whenever there's a match with the data corresponding to atleast one of the tombstones, we skip the chunk, potentially resulting in the masking of chunk.
+* Store Gateway masks the series on processing the global tombstone files from the object storage. At chunk level, whenever there's a match with the data corresponding to at least one of the tombstones, we skip the chunk, potentially resulting in the masking of chunk.
 
 ## Considerations
 
