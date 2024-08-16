@@ -2,7 +2,7 @@
 
 > Note that everything is experimental and may change significantly at any time. Also it still has missing alert and dashboard definitions for certain components, e.g. rule and sidecar. Please feel free to contribute.
 
-This directory contains extensible and customizable monitoring definitons for Thanos. [Grafana](http://grafana.com/) dashboards, and [Prometheus rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) combined with documentation and scripts to provide easy monitoring experience for Thanos.
+This directory contains extensible and customizable monitoring definitions for Thanos. [Grafana](http://grafana.com/) dashboards, and [Prometheus rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) combined with documentation and scripts to provide easy monitoring experience for Thanos.
 
 You can find more about monitoring-mixins in [the design document](https://github.com/monitoring-mixins/docs/blob/master/design.pdf), and you can check out other examples like [Prometheus Mixin](https://github.com/prometheus/prometheus/tree/master/documentation/prometheus-mixin).
 
