@@ -203,9 +203,9 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 }
 ```
 
-Now that the `SeriesStats` are propagated into the `storepb.SeriesServer`, we can ammend the `selectFn` function to return a tuple of `(storage.SeriesSet, storage.SeriesSetCounter, error)`
+Now that the `SeriesStats` are propagated into the `storepb.SeriesServer`, we can amend the `selectFn` function to return a tuple of `(storage.SeriesSet, storage.SeriesSetCounter, error)`
 
-Ammending the QueryableCreator to provide a func parameter:
+Amending the QueryableCreator to provide a func parameter:
 
 ```go
 type SeriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
