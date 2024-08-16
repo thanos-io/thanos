@@ -145,7 +145,7 @@
           {
             alert: 'ThanosQueryOverload',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s has been overloaded for more than 15 minutes. This may be a symptom of excessive simultanous complex requests, low performance of the Prometheus API, or failures within these components. Assess the health of the Thanos query instances, the connnected Prometheus instances, look for potential senders of these requests and then contact support.' % location,
+              description: 'Thanos Query {{$labels.job}}%s has been overloaded for more than 15 minutes. This may be a symptom of excessive simultaneous complex requests, low performance of the Prometheus API, or failures within these components. Assess the health of the Thanos query instances, the connected Prometheus instances, look for potential senders of these requests and then contact support.' % location,
               summary: 'Thanos query reaches its maximum capacity serving concurrent requests.',
             },
             expr: |||
