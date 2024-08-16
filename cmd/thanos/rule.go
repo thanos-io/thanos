@@ -888,13 +888,7 @@ func removeLockfileIfAny(logger log.Logger, dataDir string) error {
 }
 
 func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
-	for _, l := range lset {
-		res = append(res, labels.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
-	return res
+	return lset.Copy()
 }
 
 func queryFuncCreator(

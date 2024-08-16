@@ -1013,12 +1013,12 @@ func getKeysAlphabetically(labels map[string]string) []string {
 // matchesSelector checks if blockMeta contains every label from
 // the selector with the correct value.
 func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) bool {
-	for _, l := range selectorLabels {
-		if v, ok := blockMeta.Thanos.Labels[l.Name]; !ok || v != l.Value {
-			return false
-		}
-	}
-	return true
+	matches := true
+	selectorLabels.Range(func(l labels.Label) {
+		val, ok := blockMeta.Thanos.Labels[l.Name]
+		matches = matches && ok && val == l.Value
+	})
+	return matches
 }
 
 // getIndex calculates the index of s in strs.

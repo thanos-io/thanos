@@ -70,7 +70,7 @@ func registerReceive(app *extkingpin.App) {
 		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
 			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
 		}
-		if len(lset) == 0 {
+		if lset.Len() == 0 {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
