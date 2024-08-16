@@ -269,14 +269,14 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 	for _, l := range s {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
-			return labels.Labels{}, errors.Errorf("unrecognized label %q", l)
+			return labels.EmptyLabels(), errors.Errorf("unrecognized label %q", l)
 		}
 		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
-			return labels.Labels{}, errors.Errorf("unsupported format for label %s", l)
+			return labels.EmptyLabels(), errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {
-			return labels.Labels{}, errors.Wrap(err, "unquote label value")
+			return labels.EmptyLabels(), errors.Wrap(err, "unquote label value")
 		}
 		lset.Add(parts[0], val)
 	}
