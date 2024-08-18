@@ -26,7 +26,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
-	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -954,11 +953,6 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 							{Name: "l3", Value: "v4"},
 						},
 					},
-					{
-						Labels: []labelpb.ZLabel{
-							{Name: store.CompatibilityTypeLabelName, Value: "store"},
-						},
-					},
 				}
 			},
 		},
@@ -976,11 +970,6 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 					{
 						Labels: []labelpb.ZLabel{
 							{Name: "l3", Value: "v4"},
-						},
-					},
-					{
-						Labels: []labelpb.ZLabel{
-							{Name: store.CompatibilityTypeLabelName, Value: "store"},
 						},
 					},
 				}
