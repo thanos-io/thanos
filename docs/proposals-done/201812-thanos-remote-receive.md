@@ -192,7 +192,7 @@ Receivers do not need to re-shard data on rollouts; instead, they must flush the
 
 This may produce small, and therefore unoptimized, TSDB blocks in object storage, however these are optimized away by the Thanos compactor by merging the small blocks into bigger blocks. The compaction process is done concurrently in a separate deployment to the receivers. Timestamps involved are produced by the sending Prometheus, therefore no clock synchronization is necessary.
 
-When changing a soft tenant to a hard tenant (or vise versa), all blocks on all nodes in hashrings in which the tenant is present must be flushed.
+When changing a soft tenant to a hard tenant (or vice versa), all blocks on all nodes in hashrings in which the tenant is present must be flushed.
 
 ## Open questions
 
