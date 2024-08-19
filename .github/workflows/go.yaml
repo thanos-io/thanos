@@ -66,6 +66,20 @@ jobs:
       - name: Linting & vetting
         run: make go-lint
 
+  codespell:
+    runs-on: ubuntu-latest
+    name: Check misspelled words
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run codespell
+        uses: codespell-project/actions-codespell@v2
+        with:
+          check_filenames: false
+          check_hidden: true
+          skip: ./pkg/*,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
+          ignore_words_list: re-use,intrumentation,mmaped,nd,serie
+
   e2e:
     strategy:
       fail-fast: false
