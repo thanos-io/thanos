@@ -36,6 +36,33 @@ jobs:
       - name: Cross build check
         run: make crossbuild
 
+  build-stringlabels:
+    runs-on: ubuntu-latest
+    name: Go build with -tags=stringlabels
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.22.x
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/.cache/golangci-lint
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Cross build check
+      run: go build -tags=stringlabels ./cmd/thanos
+
   lint:
     runs-on: ubuntu-latest
     name: Linters (Static Analysis) for Go
