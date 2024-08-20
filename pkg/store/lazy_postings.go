@@ -308,8 +308,8 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(ctx, groupRemovals...))
 
-	if ctx.Err() != nil {
-		return nil, nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
 	}
 	ps, err := ExpandPostingsWithContext(ctx, result)
 	if err != nil {

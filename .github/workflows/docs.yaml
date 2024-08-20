@@ -7,6 +7,9 @@ on:
     tags:
   pull_request:
 
+permissions:  
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -15,21 +18,21 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: 1.22.x
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
           path: .mdoxcache
           key: ${{ runner.os }}-mdox-${{ hashFiles('docs/**/*.md', 'examples/**/*.md', 'mixin/**/*.md', '*.md') }}
