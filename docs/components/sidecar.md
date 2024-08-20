@@ -118,6 +118,10 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS minimum version to gRPC server, unset will
+                                 default to tls 1.3, allow values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not

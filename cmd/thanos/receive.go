@@ -136,7 +136,7 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -782,16 +782,17 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
-	rwAddress          string
-	rwServerCert       string
-	rwServerKey        string
-	rwServerClientCA   string
-	rwClientCert       string
-	rwClientKey        string
-	rwClientSecure     bool
-	rwClientServerCA   string
-	rwClientServerName string
-	rwClientSkipVerify bool
+	rwAddress             string
+	rwServerCert          string
+	rwServerKey           string
+	rwServerClientCA      string
+	rwServerTlsMinVersion string
+	rwClientCert          string
+	rwClientKey           string
+	rwClientSecure        bool
+	rwClientServerCA      string
+	rwClientServerName    string
+	rwClientSkipVerify    bool
 
 	dataDir   string
 	labelStrs []string
@@ -860,6 +861,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS.").Default("").StringVar(&rc.rwServerKey)
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
+
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
 
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 

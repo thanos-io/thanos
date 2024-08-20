@@ -353,6 +353,10 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS minimum version to gRPC server, unset will
+                                 default to tls 1.3, allow values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
