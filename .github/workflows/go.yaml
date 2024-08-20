@@ -8,6 +8,9 @@ on:
   pull_request:
 
 # TODO(bwplotka): Add tests here.
+permissions:  
+  contents: read
+
 jobs:
   cross-build-check:
     runs-on: ubuntu-latest
@@ -16,14 +19,14 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: 1.22.x
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
           path: |
             ~/.cache/go-build
@@ -36,6 +39,33 @@ jobs:
       - name: Cross build check
         run: make crossbuild
 
+  build-stringlabels:
+    runs-on: ubuntu-latest
+    name: Go build with -tags=stringlabels
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+    - name: Install Go
+      uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+      with:
+        go-version: 1.22.x
+
+    - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/.cache/golangci-lint
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Cross build check
+      run: go build -tags=stringlabels ./cmd/thanos
+
   lint:
     runs-on: ubuntu-latest
     name: Linters (Static Analysis) for Go
@@ -43,14 +73,14 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: 1.22.x
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
           path: |
             ~/.cache/go-build
@@ -66,6 +96,20 @@ jobs:
       - name: Linting & vetting
         run: make go-lint
 
+  codespell:
+    runs-on: ubuntu-latest
+    name: Check misspelled words
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run codespell
+        uses: codespell-project/actions-codespell@v2
+        with:
+          check_filenames: false
+          check_hidden: true
+          skip: ./pkg/*,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
+          ignore_words_list: re-use,intrumentation,mmaped,nd,serie
+
   e2e:
     strategy:
       fail-fast: false
@@ -78,14 +122,14 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: 1.22.x
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:
           path: |
             ~/.cache/go-build

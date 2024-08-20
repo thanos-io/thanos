@@ -190,7 +190,7 @@ sum(
 
 The root querier would need to know that downstream queriers have already executed the `count` and should convert the aggregation into a `sum`
 
-A similar problem can happen with a `sum(rate(metric[2m]))` expression where downstream queriers calculate the `sum` over the metric's `rate`. In order for the values to not get rated twice, either the downstream queriers need to invert the rate into a cumulative value, or the central querier needs to omit the rate and only calcualte the sum.
+A similar problem can happen with a `sum(rate(metric[2m]))` expression where downstream queriers calculate the `sum` over the metric's `rate`. In order for the values to not get rated twice, either the downstream queriers need to invert the rate into a cumulative value, or the central querier needs to omit the rate and only calculate the sum.
 
 Managing this complexity in Thanos itself seems error prone and hard to maintain over time. As a result, this proposal suggests to localize the complexity into a single logical optimizer as suggested in the sections above.
 

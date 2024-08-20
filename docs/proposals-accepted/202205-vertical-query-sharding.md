@@ -134,7 +134,7 @@ Using the reference implementation, we benchmarked query execution and memory us
 
 We then ran the following query on the reference dataset for 10-15 minutes: `sum by (pod) (http_requests_total)`
 
-The memory usage of Queriers with and without sharding was ~650MB and ~1.5GB respectively, as shown n the screenshots bellow.
+The memory usage of Queriers with and without sharding was ~650MB and ~1.5GB respectively, as shown n the screenshots below.
 
 Memory usage with sharding:
 
