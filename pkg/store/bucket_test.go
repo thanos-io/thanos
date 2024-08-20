@@ -3947,3 +3947,138 @@ func (m *compositeBytesLimiterMock) ReserveWithType(num uint64, dataType StoreDa
 	}
 	return nil
 }
+
+func TestBucketStoreMetadataLimit(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(tb, bkt.Close()) }()
+
+	uploadTestBlock(tb, tmpDir, bkt, 100)
+
+	instrBkt := objstore.WithNoopInstr(bkt)
+	logger := log.NewNopLogger()
+
+	// Instance a real bucket store we'll use to query the series.
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		instrBkt,
+		fetcher,
+		tmpDir,
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		10,
+		false,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+		false,
+		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	seriesTests := map[string]struct {
+		limit           int64
+		expectedResults int
+	}{
+		"series without limit": {
+			expectedResults: 40,
+		},
+		"series with limit": {
+			limit:           2,
+			expectedResults: 2,
+		},
+	}
+
+	for testName, testData := range seriesTests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.SeriesRequest{
+				MinTime: timestamp.FromTime(minTime),
+				MaxTime: timestamp.FromTime(maxTime),
+				Limit:   testData.limit,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "j", Value: "foo"},
+				},
+			}
+
+			srv := newStoreSeriesServer(context.Background())
+			err = store.Series(req, srv)
+			testutil.Ok(t, err)
+			testutil.Assert(t, len(srv.SeriesSet) == testData.expectedResults)
+		})
+	}
+
+	labelNamesTests := map[string]struct {
+		limit           int64
+		expectedResults []string
+	}{
+		"label names without limit": {
+			expectedResults: []string{"ext1", "i", "j", "n", "uniq"},
+		},
+		"label names with limit": {
+			limit:           3,
+			expectedResults: []string{"ext1", "i", "j"},
+		},
+	}
+
+	for testName, testData := range labelNamesTests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.LabelNamesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Limit: testData.limit,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "j", Value: "foo"},
+				},
+			}
+
+			resp, err := store.LabelNames(context.Background(), req)
+			testutil.Ok(t, err)
+			testutil.Equals(t, testData.expectedResults, resp.Names)
+		})
+	}
+
+	labelValuesTests := map[string]struct {
+		limit           int64
+		expectedResults []string
+	}{
+		"label values without limit": {
+			expectedResults: []string{"bar", "foo"},
+		},
+		"label values with limit": {
+			limit:           1,
+			expectedResults: []string{"bar"},
+		},
+	}
+
+	for testName, testData := range labelValuesTests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.LabelValuesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Label: "j",
+				Limit: testData.limit,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "j", Value: "(foo|bar)"},
+				},
+			}
+
+			resp, err := store.LabelValues(context.Background(), req)
+			testutil.Ok(t, err)
+			testutil.Equals(t, testData.expectedResults, resp.Values)
+		})
+	}
+}

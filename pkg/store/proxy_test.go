@@ -742,6 +742,46 @@ func TestProxyStore_Series(t *testing.T) {
 				},
 			},
 		},
+		{
+			title: "skip chunks with limit",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "3")),
+							storeSeriesResponse(t, labels.FromStrings("a", "4")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: "[1-4]", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      2,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset: labels.FromStrings("a", "1"),
+				},
+				{
+					lset: labels.FromStrings("a", "2"),
+				},
+			},
+		},
 	} {
 		t.Run(tc.title, func(t *testing.T) {
 			for _, replicaLabelSupport := range []bool{false, true} {
@@ -1439,7 +1479,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			Warnings: []string{"warning"},
 		},
 	}
-	cls := []Client{
+	storeApis := []Client{
 		&storetestutil.TestClient{StoreClient: m1},
 		&storetestutil.TestClient{StoreClient: &mockedStoreAPI{
 			RespLabelValues: &storepb.LabelValuesResponse{
@@ -1454,41 +1494,82 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			MaxTime: timestamp.FromTime(time.Now()),
 		},
 	}
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return cls },
-		component.Query,
-		labels.EmptyLabels(),
-		0*time.Second, EagerRetrieval,
-	)
 
-	ctx := context.Background()
-	req := &storepb.LabelValuesRequest{
-		Label:                   "a",
-		PartialResponseDisabled: true,
-		Start:                   timestamp.FromTime(minTime),
-		End:                     timestamp.FromTime(maxTime),
+	for _, tc := range []struct {
+		title     string
+		storeAPIs []Client
+
+		req *storepb.LabelValuesRequest
+
+		expectedValues      []string
+		expectedErr         error
+		expectedWarningsLen int
+	}{
+		{
+			title:     "request all time range",
+			storeAPIs: storeApis,
+			req: &storepb.LabelValuesRequest{
+				Label:                   "a",
+				PartialResponseDisabled: true,
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+			},
+			expectedValues:      []string{"1", "2", "3", "4", "5", "6"},
+			expectedWarningsLen: 1,
+		},
+		{
+			title:     "outside the time range of the last store client",
+			storeAPIs: storeApis,
+			req: &storepb.LabelValuesRequest{
+				Label:                   "a",
+				PartialResponseDisabled: true,
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(time.Now().Add(-1 * time.Hour)),
+			},
+			expectedValues:      []string{"1", "2", "3", "4"},
+			expectedWarningsLen: 1,
+		},
+		{
+			title:     "request all time range with limit",
+			storeAPIs: storeApis,
+			req: &storepb.LabelValuesRequest{
+				Label:                   "a",
+				PartialResponseDisabled: true,
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+				Limit:                   2,
+			},
+			expectedValues:      []string{"1", "2"},
+			expectedWarningsLen: 1,
+		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			q := NewProxyStore(
+				nil,
+				nil,
+				func() []Client { return tc.storeAPIs },
+				component.Query,
+				labels.EmptyLabels(),
+				0*time.Second, EagerRetrieval,
+			)
+
+			ctx := context.Background()
+
+			resp, err := q.LabelValues(ctx, tc.req)
+			if tc.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+				return
+			}
+			testutil.Ok(t, err)
+			testutil.Assert(t, proto.Equal(tc.req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", tc.req, m1.LastLabelValuesReq)
+
+			testutil.Equals(t, tc.expectedValues, resp.Values)
+			testutil.Equals(t, tc.expectedWarningsLen, len(resp.Warnings), "got %v", resp.Warnings)
+		}); !ok {
+			return
+		}
 	}
-	resp, err := q.LabelValues(ctx, req)
-	testutil.Ok(t, err)
-	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
-
-	testutil.Equals(t, []string{"1", "2", "3", "4", "5", "6"}, resp.Values)
-	testutil.Equals(t, 1, len(resp.Warnings))
-
-	// Request outside the time range of the last store client.
-	req = &storepb.LabelValuesRequest{
-		Label:                   "a",
-		PartialResponseDisabled: true,
-		Start:                   timestamp.FromTime(minTime),
-		End:                     timestamp.FromTime(time.Now().Add(-1 * time.Hour)),
-	}
-	resp, err = q.LabelValues(ctx, req)
-	testutil.Ok(t, err)
-	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
-
-	testutil.Equals(t, []string{"1", "2", "3", "4"}, resp.Values)
-	testutil.Equals(t, 1, len(resp.Warnings))
 }
 
 func TestProxyStore_LabelNames(t *testing.T) {
@@ -1648,6 +1729,33 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				PartialResponseDisabled: false,
 			},
 			storeDebugMatchers:  [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}},
+			expectedNames:       []string{"a", "b"},
+			expectedWarningsLen: 0,
+		},
+		{
+			title: "label_names partial response disabled with limit",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "c", "d"},
+						},
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+				PartialResponseDisabled: true,
+				Limit:                   2,
+			},
 			expectedNames:       []string{"a", "b"},
 			expectedWarningsLen: 0,
 		},
