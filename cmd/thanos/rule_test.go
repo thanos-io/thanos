@@ -35,7 +35,7 @@ func Test_parseFlagLabels(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_Name"LabelVal"`}, // Missing "=" seprator.
+			s:         []string{`label_Name"LabelVal"`}, // Missing "=" separator.
 			expectErr: true,
 		},
 		{

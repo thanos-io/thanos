@@ -8,7 +8,6 @@ package main
 
 import (
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -266,23 +265,23 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 }
 
 func parseFlagLabels(s []string) (labels.Labels, error) {
-	var lset labels.Labels
+	var lset labels.ScratchBuilder
 	for _, l := range s {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
-			return nil, errors.Errorf("unrecognized label %q", l)
+			return labels.EmptyLabels(), errors.Errorf("unrecognized label %q", l)
 		}
 		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
-			return nil, errors.Errorf("unsupported format for label %s", l)
+			return labels.EmptyLabels(), errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {
-			return nil, errors.Wrap(err, "unquote label value")
+			return labels.EmptyLabels(), errors.Wrap(err, "unquote label value")
 		}
-		lset = append(lset, labels.Label{Name: parts[0], Value: val})
+		lset.Add(parts[0], val)
 	}
-	sort.Sort(lset)
-	return lset, nil
+	lset.Sort()
+	return lset.Labels(), nil
 }
 
 type goMemLimitConfig struct {

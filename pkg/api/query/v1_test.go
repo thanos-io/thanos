@@ -1038,6 +1038,15 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			response: []string{"__name__", "foo", "replica1"},
 		},
+		// With limit
+		{
+			endpoint: api.labelNames,
+			query: url.Values{
+				"match[]": []string{`test_metric_replica2`},
+				"limit":   []string{"2"},
+			},
+			response: []string{"__name__", "foo"},
+		},
 		{
 			endpoint: api.labelValues,
 			query: url.Values{
@@ -1057,6 +1066,18 @@ func TestMetadataEndpoints(t *testing.T) {
 				"name": "__name__",
 			},
 			response: []string{"test_metric1", "test_metric2", "test_metric_replica1", "test_metric_replica2"},
+		},
+		// With limit
+		{
+			endpoint: api.labelValues,
+			query: url.Values{
+				"match[]": []string{`{foo="bar"}`, `{foo="boo"}`},
+				"limit":   []string{"3"},
+			},
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{"test_metric1", "test_metric2", "test_metric_replica1"},
 		},
 		// No matched series.
 		{
@@ -1356,6 +1377,32 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			errType: baseAPI.ErrorBadData,
 			method:  http.MethodPost,
+		},
+		// With limit
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`{replica="", foo=~"b.+", replica1=""}`},
+				"limit":   []string{"2"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Without limit
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`{replica="", foo=~"b.+", replica1=""}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
 		},
 	}
 
@@ -1695,6 +1742,42 @@ func TestParseStoreDebugMatchersParam(t *testing.T) {
 				testutil.NotOk(t, err)
 			}
 		})
+	}
+}
+
+func TestParseLimitParam(t *testing.T) {
+	var tests = []struct {
+		input  string
+		fail   bool
+		result int
+	}{
+		{
+			input:  "",
+			fail:   false,
+			result: 0,
+		}, {
+			input: "abc",
+			fail:  true,
+		}, {
+			input:  "10",
+			fail:   false,
+			result: 10,
+		},
+	}
+
+	for _, test := range tests {
+		res, err := parseLimitParam(test.input)
+		if err != nil && !test.fail {
+			t.Errorf("Unexpected error for %q: %s", test.input, err)
+			continue
+		}
+		if err == nil && test.fail {
+			t.Errorf("Expected error for %q but got none", test.input)
+			continue
+		}
+		if !test.fail && res != test.result {
+			t.Errorf("Expected limit %v for input %q but got %v", test.result, test.input, res)
+		}
 	}
 }
 

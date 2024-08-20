@@ -180,7 +180,7 @@ message SeriesRefMap {
 
 ### 9.2 Per-Receive Validation
 
-We can implement the same new endpoints as mentioned in the previous approach, on Thanos Receive, but do merging and checking operations on each Receive node in the hashring, i.e change the existing Router and Ingestor modes to handle the same limting logic.
+We can implement the same new endpoints as mentioned in the previous approach, on Thanos Receive, but do merging and checking operations on each Receive node in the hashring, i.e change the existing Router and Ingestor modes to handle the same limiting logic.
 
 The implementation would be as follows,
 

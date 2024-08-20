@@ -131,7 +131,7 @@ Example usages would be:
 
 * Add/import relabel config into Thanos, add relevant logic.
 * Hook it for selecting blocks on Store Gateway
-  * Advertise original labels of "approved" blocs on resulted external labels.
+  * Advertise original labels of "approved" blocks on resulted external labels.
 * Hook it for selecting blocks on Compactor.
   * Add documentation about following concern: Care must be taken with changing selection for compactor to unsure only single compactor ever running over each Source's blocks.
 
