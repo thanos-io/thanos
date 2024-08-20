@@ -296,10 +296,6 @@ func runCompact(
 			api.SetLoaded(blocks, err)
 		})
 
-		tsdbPlanner.UpdateOnPlanned(func(blocks []metadata.Meta, err error) {
-			api.SetPlanned(blocks, err)
-		})
-
 		sy, err = compact.NewMetaSyncer(
 			logger,
 			reg,

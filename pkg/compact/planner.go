@@ -54,10 +54,6 @@ func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Me
 	return p.plan(p.noCompBlocksFunc(), metasByMinTime)
 }
 
-func (p *tsdbBasedPlanner) UpdateOnPlanned(f func([]metadata.Meta, error)) {
-	p.updateOnPlanned = f
-}
-
 func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error) {
 	notExcludedMetasByMinTime := make([]*metadata.Meta, 0, len(metasByMinTime))
 	for _, meta := range metasByMinTime {

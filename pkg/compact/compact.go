@@ -795,6 +795,11 @@ type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
 	Plan(ctx context.Context, metasByMinTime []*metadata.Meta, errChan chan error, extensions any) ([]*metadata.Meta, error)
+	UpdateOnPlanned(f func([]metadata.Meta, error))
+}
+
+func (p *tsdbBasedPlanner) UpdateOnPlanned(f func([]metadata.Meta, error)) {
+	p.updateOnPlanned = f
 }
 
 type BlockDeletableChecker interface {
