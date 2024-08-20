@@ -138,6 +138,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 ## Blog posts
 
 * 2024:
+  * [Scaling Prometheus with Thanos.](https://www.cloudraft.io/blog/scaling-prometheus-with-thanos)
   * [Streamlining Long-Term Storage Query Performance for Metrics With Thanos.](https://blog.devops.dev/streamlining-long-term-storage-query-performance-for-metrics-with-thanos-b44419c70cc4)
 
 * 2023:
