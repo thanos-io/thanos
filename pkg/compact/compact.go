@@ -1140,6 +1140,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
 		toCompact, e = planner.Plan(ctx, cg.metasByMinTime, errChan, cg.extensions)
+		planner.UpdateOnPlanned(func(metas []metadata.Meta, err error) {
+			level.Info(cg.logger).Log("msg", "planner updated", "metas", len(metas), "err", err)
+		})
 		return e
 	}); err != nil {
 		return false, nil, errors.Wrap(err, "plan compaction")
