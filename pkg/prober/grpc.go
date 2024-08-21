@@ -13,7 +13,7 @@ type GRPCProbe struct {
 	h *health.Server
 }
 
-// NewGRPC creates a Probe that wrapped around grpc/healt.Server which reflects status of server.
+// NewGRPC creates a Probe that wrapped around grpc/health.Server which reflects status of server.
 func NewGRPC() *GRPCProbe {
 	h := health.NewServer()
 	h.SetServingStatus("", grpc_health.HealthCheckResponse_NOT_SERVING)
