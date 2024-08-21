@@ -113,27 +113,27 @@ func TestProxy(t *testing.T) {
 			wantResponse: rulespb.NewWarningRulesResponse(errors.New("warning from client")),
 		},
 		{
-			name: "warn: retreiving rules client failed",
+			name: "warn: retrieving rules client failed",
 			request: &rulespb.RulesRequest{
 				Type:                    rulespb.RulesRequest_ALL,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 			},
 			client: &testRulesClient{
 				response: nil,
-				rulesErr: errors.New("retreiving rules failed"),
+				rulesErr: errors.New("retrieving rules failed"),
 			},
 			server:       &testRulesServer{},
-			wantResponse: rulespb.NewWarningRulesResponse(errors.New("fetching rules from rules client test: retreiving rules failed")),
+			wantResponse: rulespb.NewWarningRulesResponse(errors.New("fetching rules from rules client test: retrieving rules failed")),
 		},
 		{
-			name: "warn: retreiving rules client failed, forward warning failed",
+			name: "warn: retrieving rules client failed, forward warning failed",
 			request: &rulespb.RulesRequest{
 				Type:                    rulespb.RulesRequest_ALL,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 			},
 			client: &testRulesClient{
 				response: nil,
-				rulesErr: errors.New("retreiving rules failed"),
+				rulesErr: errors.New("retrieving rules failed"),
 			},
 			server: &testRulesServer{
 				sendErr: errors.New("forwarding warning response failed"),
@@ -141,17 +141,17 @@ func TestProxy(t *testing.T) {
 			wantError: errors.New("forwarding warning response failed"),
 		},
 		{
-			name: "abort: retreiving rules client failed",
+			name: "abort: retrieving rules client failed",
 			request: &rulespb.RulesRequest{
 				Type:                    rulespb.RulesRequest_ALL,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
 			client: &testRulesClient{
 				response: nil,
-				rulesErr: errors.New("retreiving rules failed"),
+				rulesErr: errors.New("retrieving rules failed"),
 			},
 			server:    &testRulesServer{},
-			wantError: errors.New("fetching rules from rules client test: retreiving rules failed"),
+			wantError: errors.New("fetching rules from rules client test: retrieving rules failed"),
 		},
 		{
 			name: "warn: receive failed",

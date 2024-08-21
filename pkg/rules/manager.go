@@ -282,7 +282,7 @@ func (g configRuleAdapter) validate() (errs []error) {
 	return errs
 }
 
-// ValidateAndCount validates all rules in the rule groups and return overal number of rules in all groups.
+// ValidateAndCount validates all rules in the rule groups and return overall number of rules in all groups.
 // TODO(bwplotka): Replace this with upstream implementation after https://github.com/prometheus/prometheus/issues/7128 is fixed.
 func ValidateAndCount(group io.Reader) (numRules int, errs errutil.MultiError) {
 	var rgs configGroups
