@@ -15,7 +15,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -33,7 +32,7 @@ type BlocksAPI struct {
 	loadedBlocksInfo  *BlocksInfo
 	plannedBlocksInfo *BlocksInfo
 
-	globalLock, loadedLock, plannedLock sync.Mutex
+	globalLock, loadedLock sync.Mutex
 	disableCORS                         bool
 	bkt                                 objstore.Bucket
 	disableAdminOperations              bool
@@ -150,40 +149,8 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 }
 
 func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
-  // TODO: fetch from planner.plan then mock data
 	ctx := r.Context()
-	mockBlocks := []metadata.Meta{
-		{
-			BlockMeta: tsdb.BlockMeta{
-				ULID:    ulid.MustParse("01EEB0ZRSQDJW51W11V4R6YP4T"),
-				MinTime: 1594629445222,
-				MaxTime: 1595455200000,
-				Stats: tsdb.BlockStats{
-					NumSamples: 1189126896,
-					NumSeries:  2492,
-					NumChunks:  10093065,
-				},
-				Compaction: tsdb.BlockMetaCompaction{
-					Level: 4,
-					Sources: []ulid.ULID{
-						ulid.MustParse("01EDBMV5FNTZXBZETENC7ZXY99"),
-						ulid.MustParse("01EE3BKGP8WSJAH3M4Y6D7XQVB"),
-						ulid.MustParse("01EDW1T6FWT1PDSE85WAGBF848"),
-						ulid.MustParse("01EEB0QH11ANV2845HJNEP1M8J"),
-					},
-				},
-			},
-			Thanos: metadata.Thanos{
-				Downsample: metadata.ThanosDownsample{
-					Resolution: 0,
-				},
-				Labels: map[string]string{
-					"monitor": "prometheus_two",
-				},
-				Source: "compactor",
-			},
-		},
-	}
+
 
 	select {
 	case <-ctx.Done():
@@ -191,11 +158,7 @@ func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *ap
 	default:
 	}
 
-	return &BlocksInfo{
-		Blocks:      mockBlocks,
-		RefreshedAt: time.Now(),
-		Label:       "Planned Blocks",
-	}, nil, nil, func() {}
+	return bapi.plannedBlocksInfo, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
@@ -229,8 +192,6 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 
 // SetPlanned updates the plan blocks' metadata in the API.
 func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
-	bapi.plannedLock.Lock()
-	defer bapi.plannedLock.Unlock()
 
 	bapi.plannedBlocksInfo.set(blocks, err)
 }
