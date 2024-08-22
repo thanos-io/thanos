@@ -47,7 +47,7 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		"TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").
 		Default("").StringVar(&gc.tlsSrvClientCA)
 	cmd.Flag("grpc-server-tls-min-version",
-		"TLS minimum version to gRPC server, unset will default to tls 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
+		"TLS supported minimum version for gRPC server. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
 		Default("1.3").StringVar(&gc.tlsMinVersion)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
