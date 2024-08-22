@@ -48,6 +48,7 @@ type HandlerConfig struct {
 	QueryStatsEnabled        bool          `yaml:"query_stats_enabled"`
 	LogFailedQueries         bool          `yaml:"log_failed_queries"`
 	FailedQueryCacheCapacity int           `yaml:"failed_query_cache_capacity"`
+	SlowQueryLogsUserHeader  string        `yaml:"slow_query_logs_user_header"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,

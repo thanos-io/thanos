@@ -113,6 +113,7 @@ require (
 
 require (
 	github.com/cortexproject/promqlsmith v0.0.0-20240326071418-c2a9ca1e89f5
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru v0.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/mitchellh/go-ps v1.0.0

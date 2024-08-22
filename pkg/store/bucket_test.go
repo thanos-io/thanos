@@ -720,7 +720,7 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 			MinTime: 0,
 			MaxTime: 2000,
 		},
-	}, actual)
+	})
 }
 
 func TestBucketStore_Info(t *testing.T) {
