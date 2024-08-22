@@ -303,15 +303,18 @@ func ExtendSortedLabels(lset, extend labels.Labels) labels.Labels {
 }
 
 func PromLabelSetsToString(lsets []labels.Labels) string {
-	return PromLabelSetsToStringN(lsets, 1000000)
+	return PromLabelSetsToStringN(lsets, 500)
 }
 
-func PromLabelSetsToStringN(lsets []labels.Labels, maxNumLabels int) string {
+func PromLabelSetsToStringN(lsets []labels.Labels, maxLength int) string {
+	if len(lsets) == 0 {
+		return ""
+	}
 	s := []string{}
 	for _, ls := range lsets {
 		s = append(s, ls.String())
-		maxNumLabels--
-		if maxNumLabels <= 0 {
+		maxLength -= len(ls.String())
+		if maxLength <= 0 {
 			break
 		}
 	}

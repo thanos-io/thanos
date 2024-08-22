@@ -99,6 +99,7 @@ type ProxyStore struct {
 
 type proxyStoreMetrics struct {
 	emptyStreamResponses prometheus.Counter
+	storeFailureCount    *prometheus.CounterVec
 }
 
 func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
@@ -108,6 +109,10 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 		Name: "thanos_proxy_store_empty_stream_responses_total",
 		Help: "Total number of empty responses received.",
 	})
+	m.storeFailureCount = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_proxy_store_failure_total",
+		Help: "Total number of store failures.",
+	}, []string{"group", "replica"})
 
 	return &m
 }
@@ -431,7 +436,8 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		if err != nil {
 			// NB: respSet is nil in case of error.
 			level.Error(reqLogger).Log("err", err)
-			level.Warn(s.logger).Log("msg", "Store failure", "group", st.GroupKey(), "replica", st.ReplicaKey())
+			level.Warn(s.logger).Log("msg", "Store failure", "group", st.GroupKey(), "replica", st.ReplicaKey(), "err", err)
+			s.metrics.storeFailureCount.WithLabelValues(st.GroupKey(), st.ReplicaKey()).Inc()
 			bumpCounter(st.GroupKey(), st.ReplicaKey(), failedStores)
 			totalFailedStores++
 			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
@@ -464,14 +470,18 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		if resp.GetWarning() != "" {
 			totalFailedStores++
-			level.Error(s.logger).Log("msg", "Series: warning from store", "warning", resp.GetWarning())
+			maxWarningBytes := 2000
+			warning := resp.GetWarning()[:min(maxWarningBytes, len(resp.GetWarning()))]
+			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning)
+			// Don't have group/replica keys here, so we can't attribute the warning to a specific store.
+			s.metrics.storeFailureCount.WithLabelValues("", "").Inc()
 			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
 				// TODO: attribute the warning to the store(group key and replica key) that produced it.
 				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
 				if totalFailedStores > 1 {
 					level.Error(reqLogger).Log("msg", "more than one stores have failed")
 					// If we don't know which store has failed, we can tolerate at most one failed store.
-					return status.Error(codes.Aborted, resp.GetWarning())
+					return status.Error(codes.Aborted, warning)
 				}
 			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return status.Error(codes.Aborted, resp.GetWarning())
