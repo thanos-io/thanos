@@ -78,6 +78,10 @@ func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap ma
 			Blocks: []metadata.Meta{},
 			Label:  label,
 		},
+		plannedBlocksInfo: &BlocksInfo{
+			Blocks: []metadata.Meta{},
+			Label:  label,
+		},
 		disableCORS:            disableCORS,
 		bkt:                    bkt,
 		disableAdminOperations: disableAdminOperations,
@@ -149,16 +153,7 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 }
 
 func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
-	ctx := r.Context()
-
-
-	select {
-	case <-ctx.Done():
-		return nil, []error{ctx.Err()}, nil, func() {}
-	default:
-	}
-
-	return bapi.plannedBlocksInfo, nil, nil, func() {}
+    return bapi.plannedBlocksInfo, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
@@ -192,6 +187,5 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 
 // SetPlanned updates the plan blocks' metadata in the API.
 func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
-
 	bapi.plannedBlocksInfo.set(blocks, err)
 }

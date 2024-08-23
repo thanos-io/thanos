@@ -445,7 +445,7 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		if err := compactor.Compact(ctx); err != nil {
+		if err := compactor.Compact(ctx, api); err != nil {
 			return errors.Wrap(err, "compaction")
 		}
 

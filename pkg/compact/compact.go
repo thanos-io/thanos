@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -795,9 +796,11 @@ type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
 	Plan(ctx context.Context, metasByMinTime []*metadata.Meta, errChan chan error, extensions any) ([]*metadata.Meta, error)
+	// Delete before merge: UpdateOnPlanned allows to update the planner with a function that will be called with the planned blocks and an error.
 	UpdateOnPlanned(f func([]metadata.Meta, error))
 }
 
+// Delete before merge: UpdateOnPlanned allows to update the planner with a function that will be called with the planned blocks and an error.
 func (p *tsdbBasedPlanner) UpdateOnPlanned(f func([]metadata.Meta, error)) {
 	p.updateOnPlanned = f
 }
@@ -868,7 +871,7 @@ type Compactor interface {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, v1 *v1.BlocksAPI) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
@@ -905,7 +908,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 
 	errChan := make(chan error, 1)
 	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
-		shouldRerun, compIDs, err = cg.compact(ctx, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
+		shouldRerun, compIDs, err = cg.compact(ctx, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan, v1)
 		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
 	errChan <- err
@@ -1121,7 +1124,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
+func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error, v1 *v1.BlocksAPI) (bool, []ulid.ULID, error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -1140,9 +1143,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
 		toCompact, e = planner.Plan(ctx, cg.metasByMinTime, errChan, cg.extensions)
-		planner.UpdateOnPlanned(func(metas []metadata.Meta, err error) {
-			level.Info(cg.logger).Log("msg", "planner updated", "metas", len(metas), "err", err)
-		})
 		return e
 	}); err != nil {
 		return false, nil, errors.Wrap(err, "plan compaction")
@@ -1151,6 +1151,13 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		// Nothing to do.
 		return false, nil, nil
 	}
+	// Delete before merge: Convert []*metadata.Meta to []metadata.Meta
+	plannedMetas := make([]metadata.Meta, len(toCompact))
+	for i, meta := range toCompact {
+		plannedMetas[i] = *meta
+	}
+	// Delete before merge: Call v1 interface defined in the github.com/thanos-io/thanos/pkg/api/blocks package
+	v1.SetPlanned(plannedMetas, nil)
 
 	level.Info(cg.logger).Log("msg", "compaction available and planned", "plan", fmt.Sprintf("%v", toCompact))
 
@@ -1436,7 +1443,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
+func (c *BucketCompactor) Compact(ctx context.Context, v1 *v1.BlocksAPI) (rerr error) {
 	defer func() {
 		// Do not remove the compactDir if an error has occurred
 		// because potentially on the next run we would not have to download
@@ -1468,7 +1475,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback, v1)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
