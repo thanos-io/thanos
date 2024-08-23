@@ -79,7 +79,9 @@ func (r *dnsResolver) start() {
 	}
 }
 
-func (*dnsResolver) ResolveNow(_ resolver.ResolveNowOptions) {}
+func (r *dnsResolver) ResolveNow(_ resolver.ResolveNowOptions) {
+	r.start()
+}
 
 func (*dnsResolver) Close() {}
 
@@ -1850,8 +1852,6 @@ func TestIngestorRestart(t *testing.T) {
 		logger: logger,
 		addrStore: map[string][]string{
 			addr1:      {addr1},
-			addr2:      {addr2},
-			addr3:      {addr3},
 			clientAddr: {addr2},
 		},
 	}
