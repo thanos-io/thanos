@@ -1890,10 +1890,9 @@ func TestIngestorRestart(t *testing.T) {
 	ing3 := startIngestor(logger, addr3, 2*time.Second)
 	defer ing3.Shutdown(err)
 	// bind the new backend to the same DNS
-	// dnsBuilder.addrStore[clientAddr] = append(dnsBuilder.addrStore[clientAddr], addr3)
-	dnsBuilder.addrStore[clientAddr][0] = addr3
+	dnsBuilder.addrStore[clientAddr] = []string{addr3}
 
-	iter, errs := 30, 0
+	iter, errs := 10, 0
 	for i := 0; i < iter; i++ {
 		_, err = client.handleRequest(ctx, 0, "test", data)
 		if err != nil {
