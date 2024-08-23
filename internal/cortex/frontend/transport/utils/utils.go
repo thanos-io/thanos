@@ -105,7 +105,7 @@ func (f *FailedQueryCache) addCacheEntry(queryExpressionNormalized string, query
 func queryHitCache(queryExpressionNormalized string, queryExpressionRangeLength int, lruCache *lru.Cache, cachedHits prometheus.Counter) (bool, string) {
 	if value, ok := lruCache.Get(queryExpressionNormalized); ok && value.(int) <= queryExpressionRangeLength {
 		cachedQueryRangeSeconds := value.(int)
-		message := createLogMessage("Retrieved query from cache", queryExpressionNormalized, cachedQueryRangeSeconds, queryExpressionRangeLength, nil)
+		message := createLogMessage("Blocked a query from failed query cache", queryExpressionNormalized, cachedQueryRangeSeconds, queryExpressionRangeLength, nil)
 		cachedHits.Inc()
 		return true, message
 	}

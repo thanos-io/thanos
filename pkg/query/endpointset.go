@@ -360,22 +360,6 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 				groupKey, replicaKeys)
 		}
 	}
-	for replicaKey, occurrencesPerAddr := range c.storeNodesAddr {
-		for addr, occurrences := range occurrencesPerAddr {
-			ch <- prometheus.MustNewConstMetric(
-				c.connectionsWithAddr, prometheus.GaugeValue,
-				float64(occurrences),
-				replicaKey, addr)
-		}
-	}
-	for groupKey, occurrencesPerReplicaKey := range c.storeNodesKeys {
-		for replicaKeys, occurrences := range occurrencesPerReplicaKey {
-			ch <- prometheus.MustNewConstMetric(
-				c.connectionsWithKeys, prometheus.GaugeValue,
-				float64(occurrences),
-				groupKey, replicaKeys)
-		}
-	}
 }
 
 // EndpointSet maintains a set of active Thanos endpoints. It is backed up by Endpoint Specifications that are dynamically fetched on

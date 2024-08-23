@@ -1847,8 +1847,13 @@ func TestIngestorRestart(t *testing.T) {
 
 	clientAddr := "ingestor.com"
 	dnsBuilder := &dnsResolverBuilder{
-		logger:    logger,
-		addrStore: map[string][]string{clientAddr: {addr2}},
+		logger: logger,
+		addrStore: map[string][]string{
+			addr1:      {addr1},
+			addr2:      {addr2},
+			addr3:      {addr3},
+			clientAddr: {addr2},
+		},
 	}
 	resolver.Register(dnsBuilder)
 	dialOpts := []grpc.DialOption{
@@ -1885,9 +1890,10 @@ func TestIngestorRestart(t *testing.T) {
 	ing3 := startIngestor(logger, addr3, 2*time.Second)
 	defer ing3.Shutdown(err)
 	// bind the new backend to the same DNS
-	dnsBuilder.addrStore[clientAddr] = []string{addr3}
+	// dnsBuilder.addrStore[clientAddr] = append(dnsBuilder.addrStore[clientAddr], addr3)
+	dnsBuilder.addrStore[clientAddr][0] = addr3
 
-	iter, errs := 10, 0
+	iter, errs := 30, 0
 	for i := 0; i < iter; i++ {
 		_, err = client.handleRequest(ctx, 0, "test", data)
 		if err != nil {
