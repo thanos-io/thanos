@@ -712,6 +712,34 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				},
 			},
 		},
+		{
+			desc: "label values and names with non-equal matchers on external labels",
+			appendFn: func(app storage.Appender) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar"), 0, 0)
+				testutil.Ok(t, err)
+				testutil.Ok(t, app.Commit())
+			},
+			labelNameCalls: []labelNameCallCase{
+				{
+					start:         timestamp.FromTime(minTime),
+					end:           timestamp.FromTime(maxTime),
+					expectedNames: []string{"__name__", "foo", "region"},
+					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_RE, Name: "region", Value: ".*"}},
+				},
+			},
+			labelValuesCalls: []labelValuesCallCase{
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					label: "region",
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
+						{Type: storepb.LabelMatcher_RE, Name: "region", Value: ".*"},
+					},
+					expectedValues: []string{"eu-west"},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			appendFn := tc.appendFn
