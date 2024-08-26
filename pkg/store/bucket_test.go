@@ -233,7 +233,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
 	}
 	_, ok := b.FilterExtLabelsMatchers(ms)
-	testutil.Equals(t, ok, false)
+	testutil.Equals(t, ok, true)
 
 	ms = []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
@@ -246,6 +246,18 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
 	}
 	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 1)
+	testutil.Equals(t, res, ms)
+
+	// validate that it can filter out ext labels that match non-equal matchers
+	ext, err := labels.NewMatcher(labels.MatchRegexp, "a", ".*")
+	if err != nil {
+		t.Error(err)
+	}
+	ms = []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
+	}
+	res, _ = b.FilterExtLabelsMatchers(append(ms, ext))
 	testutil.Equals(t, len(res), 1)
 	testutil.Equals(t, res, ms)
 }
