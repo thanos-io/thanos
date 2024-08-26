@@ -396,6 +396,7 @@ func runCompact(
 		insBkt,
 		conf.compactionConcurrency,
 		conf.skipBlockWithOutOfOrderChunks,
+		api,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create bucket compactor")
@@ -445,7 +446,7 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		if err := compactor.Compact(ctx, api); err != nil {
+		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction")
 		}
 
