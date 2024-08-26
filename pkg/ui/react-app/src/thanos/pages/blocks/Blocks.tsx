@@ -207,7 +207,7 @@ interface BlocksProps {
 
 export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
   const { response, error, isLoading } = useFetch<BlockListProps>(
-    `${pathPrefix}/api/v1/blocks${view ? '?view=' + view : ''}`
+    `${pathPrefix}/api/v1/blocks${view === 'planned' ? '/plan' : view ? '?view=' + view : ''}`
   );
   const { status: responseStatus } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
@@ -220,6 +220,13 @@ export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = (
       isLoading={isLoading}
     />
   );
+};
+export const GlobalBlocks: React.FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix }) => {
+  return <Blocks view="global" pathPrefix={pathPrefix} />;
+};
+
+export const PlannedBlocks: React.FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix }) => {
+  return <Blocks view="planned" pathPrefix={pathPrefix} />;
 };
 
 export default Blocks;

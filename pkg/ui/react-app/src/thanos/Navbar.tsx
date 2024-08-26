@@ -63,7 +63,8 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
     },
   ],
   compact: [
-    { name: 'Global Blocks', uri: '/blocks' },
+    { name: 'Global Blocks', uri: '/global-blocks' },
+    { name: 'Planned Blocks', uri: '/planned-blocks' },
     { name: 'Loaded Blocks', uri: '/loaded' },
     {
       name: 'Status',

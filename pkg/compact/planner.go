@@ -25,6 +25,7 @@ type tsdbBasedPlanner struct {
 	ranges []int64
 
 	noCompBlocksFunc func() map[ulid.ULID]*metadata.NoCompactMark
+	updateOnPlanned  func([]metadata.Meta, error)
 }
 
 var _ Planner = &tsdbBasedPlanner{}

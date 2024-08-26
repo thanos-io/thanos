@@ -65,6 +65,15 @@ type Syncer struct {
 	g singleflight.Group
 }
 
+func (s *Syncer) SetPlanned(metas []metadata.Meta) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	for _, meta := range metas {
+		s.blocks[meta.ULID] = &meta
+	}
+	return nil
+}
+
 // SyncerMetrics holds metrics tracked by the syncer. This struct and its fields are exported
 // to allow depending projects (eg. Cortex) to implement their own custom syncer while tracking
 // compatible metrics.
@@ -409,6 +418,12 @@ type Group struct {
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
 	extensions                    any
+}
+
+func (g *Group) Metas() []*metadata.Meta {
+	g.mtx.Lock()
+	defer g.mtx.Unlock()
+	return g.metasByMinTime
 }
 
 // NewGroup returns a new compaction group.
@@ -795,6 +810,13 @@ type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
 	Plan(ctx context.Context, metasByMinTime []*metadata.Meta, errChan chan error, extensions any) ([]*metadata.Meta, error)
+	// Delete before merge: UpdateOnPlanned allows to update the planner with a function that will be called with the planned blocks and an error.
+	UpdateOnPlanned(f func([]metadata.Meta, error))
+}
+
+// Delete before merge: UpdateOnPlanned allows to update the planner with a function that will be called with the planned blocks and an error.
+func (p *tsdbBasedPlanner) UpdateOnPlanned(f func([]metadata.Meta, error)) {
+	p.updateOnPlanned = f
 }
 
 type BlockDeletableChecker interface {
@@ -1364,6 +1386,7 @@ type BucketCompactor struct {
 	bkt                            objstore.Bucket
 	concurrency                    int
 	skipBlocksWithOutOfOrderChunks bool
+	blocksAPI                      BlocksAPI
 }
 
 // NewBucketCompactor creates a new bucket compactor.
@@ -1377,6 +1400,7 @@ func NewBucketCompactor(
 	bkt objstore.Bucket,
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
+	blocksAPI BlocksAPI,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
@@ -1393,7 +1417,11 @@ func NewBucketCompactor(
 		bkt,
 		concurrency,
 		skipBlocksWithOutOfOrderChunks,
+		blocksAPI,
 	)
+}
+type BlocksAPI interface {
+    SetPlanned([]metadata.Meta, error)
 }
 
 func NewBucketCompactorWithCheckerAndCallback(
@@ -1408,6 +1436,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 	bkt objstore.Bucket,
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
+	blocksAPI BlocksAPI,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
@@ -1424,6 +1453,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 		bkt:                            bkt,
 		concurrency:                    concurrency,
 		skipBlocksWithOutOfOrderChunks: skipBlocksWithOutOfOrderChunks,
+		blocksAPI:                      blocksAPI,
 	}, nil
 }
 
@@ -1460,7 +1490,33 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					// Delete before merge: Get the metas for the current group
+					groupMetas := g.Metas()
+
+					// Delete before merge: Convert []*metadata.Meta to []metadata.Meta
+					plannedMetas := make([]metadata.Meta, len(groupMetas))
+					for i, meta := range groupMetas {
+						plannedMetas[i] = *meta
+					}
+
+					// Delete before merge: Call Syncer.SetPlanned before compaction
+					if err := c.sy.SetPlanned(plannedMetas); err != nil {
+						errChan <- errors.Wrapf(err, "set planned for group %s", g.Key())
+						return
+					}
+
+					// Delete before merge: Call BlocksAPI.SetPlanned to update the API
+					c.blocksAPI.SetPlanned(plannedMetas, nil)
+
+					shouldRerunGroup, compIDs, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					if err == nil {
+						plannedMetas := make([]metadata.Meta, 0, len(compIDs))
+						for _, id := range compIDs {
+							if meta, ok := c.sy.Metas()[id]; ok {
+								plannedMetas = append(plannedMetas, *meta)
+							}
+							}
+					}
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()

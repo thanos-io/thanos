@@ -26,15 +26,16 @@ import (
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI          *api.BaseAPI
-	logger           log.Logger
-	globalBlocksInfo *BlocksInfo
-	loadedBlocksInfo *BlocksInfo
+	baseAPI           *api.BaseAPI
+	logger            log.Logger
+	globalBlocksInfo  *BlocksInfo
+	loadedBlocksInfo  *BlocksInfo
+	plannedBlocksInfo *BlocksInfo
 
 	globalLock, loadedLock sync.Mutex
-	disableCORS            bool
-	bkt                    objstore.Bucket
-	disableAdminOperations bool
+	disableCORS                         bool
+	bkt                                 objstore.Bucket
+	disableAdminOperations              bool
 }
 
 type BlocksInfo struct {
@@ -77,6 +78,10 @@ func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap ma
 			Blocks: []metadata.Meta{},
 			Label:  label,
 		},
+		plannedBlocksInfo: &BlocksInfo{
+			Blocks: []metadata.Meta{},
+			Label:  label,
+		},
 		disableCORS:            disableCORS,
 		bkt:                    bkt,
 		disableAdminOperations: disableAdminOperations,
@@ -90,6 +95,7 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
+	r.Get("/blocks/plan", instr("blocks_plan", bapi.plannedBlocks))
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -146,6 +152,10 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 	return bapi.globalBlocksInfo, nil, nil, func() {}
 }
 
+func (bapi *BlocksAPI) plannedBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+    return bapi.plannedBlocksInfo, nil, nil, func() {}
+}
+
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
 	if err != nil {
 		// Last view is maintained.
@@ -173,4 +183,9 @@ func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
 	defer bapi.loadedLock.Unlock()
 
 	bapi.loadedBlocksInfo.set(blocks, err)
+}
+
+// SetPlanned updates the plan blocks' metadata in the API.
+func (bapi *BlocksAPI) SetPlanned(blocks []metadata.Meta, err error) {
+	bapi.plannedBlocksInfo.set(blocks, err)
 }
