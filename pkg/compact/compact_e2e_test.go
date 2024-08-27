@@ -217,7 +217,8 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
 		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
-		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true)
+		blocksAPI := &metaFetcherWrapper{metaFetcher}
+		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true, blocksAPI)
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
@@ -541,4 +542,12 @@ func listBlocksMarkedForDeletion(ctx context.Context, bkt objstore.Bucket) ([]ul
 		return nil
 	})
 	return rem, err
+}
+
+type metaFetcherWrapper struct {
+    *block.MetaFetcher
+}
+
+func (m *metaFetcherWrapper) SetPlanned(metas []metadata.Meta, err error) {
+    // Implement the logic as needed
 }
