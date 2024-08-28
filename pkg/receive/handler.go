@@ -988,6 +988,13 @@ func (h *Handler) sendRemoteWrite(
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
+	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
+	// would need to succeed all the time. Another way to think about it is when migrating
+	// from a Sidecar based setup with 2 Prometheus nodes to a Receiver setup, we want to
+	// keep the same guarantees.
+	if h.options.ReplicationFactor == 2 {
+		return 1
+	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
