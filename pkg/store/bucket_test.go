@@ -613,7 +613,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 		},
 		{
 			input: [][2]int{
-				// Mimick AllPostingsKey, where range specified whole range.
+				// Mimic AllPostingsKey, where range specified whole range.
 				{1, 15},
 				{1, maxGapSize + 100},
 				{maxGapSize + 31, maxGapSize + 40},
@@ -1250,7 +1250,7 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 	testutil.Ok(t, app.Commit())
 }
 
-// Very similar benchmark to ths: https://github.com/prometheus/prometheus/blob/1d1732bc25cc4b47f513cb98009a4eb91879f175/tsdb/querier_bench_test.go#L82,
+// Very similar benchmark to this: https://github.com/prometheus/prometheus/blob/1d1732bc25cc4b47f513cb98009a4eb91879f175/tsdb/querier_bench_test.go#L82,
 // but with postings results check when run as test.
 func benchmarkExpandedPostings(
 	t testutil.TB,

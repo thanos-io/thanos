@@ -66,8 +66,8 @@ func (c *TracingIndexCache) FetchExpandedPostings(ctx context.Context, blockID u
 	return data, exists
 }
 
-// StoreSeries stores a single series. Skip intrumenting this method
-// excessive spans as a single request can store millions of serieses.
+// StoreSeries stores a single series. Skip instrumenting this method
+// excessive spans as a single request can store millions of series.
 func (c *TracingIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
 	c.cache.StoreSeries(blockID, id, v, tenant)
 }

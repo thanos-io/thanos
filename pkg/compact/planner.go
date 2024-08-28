@@ -68,7 +68,7 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 	}
 	// No overlapping blocks, do compaction the usual way.
 
-	// We do not include a recently producted block with max(minTime), so the block which was just uploaded to bucket.
+	// We do not include a recently produced block with max(minTime), so the block which was just uploaded to bucket.
 	// This gives users a window of a full block size maintenance if needed.
 	if _, excluded := noCompactMarked[metasByMinTime[len(metasByMinTime)-1].ULID]; !excluded {
 		notExcludedMetasByMinTime = notExcludedMetasByMinTime[:len(notExcludedMetasByMinTime)-1]
@@ -200,7 +200,7 @@ func splitByRange(metasByMinTime []*metadata.Meta, tr int64) [][]*metadata.Meta 
 			t0 = tr * ((m.MinTime - tr + 1) / tr)
 		}
 
-		// Skip blocks that don't fall into the range. This can happen via mis-alignment or
+		// Skip blocks that don't fall into the range. This can happen via misalignment or
 		// by being the multiple of the intended range.
 		if m.MaxTime > t0+tr {
 			i++
