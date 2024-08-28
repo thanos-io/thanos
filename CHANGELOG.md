@@ -12,6 +12,38 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#7323](https://github.com/thanos-io/thanos/pull/7323) Sidecar: wait for prometheus on startup
+- [#7326](https://github.com/thanos-io/thanos/pull/7326) Query: fixing exemplars proxy when querying stores with multiple tenants.
+- [#7335](https://github.com/thanos-io/thanos/pull/7335) Dependency: Update minio-go to v7.0.70 which includes support for EKS Pod Identity.
+- [#6948](https://github.com/thanos-io/thanos/pull/6948) Receive: fix goroutines leak during series requests to thanos store api.
+- [#7392](https://github.com/thanos-io/thanos/pull/7392) Query: fix broken min, max for pre 0.34.1 sidecars
+
+### Added
+
+- [#7317](https://github.com/thanos-io/thanos/pull/7317) Tracing: allow specifying resource attributes for the OTLP configuration.
+- [#7363](https://github.com/thanos-io/thanos/pull/7363) Query-frontend: set value of remote_user field in Slow Query Logs from HTTP header
+- [#7335](https://github.com/thanos-io/thanos/pull/7335) Dependency: Update minio-go to v7.0.70 which includes support for EKS Pod Identity.
+- [#7477](https://github.com/thanos-io/thanos/pull/7477) *: Bump objstore to `20240622095743-1afe5d4bc3cd`
+
+### Changed
+
+- [#7334](https://github.com/thanos-io/thanos/pull/7334) Compactor: do not vertically compact downsampled blocks. Such cases are now marked with `no-compact-mark.json`. Fixes panic `panic: unexpected seriesToChunkEncoder lack of iterations`.
+- [#7382](https://github.com/thanos-io/thanos/pull/7382) *: Ensure objstore flag values are masked & disable debug/pprof/cmdline
+- [#7393](https://github.com/thanos-io/thanos/pull/7393) *: *breaking :warning:* Using native histograms for grpc middleware metrics. Metrics `grpc_client_handling_seconds` and `grpc_server_handling_seconds` will now be native histograms, if you have enabled native histogram scraping you will need to update your PromQL expressions to use the new metric names.
+
+### Removed
+
+## [v0.35.1](https://github.com/thanos-io/thanos/tree/release-0.35) - 28.05.2024
+
+### Fixed
+
+- [#7323](https://github.com/thanos-io/thanos/pull/7323) Sidecar: wait for prometheus on startup
+- [#6948](https://github.com/thanos-io/thanos/pull/6948) Receive: fix goroutines leak during series requests to thanos store api.
+- [#7382](https://github.com/thanos-io/thanos/pull/7382) *: Ensure objstore flag values are masked & disable debug/pprof/cmdline
+- [#7392](https://github.com/thanos-io/thanos/pull/7392) Query: fix broken min, max for pre 0.34.1 sidecars
+- [#7373](https://github.com/thanos-io/thanos/pull/7373) Receive: Fix stats for remote write
+- [#7318](https://github.com/thanos-io/thanos/pull/7318) Compactor: Recover from panic to log block ID
+
 ### Added
 
 ### Changed
@@ -54,6 +86,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7271](https://github.com/thanos-io/thanos/pull/7271) Query: fixing dedup iterator when working on mixed sample types.
 - [#7289](https://github.com/thanos-io/thanos/pull/7289) Query Frontend: show warnings from downstream queries.
 - [#7308](https://github.com/thanos-io/thanos/pull/7308) Store: Batch TSDB Infos for blocks.
+- [#7301](https://github.com/thanos-io/thanos/pull/7301) Store Gateway: fix index header reader `PostingsOffsets` returning wrong values.
 
 ### Added
 
@@ -158,6 +191,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6753](https://github.com/thanos-io/thanos/pull/6753) mixin(Rule): *breaking :warning:* Fixed the mixin rules with duplicate names and updated the promtool version from v0.37.0 to v0.47.0
 - [#6772](https://github.com/thanos-io/thanos/pull/6772) *: Bump prometheus to v0.47.2-0.20231006112807-a5a4eab679cc
 - [#6794](https://github.com/thanos-io/thanos/pull/6794) Receive: the exported HTTP metrics now uses the specified default tenant for requests where no tenants are found.
+- [#6651](https://github.com/thanos-io/thanos/pull/6651) *: Update go_grpc_middleware to v2.0.0. Remove Tags Interceptor from Thanos. Tags interceptor is removed from v2.0.0 go-grpc-middleware and is not needed anymore.
 
 ### Removed
 

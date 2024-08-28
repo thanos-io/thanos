@@ -62,6 +62,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+type StoreDataType int
+
+const (
+	PostingsFetched StoreDataType = iota
+	PostingsTouched
+	SeriesFetched
+	SeriesTouched
+	ChunksFetched
+	ChunksTouched
+)
+
 const (
 	// MaxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
 	// for precalculating the number of samples that we may have to retrieve and decode for any given query
@@ -388,10 +399,10 @@ type BucketStore struct {
 	// seriesLimiterFactory creates a new limiter used to limit the number of touched series by each Series() call,
 	// or LabelName and LabelValues calls when used with matchers.
 	seriesLimiterFactory SeriesLimiterFactory
-
 	// bytesLimiterFactory creates a new limiter used to limit the amount of bytes fetched/touched by each Series() call.
 	bytesLimiterFactory BytesLimiterFactory
-	partitioner         Partitioner
+
+	partitioner Partitioner
 
 	filterConfig             *FilterConfig
 	advLabelSets             []labelpb.ZLabelSet
@@ -413,6 +424,8 @@ type BucketStore struct {
 	blockEstimatedMaxChunkFunc  BlockEstimator
 
 	indexHeaderLazyDownloadStrategy indexheader.LazyDownloadIndexHeaderFunc
+
+	requestLoggerFunc RequestLoggerFunc
 }
 
 func (s *BucketStore) validate() error {
@@ -446,6 +459,20 @@ type BucketStoreOption func(s *BucketStore)
 func WithLogger(logger log.Logger) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.logger = logger
+	}
+}
+
+type RequestLoggerFunc func(ctx context.Context, log log.Logger) log.Logger
+
+func NoopRequestLoggerFunc(_ context.Context, logger log.Logger) log.Logger {
+	return logger
+}
+
+// WithRequestLoggerFunc sets the BucketStore to use the passed RequestLoggerFunc
+// to initialize logger during query time.
+func WithRequestLoggerFunc(loggerFunc RequestLoggerFunc) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.requestLoggerFunc = loggerFunc
 	}
 }
 
@@ -583,6 +610,7 @@ func NewBucketStore(
 		seriesBatchSize:                 SeriesBatchSize,
 		sortingStrategy:                 sortingStrategyStore,
 		indexHeaderLazyDownloadStrategy: indexheader.AlwaysEagerDownloadIndexHeader,
+		requestLoggerFunc:               NoopRequestLoggerFunc,
 	}
 
 	for _, option := range options {
@@ -789,7 +817,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 
 	b, err := newBucketBlock(
 		ctx,
-		log.With(s.logger, "block", meta.ULID),
 		s.metrics,
 		meta,
 		s.bkt,
@@ -1047,7 +1074,7 @@ func newBlockSeriesClient(
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
-		chunkr = b.chunkReader()
+		chunkr = b.chunkReader(logger)
 	}
 
 	extLset := b.extLset
@@ -1063,7 +1090,7 @@ func newBlockSeriesClient(
 
 		mint:                   req.MinTime,
 		maxt:                   req.MaxTime,
-		indexr:                 b.indexReader(),
+		indexr:                 b.indexReader(logger),
 		chunkr:                 chunkr,
 		seriesLimiter:          seriesLimiter,
 		chunksLimiter:          chunksLimiter,
@@ -1479,6 +1506,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 
 		queryStatsEnabled = false
+
+		logger = s.requestLoggerFunc(ctx, s.logger)
 	)
 
 	if req.Hints != nil {
@@ -1515,7 +1544,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
 
 		if s.debugLogging {
-			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
+			debugFoundBlockSetOverview(logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
 		}
 
 		for _, b := range blocks {
@@ -1531,7 +1560,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 			blockClient := newBlockSeriesClient(
 				srv.Context(),
-				s.logger,
+				log.With(logger, "block", blk.meta.ULID),
 				blk,
 				req,
 				seriesLimiter,
@@ -1641,10 +1670,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		s.metrics.cachedPostingsCompressedSizeBytes.WithLabelValues(tenant).Add(float64(stats.CachedPostingsCompressedSizeSum))
 		s.metrics.postingsSizeBytes.WithLabelValues(tenant).Observe(float64(int(stats.PostingsFetchedSizeSum) + int(stats.PostingsTouchedSizeSum)))
 
-		level.Debug(s.logger).Log("msg", "stats query processed",
-			"request", req,
-			"tenant", tenant,
-			"stats", fmt.Sprintf("%+v", stats), "err", err)
+		if s.debugLogging {
+			level.Debug(logger).Log("msg", "stats query processed",
+				"request", req,
+				"tenant", tenant,
+				"stats", fmt.Sprintf("%+v", stats), "err", err)
+		}
 	}()
 
 	// Concurrently get data from all blocks.
@@ -1772,6 +1803,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
 		b := b
@@ -1793,7 +1825,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 		resHints.AddQueriedBlock(b.meta.ULID)
 
-		indexr := b.indexReader()
+		blockLogger := log.With(logger, "block", b.meta.ULID)
+		indexr := b.indexReader(blockLogger)
 
 		g.Go(func() error {
 			span, newCtx := tracing.StartSpan(gctx, "bucket_store_block_label_names", tracing.Tags{
@@ -1803,7 +1836,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				"block.resolution": b.meta.Thanos.Downsample.Resolution,
 			})
 			defer span.Finish()
-			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
+			defer runutil.CloseWithLogOnErr(blockLogger, indexr, "label names")
 
 			var result []string
 			if len(reqSeriesMatchersNoExtLabels) == 0 {
@@ -1834,7 +1867,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				}
 				blockClient := newBlockSeriesClient(
 					newCtx,
-					s.logger,
+					blockLogger,
 					b,
 					seriesReq,
 					seriesLimiter,
@@ -1981,6 +2014,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
+	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
 		b := b
@@ -2012,7 +2046,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 		resHints.AddQueriedBlock(b.meta.ULID)
 
-		indexr := b.indexReader()
+		blockLogger := log.With(logger, "block", b.meta.ULID)
+		indexr := b.indexReader(blockLogger)
+
 		g.Go(func() error {
 			span, newCtx := tracing.StartSpan(gctx, "bucket_store_block_label_values", tracing.Tags{
 				"block.id":         b.meta.ULID,
@@ -2021,7 +2057,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				"block.resolution": b.meta.Thanos.Downsample.Resolution,
 			})
 			defer span.Finish()
-			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
+			defer runutil.CloseWithLogOnErr(blockLogger, indexr, "label values")
 
 			var result []string
 			if len(reqSeriesMatchersNoExtLabels) == 0 {
@@ -2045,7 +2081,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				blockClient := newBlockSeriesClient(
 					newCtx,
-					s.logger,
+					blockLogger,
 					b,
 					seriesReq,
 					seriesLimiter,
@@ -2275,7 +2311,6 @@ func (s *bucketBlockSet) labelMatchers(matchers ...*labels.Matcher) ([]*labels.M
 // bucketBlock represents a block that is located in a bucket. It holds intermediate
 // state for the block on local disk.
 type bucketBlock struct {
-	logger     log.Logger
 	metrics    *bucketStoreMetrics
 	bkt        objstore.BucketReader
 	meta       *metadata.Meta
@@ -2302,7 +2337,6 @@ type bucketBlock struct {
 
 func newBucketBlock(
 	ctx context.Context,
-	logger log.Logger,
 	metrics *bucketStoreMetrics,
 	meta *metadata.Meta,
 	bkt objstore.BucketReader,
@@ -2327,7 +2361,6 @@ func newBucketBlock(
 	extLset := labels.FromMap(meta.Thanos.Labels)
 	relabelLabels := labels.NewBuilder(extLset).Set(block.BlockIDLabel, meta.ULID.String()).Labels()
 	b = &bucketBlock{
-		logger:                 logger,
 		metrics:                metrics,
 		bkt:                    bkt,
 		indexCache:             indexCache,
@@ -2366,12 +2399,12 @@ func (b *bucketBlock) indexFilename() string {
 	return path.Join(b.meta.ULID.String(), block.IndexFilename)
 }
 
-func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
+func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64, logger log.Logger) ([]byte, error) {
 	r, err := b.bkt.GetRange(ctx, b.indexFilename(), off, length)
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
-	defer runutil.CloseWithLogOnErr(b.logger, r, "readIndexRange close range reader")
+	defer runutil.CloseWithLogOnErr(logger, r, "readIndexRange close range reader")
 
 	// Preallocate the buffer with the exact size so we don't waste allocations
 	// while progressively growing an initial small buffer. The buffer capacity
@@ -2384,7 +2417,7 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	return buf.Bytes(), nil
 }
 
-func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64, chunkRanges byteRanges) (*[]byte, error) {
+func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64, chunkRanges byteRanges, logger log.Logger) (*[]byte, error) {
 	if seq < 0 || seq >= len(b.chunkObjs) {
 		return nil, errors.Errorf("unknown segment file for index %d", seq)
 	}
@@ -2394,7 +2427,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
-	defer runutil.CloseWithLogOnErr(b.logger, reader, "readChunkRange close range reader")
+	defer runutil.CloseWithLogOnErr(logger, reader, "readChunkRange close range reader")
 
 	// Get a buffer from the pool.
 	chunkBuffer, err := b.chunkPool.Get(chunkRanges.size())
@@ -2418,14 +2451,14 @@ func (b *bucketBlock) chunkRangeReader(ctx context.Context, seq int, off, length
 	return b.bkt.GetRange(ctx, b.chunkObjs[seq], off, length)
 }
 
-func (b *bucketBlock) indexReader() *bucketIndexReader {
+func (b *bucketBlock) indexReader(logger log.Logger) *bucketIndexReader {
 	b.pendingReaders.Add(1)
-	return newBucketIndexReader(b)
+	return newBucketIndexReader(b, logger)
 }
 
-func (b *bucketBlock) chunkReader() *bucketChunkReader {
+func (b *bucketBlock) chunkReader(logger log.Logger) *bucketChunkReader {
 	b.pendingReaders.Add(1)
-	return newBucketChunkReader(b)
+	return newBucketChunkReader(b, logger)
 }
 
 // matchRelabelLabels verifies whether the block matches the given matchers.
@@ -2462,9 +2495,10 @@ type bucketIndexReader struct {
 	loadedSeries    map[storage.SeriesRef][]byte
 
 	indexVersion int
+	logger       log.Logger
 }
 
-func newBucketIndexReader(block *bucketBlock) *bucketIndexReader {
+func newBucketIndexReader(block *bucketBlock, logger log.Logger) *bucketIndexReader {
 	r := &bucketIndexReader{
 		block: block,
 		dec: &index.Decoder{
@@ -2472,6 +2506,7 @@ func newBucketIndexReader(block *bucketBlock) *bucketIndexReader {
 		},
 		stats:        &queryStats{},
 		loadedSeries: map[storage.SeriesRef][]byte{},
+		logger:       logger,
 	}
 	return r
 }
@@ -2857,12 +2892,11 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	if !hit {
 		return false, nil, nil
 	}
-	if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
+	if err := bytesLimiter.ReserveWithType(uint64(len(dataFromCache)), PostingsTouched); err != nil {
 		return false, nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
 	}
-	r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
-	r.stats.postingsTouched++
-	r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(dataFromCache))
+
+	r.stats.add(PostingsTouched, 1, len(dataFromCache))
 	p, closeFns, err := r.decodeCachedPostings(dataFromCache)
 	defer func() {
 		for _, closeFn := range closeFns {
@@ -2871,13 +2905,13 @@ func (r *bucketIndexReader) fetchExpandedPostingsFromCache(ctx context.Context, 
 	}()
 	// If failed to decode or expand cached postings, return and expand postings again.
 	if err != nil {
-		level.Error(r.block.logger).Log("msg", "failed to decode cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
+		level.Error(r.logger).Log("msg", "failed to decode cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
 		return false, nil, nil
 	}
 
 	ps, err := ExpandPostingsWithContext(ctx, p)
 	if err != nil {
-		level.Error(r.block.logger).Log("msg", "failed to expand cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
+		level.Error(r.logger).Log("msg", "failed to expand cached expanded postings, refetch postings", "id", r.block.meta.ULID.String(), "err", err)
 		return false, nil, nil
 	}
 
@@ -2931,10 +2965,9 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	// Fetch postings from the cache with a single call.
 	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys, tenant)
 	for _, dataFromCache := range fromCache {
-		if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
+		if err := bytesLimiter.ReserveWithType(uint64(len(dataFromCache)), PostingsTouched); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
 		}
-		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
 	}
 
 	// Iterate over all groups and fetch posting from cache.
@@ -2946,8 +2979,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		}
 		// Get postings for the given key from cache first.
 		if b, ok := fromCache[key]; ok {
-			r.stats.postingsTouched++
-			r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(b))
+			r.stats.add(PostingsTouched, 1, len(b))
 
 			l, closer, err := r.decodeCachedPostings(b)
 			if err != nil {
@@ -2988,10 +3020,9 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		start := int64(part.Start)
 		length := int64(part.End) - start
 
-		if err := bytesLimiter.Reserve(uint64(length)); err != nil {
+		if err := bytesLimiter.ReserveWithType(uint64(length), PostingsFetched); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
 		}
-		r.stats.DataDownloadedSizeSum += units.Base2Bytes(length)
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -3017,14 +3048,13 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			if err != nil {
 				return errors.Wrap(err, "read postings range")
 			}
-			defer runutil.CloseWithLogOnErr(r.block.logger, partReader, "readIndexRange close range reader")
+			defer runutil.CloseWithLogOnErr(r.logger, partReader, "readIndexRange close range reader")
 			brdr.Reset(partReader)
 
 			rdr := newPostingsReaderBuilder(ctx, brdr, ptrs[i:j], start, length)
 
 			stats.postingsFetchCount++
-			stats.postingsFetched += j - i
-			stats.PostingsFetchedSizeSum += units.Base2Bytes(int(length))
+			stats.add(PostingsFetched, j-i, int(length))
 
 			for rdr.Next() {
 				diffVarintPostings, postingsCount, keyID := rdr.AtDiffVarint()
@@ -3038,12 +3068,11 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 					return errors.Wrap(err, "encoding with snappy")
 				}
 
-				stats.postingsTouched++
-				stats.PostingsTouchedSizeSum += units.Base2Bytes(int(len(diffVarintPostings)))
 				stats.cachedPostingsCompressions += 1
 				stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(diffVarintPostings))
 				stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(len(dataToCache))
 				stats.CachedPostingsCompressionTimeSum += time.Since(startCompression)
+				stats.add(PostingsTouched, 1, len(diffVarintPostings))
 
 				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[keyID], dataToCache, tenant)
 			}
@@ -3166,10 +3195,9 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 	fromCache, ids := r.block.indexCache.FetchMultiSeries(ctx, r.block.meta.ULID, ids, tenant)
 	for id, b := range fromCache {
 		r.loadedSeries[id] = b
-		if err := bytesLimiter.Reserve(uint64(len(b))); err != nil {
+		if err := bytesLimiter.ReserveWithType(uint64(len(b)), SeriesTouched); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
 		}
-		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(b))
 	}
 
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
@@ -3195,22 +3223,18 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		r.stats.merge(stats)
 	}()
 
-	if bytesLimiter != nil {
-		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
-			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
-		}
-		stats.DataDownloadedSizeSum += units.Base2Bytes(end - start)
+	if err := bytesLimiter.ReserveWithType(uint64(end-start), SeriesFetched); err != nil {
+		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 	}
 
-	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
+	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start), r.logger)
 	if err != nil {
 		return errors.Wrap(err, "read series range")
 	}
 
 	stats.seriesFetchCount++
-	stats.seriesFetched += len(ids)
 	stats.SeriesFetchDurationSum += time.Since(begin)
-	stats.SeriesFetchedSizeSum += units.Base2Bytes(int(end - start))
+	stats.add(SeriesFetched, len(ids), int(end-start))
 
 	for i, id := range ids {
 		c := b[uint64(id)-start:]
@@ -3226,7 +3250,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 
 			// Inefficient, but should be rare.
 			r.block.metrics.seriesRefetches.WithLabelValues(tenant).Inc()
-			level.Warn(r.block.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", r.block.estimatedMaxSeriesSize)
+			level.Warn(r.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", r.block.estimatedMaxSeriesSize)
 
 			// Fetch plus to get the size of next one if exists.
 			return r.loadSeries(ctx, ids[i:], true, uint64(id), uint64(id)+uint64(n+int(l)+1), bytesLimiter, tenant)
@@ -3313,8 +3337,7 @@ func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]sym
 		return false, errors.Errorf("series %d not found", ref)
 	}
 
-	r.stats.seriesTouched++
-	r.stats.SeriesTouchedSizeSum += units.Base2Bytes(len(b))
+	r.stats.add(SeriesTouched, 1, len(b))
 	return decodeSeriesForTime(b, lset, chks, skipChunks, mint, maxt)
 }
 
@@ -3416,17 +3439,19 @@ type bucketChunkReader struct {
 	chunkBytesMtx sync.Mutex
 	stats         *queryStats
 	chunkBytes    []*[]byte // Byte slice to return to the chunk pool on close.
+	logger        log.Logger
 
 	loadingChunksMtx  sync.Mutex
 	loadingChunks     bool
 	finishLoadingChks chan struct{}
 }
 
-func newBucketChunkReader(block *bucketBlock) *bucketChunkReader {
+func newBucketChunkReader(block *bucketBlock, logger log.Logger) *bucketChunkReader {
 	return &bucketChunkReader{
 		block:  block,
 		stats:  &queryStats{},
 		toLoad: make([][]loadIdx, len(block.chunkObjs)),
+		logger: logger,
 	}
 }
 
@@ -3500,10 +3525,9 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 		})
 
 		for _, p := range parts {
-			if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
+			if err := bytesLimiter.ReserveWithType(uint64(p.End-p.Start), ChunksFetched); err != nil {
 				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 			}
-			r.stats.DataDownloadedSizeSum += units.Base2Bytes(p.End - p.Start)
 		}
 
 		for _, p := range parts {
@@ -3533,12 +3557,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	if err != nil {
 		return errors.Wrap(err, "get range reader")
 	}
-	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
+	defer runutil.CloseWithLogOnErr(r.logger, reader, "readChunkRange close range reader")
 	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
 	stats.chunksFetchCount++
-	stats.chunksFetched += len(pIdxs)
-	stats.ChunksFetchedSizeSum += units.Base2Bytes(int(part.End - part.Start))
+	stats.add(ChunksFetched, len(pIdxs), int(part.End-part.Start))
 
 	var (
 		buf        []byte
@@ -3601,12 +3624,12 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// There is also crc32 after the chunk, but we ignore that.
 		chunkLen = n + 1 + int(chunkDataLen)
 		if chunkLen <= len(cb) {
-			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save, calculateChunkChecksum)
+			c := rawChunk(cb[n:chunkLen])
+			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
-			stats.chunksTouched++
-			stats.ChunksTouchedSizeSum += units.Base2Bytes(int(chunkDataLen))
+			stats.add(ChunksTouched, 1, int(chunkDataLen))
 			continue
 		}
 
@@ -3615,12 +3638,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		fetchBegin = time.Now()
 		// Read entire chunk into new buffer.
 		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
-		if err := bytesLimiter.Reserve(uint64(chunkLen)); err != nil {
+		if err := bytesLimiter.ReserveWithType(uint64(chunkLen), ChunksTouched); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 		}
-		stats.DataDownloadedSizeSum += units.Base2Bytes(chunkLen)
 
-		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}})
+		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}}, r.logger)
 		if err != nil {
 			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chunkLen)
 		}
@@ -3628,15 +3650,15 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			return errors.Errorf("preloaded chunk too small, expecting %d", chunkLen)
 		}
 
-		stats.chunksFetchCount++
-		stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
-		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
+		stats.add(ChunksFetched, 1, len(*nb))
+		c := rawChunk((*nb)[n:])
+		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")
 		}
-		stats.chunksTouched++
-		stats.ChunksTouchedSizeSum += units.Base2Bytes(int(chunkDataLen))
+
+		stats.add(ChunksTouched, 1, int(chunkDataLen))
 
 		r.block.chunkPool.Put(nb)
 	}
@@ -3667,24 +3689,28 @@ func (r *bucketChunkReader) save(b []byte) ([]byte, error) {
 // It is used to Store API responses which don't need to introspect and validate the chunk's contents.
 type rawChunk []byte
 
-func (b rawChunk) Encoding() chunkenc.Encoding {
-	return chunkenc.Encoding(b[0])
+func (b *rawChunk) Reset(stream []byte) {
+	(*b) = stream
 }
 
-func (b rawChunk) Bytes() []byte {
-	return b[1:]
+func (b *rawChunk) Encoding() chunkenc.Encoding {
+	return chunkenc.Encoding((*b)[0])
 }
-func (b rawChunk) Compact() {}
 
-func (b rawChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
+func (b *rawChunk) Bytes() []byte {
+	return (*b)[1:]
+}
+func (b *rawChunk) Compact() {}
+
+func (b *rawChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	panic("invalid call")
 }
 
-func (b rawChunk) Appender() (chunkenc.Appender, error) {
+func (b *rawChunk) Appender() (chunkenc.Appender, error) {
 	panic("invalid call")
 }
 
-func (b rawChunk) NumSamples() int {
+func (b *rawChunk) NumSamples() int {
 	panic("invalid call")
 }
 
@@ -3731,6 +3757,35 @@ type queryStats struct {
 	MergeDuration     time.Duration
 
 	DataDownloadedSizeSum units.Base2Bytes
+}
+
+func (s *queryStats) add(dataType StoreDataType, dataCount int, dataSize int) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	switch dataType {
+	case PostingsFetched:
+		s.postingsFetched += dataCount
+		s.PostingsFetchedSizeSum += units.Base2Bytes(dataSize)
+	case PostingsTouched:
+		s.postingsTouched += dataCount
+		s.PostingsTouchedSizeSum += units.Base2Bytes(dataSize)
+	case SeriesFetched:
+		s.seriesFetched += dataCount
+		s.SeriesFetchedSizeSum += units.Base2Bytes(dataSize)
+	case SeriesTouched:
+		s.seriesTouched += dataCount
+		s.SeriesTouchedSizeSum += units.Base2Bytes(dataSize)
+	case ChunksFetched:
+		s.chunksFetched += dataCount
+		s.ChunksFetchedSizeSum += units.Base2Bytes(dataSize)
+	case ChunksTouched:
+		s.chunksTouched += dataCount
+		s.ChunksTouchedSizeSum += units.Base2Bytes(dataSize)
+	default:
+		return
+	}
+	s.DataDownloadedSizeSum += units.Base2Bytes(dataSize)
 }
 
 func (s *queryStats) merge(o *queryStats) {

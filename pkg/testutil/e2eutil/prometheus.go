@@ -605,14 +605,14 @@ func createBlock(
 		return id, errors.Wrap(err, "create compactor")
 	}
 
-	id, err = c.Write(dir, h, mint, maxt, nil)
+	ids, err := c.Write(dir, h, mint, maxt, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "write block")
 	}
-
-	if id.Compare(ulid.ULID{}) == 0 {
+	if len(ids) == 0 {
 		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
+	id = ids[0]
 
 	blockDir := filepath.Join(dir, id.String())
 	logger := log.NewNopLogger()
@@ -769,14 +769,15 @@ func CreateBlockWithChurn(
 		return id, errors.Wrap(err, "create compactor")
 	}
 
-	id, err = c.Write(dir, h, mint, maxt, nil)
+	ids, err := c.Write(dir, h, mint, maxt, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "write block")
 	}
 
-	if id.Compare(ulid.ULID{}) == 0 {
+	if len(ids) == 0 {
 		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
+	id = ids[0]
 
 	blockDir := filepath.Join(dir, id.String())
 	logger := log.NewNopLogger()

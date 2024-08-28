@@ -13,7 +13,7 @@
 | Matej Gera            | matejgera@gmail.com       | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)             | Coralogix           |
 | Filip Petkovski       | filip.petkovsky@gmail.com | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)       | Shopify             |
 | Saswata Mukherjee     | saswata.mukhe@gmail.com   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode)   | Red Hat             |
-| Michael Hoffmann      | mhoffm@posteo.de          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Aiven               |
+| Michael Hoffmann      | mhoffm@posteo.de          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Cloudflare          |
 
 We are bunch of people from different companies with various interests and skills. We are from different parts of the world: Germany, Holland, Lithuania, US, UK and India. We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 

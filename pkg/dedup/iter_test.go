@@ -196,72 +196,72 @@ func toChunkedSeriesSlice(t testing.TB, set storepb.SeriesSet) []chunkedSeries {
 func TestOverlapSplitSet(t *testing.T) {
 	input := []chunkedSeries{
 		{
-			lset: labels.Labels{{Name: "a", Value: "1_empty"}},
+			lset: labels.FromStrings("a", "1_empty"),
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "2_nonoverlap"}},
+			lset:   labels.FromStrings("a", "2_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
+			lset:   labels.FromStrings("a", "3_tworeplicas"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "4_nonoverlap"}},
+			lset:   labels.FromStrings("a", "4_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
+			lset:   labels.FromStrings("a", "5_minimaloverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 55, MaxTime: 100}},
 		},
 		{
-			lset: labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset: labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 1, MaxTime: 15}, {MinTime: 2, MaxTime: 36}, {MinTime: 16, MaxTime: 200},
 				{MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
 		},
 	}
 	exp := []chunkedSeries{
 		{
-			lset: labels.Labels{{Name: "a", Value: "1_empty"}},
+			lset: labels.FromStrings("a", "1_empty"),
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "2_nonoverlap"}},
+			lset:   labels.FromStrings("a", "2_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
+			lset:   labels.FromStrings("a", "3_tworeplicas"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
+			lset:   labels.FromStrings("a", "3_tworeplicas"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "4_nonoverlap"}},
+			lset:   labels.FromStrings("a", "4_nonoverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
+			lset:   labels.FromStrings("a", "5_minimaloverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
+			lset:   labels.FromStrings("a", "5_minimaloverlap"),
 			chunks: []storepb.AggrChunk{{MinTime: 55, MaxTime: 100}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 15}, {MinTime: 16, MaxTime: 200}},
 		},
 		{
-			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
+			lset:   labels.FromStrings("a", "6_fourreplica"),
 			chunks: []storepb.AggrChunk{{MinTime: 2, MaxTime: 36}},
 		},
 	}
@@ -281,46 +281,46 @@ func TestDedupSeriesSet(t *testing.T) {
 			name: "Single dedup label",
 			input: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{200000, 5}, {210000, 6}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
@@ -329,50 +329,50 @@ func TestDedupSeriesSet(t *testing.T) {
 			name: "Multi dedup label",
 			input: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{200000, 5}, {210000, 6}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					lset:    labels.FromStrings("a", "1", "c", "4"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "2", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
@@ -381,16 +381,16 @@ func TestDedupSeriesSet(t *testing.T) {
 			name: "Multi dedup label - some series don't have all dedup labels",
 			input: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{60000, 3}, {70000, 4}},
 				},
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					lset:    labels.FromStrings("a", "1", "c", "3"),
 					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
@@ -406,7 +406,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			isCounter: true,
 			input: []series{
 				{
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10000, 8.0}, // Smaller timestamp, this will be chosen. CurrValue = 8.0.
 						{20000, 9.0}, // Same. CurrValue = 9.0.
@@ -419,7 +419,7 @@ func TestDedupSeriesSet(t *testing.T) {
 						{100000, 9 + 6.0},
 					},
 				}, {
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10001, 8.0}, // Penalty 5000 will be added.
 						// 20001 was app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator. Penalty 2 * (20000 - 10000) will be added.
@@ -433,7 +433,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					lset:    labels.FromStrings("a", "1"),
 					samples: []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}},
 				},
 			},
@@ -444,12 +444,12 @@ func TestDedupSeriesSet(t *testing.T) {
 			isCounter: false,
 			input: []series{
 				{
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10000, 8.0}, {20000, 9.0}, {50001, 9 + 1.0}, {60000, 9 + 2.0}, {70000, 9 + 3.0}, {80000, 9 + 4.0}, {90000, 9 + 5.0}, {100000, 9 + 6.0},
 					},
 				}, {
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{10001, 8.0}, {45001, 8 + 0.5}, {55001, 8 + 1.5}, {65001, 8 + 2.5},
 					},
@@ -457,7 +457,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					lset:    labels.FromStrings("a", "1"),
 					samples: []sample{{10000, 8}, {20000, 9}, {45001, 8.5}, {55001, 9.5}, {65001, 10.5}, {90000, 14}, {100000, 15}},
 				},
 			},
@@ -469,7 +469,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			isCounter: true,
 			input: []series{
 				{
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{t: 1587690005791, f: 461968}, {t: 1587690020791, f: 462151}, {t: 1587690035797, f: 462336}, {t: 1587690050791, f: 462650}, {t: 1587690065791, f: 462813}, {t: 1587690080791, f: 462987}, {t: 1587690095791, f: 463095}, {t: 1587690110791, f: 463247}, {t: 1587690125791, f: 463440}, {t: 1587690140791, f: 463642}, {t: 1587690155791, f: 463811},
 						{t: 1587690170791, f: 464027}, {t: 1587690185791, f: 464308}, {t: 1587690200791, f: 464514}, {t: 1587690215791, f: 464798}, {t: 1587690230791, f: 465018}, {t: 1587690245791, f: 465215}, {t: 1587690260813, f: 465431}, {t: 1587690275791, f: 465651}, {t: 1587690290791, f: 465870}, {t: 1587690305791, f: 466070}, {t: 1587690320792, f: 466248},
@@ -495,7 +495,7 @@ func TestDedupSeriesSet(t *testing.T) {
 						{t: 1587693530816, f: 510666}, {t: 1587693545791, f: 510871}, {t: 1587693560791, f: 511123}, {t: 1587693575791, f: 511303}, {t: 1587693590791, f: 511500},
 					},
 				}, {
-					lset: labels.Labels{{Name: "a", Value: "1"}},
+					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
 						{t: 1587690007139, f: 461993}, {t: 1587690022139, f: 462164}, {t: 1587690037139, f: 462409}, {t: 1587690052139, f: 462662}, {t: 1587690067139, f: 462824}, {t: 1587690082139, f: 462987}, {t: 1587690097155, f: 463108}, {t: 1587690112139, f: 463261}, {t: 1587690127139, f: 463465}, {t: 1587690142139, f: 463642},
 						{t: 1587690157139, f: 463823}, {t: 1587690172139, f: 464065}, {t: 1587690187139, f: 464333}, {t: 1587690202139, f: 464566}, {t: 1587690217139, f: 464811}, {t: 1587690232140, f: 465032}, {t: 1587690247139, f: 465229}, {t: 1587690262139, f: 465445}, {t: 1587690277139, f: 465700}, {t: 1587690292139, f: 465884},
@@ -526,7 +526,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			exp: []series{
 				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}},
+					lset:    labels.FromStrings("a", "1"),
 					samples: expectedRealSeriesWithStaleMarkerDeduplicatedForRate,
 				},
 			},

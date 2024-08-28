@@ -20,7 +20,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/gzhttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
@@ -65,6 +65,11 @@ var corsHeaders = map[string]string{
 	"Access-Control-Allow-Origin":   "*",
 	"Access-Control-Expose-Headers": "Date",
 }
+
+var (
+	// Let suse the same json codec used by upstream prometheus.
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
+)
 
 // ThanosVersion contains build information about Thanos.
 type ThanosVersion struct {
@@ -221,10 +226,10 @@ func GetInstr(
 			}
 		})
 
-		return tracing.HTTPMiddleware(tracer, name, logger,
-			ins.NewHandler(name,
-				gzhttp.GzipHandler(
-					middleware.RequestID(
+		return middleware.RequestID(
+			tracing.HTTPMiddleware(tracer, name, logger,
+				ins.NewHandler(name,
+					gzhttp.GzipHandler(
 						logMiddleware.HTTPMiddleware(name, hf),
 					),
 				),

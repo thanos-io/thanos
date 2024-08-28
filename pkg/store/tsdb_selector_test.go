@@ -26,29 +26,28 @@ func TestMatchersForLabelSets(t *testing.T) {
 		},
 		{
 			name: "single label set with single label",
-			labelSets: []labels.Labels{{
-				labels.Label{Name: "a", Value: "1"},
-			}},
+			labelSets: []labels.Labels{
+				labels.FromStrings("a", "1"),
+			},
 			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
 			},
 		},
 		{
 			name: "multiple labels with same label name",
-			labelSets: []labels.Labels{{
-				labels.Label{Name: "a", Value: "1"},
-				labels.Label{Name: "a", Value: "2"},
-			}},
+			labelSets: []labels.Labels{
+				labels.FromStrings("a", "1"),
+				labels.FromStrings("a", "2"),
+			},
 			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 		},
 		{
 			name: "multiple labels with different label name",
-			labelSets: []labels.Labels{{
-				labels.Label{Name: "a", Value: "1"},
-				labels.Label{Name: "b", Value: "2"},
-			}},
+			labelSets: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+			},
 			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
 				{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2"},
@@ -56,22 +55,20 @@ func TestMatchersForLabelSets(t *testing.T) {
 		},
 		{
 			name: "multiple label sets with same label name",
-			labelSets: []labels.Labels{{
-				labels.Label{Name: "a", Value: "1"},
-			}, {
-				labels.Label{Name: "a", Value: "2"},
-			}},
+			labelSets: []labels.Labels{
+				labels.FromStrings("a", "1"),
+				labels.FromStrings("a", "2"),
+			},
 			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 		},
 		{
 			name: "multiple label sets with different label name",
-			labelSets: []labels.Labels{{
-				labels.Label{Name: "a", Value: "1"},
-			}, {
-				labels.Label{Name: "b", Value: "2"},
-			}},
+			labelSets: []labels.Labels{
+				labels.FromStrings("a", "1"),
+				labels.FromStrings("b", "2"),
+			},
 			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|^$"},
 				{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2|^$"},

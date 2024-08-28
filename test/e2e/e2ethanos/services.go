@@ -510,6 +510,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.enableXFunctions {
 		args = append(args, "--query.enable-x-functions")
 	}
+	if q.queryMode != "" {
+		args = append(args, "--query.mode="+q.queryMode)
+	}
 	if q.engine != "" {
 		args = append(args, "--query.promql-engine="+string(q.engine))
 	}
@@ -1235,4 +1238,34 @@ func NewRedis(e e2e.Environment, name string) e2e.Runnable {
 			WaitReadyBackoff: &defaultBackoffConfig,
 		},
 	)
+}
+
+func NewToolsBucketDownsample(e e2e.Environment, name string, bucketConfig client.BucketConfig) *e2eobs.Observable {
+	f := e.Runnable(fmt.Sprintf("downsampler-%s", name)).
+		WithPorts(map[string]int{"http": 8080}).
+		Future()
+
+	bktConfigBytes, err := yaml.Marshal(bucketConfig)
+	if err != nil {
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
+	}
+
+	args := []string{"bucket", "downsample"}
+
+	args = append(args, e2e.BuildArgs(map[string]string{
+		"--http-address":    ":8080",
+		"--log.level":       "debug",
+		"--objstore.config": string(bktConfigBytes),
+		"--data-dir":        f.InternalDir(),
+	})...)
+
+	return e2eobs.AsObservable(f.Init(
+		e2e.StartOptions{
+			Image:            DefaultImage(),
+			Command:          e2e.NewCommand("tools", args...),
+			User:             strconv.Itoa(os.Getuid()),
+			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
+	), "http")
 }

@@ -17,6 +17,14 @@ func NewQueryResponse(series *prompb.TimeSeries) *QueryResponse {
 	}
 }
 
+func NewQueryStatsResponse(stats *QueryStats) *QueryResponse {
+	return &QueryResponse{
+		Result: &QueryResponse_Stats{
+			Stats: stats,
+		},
+	}
+}
+
 func NewQueryWarningsResponse(errs ...error) *QueryResponse {
 	warnings := make([]string, 0, len(errs))
 	for _, err := range errs {
@@ -33,6 +41,14 @@ func NewQueryRangeResponse(series *prompb.TimeSeries) *QueryRangeResponse {
 	return &QueryRangeResponse{
 		Result: &QueryRangeResponse_Timeseries{
 			Timeseries: series,
+		},
+	}
+}
+
+func NewQueryRangeStatsResponse(stats *QueryStats) *QueryRangeResponse {
+	return &QueryRangeResponse{
+		Result: &QueryRangeResponse_Stats{
+			Stats: stats,
 		},
 	}
 }

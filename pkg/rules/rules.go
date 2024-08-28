@@ -12,9 +12,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/util/annotations"
 
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -64,7 +64,7 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 	var err error
 	matcherSets := make([][]*labels.Matcher, len(req.MatcherString))
 	for i, s := range req.MatcherString {
-		matcherSets[i], err = parser.ParseMetricSelector(s)
+		matcherSets[i], err = extpromql.ParseMetricSelector(s)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "parser ParseMetricSelector")
 		}

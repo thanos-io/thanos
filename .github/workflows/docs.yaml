@@ -15,21 +15,21 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: 1.21.x
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: .mdoxcache
           key: ${{ runner.os }}-mdox-${{ hashFiles('docs/**/*.md', 'examples/**/*.md', 'mixin/**/*.md', '*.md') }}

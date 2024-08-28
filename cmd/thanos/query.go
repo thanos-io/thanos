@@ -17,7 +17,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -268,7 +267,8 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(reqLogConfig)
+		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(reqLogConfig)
+
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -310,7 +310,7 @@ func registerQuery(app *extkingpin.App) {
 			tracer,
 			httpLogOpts,
 			grpcLogOpts,
-			tagOpts,
+			logFilterMethods,
 			grpcServerConfig,
 			*grpcCompression,
 			*secure,
@@ -395,7 +395,7 @@ func runQuery(
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
-	tagOpts []tags.Option,
+	logFilterMethods []string,
 	grpcServerConfig grpcConfig,
 	grpcCompression string,
 	secure bool,
@@ -831,7 +831,7 @@ func runQuery(
 		defaultEngineType := querypb.EngineType(querypb.EngineType_value[defaultEngine])
 		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engineFactory, defaultEngineType, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
@@ -851,6 +851,7 @@ func runQuery(
 		}, func(error) {
 			statusProber.NotReady(err)
 			s.Shutdown(err)
+			endpoints.Close()
 		})
 	}
 
@@ -949,7 +950,6 @@ func prepareEndpointSet(
 			})
 		}, func(error) {
 			cancel()
-			endpointSet.Close()
 		})
 	}
 
