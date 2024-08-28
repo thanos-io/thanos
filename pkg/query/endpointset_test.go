@@ -1456,40 +1456,40 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					t,
 					tc.states[currentState].expectedStores,
 					gotStores,
-					"unexepected discovered storeAPIs in state %q",
+					"unexpected discovered storeAPIs in state %q",
 					tc.states[currentState].name)
 				testutil.Equals(
 					t,
 					tc.states[currentState].expectedRules,
 					gotRules,
-					"unexepected discovered rulesAPIs in state %q",
+					"unexpected discovered rulesAPIs in state %q",
 					tc.states[currentState].name)
 				testutil.Equals(
 					t,
 					tc.states[currentState].expectedTarget,
 					gotTarget,
-					"unexepected discovered targetAPIs in state %q",
+					"unexpected discovered targetAPIs in state %q",
 					tc.states[currentState].name,
 				)
 				testutil.Equals(
 					t,
 					tc.states[currentState].expectedMetricMetadata,
 					gotMetricMetadata,
-					"unexepected discovered metricMetadataAPIs in state %q",
+					"unexpected discovered metricMetadataAPIs in state %q",
 					tc.states[currentState].name,
 				)
 				testutil.Equals(
 					t,
 					tc.states[currentState].expectedExemplars,
 					gotExemplars,
-					"unexepected discovered ExemplarsAPIs in state %q",
+					"unexpected discovered ExemplarsAPIs in state %q",
 					tc.states[currentState].name,
 				)
 				testutil.Equals(
 					t,
 					tc.states[currentState].expectedQueryAPIs,
 					gotQueryAPIs,
-					"unexepected discovered QueryAPIs in state %q",
+					"unexpected discovered QueryAPIs in state %q",
 					tc.states[currentState].name,
 				)
 

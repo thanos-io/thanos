@@ -2155,7 +2155,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		tsdbSelector:      DefaultSelector,
 	}
 
-	t.Run("failling send", func(t *testing.T) {
+	t.Run("failing send", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// We mimic failing series server, but practically context cancel will do the same.
 		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{

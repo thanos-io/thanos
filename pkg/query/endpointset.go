@@ -829,7 +829,7 @@ func (er *endpointRef) updateMetadata(metadata *endpointMetadata, err error) {
 }
 
 // isQueryable returns true if an endpointRef should be used for querying.
-// A strict endpointRef is always queriable. A non-strict endpointRef
+// A strict endpointRef is always queryable. A non-strict endpointRef
 // is queryable if the last health check (info call) succeeded.
 func (er *endpointRef) isQueryable() bool {
 	er.mtx.RLock()

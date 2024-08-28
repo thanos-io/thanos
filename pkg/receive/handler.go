@@ -976,7 +976,7 @@ func (h *Handler) sendLocalWrite(
 
 }
 
-// sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not
+// sendRemoteWrite sends a write request to the remote node. It takes care of checking whether the endpoint is up or not
 // in the peerGroup, correctly marking them as up or down when appropriate.
 // The responses are sent to the responses channel.
 func (h *Handler) sendRemoteWrite(

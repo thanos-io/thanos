@@ -894,7 +894,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 					_, _ = sb.WriteString(",")
 				}
 			}
-			rerr = fmt.Errorf("paniced while compacting %s: %v", sb.String(), p)
+			rerr = fmt.Errorf("panicked while compacting %s: %v", sb.String(), p)
 		}
 	}()
 

@@ -144,8 +144,8 @@ jobs:
         with:
           check_filenames: false
           check_hidden: true
-          skip: ./pkg/*,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
-          ignore_words_list: re-use,intrumentation,mmaped,nd,serie
+          skip: ./pkg/ui/*,./pkg/store/6545postingsrepro,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
+          ignore_words_list: intrumentation,mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te
 
   e2e:
     strategy:
