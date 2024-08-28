@@ -63,7 +63,7 @@ require (
 	github.com/prometheus/prometheus v0.53.2-0.20240718123124-e9dec5fc537b
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
-	github.com/thanos-io/objstore v0.0.0-20240622095743-1afe5d4bc3cd
+	github.com/thanos-io/objstore v0.0.0-20240828153123-de861b433240
 	github.com/thanos-io/promql-engine v0.0.0-20240718195911-cdbd6dfed36b
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -89,7 +89,7 @@ require (
 	golang.org/x/time v0.5.0
 	google.golang.org/api v0.183.0 // indirect
 	google.golang.org/genproto v0.0.0-20240528184218-531527333157 // indirect
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.66.0
 	google.golang.org/grpc/examples v0.0.0-20211119005141-f45e61797429
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.4.0
@@ -283,9 +283,6 @@ replace (
 	github.com/sercand/kuberesolver/v4 => github.com/sercand/kuberesolver/v5 v5.1.1
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
-
-	// Pinning grpc due https://github.com/grpc/grpc-go/issues/7314
-	google.golang.org/grpc => google.golang.org/grpc v1.63.2
 
 	// Overriding to use latest commit.
 	gopkg.in/alecthomas/kingpin.v2 => github.com/alecthomas/kingpin v1.3.8-0.20210301060133-17f40c25f497
