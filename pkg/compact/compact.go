@@ -1387,6 +1387,7 @@ type BucketCompactor struct {
 	concurrency                    int
 	skipBlocksWithOutOfOrderChunks bool
 	blocksAPI                      BlocksAPI
+	extensions                     any
 }
 
 // NewBucketCompactor creates a new bucket compactor.
@@ -1401,6 +1402,7 @@ func NewBucketCompactor(
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
 	blocksAPI BlocksAPI,
+	extensions any,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
@@ -1418,10 +1420,12 @@ func NewBucketCompactor(
 		concurrency,
 		skipBlocksWithOutOfOrderChunks,
 		blocksAPI,
+		extensions,
 	)
 }
+
 type BlocksAPI interface {
-    SetPlanned([]metadata.Meta, error)
+	SetPlanned([]metadata.Meta, error)
 }
 
 func NewBucketCompactorWithCheckerAndCallback(
@@ -1437,6 +1441,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
 	blocksAPI BlocksAPI,
+	extensions any,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
@@ -1454,6 +1459,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 		concurrency:                    concurrency,
 		skipBlocksWithOutOfOrderChunks: skipBlocksWithOutOfOrderChunks,
 		blocksAPI:                      blocksAPI,
+		extensions:                     extensions,
 	}, nil
 }
 
@@ -1515,7 +1521,11 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 							if meta, ok := c.sy.Metas()[id]; ok {
 								plannedMetas = append(plannedMetas, *meta)
 							}
-							}
+						}
+						if err := c.sy.SetPlanned(plannedMetas); err != nil {
+							level.Warn(c.logger).Log("msg", "failed to set planned metas after compaction", "err", err)
+						}
+						c.blocksAPI.SetPlanned(plannedMetas, nil)
 					}
 					if err == nil {
 						if shouldRerunGroup {
@@ -1587,7 +1597,33 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 
-		// Send all groups found during this pass to the compaction workers.
+		// Delete before merge: Convert map to slice
+		metas := make([]*metadata.Meta, 0, len(c.sy.Metas()))
+		for _, meta := range c.sy.Metas() {
+			metas = append(metas, meta)
+		}
+
+		// Delete before merge: Plan compaction outside of the group loop
+		plan, err := c.planner.Plan(ctx, metas, errChan, c.extensions)
+		if err != nil {
+			return errors.Wrap(err, "plan compaction")
+		}
+
+		// Delete before merge: Convert []*metadata.Meta to []metadata.Meta
+		plannedMetas := make([]metadata.Meta, len(plan))
+		for i, meta := range plan {
+			plannedMetas[i] = *meta
+		}
+
+		// Delete before merge: Call Syncer.SetPlanned before compaction
+		if err := c.sy.SetPlanned(plannedMetas); err != nil {
+			return errors.Wrap(err, "set planned metas")
+		}
+
+		// Delete before merge: Call BlocksAPI.SetPlanned to update the API
+		c.blocksAPI.SetPlanned(plannedMetas, nil)
+
+		// Now proceed with the group loop
 		var groupErrs errutil.MultiError
 	groupLoop:
 		for _, g := range groups {
