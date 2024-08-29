@@ -1491,19 +1491,23 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		// Set up workers who will compact the groups when the groups are ready.
 		// They will compact available groups until they encounter an error, after which they will stop.
+		var allPlannedMetas []metadata.Meta
+		var plannedMetasMutex sync.Mutex
+
 		for i := 0; i < c.concurrency; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					// Delete before merge: Get the metas for the current group
 					groupMetas := g.Metas()
-
-					// Delete before merge: Convert []*metadata.Meta to []metadata.Meta
 					plannedMetas := make([]metadata.Meta, len(groupMetas))
 					for i, meta := range groupMetas {
 						plannedMetas[i] = *meta
 					}
+
+					plannedMetasMutex.Lock()
+					allPlannedMetas = append(allPlannedMetas, plannedMetas...)
+					plannedMetasMutex.Unlock()
 
 					// Delete before merge: Call Syncer.SetPlanned before compaction
 					if err := c.sy.SetPlanned(plannedMetas); err != nil {
@@ -1640,6 +1644,11 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		}
 		close(groupChan)
 		wg.Wait()
+
+		if err := c.sy.SetPlanned(allPlannedMetas); err != nil {
+			return errors.Wrap(err, "set planned metas")
+		}
+		c.blocksAPI.SetPlanned(allPlannedMetas, nil)
 
 		// Collect any other error reported by the workers, or any error reported
 		// while we were waiting for the last batch of groups to run the compaction.
