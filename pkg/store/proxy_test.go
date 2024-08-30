@@ -1842,7 +1842,7 @@ func TestStoreMatches(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			ok, reason := storeMatches(context.TODO(), c.s, c.mint, c.maxt, c.ms...)
+			ok, reason := storeMatches(context.TODO(), true, c.s, c.mint, c.maxt, c.ms...)
 			testutil.Equals(t, c.expectedMatch, ok)
 			testutil.Equals(t, c.expectedReason, reason)
 
@@ -2173,18 +2173,18 @@ func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := storetestutil.TestClient{Name: "testaddr"}
 	c.IsLocalStore = true
 
-	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
+	ok, reason := storeMatchDebugMetadata(c, true, [][]*labels.Matcher{{}})
 	testutil.Assert(t, !ok)
 	testutil.Equals(t, "the store is not remote, cannot match __address__", reason)
 
 	// Change client to remote.
 	c.IsLocalStore = false
 
-	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
+	ok, reason = storeMatchDebugMetadata(c, true, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
 	testutil.Assert(t, !ok)
 	testutil.Equals(t, "__address__ testaddr does not match debug store metadata matchers: [[__address__=\"wrong\"]]", reason)
 
-	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
+	ok, reason = storeMatchDebugMetadata(c, true, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
 	testutil.Assert(t, ok)
 	testutil.Equals(t, "", reason)
 }
