@@ -233,7 +233,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
 	}
 	_, ok := b.FilterExtLabelsMatchers(ms)
-	testutil.Equals(t, ok, false)
+	testutil.Equals(t, ok, true)
 
 	ms = []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
@@ -246,6 +246,18 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
 	}
 	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 1)
+	testutil.Equals(t, res, ms)
+
+	// validate that it can filter out ext labels that match non-equal matchers
+	ext, err := labels.NewMatcher(labels.MatchRegexp, "a", ".*")
+	if err != nil {
+		t.Error(err)
+	}
+	ms = []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
+	}
+	res, _ = b.FilterExtLabelsMatchers(append(ms, ext))
 	testutil.Equals(t, len(res), 1)
 	testutil.Equals(t, res, ms)
 }
@@ -601,7 +613,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 		},
 		{
 			input: [][2]int{
-				// Mimick AllPostingsKey, where range specified whole range.
+				// Mimic AllPostingsKey, where range specified whole range.
 				{1, 15},
 				{1, maxGapSize + 100},
 				{maxGapSize + 31, maxGapSize + 40},
@@ -1238,7 +1250,7 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 	testutil.Ok(t, app.Commit())
 }
 
-// Very similar benchmark to ths: https://github.com/prometheus/prometheus/blob/1d1732bc25cc4b47f513cb98009a4eb91879f175/tsdb/querier_bench_test.go#L82,
+// Very similar benchmark to this: https://github.com/prometheus/prometheus/blob/1d1732bc25cc4b47f513cb98009a4eb91879f175/tsdb/querier_bench_test.go#L82,
 // but with postings results check when run as test.
 func benchmarkExpandedPostings(
 	t testutil.TB,

@@ -118,7 +118,7 @@ func formatErrorChain(err error) string {
 // The functions `Is`, `As` & `Unwrap` provides a thin wrapper around the builtin errors
 // package in go. Just for sake of completeness and correct autocompletion behaviors from
 // IDEs they have been wrapped using functions instead of using variable to reference them
-// as first class functions (eg: var Is = errros.Is ).
+// as first class functions (eg: var Is = errors.Is ).
 
 // Is is a wrapper of built-in errors.Is. It reports whether any error in err's
 // chain matches target. The chain consists of err itself followed by the sequence

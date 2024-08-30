@@ -163,7 +163,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 		},
 		{
-			title: "dont't match time range series",
+			title: "don't match time range series",
 			req: &storepb.SeriesRequest{
 				MinTime: 4,
 				MaxTime: 6,
@@ -185,7 +185,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			expectedError: "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)",
 		},
 		{
-			title: "dont't match labels",
+			title: "don't match labels",
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,

@@ -149,7 +149,7 @@ func Downsample(
 		// Raw and already downsampled data need different processing.
 		if origMeta.Thanos.Downsample.Resolution == 0 {
 			for _, c := range chks {
-				// TODO(bwplotka): We can optimze this further by using in WriteSeries iterators of each chunk instead of
+				// TODO(bwplotka): We can optimize this further by using in WriteSeries iterators of each chunk instead of
 				// samples. Also ensure 120 sample limit, otherwise we have gigantic chunks.
 				// https://github.com/thanos-io/thanos/issues/2542.
 				if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {

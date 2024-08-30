@@ -200,7 +200,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of forwareded requests to other receive nodes.') +
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of forwarded requests to other receive nodes.') +
           g.qpsErrTotalPanel(
             'thanos_receive_forward_requests_total{%s}' % utils.joinLabels([thanos.receive.dashboard.selector, 'result="error"']),
             'thanos_receive_forward_requests_total{%s}' % thanos.receive.dashboard.selector,

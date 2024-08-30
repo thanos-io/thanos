@@ -40,7 +40,7 @@ func TestNiceMD_Get(t *testing.T) {
 func TestNiceMD_Del(t *testing.T) {
 	nmd := metautils.NiceMD(metadata.Pairs(testPairs...))
 	assert.Equal(t, "uno", nmd.Get("singlekey"), "for present single-key value it should return it")
-	nmd.Del("singlekey").Del("doesnt exist")
+	nmd.Del("singlekey").Del("doesn't exist")
 	assert.Empty(t, nmd.Get("singlekey"), "after deletion singlekey shouldn't exist")
 }
 
