@@ -121,7 +121,6 @@ require (
 	github.com/onsi/gomega v1.33.1
 	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.53.0
-	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
 )
 
@@ -152,7 +151,6 @@ require (
 	go.opentelemetry.io/collector/semconv v0.104.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
 	go.opentelemetry.io/contrib/propagators/ot v1.28.0 // indirect
-	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240701130421-f6361c86f094 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240701130421-f6361c86f094 // indirect

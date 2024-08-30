@@ -408,7 +408,7 @@ type BucketStore struct {
 	partitioner Partitioner
 
 	filterConfig             *FilterConfig
-	advLabelSets             []labelpb.ZLabelSet
+	advLabelSets             []labelpb.LabelSet
 	enableCompatibilityLabel bool
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
@@ -709,9 +709,9 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 
 	// Sync advertise labels.
 	s.mtx.Lock()
-	s.advLabelSets = make([]labelpb.ZLabelSet, 0, len(s.advLabelSets))
+	s.advLabelSets = make([]labelpb.LabelSet, 0, len(s.advLabelSets))
 	for _, bs := range s.blockSets {
-		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(bs.labels.Copy())})
+		s.advLabelSets = append(s.advLabelSets, labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(bs.labels.Copy())})
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
 		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
@@ -908,8 +908,8 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 		lbls := labels.FromMap(b.meta.Thanos.Labels)
 		hash := lbls.Hash()
 		infoMap[hash] = append(infoMap[hash], infopb.TSDBInfo{
-			Labels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(lbls),
+			Labels: labelpb.LabelSet{
+				Labels: labelpb.PromLabelsToLabelpbLabels(lbls),
 			},
 			MinTime: b.meta.MinTime,
 			MaxTime: b.meta.MaxTime,
@@ -938,13 +938,13 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	return res
 }
 
-func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
+func (s *BucketStore) LabelSet() []labelpb.LabelSet {
 	s.mtx.RLock()
 	labelSets := s.advLabelSets
 	s.mtx.RUnlock()
 
 	if s.enableCompatibilityLabel && len(labelSets) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+		labelSets = append(labelSets, labelpb.LabelSet{Labels: []labelpb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
 	}
 
 	return labelSets
@@ -1196,7 +1196,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	b.entries = b.entries[1:]
 
 	return storepb.NewSeriesResponse(&storepb.Series{
-		Labels: labelpb.ZLabelsFromPromLabels(next.lset),
+		Labels: labelpb.PromLabelsToLabelpbLabels(next.lset),
 		Chunks: next.chks,
 	}), nil
 }
@@ -1286,7 +1286,7 @@ OUTER:
 			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
 		}
 
-		if !b.shardMatcher.MatchesLabels(completeLabelset) {
+		if !b.shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
 			continue
 		}
 
@@ -2122,7 +2122,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 						continue
 					}
 
-					val := labelpb.ZLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
+					val := labelpb.LabelpbLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
 					if val != "" { // Should never be empty since we added labelName!="" matcher to the list of matchers.
 						values[val] = struct{}{}
 					}

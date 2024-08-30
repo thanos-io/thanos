@@ -44,7 +44,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	resp, err := tsdbStore.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, []labelpb.ZLabel{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, []labelpb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
 	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
@@ -57,7 +57,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	resp, err = tsdbStore.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, []labelpb.ZLabel{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, []labelpb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
 	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
 	testutil.Equals(t, int64(12), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
@@ -597,16 +597,16 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+extLabels.Len())
+			lbls := make([]labelpb.Label, 0, len(s.Labels)+extLabels.Len())
 			for _, l := range s.Labels {
-				lbls = append(lbls, labelpb.ZLabel{
+				lbls = append(lbls, labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
 			}
 			extLabels.Range(func(l labels.Label) {
-				lbls = append(lbls, labelpb.ZLabel{
+				lbls = append(lbls, labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
 				})
