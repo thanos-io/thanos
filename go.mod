@@ -97,7 +97,7 @@ require (
 )
 
 require (
-	github.com/efficientgo/core v1.0.0-rc.2
+	github.com/efficientgo/core v1.0.0-rc.3
 	github.com/minio/sha256-simd v1.0.1
 )
 
