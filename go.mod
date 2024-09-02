@@ -22,7 +22,7 @@ require (
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
-	github.com/felixge/fgprof v0.9.4
+	github.com/felixge/fgprof v0.9.5
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-kit/log v0.2.1
