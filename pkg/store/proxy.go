@@ -371,6 +371,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		}
 
 		if err := srv.Send(resp); err != nil {
+			level.Error(reqLogger).Log("msg", errors.Wrap(err, "send series response").Error())
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
 	}
