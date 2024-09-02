@@ -258,7 +258,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			},
 			// Mix order to make sure compactor is able to deduct min time / max time.
 			// Currently TSDB does not produces empty blocks (see: https://github.com/prometheus/tsdb/pull/374). However before v2.7.0 it was
-			// so we still want to mimick this case as close as possible.
+			// so we still want to mimic this case as close as possible.
 			{
 				mint: 1000, maxt: 2000, extLset: extLabels, res: 124,
 				// Empty block.

@@ -388,7 +388,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 				resolution := time.Duration(tcase.hints.Step) * time.Millisecond
 				t.Run(fmt.Sprintf("dedup=%v, resolution=%v", sc.dedup, resolution.String()), func(t *testing.T) {
 					var actual []series
-					// Boostrap a local store and pass the data through promql.
+					// Bootstrap a local store and pass the data through promql.
 					{
 						g := gate.New(2)
 						mq := &mockedQueryable{
