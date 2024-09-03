@@ -331,6 +331,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	req := storepb.SeriesRequest{
 		MinTime:                 hints.Start,
 		MaxTime:                 hints.End,
+		Limit:                   int64(hints.Limit),
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              aggrs,
@@ -373,7 +374,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 }
 
 // LabelValues returns all potential values for a label name.
-func (q *querier) LabelValues(ctx context.Context, name string, _ *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
+func (q *querier) LabelValues(ctx context.Context, name string, hints *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "querier_label_values")
 	defer span.Finish()
 
@@ -384,12 +385,18 @@ func (q *querier) LabelValues(ctx context.Context, name string, _ *storage.Label
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
+
+	if hints == nil {
+		hints = &storage.LabelHints{}
+	}
+
 	req := &storepb.LabelValuesRequest{
 		Label:                   name,
 		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
+		Limit:                   int64(hints.Limit),
 	}
 
 	if q.isDedupEnabled() {
@@ -411,7 +418,7 @@ func (q *querier) LabelValues(ctx context.Context, name string, _ *storage.Label
 
 // LabelNames returns all the unique label names present in the block in sorted order constrained
 // by the given matchers.
-func (q *querier) LabelNames(ctx context.Context, _ *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
+func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "querier_label_names")
 	defer span.Finish()
 
@@ -423,11 +430,16 @@ func (q *querier) LabelNames(ctx context.Context, _ *storage.LabelHints, matcher
 		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
 
+	if hints == nil {
+		hints = &storage.LabelHints{}
+	}
+
 	req := &storepb.LabelNamesRequest{
 		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
+		Limit:                   int64(hints.Limit),
 	}
 
 	if q.isDedupEnabled() {
