@@ -1006,12 +1006,12 @@ type blockSeriesClient struct {
 	extLset         labels.Labels
 	extLsetToRemove map[string]struct{}
 
-	mint                  int64
-	maxt                  int64
-	expandedPostingsLimit int
-	indexr                *bucketIndexReader
-	chunkr                *bucketChunkReader
-	loadAggregates        []storepb.Aggr
+	mint           int64
+	maxt           int64
+	seriesLimit    int
+	indexr         *bucketIndexReader
+	chunkr         *bucketChunkReader
+	loadAggregates []storepb.Aggr
 
 	seriesLimiter SeriesLimiter
 	chunksLimiter ChunksLimiter
@@ -1084,7 +1084,7 @@ func newBlockSeriesClient(
 
 		mint:                   req.MinTime,
 		maxt:                   req.MaxTime,
-		expandedPostingsLimit:  int(req.Limit),
+		seriesLimit:            int(req.Limit),
 		indexr:                 b.indexReader(logger),
 		chunkr:                 chunkr,
 		seriesLimiter:          seriesLimiter,
@@ -1164,10 +1164,10 @@ func (b *blockSeriesClient) ExpandPostings(
 		b.expandedPostings = make([]storage.SeriesRef, 0, len(b.lazyPostings.postings)/2)
 		b.lazyExpandedPostingsCount.Inc()
 	} else {
-		// If expandedPostingsLimit is set, it can be applied here to limit the amount of series.
+		// If seriesLimit is set, it can be applied here to limit the amount of series.
 		// Note: This can only be done when postings are not expanded lazily.
-		if b.expandedPostingsLimit > 0 && len(b.lazyPostings.postings) > b.expandedPostingsLimit {
-			b.lazyPostings.postings = b.lazyPostings.postings[:b.expandedPostingsLimit]
+		if b.seriesLimit > 0 && len(b.lazyPostings.postings) > b.seriesLimit {
+			b.lazyPostings.postings = b.lazyPostings.postings[:b.seriesLimit]
 		}
 
 		// Apply series limiter eargerly if lazy postings not enabled.
@@ -1299,6 +1299,11 @@ OUTER:
 		}
 
 		seriesMatched++
+		if b.seriesLimit > 0 && seriesMatched > b.seriesLimit {
+			// Exit early if seriesLimit is set.
+			b.hasMorePostings = false
+			break
+		}
 		s := seriesEntry{lset: completeLabelset}
 		if b.skipChunks {
 			b.entries = append(b.entries, s)

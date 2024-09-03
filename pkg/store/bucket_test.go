@@ -3957,7 +3957,7 @@ func TestBucketStoreMetadataLimit(t *testing.T) {
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(tb, bkt.Close()) }()
 
-	uploadTestBlock(tb, tmpDir, bkt, 100)
+	uploadTestBlock(tb, tmpDir, bkt, 30000)
 
 	instrBkt := objstore.WithNoopInstr(bkt)
 	logger := log.NewNopLogger()
@@ -3995,11 +3995,11 @@ func TestBucketStoreMetadataLimit(t *testing.T) {
 		expectedResults int
 	}{
 		"series without limit": {
-			expectedResults: 40,
+			expectedResults: 12000,
 		},
 		"series with limit": {
-			limit:           2,
-			expectedResults: 2,
+			limit:           11000,
+			expectedResults: 11000,
 		},
 	}
 
