@@ -473,7 +473,7 @@ While the remaining settings are **optional**:
 - `dial_timeout`: the redis dial timeout.
 - `read_timeout`: the redis read timeout.
 - `write_timeout`: the redis write timeout.
-- `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
+- `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s). The size units are - 'Bytes', 'KiB', 'MiB', 'GiB', 'TiB' or 'PiB'
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 - `ttl`: ttl to store index cache items in redis.
 
