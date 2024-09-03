@@ -366,6 +366,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	r := &storepb.SeriesRequest{
 		MinTime:                 originalRequest.MinTime,
 		MaxTime:                 originalRequest.MaxTime,
+		Limit:                   originalRequest.Limit,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		Aggregates:              originalRequest.Aggregates,
 		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
@@ -456,7 +457,13 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	respHeap := NewResponseDeduplicator(NewProxyResponseLoserTree(storeResponses...))
     respHeap.quorumChunkDedup = s.quorumChunkDedup
+
+	i := 0
 	for respHeap.Next() {
+		i++
+		if r.Limit > 0 && i > int(r.Limit) {
+			break
+		}
 		resp := respHeap.At()
 
 		if resp.GetWarning() != "" {
@@ -528,6 +535,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		Hints:                   originalRequest.Hints,
 	}
 
 	var (
@@ -574,8 +582,13 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		return nil, err
 	}
 
+	result := strutil.MergeUnsortedSlices(names...)
+	if originalRequest.Limit > 0 && len(result) > int(originalRequest.Limit) {
+		result = result[:originalRequest.Limit]
+	}
+
 	return &storepb.LabelNamesResponse{
-		Names:    strutil.MergeUnsortedSlices(names...),
+		Names:    result,
 		Warnings: warnings,
 	}, nil
 }
@@ -629,6 +642,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		Limit:                   originalRequest.Limit,
 	}
 
 	var (
@@ -676,8 +690,13 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		return nil, err
 	}
 
+	vals := strutil.MergeUnsortedSlices(all...)
+	if originalRequest.Limit > 0 && len(vals) > int(originalRequest.Limit) {
+		vals = vals[:originalRequest.Limit]
+	}
+
 	return &storepb.LabelValuesResponse{
-		Values:   strutil.MergeUnsortedSlices(all...),
+		Values:   vals,
 		Warnings: warnings,
 	}, nil
 }
