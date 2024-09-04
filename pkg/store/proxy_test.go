@@ -74,7 +74,7 @@ func TestProxyStore_Info(t *testing.T) {
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
-	testutil.Equals(t, []labelpb.Label(nil), resp.LabelSets)
+	testutil.Equals(t, []labelpb.LabelSet(nil), resp.LabelSets)
 	testutil.Equals(t, storepb.StoreType_QUERY, resp.StoreType)
 	testutil.Equals(t, int64(0), resp.MinTime)
 	testutil.Equals(t, int64(0), resp.MaxTime)

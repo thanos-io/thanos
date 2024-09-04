@@ -4,6 +4,7 @@
 package labelpb
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -79,6 +80,9 @@ func ValidateLabels(lbls []Label) error {
 }
 
 func PromLabelsToLabelpbLabels(lbls labels.Labels) []Label {
+	if lbls.Len() == 0 {
+		return []Label(nil)
+	}
 	lset := make([]Label, 0, lbls.Len())
 	lbls.Range(func(l labels.Label) {
 		lset = append(lset, Label{Name: l.Name, Value: l.Value})
@@ -88,11 +92,14 @@ func PromLabelsToLabelpbLabels(lbls labels.Labels) []Label {
 }
 
 func LabelpbLabelsToPromLabels(lbls []Label) labels.Labels {
-	m := make(map[string]string, len(lbls))
-	for _, l := range lbls {
-		m[l.Name] = l.Value
+	if len(lbls) == 0 {
+		return labels.Labels(nil)
 	}
-	return labels.FromMap(m)
+	lblSlice := make([]string, 0, len(lbls)*2)
+	for _, l := range lbls {
+		lblSlice = append(lblSlice, l.Name, l.Value)
+	}
+	return labels.FromStrings(lblSlice...)
 }
 
 func (l *Label) Equal(other Label) bool {
@@ -167,4 +174,26 @@ func (z LabelSets) Less(i, j int) bool {
 		return result < 0
 	}
 	return l == lenI
+}
+
+func (m *Label) UnmarshalJSON(entry []byte) error {
+	f := Label(*m)
+	if err := json.Unmarshal(entry, &f); err != nil {
+		return errors.Wrapf(err, "labels: label field unmarshal: %v", string(entry))
+	}
+	*m = Label(f)
+	return nil
+}
+
+func (m *LabelSet) UnmarshalJSON(entry []byte) error {
+	lbls := labels.Labels{}
+	if err := lbls.UnmarshalJSON(entry); err != nil {
+		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
+	}
+	m.Labels = PromLabelsToLabelpbLabels(lbls)
+	return nil
+}
+
+func (m *LabelSet) MarshalJSON() ([]byte, error) {
+	return m.PromLabels().MarshalJSON()
 }
