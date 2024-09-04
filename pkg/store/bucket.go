@@ -3615,6 +3615,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	bufPooled, err := r.block.chunkPool.Get(r.block.estimatedMaxChunkSize)
 	if err == nil {
 		buf = *bufPooled
+		defer r.block.chunkPool.Put(&buf)
 	} else {
 		buf = make([]byte, r.block.estimatedMaxChunkSize)
 	}
