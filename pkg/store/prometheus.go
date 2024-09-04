@@ -173,7 +173,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 
 	if r.SkipChunks {
 		finalExtLset := rmLabels(extLset.Copy(), extLsetToRemove)
-		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
+		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime, int(r.Limit))
 		if err != nil {
 			return err
 		}
@@ -571,12 +571,12 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 
 	var lbls []string
 	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
-		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sers, err := p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		sers, err := p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
 		if err != nil {
 			return nil, err
 		}
@@ -642,7 +642,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		if len(matchers) == 0 {
 			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
 		}
-		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
 		if err != nil {
 			return nil, err
 		}
@@ -653,12 +653,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
-		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End)
+		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End, int(r.Limit))
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
 		if err != nil {
 			return nil, err
 		}

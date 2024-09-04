@@ -678,29 +678,38 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(localWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
 	var stats tenantRequestStats = make(tenantRequestStats)
 
-	for er := range localWrites {
-		for tenant, series := range localWrites[er] {
-			samples := 0
+	for _, write := range writes {
+		for er := range write {
+			for tenant, series := range write[er] {
+				samples := 0
 
-			for _, ts := range series.timeSeries {
-				samples += len(ts.Samples)
-			}
+				for _, ts := range series.timeSeries {
+					samples += len(ts.Samples)
+				}
 
-			if st, ok := stats[tenant]; ok {
-				st.timeseries += len(series.timeSeries)
-				st.totalSamples += samples
+				if st, ok := stats[tenant]; ok {
+					st.timeseries += len(series.timeSeries)
+					st.totalSamples += samples
 
-				stats[tenant] = st
-			} else {
-				stats[tenant] = requestStats{
-					timeseries:   len(series.timeSeries),
-					totalSamples: samples,
+					stats[tenant] = st
+				} else {
+					stats[tenant] = requestStats{
+						timeseries:   len(series.timeSeries),
+						totalSamples: samples,
+					}
 				}
 			}
 		}
+	}
+
+	// adjust counters by the replication factor
+	for tenant, st := range stats {
+		st.timeseries /= rf
+		st.totalSamples /= rf
+		stats[tenant] = st
 	}
 
 	return stats
@@ -733,7 +742,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		return stats, err
 	}
 
-	stats = h.gatherWriteStats(localWrites)
+	stats = h.gatherWriteStats(len(params.replicas), localWrites, remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.

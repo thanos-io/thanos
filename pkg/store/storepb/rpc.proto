@@ -137,6 +137,9 @@ message SeriesRequest {
   // NOTE(bwplotka): thanos.info.store.supports_without_replica_labels field has to return true to let client knows
   // server supports it.
   repeated string without_replica_labels = 14;
+
+  // limit is used to limit the number of results returned
+  int64 limit = 15;
 }
 
 // QueryHints represents hints from PromQL that might help to
@@ -235,6 +238,9 @@ message LabelNamesRequest {
 
   // same as in series request.
   repeated string without_replica_labels = 7;
+
+    // limit is used to limit the number of results returned
+    int64 limit = 8;
 }
 
 message LabelNamesResponse {
@@ -268,6 +274,9 @@ message LabelValuesRequest {
 
   // same as in series request.
   repeated string without_replica_labels = 8;
+
+    // limit is used to limit the number of results returned
+    int64 limit = 9;
 }
 
 message LabelValuesResponse {

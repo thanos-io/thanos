@@ -462,10 +462,14 @@ func TestMultiTSDBPrune(t *testing.T) {
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+
+			g := sync.WaitGroup{}
+			defer func() { cancel(); g.Wait() }()
 
 			if test.bucket != nil {
+				g.Add(1)
 				go func() {
+					defer g.Done()
 					testutil.Ok(t, syncTSDBs(ctx, m, 10*time.Millisecond))
 				}()
 			}

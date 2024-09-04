@@ -443,17 +443,17 @@ func TestQueryLabelNames(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) > 0
 	})
 
 	// Outside time range.
-	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), 0, func(res []string) bool {
 		return len(res) == 0
 	})
 
 	labelNames(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			// Expected result: [__name__, instance, job, prometheus, replica, receive, tenant_id]
 			// Pre-labelnames pushdown we've done Select() over all series and picked out the label names hence they all had external labels.
 			// With labelnames pushdown we had to extend the LabelNames() call to enrich the response with the external labelset when there is more than one label.
@@ -461,9 +461,17 @@ func TestQueryLabelNames(t *testing.T) {
 		},
 	)
 
+	// With limit
+	labelNames(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3, func(res []string) bool {
+			// Same test as above but requesting limited results.
+			return len(res) == 3
+		},
+	)
+
 	// There is no matched series.
 	labelNames(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "foobar"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 0
 		},
 	)
@@ -490,24 +498,67 @@ func TestQueryLabelValues(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) == 1 && res[0] == "localhost:9090"
 	})
 
 	// Outside time range.
-	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), 0, func(res []string) bool {
 		return len(res) == 0
 	})
 
 	labelValues(t, ctx, q.Endpoint("http"), "__name__", []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1 && res[0] == "up"
 		},
 	)
 
+	labelValues(t, ctx, q.Endpoint("http"), "__name__", []*labels.Matcher{},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 2, func(res []string) bool {
+			return len(res) == 2
+		},
+	)
+
 	labelValues(t, ctx, q.Endpoint("http"), "__name__", []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "foobar"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 0
+		},
+	)
+}
+
+func TestQuerySeries(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("series")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+
+	// Without limit
+	series(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
+			return len(res) == 3
+		},
+	)
+
+	// With limit
+	series(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 1, func(res []map[string]string) bool {
+			return len(res) == 1
 		},
 	)
 }
@@ -649,7 +700,7 @@ config:
 				end := timestamp.FromTime(now.Add(time.Hour))
 
 				// Send HTTP requests to thanos query to trigger exemplars.
-				labelNames(t, ctx, q.Endpoint("http"), nil, start, end, func(res []string) bool {
+				labelNames(t, ctx, q.Endpoint("http"), nil, start, end, 0, func(res []string) bool {
 					return true
 				})
 
@@ -1563,13 +1614,13 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() str
 	testutil.Equals(t, expected, result)
 }
 
-func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, check func(res []string) bool) {
+func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, limit int, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
+		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end, limit)
 		if err != nil {
 			return err
 		}
@@ -1582,13 +1633,13 @@ func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labe
 }
 
 //nolint:unparam
-func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers []*labels.Matcher, start, end int64, check func(res []string) bool) {
+func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers []*labels.Matcher, start, end int64, limit int, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, matchers, start, end)
+		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, matchers, start, end, limit)
 		if err != nil {
 			return err
 		}
@@ -1600,13 +1651,13 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 	}))
 }
 
-func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, check func(res []map[string]string) bool) {
+func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, limit int, check func(res []map[string]string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
+		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end, limit)
 		if err != nil {
 			return err
 		}
@@ -2361,23 +2412,23 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		})
 
 	// default-tenant should only see two labels when enforcing is on (c,tenant_id)
-	labelNames(t, ctx, querierEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, querierEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) == 2
 	})
 
 	// default-tenant should only see all labels when enforcing is not on (a,b,c,tenant_id)
-	labelNames(t, ctx, querierNoEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, querierNoEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) == 4
 	})
 
 	// default tenant can just the value of the C label
 	labelValues(t, ctx, querierEnforce.Endpoint("http"), "c", nil,
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1
 		},
 	)
 	labelValues(t, ctx, querierEnforce.Endpoint("http"), "a", nil,
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 0
 		},
 	)
@@ -2400,7 +2451,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	matcherSetB = append(matcherSetB, labelMatcher)
 
 	// default-tenant can see series with matcher C
-	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetC, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetC, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
 		var expected = []map[string]string{
 			{
 				"c":         "3",
@@ -2411,12 +2462,12 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	})
 
 	// default-tenant cannot see series with matcher B when tenancy is enabled
-	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
 		return len(res) == 0
 	})
 
 	// default-tenant can see series with matcher B when tenancy is not enabled
-	series(t, ctx, querierNoEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+	series(t, ctx, querierNoEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
 		var expected = []map[string]string{
 			{
 				"b":         "2",
