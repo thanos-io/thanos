@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7592](https://github.com/thanos-io/thanos/pull/7592) Ruler: Only increment `thanos_rule_evaluation_with_warnings_total` metric for non PromQL warnings.
 - [#7614](https://github.com/thanos-io/thanos/pull/7614) *: fix debug log formatting.
 - [#7492](https://github.com/thanos-io/thanos/pull/7492) Compactor: update filtered blocks list before second downsample pass.
+- [#7658](https://github.com/thanos-io/thanos/pull/7658) Store: Fix panic because too small buffer in pool.
 - [#7643](https://github.com/thanos-io/thanos/pull/7643) Receive: fix thanos_receive_write_{timeseries,samples} stats
 - [#7644](https://github.com/thanos-io/thanos/pull/7644) fix(ui): add null check to find overlapping blocks logic
 - [#7679](https://github.com/thanos-io/thanos/pull/7679) Query: respect store.limit.* flags when evaluating queries
