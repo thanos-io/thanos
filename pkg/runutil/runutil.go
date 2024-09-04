@@ -3,7 +3,7 @@
 
 // Package runutil provides helpers to advanced function scheduling control like repeat or retry.
 //
-// It's very often the case when you need to excutes some code every fixed intervals or have it retried automatically.
+// It's very often the case when you need to executes some code every fixed intervals or have it retried automatically.
 // To make it reliably with proper timeout, you need to carefully arrange some boilerplate for this.
 // Below function does it for you.
 //

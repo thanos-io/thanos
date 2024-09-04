@@ -80,7 +80,7 @@ pre {
 .header-anchor { font-size: 100%; visibility: hidden;}
 h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}
 
-/* seaarchBox */
+/* searchBox */
 .searchBox {
     position: relative;
     height: 100%;
@@ -125,6 +125,13 @@ input[type="search"]:focus {
 input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
     color: #fff;
   }
+
+/* version-picker */
+.dropdown-menu {
+    max-height: 600px;
+    overflow-y: auto;
+    position: absolute;
+}
 
 /* SideMenu Collapse */
 .docs-menu{

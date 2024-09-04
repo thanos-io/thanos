@@ -56,7 +56,7 @@ func TestRateLimitedServer(t *testing.T) {
 			series: series,
 		},
 		{
-			name: "series bellow limit",
+			name: "series below limit",
 			limits: SeriesSelectLimits{
 				SeriesPerRequest:  3,
 				SamplesPerRequest: 0,
@@ -73,7 +73,7 @@ func TestRateLimitedServer(t *testing.T) {
 			err:    "failed to send series: limit 2 violated (got 3)",
 		},
 		{
-			name: "chunks bellow limit",
+			name: "chunks below limit",
 			limits: SeriesSelectLimits{
 				SeriesPerRequest:  0,
 				SamplesPerRequest: uint64(3 * numSamples * MaxSamplesPerChunk),

@@ -1008,6 +1008,7 @@ type blockSeriesClient struct {
 
 	mint           int64
 	maxt           int64
+	seriesLimit    int
 	indexr         *bucketIndexReader
 	chunkr         *bucketChunkReader
 	loadAggregates []storepb.Aggr
@@ -1083,6 +1084,7 @@ func newBlockSeriesClient(
 
 		mint:                   req.MinTime,
 		maxt:                   req.MaxTime,
+		seriesLimit:            int(req.Limit),
 		indexr:                 b.indexReader(logger),
 		chunkr:                 chunkr,
 		seriesLimiter:          seriesLimiter,
@@ -1162,14 +1164,20 @@ func (b *blockSeriesClient) ExpandPostings(
 		b.expandedPostings = make([]storage.SeriesRef, 0, len(b.lazyPostings.postings)/2)
 		b.lazyExpandedPostingsCount.Inc()
 	} else {
+		// If seriesLimit is set, it can be applied here to limit the amount of series.
+		// Note: This can only be done when postings are not expanded lazily.
+		if b.seriesLimit > 0 && len(b.lazyPostings.postings) > b.seriesLimit {
+			b.lazyPostings.postings = b.lazyPostings.postings[:b.seriesLimit]
+		}
+
 		// Apply series limiter eargerly if lazy postings not enabled.
-		if err := seriesLimiter.Reserve(uint64(len(ps.postings))); err != nil {
+		if err := seriesLimiter.Reserve(uint64(len(b.lazyPostings.postings))); err != nil {
 			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
 		}
 	}
 
-	if b.batchSize > len(ps.postings) {
-		b.batchSize = len(ps.postings)
+	if b.batchSize > len(b.lazyPostings.postings) {
+		b.batchSize = len(b.lazyPostings.postings)
 	}
 
 	b.entries = make([]seriesEntry, 0, b.batchSize)
@@ -1291,6 +1299,11 @@ OUTER:
 		}
 
 		seriesMatched++
+		if b.seriesLimit > 0 && seriesMatched > b.seriesLimit {
+			// Exit early if seriesLimit is set.
+			b.hasMorePostings = false
+			break
+		}
 		s := seriesEntry{lset: completeLabelset}
 		if b.skipChunks {
 			b.entries = append(b.entries, s)
@@ -1694,7 +1707,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
 		set := NewResponseDeduplicator(NewProxyResponseLoserTree(respSets...))
+		i := 0
 		for set.Next() {
+			i++
+			if req.Limit > 0 && i > int(req.Limit) {
+				break
+			}
 			at := set.At()
 			warn := at.GetWarning()
 			if warn != "" {
@@ -1945,8 +1963,13 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
 
+	names := strutil.MergeSlices(sets...)
+	if req.Limit > 0 && len(names) > int(req.Limit) {
+		names = names[:req.Limit]
+	}
+
 	return &storepb.LabelNamesResponse{
-		Names: strutil.MergeSlices(sets...),
+		Names: names,
 		Hints: anyHints,
 	}, nil
 }
@@ -1960,7 +1983,7 @@ func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*la
 		// If value is empty string the matcher is a valid one since it's not part of external labels.
 		if v == "" {
 			result = append(result, m)
-		} else if v != "" && v != m.Value {
+		} else if v != "" && !m.Matches(v) {
 			// If matcher is external label but value is different we don't want to look in block anyway.
 			return []*labels.Matcher{}, false
 		}
@@ -2160,8 +2183,13 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}
 
+	vals := strutil.MergeSlices(sets...)
+	if req.Limit > 0 && len(vals) > int(req.Limit) {
+		vals = vals[:req.Limit]
+	}
+
 	return &storepb.LabelValuesResponse{
-		Values: strutil.MergeSlices(sets...),
+		Values: vals,
 		Hints:  anyHints,
 	}, nil
 }

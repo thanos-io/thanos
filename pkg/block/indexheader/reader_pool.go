@@ -32,7 +32,7 @@ func NewReaderPoolMetrics(reg prometheus.Registerer) *ReaderPoolMetrics {
 	}
 }
 
-// ReaderPool is used to istantiate new index-header readers and keep track of them.
+// ReaderPool is used to instantiate new index-header readers and keep track of them.
 // When the lazy reader is enabled, the pool keeps track of all instantiated readers
 // and automatically close them once the idle timeout is reached. A closed lazy reader
 // will be automatically re-opened upon next usage.
@@ -73,7 +73,7 @@ func (s IndexHeaderLazyDownloadStrategy) StrategyToDownloadFunc() LazyDownloadIn
 	}
 }
 
-// LazyDownloadIndexHeaderFunc is used to determinte whether to download the index header lazily
+// LazyDownloadIndexHeaderFunc is used to determine whether to download the index header lazily
 // or not by checking its block metadata. Usecase can be by time or by index file size.
 type LazyDownloadIndexHeaderFunc func(meta *metadata.Meta) bool
 
