@@ -92,9 +92,6 @@ func PromLabelsToLabelpbLabels(lbls labels.Labels) []Label {
 }
 
 func LabelpbLabelsToPromLabels(lbls []Label) labels.Labels {
-	if len(lbls) == 0 {
-		return labels.Labels(nil)
-	}
 	lblSlice := make([]string, 0, len(lbls)*2)
 	for _, l := range lbls {
 		lblSlice = append(lblSlice, l.Name, l.Value)

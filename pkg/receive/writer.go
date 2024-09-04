@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"go4.org/intern"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -142,6 +143,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
 			lset = labelpb.LabelpbLabelsToPromLabels(t.Labels)
+
+			if r.opts.Intern {
+				for i := range t.Labels {
+					t.Labels[i].Name = intern.GetByString(t.Labels[i].Name).Get().(string)
+					t.Labels[i].Value = intern.GetByString(t.Labels[i].Value).Get().(string)
+				}
+			}
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
