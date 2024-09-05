@@ -65,7 +65,7 @@ func TestServerAsClient(t *testing.T) {
 			t.Run("Info", func(t *testing.T) {
 				s := &testStoreServer{
 					info: &InfoResponse{
-						LabelSets: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}}},
+						LabelSets: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "a", Value: "b"}}}},
 						MinTime:   -1,
 						MaxTime:   10,
 						StoreType: StoreType_DEBUG,
@@ -94,16 +94,16 @@ func TestServerAsClient(t *testing.T) {
 				s := &testStoreServer{
 					series: []*SeriesResponse{
 						NewSeriesResponse(&Series{
-							Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}},
+							Labels: []labelpb.Label{{Name: "a", Value: "b"}},
 							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
 						NewSeriesResponse(&Series{
-							Labels: []labelpb.ZLabel{{Name: "a", Value: "b1"}},
+							Labels: []labelpb.Label{{Name: "a", Value: "b1"}},
 							Chunks: []AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
 						NewWarnSeriesResponse(errors.New("yolo")),
 						NewSeriesResponse(&Series{
-							Labels: []labelpb.ZLabel{{Name: "a", Value: "b3"}},
+							Labels: []labelpb.Label{{Name: "a", Value: "b3"}},
 							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
 						}),
 					}}
@@ -191,7 +191,7 @@ func TestServerAsClient(t *testing.T) {
 			t.Run("LabelNames", func(t *testing.T) {
 				s := &testStoreServer{
 					info: &InfoResponse{
-						LabelSets: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}}},
+						LabelSets: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "a", Value: "b"}}}},
 						MinTime:   -1,
 						MaxTime:   10,
 						StoreType: StoreType_DEBUG,

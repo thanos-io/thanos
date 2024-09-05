@@ -73,7 +73,7 @@ scrape_configs:
 	expected := &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "__address__", Value: p.Addr()},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -82,7 +82,7 @@ scrape_configs:
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
 				}},
-				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "instance", Value: p.Addr()},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
@@ -97,7 +97,7 @@ scrape_configs:
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
