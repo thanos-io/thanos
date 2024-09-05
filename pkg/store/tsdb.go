@@ -101,7 +101,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.getExtLset()),
+		Labels:    labelpb.PromLabelsToLabelpbLabels(s.getExtLset()),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -109,20 +109,20 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.ZLabelSet{}
+	res.LabelSets = []labelpb.LabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
+		res.LabelSets = append(res.LabelSets, labelpb.LabelSet{
 			Labels: res.Labels,
 		})
 	}
 	return res, nil
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(s.getExtLset())
-	labelSets := []labelpb.ZLabelSet{}
+func (s *TSDBStore) LabelSet() []labelpb.LabelSet {
+	labels := labelpb.PromLabelsToLabelpbLabels(s.getExtLset())
+	labelSets := []labelpb.LabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{
+		labelSets = append(labelSets, labelpb.LabelSet{
 			Labels: labels,
 		})
 	}
@@ -139,7 +139,7 @@ func (p *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
 	mint, maxt := p.TimeRange()
 	return []infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
+			Labels: labelpb.LabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
@@ -243,11 +243,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		series := set.At()
 
 		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(completeLabelset) {
+		if !shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: labelpb.PromLabelsToLabelpbLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())

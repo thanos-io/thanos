@@ -244,13 +244,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: labelpb.PromLabelsToLabelpbLabels(lset), Chunks: chks}
 			continue
 		}
 
 		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
 			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: labelpb.PromLabelsToLabelpbLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -447,27 +447,27 @@ func (x LabelMatcher_Type) PromString() string {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.ZLabelsToPromLabels(m.Labels)
+	return labelpb.LabelpbLabelsToPromLabels(m.Labels)
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-type Label = labelpb.ZLabel
+type Label = labelpb.Label
 
 // Deprecated.
 // TODO(bwplotka): Remove this in next PR. Done to reduce diff only.
-type LabelSet = labelpb.ZLabelSet
+type LabelSet = labelpb.LabelSet
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func CompareLabels(a, b []Label) int {
-	return labels.Compare(labelpb.ZLabelsToPromLabels(a), labelpb.ZLabelsToPromLabels(b))
+	return labels.Compare(labelpb.LabelpbLabelsToPromLabels(a), labelpb.LabelpbLabelsToPromLabels(b))
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
-	return labelpb.ZLabelsToPromLabels(lset)
+	return labelpb.LabelpbLabelsToPromLabels(lset)
 }
 
 // XORNumSamples return number of samples. Returns 0 if it's not XOR chunk.
@@ -486,7 +486,7 @@ type SeriesStatsCounter struct {
 	Samples int
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
+func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.Label) {
 	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash

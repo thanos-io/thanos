@@ -64,8 +64,8 @@ enum TargetHealth {
 }
 
 message ActiveTarget {
-    ZLabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
-    ZLabelSet labels = 2 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
+    LabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
+    LabelSet labels = 2 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
     string scrapePool = 3 [(gogoproto.jsontag) = "scrapePool"];
     string scrapeUrl = 4 [(gogoproto.jsontag) = "scrapeUrl"];
     string globalUrl = 5 [(gogoproto.jsontag) = "globalUrl"];
@@ -76,5 +76,5 @@ message ActiveTarget {
 }
 
 message DroppedTarget {
-    ZLabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
+    LabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
 }

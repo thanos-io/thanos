@@ -718,7 +718,7 @@ config:
 				targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 					ActiveTargets: []*targetspb.ActiveTarget{
 						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 								{Name: "__address__", Value: "localhost:9090"},
 								{Name: "__metrics_path__", Value: "/metrics"},
 								{Name: "__scheme__", Value: "http"},
@@ -727,7 +727,7 @@ config:
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 								{Name: "instance", Value: "localhost:9090"},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
@@ -737,7 +737,7 @@ config:
 							Health:     targetspb.TargetHealth_UP,
 						},
 						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 								{Name: "__address__", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
 								{Name: "__metrics_path__", Value: "/metrics"},
 								{Name: "__scheme__", Value: "http"},
@@ -746,7 +746,7 @@ config:
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 								{Name: "instance", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
@@ -771,7 +771,7 @@ config:
 								Name:  "TestAlert_AbortOnPartialResponse",
 								State: rulespb.AlertState_FIRING,
 								Query: "absent(some_metric)",
-								Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 									{Name: "prometheus", Value: "p1"},
 									{Name: "severity", Value: "page"},
 								}},

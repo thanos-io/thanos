@@ -59,7 +59,7 @@ func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 }
 
 type testStoreMeta struct {
-	extlsetFn func(addr string) []labelpb.ZLabelSet
+	extlsetFn func(addr string) labelpb.LabelSets
 	storeType component.StoreAPI
 }
 
@@ -134,10 +134,10 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	st, err := startTestStores([]testStoreMeta{
 		{
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []labelpb.ZLabelSet {
-				return []labelpb.ZLabelSet{
+			extlsetFn: func(addr string) labelpb.LabelSets {
+				return []labelpb.LabelSet{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -147,17 +147,17 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 		},
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []labelpb.ZLabelSet {
-				return []labelpb.ZLabelSet{
+			extlsetFn: func(addr string) labelpb.LabelSets {
+				return []labelpb.LabelSet{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []labelpb.Label{
 							// This is the labelset exposed by store when having only one sidecar's data.
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.ZLabel{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
+						Labels: []labelpb.Label{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
 					},
 				}
 			},
@@ -165,16 +165,16 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 		// We expect this to be duplicated.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []labelpb.ZLabelSet {
-				return []labelpb.ZLabelSet{
+			extlsetFn: func(addr string) labelpb.LabelSets {
+				return []labelpb.LabelSet{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.ZLabel{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
+						Labels: []labelpb.Label{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
 					},
 				}
 			},

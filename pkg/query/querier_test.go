@@ -1246,7 +1246,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 	var s storepb.Series
 
 	for _, l := range lset {
-		s.Labels = append(s.Labels, labelpb.ZLabel{Name: l.Name, Value: l.Value})
+		s.Labels = append(s.Labels, labelpb.Label{Name: l.Name, Value: l.Value})
 	}
 
 	for _, smpls := range smplChunks {
