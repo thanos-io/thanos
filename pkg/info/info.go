@@ -20,7 +20,7 @@ type InfoServer struct {
 
 	component string
 
-	getLabelSet           func() []labelpb.LabelSet
+	getLabelSet           func() []*labelpb.LabelSet
 	getStoreInfo          func() (*infopb.StoreInfo, error)
 	getExemplarsInfo      func() *infopb.ExemplarsInfo
 	getRulesInfo          func() *infopb.RulesInfo
@@ -38,7 +38,7 @@ func NewInfoServer(
 	srv := &InfoServer{
 		component: component,
 		// By default, do not return info for any API.
-		getLabelSet:           func() []labelpb.LabelSet { return nil },
+		getLabelSet:           func() []*labelpb.LabelSet { return nil },
 		getStoreInfo:          func() (*infopb.StoreInfo, error) { return nil, nil },
 		getExemplarsInfo:      func() *infopb.ExemplarsInfo { return nil },
 		getRulesInfo:          func() *infopb.RulesInfo { return nil },
@@ -60,10 +60,10 @@ type ServerOptionFunc func(*InfoServer)
 // WithLabelSetFunc determines the function that should be executed to obtain
 // the label set information. If no function is provided, the default empty
 // label set is returned. Only the first function from the list is considered.
-func WithLabelSetFunc(getLabelSet ...func() []labelpb.LabelSet) ServerOptionFunc {
+func WithLabelSetFunc(getLabelSet ...func() []*labelpb.LabelSet) ServerOptionFunc {
 	if len(getLabelSet) == 0 {
 		return func(s *InfoServer) {
-			s.getLabelSet = func() []labelpb.LabelSet { return []labelpb.LabelSet{} }
+			s.getLabelSet = func() []*labelpb.LabelSet { return []*labelpb.LabelSet{} }
 		}
 	}
 

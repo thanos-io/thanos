@@ -126,7 +126,7 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 
 				if _, ok := chunkDedupMap[hash]; !ok {
 					chk := chk
-					chunkDedupMap[hash] = &chk
+					chunkDedupMap[hash] = chk
 					break
 				}
 			}
@@ -138,13 +138,13 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 		return series[0]
 	}
 
-	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
+	finalChunks := make([]*storepb.AggrChunk, 0, len(chunkDedupMap))
 	for _, chk := range chunkDedupMap {
-		finalChunks = append(finalChunks, *chk)
+		finalChunks = append(finalChunks, chk)
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
-		return finalChunks[i].Compare(finalChunks[j]) > 0
+		return finalChunks[i].Compare(*finalChunks[j]) > 0
 	})
 
 	return storepb.NewSeriesResponse(&storepb.Series{

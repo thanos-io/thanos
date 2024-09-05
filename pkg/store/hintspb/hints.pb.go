@@ -5,16 +5,12 @@ package hintspb
 
 import (
 	fmt "fmt"
-
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-
 	io "io"
 	math "math"
 	math_bits "math/bits"
-	time "time"
 
+	proto "github.com/gogo/protobuf/proto"
+	protobuf "github.com/gogo/protobuf/types"
 	storepb "github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -22,7 +18,6 @@ import (
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -34,8 +29,11 @@ type SeriesRequestHints struct {
 	/// block_matchers is a list of label matchers that are evaluated against each single block's
 	/// labels to filter which blocks get queried. If the list is empty, no per-block filtering
 	/// is applied.
-	BlockMatchers    []storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers"`
-	EnableQueryStats bool                   `protobuf:"varint,2,opt,name=enable_query_stats,json=enableQueryStats,proto3" json:"enable_query_stats,omitempty"`
+	BlockMatchers        []*storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers,omitempty"`
+	EnableQueryStats     bool                    `protobuf:"varint,2,opt,name=enable_query_stats,json=enableQueryStats,proto3" json:"enable_query_stats,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
 func (m *SeriesRequestHints) Reset()         { *m = SeriesRequestHints{} }
@@ -71,11 +69,28 @@ func (m *SeriesRequestHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SeriesRequestHints proto.InternalMessageInfo
 
+func (m *SeriesRequestHints) GetBlockMatchers() []*storepb.LabelMatcher {
+	if m != nil {
+		return m.BlockMatchers
+	}
+	return nil
+}
+
+func (m *SeriesRequestHints) GetEnableQueryStats() bool {
+	if m != nil {
+		return m.EnableQueryStats
+	}
+	return false
+}
+
 type SeriesResponseHints struct {
 	/// queried_blocks is the list of blocks that have been queried.
-	QueriedBlocks []Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks"`
+	QueriedBlocks []*Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks,omitempty"`
 	/// query_stats contains statistics of querying store gateway.
-	QueryStats *QueryStats `protobuf:"bytes,2,opt,name=query_stats,json=queryStats,proto3" json:"query_stats,omitempty"`
+	QueryStats           *QueryStats `protobuf:"bytes,2,opt,name=query_stats,json=queryStats,proto3" json:"query_stats,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
 func (m *SeriesResponseHints) Reset()         { *m = SeriesResponseHints{} }
@@ -111,8 +126,25 @@ func (m *SeriesResponseHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SeriesResponseHints proto.InternalMessageInfo
 
+func (m *SeriesResponseHints) GetQueriedBlocks() []*Block {
+	if m != nil {
+		return m.QueriedBlocks
+	}
+	return nil
+}
+
+func (m *SeriesResponseHints) GetQueryStats() *QueryStats {
+	if m != nil {
+		return m.QueryStats
+	}
+	return nil
+}
+
 type Block struct {
-	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Block) Reset()         { *m = Block{} }
@@ -148,11 +180,21 @@ func (m *Block) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Block proto.InternalMessageInfo
 
+func (m *Block) GetId() string {
+	if m != nil {
+		return m.Id
+	}
+	return ""
+}
+
 type LabelNamesRequestHints struct {
 	/// block_matchers is a list of label matchers that are evaluated against each single block's
 	/// labels to filter which blocks get queried. If the list is empty, no per-block filtering
 	/// is applied.
-	BlockMatchers []storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers"`
+	BlockMatchers        []*storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
 func (m *LabelNamesRequestHints) Reset()         { *m = LabelNamesRequestHints{} }
@@ -188,9 +230,19 @@ func (m *LabelNamesRequestHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelNamesRequestHints proto.InternalMessageInfo
 
+func (m *LabelNamesRequestHints) GetBlockMatchers() []*storepb.LabelMatcher {
+	if m != nil {
+		return m.BlockMatchers
+	}
+	return nil
+}
+
 type LabelNamesResponseHints struct {
 	/// queried_blocks is the list of blocks that have been queried.
-	QueriedBlocks []Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks"`
+	QueriedBlocks        []*Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *LabelNamesResponseHints) Reset()         { *m = LabelNamesResponseHints{} }
@@ -226,11 +278,21 @@ func (m *LabelNamesResponseHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelNamesResponseHints proto.InternalMessageInfo
 
+func (m *LabelNamesResponseHints) GetQueriedBlocks() []*Block {
+	if m != nil {
+		return m.QueriedBlocks
+	}
+	return nil
+}
+
 type LabelValuesRequestHints struct {
 	/// block_matchers is a list of label matchers that are evaluated against each single block's
 	/// labels to filter which blocks get queried. If the list is empty, no per-block filtering
 	/// is applied.
-	BlockMatchers []storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers"`
+	BlockMatchers        []*storepb.LabelMatcher `protobuf:"bytes,1,rep,name=block_matchers,json=blockMatchers,proto3" json:"block_matchers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
 func (m *LabelValuesRequestHints) Reset()         { *m = LabelValuesRequestHints{} }
@@ -266,9 +328,19 @@ func (m *LabelValuesRequestHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesRequestHints proto.InternalMessageInfo
 
+func (m *LabelValuesRequestHints) GetBlockMatchers() []*storepb.LabelMatcher {
+	if m != nil {
+		return m.BlockMatchers
+	}
+	return nil
+}
+
 type LabelValuesResponseHints struct {
 	/// queried_blocks is the list of blocks that have been queried.
-	QueriedBlocks []Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks"`
+	QueriedBlocks        []*Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *LabelValuesResponseHints) Reset()         { *m = LabelValuesResponseHints{} }
@@ -304,30 +376,40 @@ func (m *LabelValuesResponseHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesResponseHints proto.InternalMessageInfo
 
+func (m *LabelValuesResponseHints) GetQueriedBlocks() []*Block {
+	if m != nil {
+		return m.QueriedBlocks
+	}
+	return nil
+}
+
 // / QueryStats fields are unstable and might change in the future.
 type QueryStats struct {
-	BlocksQueried          int64         `protobuf:"varint,1,opt,name=blocks_queried,json=blocksQueried,proto3" json:"blocks_queried,omitempty"`
-	MergedSeriesCount      int64         `protobuf:"varint,2,opt,name=merged_series_count,json=mergedSeriesCount,proto3" json:"merged_series_count,omitempty"`
-	MergedChunksCount      int64         `protobuf:"varint,3,opt,name=merged_chunks_count,json=mergedChunksCount,proto3" json:"merged_chunks_count,omitempty"`
-	PostingsTouched        int64         `protobuf:"varint,4,opt,name=postings_touched,json=postingsTouched,proto3" json:"postings_touched,omitempty"`
-	PostingsTouchedSizeSum int64         `protobuf:"varint,5,opt,name=postings_touched_size_sum,json=postingsTouchedSizeSum,proto3" json:"postings_touched_size_sum,omitempty"`
-	PostingsToFetch        int64         `protobuf:"varint,6,opt,name=postings_to_fetch,json=postingsToFetch,proto3" json:"postings_to_fetch,omitempty"`
-	PostingsFetched        int64         `protobuf:"varint,7,opt,name=postings_fetched,json=postingsFetched,proto3" json:"postings_fetched,omitempty"`
-	PostingsFetchedSizeSum int64         `protobuf:"varint,8,opt,name=postings_fetched_size_sum,json=postingsFetchedSizeSum,proto3" json:"postings_fetched_size_sum,omitempty"`
-	PostingsFetchCount     int64         `protobuf:"varint,9,opt,name=postings_fetch_count,json=postingsFetchCount,proto3" json:"postings_fetch_count,omitempty"`
-	SeriesTouched          int64         `protobuf:"varint,10,opt,name=series_touched,json=seriesTouched,proto3" json:"series_touched,omitempty"`
-	SeriesTouchedSizeSum   int64         `protobuf:"varint,11,opt,name=series_touched_size_sum,json=seriesTouchedSizeSum,proto3" json:"series_touched_size_sum,omitempty"`
-	SeriesFetched          int64         `protobuf:"varint,12,opt,name=series_fetched,json=seriesFetched,proto3" json:"series_fetched,omitempty"`
-	SeriesFetchedSizeSum   int64         `protobuf:"varint,13,opt,name=series_fetched_size_sum,json=seriesFetchedSizeSum,proto3" json:"series_fetched_size_sum,omitempty"`
-	SeriesFetchCount       int64         `protobuf:"varint,14,opt,name=series_fetch_count,json=seriesFetchCount,proto3" json:"series_fetch_count,omitempty"`
-	ChunksTouched          int64         `protobuf:"varint,15,opt,name=chunks_touched,json=chunksTouched,proto3" json:"chunks_touched,omitempty"`
-	ChunksTouchedSizeSum   int64         `protobuf:"varint,16,opt,name=chunks_touched_size_sum,json=chunksTouchedSizeSum,proto3" json:"chunks_touched_size_sum,omitempty"`
-	ChunksFetched          int64         `protobuf:"varint,17,opt,name=chunks_fetched,json=chunksFetched,proto3" json:"chunks_fetched,omitempty"`
-	ChunksFetchedSizeSum   int64         `protobuf:"varint,18,opt,name=chunks_fetched_size_sum,json=chunksFetchedSizeSum,proto3" json:"chunks_fetched_size_sum,omitempty"`
-	ChunksFetchCount       int64         `protobuf:"varint,19,opt,name=chunks_fetch_count,json=chunksFetchCount,proto3" json:"chunks_fetch_count,omitempty"`
-	DataDownloadedSizeSum  int64         `protobuf:"varint,20,opt,name=data_downloaded_size_sum,json=dataDownloadedSizeSum,proto3" json:"data_downloaded_size_sum,omitempty"`
-	GetAllDuration         time.Duration `protobuf:"bytes,21,opt,name=get_all_duration,json=getAllDuration,proto3,stdduration" json:"get_all_duration"`
-	MergeDuration          time.Duration `protobuf:"bytes,22,opt,name=merge_duration,json=mergeDuration,proto3,stdduration" json:"merge_duration"`
+	BlocksQueried          int64              `protobuf:"varint,1,opt,name=blocks_queried,json=blocksQueried,proto3" json:"blocks_queried,omitempty"`
+	MergedSeriesCount      int64              `protobuf:"varint,2,opt,name=merged_series_count,json=mergedSeriesCount,proto3" json:"merged_series_count,omitempty"`
+	MergedChunksCount      int64              `protobuf:"varint,3,opt,name=merged_chunks_count,json=mergedChunksCount,proto3" json:"merged_chunks_count,omitempty"`
+	PostingsTouched        int64              `protobuf:"varint,4,opt,name=postings_touched,json=postingsTouched,proto3" json:"postings_touched,omitempty"`
+	PostingsTouchedSizeSum int64              `protobuf:"varint,5,opt,name=postings_touched_size_sum,json=postingsTouchedSizeSum,proto3" json:"postings_touched_size_sum,omitempty"`
+	PostingsToFetch        int64              `protobuf:"varint,6,opt,name=postings_to_fetch,json=postingsToFetch,proto3" json:"postings_to_fetch,omitempty"`
+	PostingsFetched        int64              `protobuf:"varint,7,opt,name=postings_fetched,json=postingsFetched,proto3" json:"postings_fetched,omitempty"`
+	PostingsFetchedSizeSum int64              `protobuf:"varint,8,opt,name=postings_fetched_size_sum,json=postingsFetchedSizeSum,proto3" json:"postings_fetched_size_sum,omitempty"`
+	PostingsFetchCount     int64              `protobuf:"varint,9,opt,name=postings_fetch_count,json=postingsFetchCount,proto3" json:"postings_fetch_count,omitempty"`
+	SeriesTouched          int64              `protobuf:"varint,10,opt,name=series_touched,json=seriesTouched,proto3" json:"series_touched,omitempty"`
+	SeriesTouchedSizeSum   int64              `protobuf:"varint,11,opt,name=series_touched_size_sum,json=seriesTouchedSizeSum,proto3" json:"series_touched_size_sum,omitempty"`
+	SeriesFetched          int64              `protobuf:"varint,12,opt,name=series_fetched,json=seriesFetched,proto3" json:"series_fetched,omitempty"`
+	SeriesFetchedSizeSum   int64              `protobuf:"varint,13,opt,name=series_fetched_size_sum,json=seriesFetchedSizeSum,proto3" json:"series_fetched_size_sum,omitempty"`
+	SeriesFetchCount       int64              `protobuf:"varint,14,opt,name=series_fetch_count,json=seriesFetchCount,proto3" json:"series_fetch_count,omitempty"`
+	ChunksTouched          int64              `protobuf:"varint,15,opt,name=chunks_touched,json=chunksTouched,proto3" json:"chunks_touched,omitempty"`
+	ChunksTouchedSizeSum   int64              `protobuf:"varint,16,opt,name=chunks_touched_size_sum,json=chunksTouchedSizeSum,proto3" json:"chunks_touched_size_sum,omitempty"`
+	ChunksFetched          int64              `protobuf:"varint,17,opt,name=chunks_fetched,json=chunksFetched,proto3" json:"chunks_fetched,omitempty"`
+	ChunksFetchedSizeSum   int64              `protobuf:"varint,18,opt,name=chunks_fetched_size_sum,json=chunksFetchedSizeSum,proto3" json:"chunks_fetched_size_sum,omitempty"`
+	ChunksFetchCount       int64              `protobuf:"varint,19,opt,name=chunks_fetch_count,json=chunksFetchCount,proto3" json:"chunks_fetch_count,omitempty"`
+	DataDownloadedSizeSum  int64              `protobuf:"varint,20,opt,name=data_downloaded_size_sum,json=dataDownloadedSizeSum,proto3" json:"data_downloaded_size_sum,omitempty"`
+	GetAllDuration         *protobuf.Duration `protobuf:"bytes,21,opt,name=get_all_duration,json=getAllDuration,proto3" json:"get_all_duration,omitempty"`
+	MergeDuration          *protobuf.Duration `protobuf:"bytes,22,opt,name=merge_duration,json=mergeDuration,proto3" json:"merge_duration,omitempty"`
+	XXX_NoUnkeyedLiteral   struct{}           `json:"-"`
+	XXX_unrecognized       []byte             `json:"-"`
+	XXX_sizecache          int32              `json:"-"`
 }
 
 func (m *QueryStats) Reset()         { *m = QueryStats{} }
@@ -363,6 +445,160 @@ func (m *QueryStats) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueryStats proto.InternalMessageInfo
 
+func (m *QueryStats) GetBlocksQueried() int64 {
+	if m != nil {
+		return m.BlocksQueried
+	}
+	return 0
+}
+
+func (m *QueryStats) GetMergedSeriesCount() int64 {
+	if m != nil {
+		return m.MergedSeriesCount
+	}
+	return 0
+}
+
+func (m *QueryStats) GetMergedChunksCount() int64 {
+	if m != nil {
+		return m.MergedChunksCount
+	}
+	return 0
+}
+
+func (m *QueryStats) GetPostingsTouched() int64 {
+	if m != nil {
+		return m.PostingsTouched
+	}
+	return 0
+}
+
+func (m *QueryStats) GetPostingsTouchedSizeSum() int64 {
+	if m != nil {
+		return m.PostingsTouchedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetPostingsToFetch() int64 {
+	if m != nil {
+		return m.PostingsToFetch
+	}
+	return 0
+}
+
+func (m *QueryStats) GetPostingsFetched() int64 {
+	if m != nil {
+		return m.PostingsFetched
+	}
+	return 0
+}
+
+func (m *QueryStats) GetPostingsFetchedSizeSum() int64 {
+	if m != nil {
+		return m.PostingsFetchedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetPostingsFetchCount() int64 {
+	if m != nil {
+		return m.PostingsFetchCount
+	}
+	return 0
+}
+
+func (m *QueryStats) GetSeriesTouched() int64 {
+	if m != nil {
+		return m.SeriesTouched
+	}
+	return 0
+}
+
+func (m *QueryStats) GetSeriesTouchedSizeSum() int64 {
+	if m != nil {
+		return m.SeriesTouchedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetSeriesFetched() int64 {
+	if m != nil {
+		return m.SeriesFetched
+	}
+	return 0
+}
+
+func (m *QueryStats) GetSeriesFetchedSizeSum() int64 {
+	if m != nil {
+		return m.SeriesFetchedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetSeriesFetchCount() int64 {
+	if m != nil {
+		return m.SeriesFetchCount
+	}
+	return 0
+}
+
+func (m *QueryStats) GetChunksTouched() int64 {
+	if m != nil {
+		return m.ChunksTouched
+	}
+	return 0
+}
+
+func (m *QueryStats) GetChunksTouchedSizeSum() int64 {
+	if m != nil {
+		return m.ChunksTouchedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetChunksFetched() int64 {
+	if m != nil {
+		return m.ChunksFetched
+	}
+	return 0
+}
+
+func (m *QueryStats) GetChunksFetchedSizeSum() int64 {
+	if m != nil {
+		return m.ChunksFetchedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetChunksFetchCount() int64 {
+	if m != nil {
+		return m.ChunksFetchCount
+	}
+	return 0
+}
+
+func (m *QueryStats) GetDataDownloadedSizeSum() int64 {
+	if m != nil {
+		return m.DataDownloadedSizeSum
+	}
+	return 0
+}
+
+func (m *QueryStats) GetGetAllDuration() *protobuf.Duration {
+	if m != nil {
+		return m.GetAllDuration
+	}
+	return nil
+}
+
+func (m *QueryStats) GetMergeDuration() *protobuf.Duration {
+	if m != nil {
+		return m.MergeDuration
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*SeriesRequestHints)(nil), "hintspb.SeriesRequestHints")
 	proto.RegisterType((*SeriesResponseHints)(nil), "hintspb.SeriesResponseHints")
@@ -377,53 +613,50 @@ func init() {
 func init() { proto.RegisterFile("store/hintspb/hints.proto", fileDescriptor_b82aa23c4c11e83f) }
 
 var fileDescriptor_b82aa23c4c11e83f = []byte{
-	// 731 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0xcd, 0x4f, 0xdb, 0x30,
-	0x1c, 0x6d, 0x28, 0x1f, 0xc5, 0x1d, 0xa1, 0xb8, 0x05, 0x02, 0x87, 0x80, 0x2a, 0x21, 0xb1, 0x09,
-	0xa5, 0x13, 0xd3, 0x34, 0x6d, 0x3b, 0xf1, 0x21, 0x34, 0x4d, 0x63, 0x12, 0xe9, 0xc4, 0xa4, 0x6d,
-	0x92, 0x95, 0x34, 0x26, 0x8d, 0x48, 0xe3, 0x12, 0x3b, 0x9a, 0xe0, 0xbe, 0xeb, 0xb4, 0xe3, 0xfe,
-	0x24, 0x8e, 0x1c, 0x77, 0xda, 0x07, 0x68, 0xff, 0xc7, 0x14, 0x7f, 0x34, 0x4e, 0xb9, 0xec, 0xd0,
-	0x0b, 0xb4, 0xef, 0xf7, 0xde, 0xf3, 0x7b, 0x76, 0x1a, 0x83, 0x35, 0xca, 0x48, 0x8a, 0x3b, 0xfd,
-	0x28, 0x61, 0x74, 0xe8, 0x8b, 0xff, 0xce, 0x30, 0x25, 0x8c, 0xc0, 0x39, 0x09, 0xae, 0xb7, 0x42,
-	0x12, 0x12, 0x8e, 0x75, 0xf2, 0x4f, 0x62, 0xbc, 0x6e, 0x87, 0x84, 0x84, 0x31, 0xee, 0xf0, 0x6f,
-	0x7e, 0x76, 0xd6, 0x09, 0xb2, 0xd4, 0x63, 0x11, 0x49, 0xe4, 0x5c, 0x3a, 0xf3, 0xbf, 0x43, 0xbf,
-	0xc3, 0x2e, 0x87, 0x58, 0x3a, 0xb7, 0xbf, 0x18, 0x00, 0x76, 0x71, 0x1a, 0x61, 0xea, 0xe2, 0x8b,
-	0x0c, 0x53, 0xf6, 0x2a, 0x5f, 0x09, 0xee, 0x01, 0xd3, 0x8f, 0x49, 0xef, 0x1c, 0x0d, 0x3c, 0xd6,
-	0xeb, 0xe3, 0x94, 0x5a, 0xc6, 0x66, 0x75, 0xbb, 0xbe, 0xdb, 0x72, 0x58, 0xdf, 0x4b, 0x08, 0x75,
-	0xde, 0x78, 0x3e, 0x8e, 0x8f, 0xc5, 0x70, 0x7f, 0xfa, 0xfa, 0xe7, 0x46, 0xc5, 0x5d, 0xe0, 0x0a,
-	0x89, 0x51, 0xb8, 0x03, 0x20, 0x4e, 0x3c, 0x3f, 0xc6, 0xe8, 0x22, 0xc3, 0xe9, 0x25, 0xa2, 0xcc,
-	0x63, 0xd4, 0x9a, 0xda, 0x34, 0xb6, 0x6b, 0x6e, 0x43, 0x4c, 0x4e, 0xf2, 0x41, 0x37, 0xc7, 0xdb,
-	0x5f, 0x0d, 0xd0, 0x54, 0x39, 0xe8, 0x90, 0x24, 0x14, 0x8b, 0x20, 0x2f, 0x81, 0x99, 0xcb, 0x23,
-	0x1c, 0x20, 0x6e, 0xaf, 0x82, 0x98, 0x8e, 0xdc, 0x12, 0x67, 0x3f, 0x87, 0x55, 0x04, 0xc9, 0xe5,
-	0x18, 0x85, 0x2f, 0x40, 0x7d, 0x7c, 0xed, 0xfa, 0x6e, 0x73, 0xa4, 0x2c, 0x96, 0xe7, 0x72, 0xc3,
-	0x05, 0x17, 0x45, 0xa0, 0x55, 0x30, 0xc3, 0x5d, 0xa0, 0x09, 0xa6, 0xa2, 0xc0, 0x32, 0x36, 0x8d,
-	0xed, 0x79, 0x77, 0x2a, 0x0a, 0xda, 0x1f, 0xc1, 0x0a, 0x2f, 0xff, 0xd6, 0x1b, 0x4c, 0x7c, 0xd3,
-	0xda, 0xa7, 0x60, 0x55, 0x37, 0x9f, 0xd4, 0x4e, 0xb4, 0x3f, 0x49, 0xdf, 0x53, 0x2f, 0xce, 0x26,
-	0x9f, 0xfa, 0x3d, 0xb0, 0x4a, 0xee, 0x13, 0x8b, 0xfd, 0xb7, 0x06, 0x40, 0x71, 0x4a, 0x70, 0x4b,
-	0x46, 0xa5, 0x48, 0xd2, 0xf8, 0xb1, 0x54, 0x65, 0x1c, 0x7a, 0x22, 0x40, 0xe8, 0x80, 0xe6, 0x00,
-	0xa7, 0x21, 0x0e, 0x10, 0xe5, 0x4f, 0x14, 0xea, 0x91, 0x2c, 0x61, 0xfc, 0xf8, 0xab, 0xee, 0x92,
-	0x18, 0x89, 0x67, 0xed, 0x20, 0x1f, 0x68, 0xfc, 0x5e, 0x3f, 0x4b, 0xce, 0x15, 0xbf, 0xaa, 0xf3,
-	0x0f, 0xf8, 0x44, 0xf0, 0x1f, 0x82, 0xc6, 0x90, 0x50, 0x16, 0x25, 0x21, 0x45, 0x8c, 0x64, 0xbd,
-	0x3e, 0x0e, 0xac, 0x69, 0x4e, 0x5e, 0x54, 0xf8, 0x3b, 0x01, 0xc3, 0xe7, 0x60, 0x6d, 0x9c, 0x8a,
-	0x68, 0x74, 0x85, 0x11, 0xcd, 0x06, 0xd6, 0x0c, 0xd7, 0xac, 0x8c, 0x69, 0xba, 0xd1, 0x15, 0xee,
-	0x66, 0x03, 0xf8, 0x08, 0x2c, 0x69, 0x52, 0x74, 0x86, 0x59, 0xaf, 0x6f, 0xcd, 0x8e, 0x2f, 0x73,
-	0x94, 0xc3, 0xa5, 0x44, 0x9c, 0x88, 0x03, 0x6b, 0xae, 0x4c, 0x3d, 0x12, 0x70, 0x29, 0x91, 0xa4,
-	0x16, 0x89, 0x6a, 0xe5, 0x44, 0x52, 0xa3, 0x12, 0x3d, 0x06, 0xad, 0xb2, 0x54, 0x6e, 0xd4, 0x3c,
-	0x57, 0xc1, 0x92, 0x4a, 0xec, 0xd4, 0x16, 0x30, 0xe5, 0x11, 0xa8, 0x7d, 0x02, 0xe2, 0xc0, 0x04,
-	0xaa, 0x76, 0xe9, 0x29, 0x58, 0x2d, 0xd3, 0x8a, 0x44, 0x75, 0xce, 0x6f, 0x95, 0xf8, 0x2a, 0x4f,
-	0xe1, 0xae, 0x3a, 0x3f, 0xd0, 0xdd, 0x55, 0xe3, 0xc2, 0xfd, 0x5e, 0xdf, 0x05, 0xdd, 0x7d, 0xac,
-	0xed, 0x0e, 0x80, 0xba, 0x4c, 0x76, 0x35, 0xb9, 0xa2, 0xa1, 0x29, 0x46, 0x4d, 0xe5, 0xc3, 0xa3,
-	0x9a, 0x2e, 0x8a, 0x2c, 0x02, 0xd5, 0x9a, 0x96, 0x69, 0x45, 0x96, 0x86, 0xc8, 0x52, 0xe2, 0x6b,
-	0x4d, 0xa5, 0x4c, 0x35, 0x5d, 0xd2, 0xdd, 0xb5, 0xa6, 0x65, 0x5a, 0xe1, 0x0e, 0x75, 0xf7, 0xfb,
-	0x4d, 0x75, 0x99, 0x6c, 0xda, 0x14, 0x4d, 0x35, 0x85, 0x68, 0xfa, 0x0c, 0x58, 0x81, 0xc7, 0x3c,
-	0x14, 0x90, 0xcf, 0x49, 0x4c, 0xbc, 0x40, 0x5f, 0xa5, 0xc5, 0x35, 0xcb, 0xf9, 0xfc, 0x70, 0x34,
-	0x56, 0xcb, 0x1c, 0x83, 0x46, 0x88, 0x19, 0xf2, 0xe2, 0x18, 0xa9, 0xfb, 0xc9, 0x5a, 0xe6, 0xaf,
-	0xe4, 0x35, 0x47, 0x5c, 0x60, 0x8e, 0xba, 0xc0, 0x9c, 0x43, 0x49, 0xd8, 0xaf, 0xe5, 0xaf, 0x85,
-	0xef, 0xbf, 0x36, 0x0c, 0xd7, 0x0c, 0x31, 0xdb, 0x8b, 0x63, 0x35, 0x81, 0xaf, 0x81, 0xc9, 0x7f,
-	0x9a, 0x85, 0xd9, 0xca, 0xff, 0x9b, 0x2d, 0x70, 0xe9, 0x68, 0xb0, 0x75, 0xfd, 0xc7, 0xae, 0x5c,
-	0xdf, 0xda, 0xc6, 0xcd, 0xad, 0x6d, 0xfc, 0xbe, 0xb5, 0x8d, 0x6f, 0x77, 0x76, 0xe5, 0xe6, 0xce,
-	0xae, 0xfc, 0xb8, 0xb3, 0x2b, 0x1f, 0xd4, 0xed, 0xeb, 0xcf, 0x72, 0xcb, 0x27, 0xff, 0x02, 0x00,
-	0x00, 0xff, 0xff, 0x49, 0xb6, 0x83, 0x90, 0xaa, 0x07, 0x00, 0x00,
+	// 682 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0xcf, 0x6f, 0xd3, 0x30,
+	0x18, 0x55, 0x56, 0xf6, 0xeb, 0x2b, 0xcd, 0x3a, 0xb7, 0xdb, 0xb2, 0x1d, 0xaa, 0xa9, 0xd2, 0xa4,
+	0x81, 0xa6, 0x14, 0x0d, 0x26, 0x84, 0xb8, 0xc0, 0x36, 0x4d, 0x1c, 0x00, 0xb1, 0x14, 0x76, 0xe0,
+	0x62, 0x25, 0x8d, 0xd7, 0x46, 0x4b, 0xe3, 0x2c, 0x76, 0x84, 0xb6, 0x0b, 0x12, 0x7f, 0x1d, 0x47,
+	0xf8, 0x0f, 0xd0, 0xfe, 0x12, 0x14, 0xff, 0x58, 0xec, 0xee, 0xc0, 0x81, 0x5e, 0x5a, 0xf9, 0xfb,
+	0xde, 0x7b, 0x7e, 0xef, 0xb3, 0x5b, 0xc3, 0x36, 0xe3, 0xb4, 0x20, 0x83, 0x49, 0x92, 0x71, 0x96,
+	0x47, 0xf2, 0xdb, 0xcf, 0x0b, 0xca, 0x29, 0x5a, 0x56, 0xc5, 0x9d, 0xde, 0x98, 0xd2, 0x71, 0x4a,
+	0x06, 0xa2, 0x1c, 0x95, 0x97, 0x83, 0xb8, 0x2c, 0x42, 0x9e, 0xd0, 0x4c, 0x02, 0x77, 0x94, 0x86,
+	0xf8, 0xcc, 0xa3, 0x01, 0xbf, 0xc9, 0x89, 0xd2, 0xe8, 0x7f, 0x07, 0x34, 0x24, 0x45, 0x42, 0x58,
+	0x40, 0xae, 0x4b, 0xc2, 0xf8, 0xbb, 0x4a, 0x12, 0xbd, 0x06, 0x37, 0x4a, 0xe9, 0xe8, 0x0a, 0x4f,
+	0x43, 0x3e, 0x9a, 0x90, 0x82, 0x79, 0xce, 0x6e, 0x63, 0xbf, 0x79, 0xd8, 0xf5, 0xf9, 0x24, 0xcc,
+	0x28, 0xf3, 0xdf, 0x87, 0x11, 0x49, 0x3f, 0xc8, 0x66, 0xd0, 0x12, 0x58, 0xb5, 0x62, 0xe8, 0x00,
+	0x10, 0xc9, 0xc2, 0x28, 0x25, 0xf8, 0xba, 0x24, 0xc5, 0x0d, 0x66, 0x3c, 0xe4, 0xcc, 0x5b, 0xd8,
+	0x75, 0xf6, 0x57, 0x82, 0xb6, 0xec, 0x9c, 0x57, 0x8d, 0x61, 0x55, 0xef, 0xff, 0x70, 0xa0, 0xa3,
+	0x1d, 0xb0, 0x9c, 0x66, 0x8c, 0x48, 0x0b, 0x47, 0xe0, 0x56, 0xf4, 0x84, 0xc4, 0x58, 0xc8, 0x6b,
+	0x0b, 0xae, 0xaf, 0x52, 0xfb, 0xc7, 0x55, 0x39, 0x68, 0x29, 0x94, 0x58, 0x31, 0xf4, 0x02, 0x9a,
+	0xb3, 0xbb, 0x36, 0x0f, 0x3b, 0xf7, 0x9c, 0x7a, 0xe3, 0x00, 0xae, 0x6b, 0x13, 0x5b, 0xb0, 0x28,
+	0xf8, 0xc8, 0x85, 0x85, 0x24, 0xf6, 0x9c, 0x5d, 0x67, 0x7f, 0x35, 0x58, 0x48, 0xe2, 0xfe, 0x17,
+	0xd8, 0x14, 0x51, 0x3f, 0x86, 0xd3, 0x39, 0x8e, 0xa8, 0xff, 0x09, 0xb6, 0x4c, 0xd9, 0xff, 0xcf,
+	0xdd, 0xbf, 0x50, 0x8a, 0x17, 0x61, 0x5a, 0xce, 0xd3, 0xe9, 0x39, 0x78, 0x96, 0xee, 0x1c, 0xac,
+	0xfe, 0x5e, 0x01, 0xa8, 0xcf, 0x01, 0xed, 0x29, 0x7b, 0x0c, 0x2b, 0x98, 0x18, 0x7f, 0x43, 0x19,
+	0x61, 0xe7, 0xb2, 0x88, 0x7c, 0xe8, 0x4c, 0x49, 0x31, 0x26, 0x31, 0x66, 0xe2, 0xb6, 0xe0, 0x11,
+	0x2d, 0x33, 0x2e, 0x0e, 0xb8, 0x11, 0xac, 0xcb, 0x96, 0xbc, 0x47, 0x27, 0x55, 0xc3, 0xc0, 0x8f,
+	0x26, 0x65, 0x76, 0xa5, 0xf1, 0x0d, 0x13, 0x7f, 0x22, 0x3a, 0x12, 0xff, 0x04, 0xda, 0x39, 0x65,
+	0x3c, 0xc9, 0xc6, 0x0c, 0x73, 0x5a, 0x8e, 0x26, 0x24, 0xf6, 0x1e, 0x09, 0xf0, 0x9a, 0xae, 0x7f,
+	0x96, 0x65, 0xf4, 0x0a, 0xb6, 0x67, 0xa1, 0x98, 0x25, 0xb7, 0x04, 0xb3, 0x72, 0xea, 0x2d, 0x0a,
+	0xce, 0xe6, 0x0c, 0x67, 0x98, 0xdc, 0x92, 0x61, 0x39, 0x45, 0x4f, 0x61, 0xdd, 0xa0, 0xe2, 0x4b,
+	0xc2, 0x47, 0x13, 0x6f, 0x69, 0x76, 0x9b, 0xb3, 0xaa, 0x6c, 0x39, 0x12, 0x40, 0x12, 0x7b, 0xcb,
+	0x36, 0xf4, 0x4c, 0x96, 0x2d, 0x47, 0x0a, 0x5a, 0x3b, 0x5a, 0xb1, 0x1d, 0x29, 0x8e, 0x76, 0xf4,
+	0x0c, 0xba, 0x36, 0x55, 0x0d, 0x6a, 0x55, 0xb0, 0x90, 0xc5, 0x92, 0x93, 0xda, 0x03, 0x57, 0x1d,
+	0x81, 0x9e, 0x13, 0xc8, 0x03, 0x93, 0x55, 0x3d, 0xa5, 0x23, 0xd8, 0xb2, 0x61, 0xb5, 0xa3, 0xa6,
+	0xc0, 0x77, 0x2d, 0xbc, 0xf6, 0x53, 0xab, 0xeb, 0xcc, 0x8f, 0x4d, 0x75, 0x9d, 0xb8, 0x56, 0x7f,
+	0x90, 0xb7, 0x65, 0xaa, 0xcf, 0xa4, 0x3d, 0x00, 0x64, 0xd2, 0x54, 0x56, 0x57, 0x30, 0xda, 0x06,
+	0xe3, 0x3e, 0xa9, 0xba, 0x3c, 0x3a, 0xe9, 0x9a, 0xf4, 0x22, 0xab, 0x46, 0x52, 0x1b, 0x56, 0x7b,
+	0x69, 0x4b, 0x2f, 0x16, 0xde, 0x48, 0xaa, 0x68, 0x3a, 0xe9, 0xba, 0xa9, 0x6e, 0x24, 0xb5, 0x61,
+	0xb5, 0x3a, 0x32, 0xd5, 0x1f, 0x26, 0x35, 0x69, 0x2a, 0x69, 0x47, 0x26, 0x35, 0x18, 0x32, 0xe9,
+	0x4b, 0xf0, 0xe2, 0x90, 0x87, 0x38, 0xa6, 0xdf, 0xb2, 0x94, 0x86, 0xb1, 0xb9, 0x4b, 0x57, 0x70,
+	0x36, 0xaa, 0xfe, 0xe9, 0x7d, 0x5b, 0x6f, 0x73, 0x02, 0xed, 0x31, 0xe1, 0x38, 0x4c, 0x53, 0xac,
+	0x1f, 0x1d, 0x6f, 0x43, 0xfc, 0xe9, 0x6e, 0xfb, 0xf2, 0x55, 0xf2, 0xf5, 0xab, 0xe4, 0x9f, 0x2a,
+	0x40, 0xe0, 0x8e, 0x09, 0x7f, 0x9b, 0xa6, 0x7a, 0x8d, 0xde, 0x80, 0x2b, 0x7e, 0x90, 0xb5, 0xc4,
+	0xe6, 0xbf, 0x24, 0x5a, 0x82, 0xa0, 0x97, 0xc7, 0x1b, 0x3f, 0xef, 0x7a, 0xce, 0xaf, 0xbb, 0x9e,
+	0xf3, 0xe7, 0xae, 0xe7, 0x7c, 0xd5, 0x0f, 0x63, 0xb4, 0x24, 0x88, 0xcf, 0xff, 0x06, 0x00, 0x00,
+	0xff, 0xff, 0xb5, 0x1c, 0xa2, 0xbd, 0x45, 0x07, 0x00, 0x00,
 }
 
 func (m *SeriesRequestHints) Marshal() (dAtA []byte, err error) {
@@ -446,6 +679,10 @@ func (m *SeriesRequestHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.EnableQueryStats {
 		i--
 		if m.EnableQueryStats {
@@ -493,6 +730,10 @@ func (m *SeriesResponseHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.QueryStats != nil {
 		{
 			size, err := m.QueryStats.MarshalToSizedBuffer(dAtA[:i])
@@ -542,6 +783,10 @@ func (m *Block) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Id) > 0 {
 		i -= len(m.Id)
 		copy(dAtA[i:], m.Id)
@@ -572,6 +817,10 @@ func (m *LabelNamesRequestHints) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.BlockMatchers) > 0 {
 		for iNdEx := len(m.BlockMatchers) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -609,6 +858,10 @@ func (m *LabelNamesResponseHints) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.QueriedBlocks) > 0 {
 		for iNdEx := len(m.QueriedBlocks) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -646,6 +899,10 @@ func (m *LabelValuesRequestHints) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.BlockMatchers) > 0 {
 		for iNdEx := len(m.BlockMatchers) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -683,6 +940,10 @@ func (m *LabelValuesResponseHints) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.QueriedBlocks) > 0 {
 		for iNdEx := len(m.QueriedBlocks) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -720,26 +981,38 @@ func (m *QueryStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	n2, err2 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.MergeDuration, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.MergeDuration):])
-	if err2 != nil {
-		return 0, err2
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	i -= n2
-	i = encodeVarintHints(dAtA, i, uint64(n2))
-	i--
-	dAtA[i] = 0x1
-	i--
-	dAtA[i] = 0xb2
-	n3, err3 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.GetAllDuration, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.GetAllDuration):])
-	if err3 != nil {
-		return 0, err3
+	if m.MergeDuration != nil {
+		{
+			size, err := m.MergeDuration.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintHints(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xb2
 	}
-	i -= n3
-	i = encodeVarintHints(dAtA, i, uint64(n3))
-	i--
-	dAtA[i] = 0x1
-	i--
-	dAtA[i] = 0xaa
+	if m.GetAllDuration != nil {
+		{
+			size, err := m.GetAllDuration.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintHints(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xaa
+	}
 	if m.DataDownloadedSizeSum != 0 {
 		i = encodeVarintHints(dAtA, i, uint64(m.DataDownloadedSizeSum))
 		i--
@@ -879,6 +1152,9 @@ func (m *SeriesRequestHints) Size() (n int) {
 	if m.EnableQueryStats {
 		n += 2
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -898,6 +1174,9 @@ func (m *SeriesResponseHints) Size() (n int) {
 		l = m.QueryStats.Size()
 		n += 1 + l + sovHints(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -910,6 +1189,9 @@ func (m *Block) Size() (n int) {
 	l = len(m.Id)
 	if l > 0 {
 		n += 1 + l + sovHints(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -926,6 +1208,9 @@ func (m *LabelNamesRequestHints) Size() (n int) {
 			n += 1 + l + sovHints(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -940,6 +1225,9 @@ func (m *LabelNamesResponseHints) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovHints(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -956,6 +1244,9 @@ func (m *LabelValuesRequestHints) Size() (n int) {
 			n += 1 + l + sovHints(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -970,6 +1261,9 @@ func (m *LabelValuesResponseHints) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovHints(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1040,10 +1334,17 @@ func (m *QueryStats) Size() (n int) {
 	if m.DataDownloadedSizeSum != 0 {
 		n += 2 + sovHints(uint64(m.DataDownloadedSizeSum))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.GetAllDuration)
-	n += 2 + l + sovHints(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.MergeDuration)
-	n += 2 + l + sovHints(uint64(l))
+	if m.GetAllDuration != nil {
+		l = m.GetAllDuration.Size()
+		n += 2 + l + sovHints(uint64(l))
+	}
+	if m.MergeDuration != nil {
+		l = m.MergeDuration.Size()
+		n += 2 + l + sovHints(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1111,7 +1412,7 @@ func (m *SeriesRequestHints) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.BlockMatchers = append(m.BlockMatchers, storepb.LabelMatcher{})
+			m.BlockMatchers = append(m.BlockMatchers, &storepb.LabelMatcher{})
 			if err := m.BlockMatchers[len(m.BlockMatchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1148,6 +1449,7 @@ func (m *SeriesRequestHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1215,7 +1517,7 @@ func (m *SeriesResponseHints) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.QueriedBlocks = append(m.QueriedBlocks, Block{})
+			m.QueriedBlocks = append(m.QueriedBlocks, &Block{})
 			if err := m.QueriedBlocks[len(m.QueriedBlocks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1268,6 +1570,7 @@ func (m *SeriesResponseHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1350,6 +1653,7 @@ func (m *Block) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1417,7 +1721,7 @@ func (m *LabelNamesRequestHints) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.BlockMatchers = append(m.BlockMatchers, storepb.LabelMatcher{})
+			m.BlockMatchers = append(m.BlockMatchers, &storepb.LabelMatcher{})
 			if err := m.BlockMatchers[len(m.BlockMatchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1434,6 +1738,7 @@ func (m *LabelNamesRequestHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1501,7 +1806,7 @@ func (m *LabelNamesResponseHints) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.QueriedBlocks = append(m.QueriedBlocks, Block{})
+			m.QueriedBlocks = append(m.QueriedBlocks, &Block{})
 			if err := m.QueriedBlocks[len(m.QueriedBlocks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1518,6 +1823,7 @@ func (m *LabelNamesResponseHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1585,7 +1891,7 @@ func (m *LabelValuesRequestHints) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.BlockMatchers = append(m.BlockMatchers, storepb.LabelMatcher{})
+			m.BlockMatchers = append(m.BlockMatchers, &storepb.LabelMatcher{})
 			if err := m.BlockMatchers[len(m.BlockMatchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1602,6 +1908,7 @@ func (m *LabelValuesRequestHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1669,7 +1976,7 @@ func (m *LabelValuesResponseHints) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.QueriedBlocks = append(m.QueriedBlocks, Block{})
+			m.QueriedBlocks = append(m.QueriedBlocks, &Block{})
 			if err := m.QueriedBlocks[len(m.QueriedBlocks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1686,6 +1993,7 @@ func (m *LabelValuesResponseHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2133,7 +2441,10 @@ func (m *QueryStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.GetAllDuration, dAtA[iNdEx:postIndex]); err != nil {
+			if m.GetAllDuration == nil {
+				m.GetAllDuration = &protobuf.Duration{}
+			}
+			if err := m.GetAllDuration.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2166,7 +2477,10 @@ func (m *QueryStats) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.MergeDuration, dAtA[iNdEx:postIndex]); err != nil {
+			if m.MergeDuration == nil {
+				m.MergeDuration = &protobuf.Duration{}
+			}
+			if err := m.MergeDuration.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2182,6 +2496,7 @@ func (m *QueryStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

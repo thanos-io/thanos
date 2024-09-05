@@ -7,65 +7,85 @@ package queryrange;
 
 option go_package = "queryrange";
 
-import "gogoproto/gogo.proto";
-import "google/protobuf/duration.proto";
 import "cortex/cortexpb/cortex.proto";
 import "google/protobuf/any.proto";
 
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 message PrometheusRequestHeader {
-  string Name = 1 [(gogoproto.jsontag) = "-"];
-  repeated string Values = 2 [(gogoproto.jsontag) = "-"];
+  // @gotags: json:"-"
+  string Name = 1;
+  // @gotags: json:"-"
+  repeated string Values = 2;
 }
 message PrometheusRequest {
   string path = 1;
   int64 start = 2;
   int64 end = 3;
   int64 step = 4;
-  google.protobuf.Duration timeout = 5 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+  Duration timeout = 5;
   string query = 6;
-  CachingOptions cachingOptions = 7 [(gogoproto.nullable) = false];
-  repeated PrometheusRequestHeader Headers = 8 [(gogoproto.jsontag) = "-"];
+  CachingOptions cachingOptions = 7;
+  // @gotags: json:"-"
+  repeated PrometheusRequestHeader Headers = 8;
   string stats = 9;
 }
 
 message PrometheusResponseHeader {
-  string Name = 1 [(gogoproto.jsontag) = "-"];
-  repeated string Values = 2 [(gogoproto.jsontag) = "-"];
+  // @gotags: json:"-"
+  string Name = 1;
+  // @gotags: json:"-"
+  repeated string Values = 2;
 }
 
 message PrometheusResponse {
-  string Status = 1 [(gogoproto.jsontag) = "status"];
-  PrometheusData Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data,omitempty"];
-  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
-  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
-  repeated PrometheusResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
-  repeated string Warnings = 6 [(gogoproto.jsontag) = "warnings,omitempty"];
+  // @gotags: json:"status"
+  string Status = 1;
+  // @gotags: json:"data,omitempty"
+  PrometheusData Data = 2;
+  // @gotags: json:"errorType,omitempty"
+  string ErrorType = 3;
+  // @gotags: json:"error,omitempty"
+  string Error = 4;
+  // @gotags: json:"-"
+  repeated PrometheusResponseHeader Headers = 5;
+  // @gotags: json:"warnings,omitempty"
+  repeated string Warnings = 6;
 }
 
 message PrometheusData {
-  string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
-  repeated SampleStream Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
-  PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
-  Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+  // @gotags: json:"resultType"
+  string ResultType = 1;
+  // @gotags: json:"result"
+  repeated SampleStream Result = 2;
+  // @gotags: json:"stats,omitempty"
+  PrometheusResponseStats stats = 3;
+  // @gotags: json:"analysis"
+  Analysis analysis = 4;
 }
 
 message PrometheusInstantQueryResponse {
-  string Status = 1 [(gogoproto.jsontag) = "status"];
-  PrometheusInstantQueryData Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data,omitempty"];
-  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
-  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
-  repeated PrometheusResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
-  repeated string Warnings = 6 [(gogoproto.jsontag) = "warnings,omitempty"];
+  // @gotags: json:"status"
+  string Status = 1;
+  // @gotags: json:"data,omitempty"
+  PrometheusInstantQueryData Data = 2;
+  // @gotags: json:"errorType,omitempty"
+  string ErrorType = 3;
+  // @gotags: json:"error,omitempty"
+  string Error = 4;
+  // @gotags: json:"-"
+  repeated PrometheusResponseHeader Headers = 5;
+  // @gotags: json:"warnings,omitempty"
+  repeated string Warnings = 6;
 }
 
 message PrometheusInstantQueryData {
-  string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
-  PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
-  PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
-  Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+  // @gotags: json:"resultType"
+  string ResultType = 1;
+  // @gotags: json:"result"
+  PrometheusInstantQueryResult Result = 2;
+  // @gotags: json:"stats,omitempty"
+  PrometheusResponseStats stats = 3;
+  // @gotags: json:"analysis"
+  Analysis analysis = 4;
 }
 
 message PrometheusInstantQueryResult {
@@ -86,12 +106,15 @@ message Matrix {
 }
 
 message PrometheusResponseStats {
-  PrometheusResponseSamplesStats samples = 1 [(gogoproto.jsontag) = "samples"];
+  // @gotags: json:"samples"
+  PrometheusResponseSamplesStats samples = 1;
 }
 
 message PrometheusResponseSamplesStats {
-  int64 totalQueryableSamples = 1 [(gogoproto.jsontag) = "totalQueryableSamples"];
-  repeated PrometheusResponseQueryableSamplesStatsPerStep totalQueryableSamplesPerStep = 2 [(gogoproto.jsontag) = "totalQueryableSamplesPerStep"];
+  // @gotags: json:"totalQueryableSamples"
+  int64 totalQueryableSamples = 1;
+  // @gotags: json:"totalQueryableSamplesPerStep"
+  repeated PrometheusResponseQueryableSamplesStatsPerStep totalQueryableSamplesPerStep = 2;
 }
 
 message PrometheusResponseQueryableSamplesStatsPerStep {
@@ -100,16 +123,22 @@ message PrometheusResponseQueryableSamplesStatsPerStep {
 }
 
 message SampleStream {
-  repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
-  repeated cortexpb.Sample samples = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "values"];
-  repeated SampleHistogramPair histograms = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "histogram"];
+  // @gotags: json:"metric"
+  repeated cortexpb.LabelPair labels = 1;
+  // @gotags: json:"values"
+  repeated cortexpb.Sample samples = 2;
+  // @gotags: json:"histogram"
+  repeated SampleHistogramPair histograms = 3;
 }
 
 message Sample {
-  repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
-  double sampleValue = 2 [(gogoproto.jsontag) = "value"];
+  // @gotags: json:"metric"
+  repeated cortexpb.LabelPair labels = 1;
+  // @gotags: json:"value"
+  double sampleValue = 2;
   int64 timestamp = 3;
-  SampleHistogram histogram = 4 [(gogoproto.nullable) = true, (gogoproto.jsontag) = "histogram"];
+  // @gotags: json:"histogram"
+  SampleHistogram histogram = 4;
 }
 
 message StringSample {
@@ -119,7 +148,7 @@ message StringSample {
 
 message SampleHistogramPair {
   int64 timestamp = 1;
-  SampleHistogram histogram = 2 [(gogoproto.nullable) = false];
+  SampleHistogram histogram = 2;
 }
 
 message SampleHistogram {
@@ -136,19 +165,25 @@ message HistogramBucket {
 }
 
 message CachedResponse  {
-  string key = 1 [(gogoproto.jsontag) = "key"];
+  // @gotags: json:"key"
+  string key = 1;
 
   // List of cached responses; non-overlapping and in order.
-  repeated Extent extents = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "extents"];
+  // @gotags: json:"extents"
+  repeated Extent extents = 2;
 }
 
 message Extent  {
-  int64 start = 1 [(gogoproto.jsontag) = "start"];
-  int64 end = 2 [(gogoproto.jsontag) = "end"];
+  // @gotags: json:"start"
+  int64 start = 1;
+  // @gotags: json:"end"
+  int64 end = 2;
   // reserved the previous key to ensure cache transition
   reserved 3;
-  string trace_id = 4 [(gogoproto.jsontag) = "-"];
-  google.protobuf.Any response = 5 [(gogoproto.jsontag) = "response"];
+  // @gotags: json:"-"
+  string trace_id = 4;
+  // @gotags: json:"response"
+  google.protobuf.Any response = 5;
 }
 
 message CachingOptions {
@@ -156,12 +191,91 @@ message CachingOptions {
 }
 
 message Explanation {
-  string name = 1 [(gogoproto.jsontag) = "name"];
-  repeated Explanation children = 2 [(gogoproto.jsontag) = "children"];
+  // @gotags: json:"name"
+  string name = 1;
+  // @gotags: json:"children"
+  repeated Explanation children = 2;
+}
+
+// A Duration represents a signed, fixed-length span of time represented
+// as a count of seconds and fractions of seconds at nanosecond
+// resolution. It is independent of any calendar and concepts like "day"
+// or "month". It is related to Timestamp in that the difference between
+// two Timestamp values is a Duration and it can be added or subtracted
+// from a Timestamp. Range is approximately +-10,000 years.
+//
+// # Examples
+//
+// Example 1: Compute Duration from two Timestamps in pseudo code.
+//
+//     Timestamp start = ...;
+//     Timestamp end = ...;
+//     Duration duration = ...;
+//
+//     duration.seconds = end.seconds - start.seconds;
+//     duration.nanos = end.nanos - start.nanos;
+//
+//     if (duration.seconds < 0 && duration.nanos > 0) {
+//       duration.seconds += 1;
+//       duration.nanos -= 1000000000;
+//     } else if (duration.seconds > 0 && duration.nanos < 0) {
+//       duration.seconds -= 1;
+//       duration.nanos += 1000000000;
+//     }
+//
+// Example 2: Compute Timestamp from Timestamp + Duration in pseudo code.
+//
+//     Timestamp start = ...;
+//     Duration duration = ...;
+//     Timestamp end = ...;
+//
+//     end.seconds = start.seconds + duration.seconds;
+//     end.nanos = start.nanos + duration.nanos;
+//
+//     if (end.nanos < 0) {
+//       end.seconds -= 1;
+//       end.nanos += 1000000000;
+//     } else if (end.nanos >= 1000000000) {
+//       end.seconds += 1;
+//       end.nanos -= 1000000000;
+//     }
+//
+// Example 3: Compute Duration from datetime.timedelta in Python.
+//
+//     td = datetime.timedelta(days=3, minutes=10)
+//     duration = Duration()
+//     duration.FromTimedelta(td)
+//
+// # JSON Mapping
+//
+// In JSON format, the Duration type is encoded as a string rather than an
+// object, where the string ends in the suffix "s" (indicating seconds) and
+// is preceded by the number of seconds, with nanoseconds expressed as
+// fractional seconds. For example, 3 seconds with 0 nanoseconds should be
+// encoded in JSON format as "3s", while 3 seconds and 1 nanosecond should
+// be expressed in JSON format as "3.000000001s", and 3 seconds and 1
+// microsecond should be expressed in JSON format as "3.000001s".
+//
+message Duration {
+  // Signed seconds of the span of time. Must be from -315,576,000,000
+  // to +315,576,000,000 inclusive. Note: these bounds are computed from:
+  // 60 sec/min * 60 min/hr * 24 hr/day * 365.25 days/year * 10000 years
+  int64 seconds = 1;
+
+  // Signed fractions of a second at nanosecond resolution of the span
+  // of time. Durations less than one second are represented with a 0
+  // `seconds` field and a positive or negative `nanos` field. For durations
+  // of one second or more, a non-zero value for the `nanos` field must be
+  // of the same sign as the `seconds` field. Must be from -999,999,999
+  // to +999,999,999 inclusive.
+  int32 nanos = 2;
 }
 
 message Analysis {
-  string name = 1 [(gogoproto.jsontag) = "name"];
-  google.protobuf.Duration executionTime = 2 [(gogoproto.customtype) = "Duration", (gogoproto.nullable) = false, (gogoproto.jsontag) = "executionTime"];
-  repeated Analysis children = 3 [(gogoproto.jsontag) = "children"];
+  // @gotags: json:"name"
+  string name = 1;
+  // @gotags: json:"executionTime"
+  Duration executionTime = 2;
+  // @gotags: json:"children"
+  repeated Analysis children = 3;
 }

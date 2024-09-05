@@ -15,46 +15,45 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/thanos/internal/cortex/util"
 )
 
-// FromLabelAdaptersToLabels casts []LabelAdapter to labels.Labels.
-// It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
-// This allows us to use labels.Labels directly in protos.
-//
-// Note: while resulting labels.Labels is supposedly sorted, this function
-// doesn't enforce that. If input is not sorted, output will be wrong.
-func FromLabelAdaptersToLabels(ls []LabelAdapter) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&ls))
+func LabelPairToModelMetric(labels []*LabelPair) model.Metric {
+	m := make(model.Metric, len(labels))
+	for _, l := range labels {
+		m[model.LabelName(l.Name)] = model.LabelValue(l.Value)
+	}
+
+	return m
 }
 
-// FromLabelsToLabelAdapters casts labels.Labels to []LabelAdapter.
-// It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
-// This allows us to use labels.Labels directly in protos.
-func FromLabelsToLabelAdapters(ls labels.Labels) []LabelAdapter {
-	return *(*[]LabelAdapter)(unsafe.Pointer(&ls))
-}
-
-// FromLabelAdaptersToMetric converts []LabelAdapter to a model.Metric.
-// Don't do this on any performance sensitive paths.
-func FromLabelAdaptersToMetric(ls []LabelAdapter) model.Metric {
-	return util.LabelsToMetric(FromLabelAdaptersToLabels(ls))
-}
-
-// FromMetricsToLabelAdapters converts model.Metric to []LabelAdapter.
-// Don't do this on any performance sensitive paths.
-// The result is sorted.
-func FromMetricsToLabelAdapters(metric model.Metric) []LabelAdapter {
-	result := make([]LabelAdapter, 0, len(metric))
-	for k, v := range metric {
-		result = append(result, LabelAdapter{
-			Name:  string(k),
-			Value: string(v),
+func LabelMapToCortexMetric(lbls map[string]string) []*LabelPair {
+	labels := make([]*LabelPair, 0, len(lbls))
+	for ln, lv := range lbls {
+		labels = append(labels, &LabelPair{
+			Name:  []byte(ln),
+			Value: []byte(lv),
 		})
 	}
-	sort.Sort(byLabel(result)) // The labels should be sorted upon initialisation.
-	return result
+	sort.Slice(labels, func(i, j int) bool {
+		return strings.Compare(string(labels[i].Name), string(labels[j].Name)) < 0
+	})
+
+	return labels
+}
+
+func ModelMetricToCortexMetric(m model.Metric) []*LabelPair {
+	labels := make([]*LabelPair, 0, len(m))
+	for ln, lv := range m {
+		labels = append(labels, &LabelPair{
+			Name:  []byte(ln),
+			Value: []byte(lv),
+		})
+	}
+	sort.Slice(labels, func(i, j int) bool {
+		return strings.Compare(string(labels[i].Name), string(labels[j].Name)) < 0
+	})
+
+	return labels
 }
 
 type byLabel []LabelAdapter

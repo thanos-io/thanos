@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	"github.com/stretchr/testify/require"
@@ -267,6 +269,27 @@ func TestSplitQuery(t *testing.T) {
 }
 
 func TestSplitByDay(t *testing.T) {
+	// NOTE(GiedriusS): we need to copy this because the original is modified.
+	parsedResponse := &PrometheusResponse{
+		Status: "success",
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("foo"), Value: []byte("bar")},
+					},
+					Samples: []*cortexpb.Sample{
+						{Value: 137, TimestampMs: 1536673680000},
+						{Value: 137, TimestampMs: 1536673780000},
+					},
+				},
+			},
+		},
+		Warnings: []string{"test-warn"},
+	}
+
 	mergedResponse, err := PrometheusCodec.MergeResponse(nil, parsedResponse, parsedResponse)
 	require.NoError(t, err)
 

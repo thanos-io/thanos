@@ -6,20 +6,8 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
-import "gogoproto/gogo.proto";
 
 option go_package = "exemplarspb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
 
 /// Exemplars represents API that is responsible for gathering exemplars and their states.
 service Exemplars {
@@ -43,12 +31,17 @@ message ExemplarsResponse {
 }
 
 message ExemplarData {
-    LabelSet seriesLabels = 1 [(gogoproto.jsontag) = "seriesLabels", (gogoproto.nullable) = false];
-    repeated Exemplar exemplars = 2 [(gogoproto.jsontag) = "exemplars"];
+    // @gotags: json:"seriesLabels"
+    LabelSet seriesLabels = 1;
+    // @gotags: json:"exemplars"
+    repeated Exemplar exemplars = 2;
 }
 
 message Exemplar {
-    LabelSet labels = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
-    double value = 2 [(gogoproto.jsontag) = "value"];
-    int64 ts = 3 [(gogoproto.jsontag) = "timestamp"];
+    // @gotags: json:"labels"
+    LabelSet labels = 1;
+    // @gotags: json:"value"
+    double value = 2;
+    // @gotags: json:"timestamp"
+    int64 ts = 3;
 }

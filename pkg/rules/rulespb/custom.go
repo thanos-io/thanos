@@ -21,6 +21,50 @@ const (
 	RuleAlertingType  = "alerting"
 )
 
+func TimestampToTime(ts *Timestamp) time.Time {
+	var tm time.Time
+	if ts == nil {
+		tm = time.Unix(0, 0).UTC() // treat nil like the empty Timestamp
+	} else {
+		tm = time.Unix(ts.Seconds, int64(ts.Nanos)).UTC()
+	}
+	return tm
+}
+
+func TimeToTimestamp(t time.Time) *Timestamp {
+	if t.IsZero() {
+		ts := &Timestamp{}
+		ts.Seconds = time.Time{}.Unix()
+		return ts
+	}
+	ts := &Timestamp{
+		Seconds: t.Unix(),
+		Nanos:   int32(t.Nanosecond()),
+	}
+
+	return ts
+}
+
+func (m *Timestamp) MarshalJSON() ([]byte, error) {
+	ret := TimestampToTime(m)
+	return json.Marshal(ret)
+}
+
+func (m *Timestamp) UnmarshalJSON(data []byte) error {
+	ret := time.Time{}
+	err := json.Unmarshal(data, &ret)
+	if err != nil {
+		return err
+	}
+
+	actualTimestamp := TimeToTimestamp(ret)
+
+	m.Seconds = actualTimestamp.Seconds
+	m.Nanos = actualTimestamp.Nanos
+
+	return nil
+}
+
 func NewRuleGroupRulesResponse(rg *RuleGroup) *RulesResponse {
 	return &RulesResponse{
 		Result: &RulesResponse_Group{
@@ -55,11 +99,11 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 //
 // Note: This method assumes r1 and r2 are logically equal as per Rule#Compare.
 func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
-	if r1.LastEvaluation.Before(r2.LastEvaluation) {
+	if TimestampToTime(r1.LastEvaluation).Before(TimestampToTime(r2.LastEvaluation)) {
 		return 1
 	}
 
-	if r1.LastEvaluation.After(r2.LastEvaluation) {
+	if TimestampToTime(r1.LastEvaluation).After(TimestampToTime(r2.LastEvaluation)) {
 		return -1
 	}
 
@@ -84,10 +128,10 @@ func (r *Rule) GetLabels() labels.Labels {
 }
 
 func (r *Rule) SetLabels(ls labels.Labels) {
-	var result labelpb.LabelSet
+	var result *labelpb.LabelSet
 
 	if !ls.IsEmpty() {
-		result = labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ls)}
+		result = &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ls)}
 	}
 
 	switch {
@@ -120,14 +164,14 @@ func (r *Rule) GetQuery() string {
 	}
 }
 
-func (r *Rule) GetLastEvaluation() time.Time {
+func (r *Rule) GetLastEvaluation() *Timestamp {
 	switch {
 	case r.GetRecording() != nil:
 		return r.GetRecording().LastEvaluation
 	case r.GetAlert() != nil:
 		return r.GetAlert().LastEvaluation
 	default:
-		return time.Time{}
+		return &Timestamp{}
 	}
 }
 
@@ -251,6 +295,12 @@ func (m *Rule) MarshalJSON() ([]byte, error) {
 		// Ensure that empty slices are marshaled as '[]' and not 'null'.
 		a.Alerts = make([]*AlertInstance, 0)
 	}
+
+	for _, ai := range a.Alerts {
+		if ai.ActiveAt == nil {
+			ai.ActiveAt = &Timestamp{}
+		}
+	}
 	return json.Marshal(struct {
 		*Alert
 		Type string `json:"type"`
@@ -264,6 +314,13 @@ func (r *RuleGroup) MarshalJSON() ([]byte, error) {
 	if r.Rules == nil {
 		// Ensure that empty slices are marshaled as '[]' and not 'null'.
 		r.Rules = make([]*Rule, 0)
+	}
+	for _, r := range r.Rules {
+		if r.GetAlert() != nil {
+			if r.GetAlert().Annotations == nil {
+				r.GetAlert().Annotations = &labelpb.LabelSet{}
+			}
+		}
 	}
 	type plain RuleGroup
 	return json.Marshal((*plain)(r))
@@ -319,11 +376,11 @@ func (a1 *Alert) Compare(a2 *Alert) int {
 		return d
 	}
 
-	if a1.LastEvaluation.Before(a2.LastEvaluation) {
+	if TimestampToTime(a1.LastEvaluation).Before(TimestampToTime(a2.LastEvaluation)) {
 		return 1
 	}
 
-	if a1.LastEvaluation.After(a2.LastEvaluation) {
+	if TimestampToTime(a1.LastEvaluation).After(TimestampToTime(a2.LastEvaluation)) {
 		return -1
 	}
 
