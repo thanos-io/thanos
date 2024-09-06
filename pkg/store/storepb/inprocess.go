@@ -20,10 +20,6 @@ type serverAsClient struct {
 	srv StoreServer
 }
 
-func (s serverAsClient) Info(ctx context.Context, in *InfoRequest, _ ...grpc.CallOption) (*InfoResponse, error) {
-	return s.srv.Info(ctx, in)
-}
-
 func (s serverAsClient) LabelNames(ctx context.Context, in *LabelNamesRequest, _ ...grpc.CallOption) (*LabelNamesResponse, error) {
 	return s.srv.LabelNames(ctx, in)
 }

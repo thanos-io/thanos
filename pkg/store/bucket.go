@@ -46,7 +46,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -948,19 +947,6 @@ func (s *BucketStore) LabelSet() []labelpb.LabelSet {
 	}
 
 	return labelSets
-}
-
-// Info implements the storepb.StoreServer interface.
-func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	mint, maxt := s.TimeRange()
-	res := &storepb.InfoResponse{
-		StoreType: component.Store.ToProto(),
-		MinTime:   mint,
-		MaxTime:   maxt,
-		LabelSets: s.LabelSet(),
-	}
-
-	return res, nil
 }
 
 func (s *BucketStore) limitMinTime(mint int64) int64 {

@@ -165,62 +165,6 @@ func NewProxyStore(
 	return s
 }
 
-// Info returns store information about the external labels this store have.
-func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	res := &storepb.InfoResponse{
-		StoreType: s.component.ToProto(),
-		Labels:    labelpb.PromLabelsToLabelpbLabels(s.selectorLabels),
-	}
-
-	minTime := int64(math.MaxInt64)
-	maxTime := int64(0)
-	stores := s.stores()
-
-	// Edge case: we have no data if there are no stores.
-	if len(stores) == 0 {
-		res.MaxTime = 0
-		res.MinTime = 0
-
-		return res, nil
-	}
-
-	for _, s := range stores {
-		mint, maxt := s.TimeRange()
-		if mint < minTime {
-			minTime = mint
-		}
-		if maxt > maxTime {
-			maxTime = maxt
-		}
-	}
-
-	res.MaxTime = maxTime
-	res.MinTime = minTime
-
-	labelSets := make(map[uint64]labelpb.LabelSet, len(stores))
-	for _, st := range stores {
-		for _, lset := range st.LabelSets() {
-			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			labelSets[mergedLabelSet.Hash()] = labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(mergedLabelSet)}
-		}
-	}
-
-	res.LabelSets = make([]labelpb.LabelSet, 0, len(labelSets))
-	for _, v := range labelSets {
-		res.LabelSets = append(res.LabelSets, v)
-	}
-
-	// We always want to enforce announcing the subset of data that
-	// selector-labels represents. If no label-sets are announced by the
-	// store-proxy's discovered stores, then we still want to enforce
-	// announcing this subset by announcing the selector as the label-set.
-	if len(res.LabelSets) == 0 && len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.LabelSet{Labels: res.Labels})
-	}
-
-	return res, nil
-}
-
 func (s *ProxyStore) LabelSet() []labelpb.LabelSet {
 	stores := s.stores()
 	if len(stores) == 0 {

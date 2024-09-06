@@ -15,9 +15,6 @@ import (
 )
 
 type testStoreServer struct {
-	info        *InfoResponse
-	infoLastReq *InfoRequest
-
 	series        []*SeriesResponse
 	seriesLastReq *SeriesRequest
 
@@ -28,11 +25,6 @@ type testStoreServer struct {
 	labelValuesLastReq *LabelValuesRequest
 
 	err error
-}
-
-func (t *testStoreServer) Info(_ context.Context, r *InfoRequest) (*InfoResponse, error) {
-	t.infoLastReq = r
-	return t.info, t.err
 }
 
 func (t *testStoreServer) Series(r *SeriesRequest, server Store_SeriesServer) error {
@@ -62,34 +54,6 @@ func TestServerAsClient(t *testing.T) {
 	ctx := context.Background()
 	for _, bufferSize := range []int{0, 1, 20, 100} {
 		t.Run(fmt.Sprintf("buffer=%v", bufferSize), func(t *testing.T) {
-			t.Run("Info", func(t *testing.T) {
-				s := &testStoreServer{
-					info: &InfoResponse{
-						LabelSets: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "a", Value: "b"}}}},
-						MinTime:   -1,
-						MaxTime:   10,
-						StoreType: StoreType_DEBUG,
-					}}
-				t.Run("ok", func(t *testing.T) {
-					for i := 0; i < 20; i++ {
-						r := &InfoRequest{}
-						resp, err := ServerAsClient(s).Info(ctx, r)
-						testutil.Ok(t, err)
-						testutil.Equals(t, s.info, resp)
-						testutil.Equals(t, r, s.infoLastReq)
-						s.infoLastReq = nil
-					}
-				})
-				t.Run("error", func(t *testing.T) {
-					s.err = errors.New("some error")
-					for i := 0; i < 20; i++ {
-						r := &InfoRequest{}
-						_, err := ServerAsClient(s).Info(ctx, r)
-						testutil.NotOk(t, err)
-						testutil.Equals(t, s.err, err)
-					}
-				})
-			})
 			t.Run("Series", func(t *testing.T) {
 				s := &testStoreServer{
 					series: []*SeriesResponse{
@@ -189,13 +153,7 @@ func TestServerAsClient(t *testing.T) {
 				})
 			})
 			t.Run("LabelNames", func(t *testing.T) {
-				s := &testStoreServer{
-					info: &InfoResponse{
-						LabelSets: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "a", Value: "b"}}}},
-						MinTime:   -1,
-						MaxTime:   10,
-						StoreType: StoreType_DEBUG,
-					}}
+				s := &testStoreServer{}
 				t.Run("ok", func(t *testing.T) {
 					for i := 0; i < 20; i++ {
 						r := &LabelNamesRequest{
