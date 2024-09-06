@@ -242,10 +242,20 @@ func runSidecar(
 					)
 					return err
 				}
+				if err := m.UpdateTimestamps(iterCtx); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch initial TSDB Timestamps. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
 
+				mint, maxt := m.Timestamps()
 				level.Info(logger).Log(
-					"msg", "successfully loaded prometheus external labels",
+					"msg", "successfully loaded prometheus external labels and TSDB timestamps",
 					"external_labels", m.Labels().String(),
+					"minT", mint,
+					"maxT", maxt,
 				)
 				return nil
 			})
@@ -267,15 +277,21 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 				defer iterCancel()
 
-				if err := m.UpdateLabels(iterCtx); err != nil {
-					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
+				if err := m.UpdateTimestamps(iterCtx); err != nil {
+					level.Warn(logger).Log("msg", "updating tsdb timestamps failed", "err", err)
 					promUp.Set(0)
 					statusProber.NotReady(err)
-				} else {
-					promUp.Set(1)
-					statusProber.Ready()
+					return nil
 				}
 
+				if err := m.UpdateLabels(iterCtx); err != nil {
+					level.Warn(logger).Log("msg", "updating labels failed", "err", err)
+					promUp.Set(0)
+					statusProber.NotReady(err)
+					return nil
+				}
+				promUp.Set(1)
+				statusProber.Ready()
 				return nil
 			})
 		}, func(error) {
@@ -409,13 +425,6 @@ func runSidecar(
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
-
-				minTime, _, err := s.Timestamps()
-				if err != nil {
-					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
-					return nil
-				}
-				m.UpdateTimestamps(minTime, math.MaxInt64)
 				return nil
 			})
 		}, func(error) {
@@ -490,7 +499,11 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
+func (s *promMetadata) UpdateTimestamps(ctx context.Context) error {
+	mint, err := s.client.MinTSDBTimestamp(ctx, s.promURL)
+	if err != nil {
+		return err
+	}
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -499,7 +512,9 @@ func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
 	}
 
 	s.mint = mint
-	s.maxt = maxt
+	s.maxt = math.MaxInt64
+
+	return nil
 }
 
 func (s *promMetadata) Labels() labels.Labels {

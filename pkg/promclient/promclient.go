@@ -901,3 +901,10 @@ func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets 
 	}
 	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
 }
+
+func (c *Client) MinTSDBTimestamp(ctx context.Context, base *url.URL) (int64, error) {
+	vec, _, _, err := c.QueryInstant(ctx, base, "", time.Now(), QueryOptions{DoNotAddThanosParams: true})
+	if err != nil {
+		return 0, err
+	}
+}
