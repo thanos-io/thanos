@@ -735,47 +735,6 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 	})
 }
 
-func TestBucketStore_Info(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dir := t.TempDir()
-
-	chunkPool, err := NewDefaultChunkBytesPool(2e5)
-	testutil.Ok(t, err)
-
-	bucketStore, err := NewBucketStore(
-		nil,
-		nil,
-		dir,
-		NewChunksLimiterFactory(0),
-		NewSeriesLimiterFactory(0),
-		NewBytesLimiterFactory(0),
-		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		20,
-		true,
-		DefaultPostingOffsetInMemorySampling,
-		false,
-		false,
-		0,
-		WithChunkPool(chunkPool),
-		WithFilterConfig(allowAllFilterConf),
-	)
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bucketStore.Close()) }()
-
-	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
-	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
-	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
-	testutil.Equals(t, []labelpb.LabelSet(nil), resp.LabelSets)
-	testutil.Equals(t, []labelpb.Label(nil), resp.Labels)
-}
-
 type recorder struct {
 	mtx sync.Mutex
 	objstore.Bucket
@@ -1021,14 +980,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				return ids[i].Compare(ids[j]) < 0
 			})
 			testutil.Equals(t, sc.expectedIDs, ids)
-
-			// Check Info endpoint.
-			resp, err := bucketStore.Info(context.Background(), &storepb.InfoRequest{})
-			testutil.Ok(t, err)
-
-			testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
-			testutil.Equals(t, []labelpb.Label(nil), resp.Labels)
-			testutil.Equals(t, sc.expectedAdvLabels, resp.LabelSets)
 
 			// Make sure we don't download files we did not expect to.
 			// Regression test: https://github.com/thanos-io/thanos/issues/1664

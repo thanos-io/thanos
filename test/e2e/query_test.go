@@ -16,7 +16,6 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -39,7 +38,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/prompb"
-	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -52,13 +50,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/extannotations"
-	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -590,199 +584,6 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 			"replica":    "0",
 		},
 	})
-}
-
-func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
-	t.Parallel()
-	if runtime.GOARCH != "amd64" {
-		t.Skip("Skip pre-info API test because of lack of multi-arch image for Thanos v0.22.0.")
-	}
-
-	for i, tcase := range []struct {
-		queryImage   string
-		sidecarImage string
-	}{
-		{
-			queryImage:   e2ethanos.DefaultImage(),
-			sidecarImage: "quay.io/thanos/thanos:v0.22.0", // Thanos components from version before 0.23 does not have new InfoAPI.
-		},
-		{
-			queryImage:   "quay.io/thanos/thanos:v0.22.0", // Thanos querier from version before 0.23 did not know about InfoAPI.
-			sidecarImage: e2ethanos.DefaultImage(),
-		},
-	} {
-		i := i
-		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("query-comp-%d", i))
-			testutil.Ok(t, err)
-			t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-			qBuilder := e2ethanos.NewQuerierBuilder(e, "1")
-
-			// Use qBuilder work dir to share rules.
-			promRulesSubDir := "rules"
-			testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
-			// Create the abort_on_partial_response alert for Prometheus.
-			// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-			createRuleFile(t, filepath.Join(qBuilder.Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
-
-			p1, s1 := e2ethanos.NewPrometheusWithSidecarCustomImage(
-				e,
-				"p1",
-				e2ethanos.DefaultPromConfig("p1", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget, qBuilder.InternalEndpoint("http")),
-				"",
-				e2ethanos.DefaultPrometheusImage(),
-				"",
-				tcase.sidecarImage,
-				e2ethanos.FeatureExemplarStorage,
-			)
-			testutil.Ok(t, e2e.StartAndWaitReady(p1, s1))
-
-			// Newest querier with old --rules --meta etc flags.
-			q := qBuilder.
-				WithStoreAddresses(s1.InternalEndpoint("grpc")).
-				WithMetadataAddresses(s1.InternalEndpoint("grpc")).
-				WithExemplarAddresses(s1.InternalEndpoint("grpc")).
-				WithTargetAddresses(s1.InternalEndpoint("grpc")).
-				WithRuleAddresses(s1.InternalEndpoint("grpc")).
-				WithTracingConfig(fmt.Sprintf(`type: JAEGER
-config:
-  sampler_type: const
-  sampler_param: 1
-  service_name: %s`, qBuilder.Name())). // Use fake tracing config to trigger exemplar.
-				WithImage(tcase.queryImage).
-				Init()
-			testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			t.Cleanup(cancel)
-
-			// We should have single TCP connection, since all APIs are against the same server.
-			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-
-			queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
-				Deduplicate: false,
-			}, []model.Metric{
-				{
-					"job":        "myself",
-					"prometheus": "p1",
-					"replica":    "0",
-				},
-			})
-
-			// We expect rule and other APIs to work.
-
-			// Metadata.
-			{
-				var promMeta map[string][]metadatapb.Meta
-				// Wait metadata response to be ready as Prometheus gets metadata after scrape.
-				testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
-					promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+p1.Endpoint("http")), "", -1)
-					testutil.Ok(t, err)
-					if len(promMeta) > 0 {
-						return nil
-					}
-					return fmt.Errorf("empty metadata response from Prometheus")
-				}))
-
-				thanosMeta, err := promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
-				testutil.Ok(t, err)
-				testutil.Assert(t, len(thanosMeta) > 0, "got empty metadata response from Thanos")
-
-				// Metadata response from Prometheus and Thanos Querier should be the same after deduplication.
-				metadataEqual(t, thanosMeta, promMeta)
-			}
-
-			// Exemplars.
-			{
-				now := time.Now()
-				start := timestamp.FromTime(now.Add(-time.Hour))
-				end := timestamp.FromTime(now.Add(time.Hour))
-
-				// Send HTTP requests to thanos query to trigger exemplars.
-				labelNames(t, ctx, q.Endpoint("http"), nil, start, end, 0, func(res []string) bool {
-					return true
-				})
-
-				queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names"}`, start, end, exemplarsOnExpectedSeries(map[string]string{
-					"__name__":   "http_request_duration_seconds_bucket",
-					"handler":    "label_names",
-					"job":        "myself",
-					"method":     "get",
-					"prometheus": "p1",
-				}))
-			}
-
-			// Targets.
-			{
-				targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
-					ActiveTargets: []*targetspb.ActiveTarget{
-						{
-							DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
-								{Name: "__address__", Value: "localhost:9090"},
-								{Name: "__metrics_path__", Value: "/metrics"},
-								{Name: "__scheme__", Value: "http"},
-								{Name: "__scrape_interval__", Value: "1s"},
-								{Name: "__scrape_timeout__", Value: "1s"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							Labels: labelpb.LabelSet{Labels: []labelpb.Label{
-								{Name: "instance", Value: "localhost:9090"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							ScrapePool: "myself",
-							ScrapeUrl:  "http://localhost:9090/metrics",
-							Health:     targetspb.TargetHealth_UP,
-						},
-						{
-							DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
-								{Name: "__address__", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
-								{Name: "__metrics_path__", Value: "/metrics"},
-								{Name: "__scheme__", Value: "http"},
-								{Name: "__scrape_interval__", Value: "1s"},
-								{Name: "__scrape_timeout__", Value: "1s"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							Labels: labelpb.LabelSet{Labels: []labelpb.Label{
-								{Name: "instance", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							ScrapePool: "myself",
-							ScrapeUrl:  fmt.Sprintf("http://query-comp-%d-querier-1:8080/metrics", i),
-							Health:     targetspb.TargetHealth_UP,
-						},
-					},
-					DroppedTargets: []*targetspb.DroppedTarget{},
-				})
-			}
-
-			// Rules.
-			{
-				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
-					{
-						Name: "example_abort",
-						File: q.Dir() + "/rules/rules.yaml",
-						Rules: []*rulespb.Rule{
-							rulespb.NewAlertingRule(&rulespb.Alert{
-								Name:  "TestAlert_AbortOnPartialResponse",
-								State: rulespb.AlertState_FIRING,
-								Query: "absent(some_metric)",
-								Labels: labelpb.LabelSet{Labels: []labelpb.Label{
-									{Name: "prometheus", Value: "p1"},
-									{Name: "severity", Value: "page"},
-								}},
-								Health: string(rules.HealthGood),
-							}),
-						},
-					},
-				})
-			}
-		})
-	}
 }
 
 type fakeMetricSample struct {

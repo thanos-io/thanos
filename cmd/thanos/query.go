@@ -364,7 +364,6 @@ func registerQuery(app *extkingpin.App) {
 			*webDisableCORS,
 			*alertQueryURL,
 			*grpcProxyStrategy,
-			component.Query,
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
@@ -449,7 +448,6 @@ func runQuery(
 	disableCORS bool,
 	alertQueryURL string,
 	grpcProxyStrategy string,
-	comp component.Component,
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []float64,
 	queryTelemetrySeriesQuantiles []float64,
@@ -467,6 +465,7 @@ func runQuery(
 	enableDedupMerge bool,
 	enableQuorumChunkDedup bool,
 ) error {
+	comp := component.Query
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
 		if lastColon != -1 {

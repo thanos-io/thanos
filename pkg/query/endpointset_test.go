@@ -27,7 +27,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 var testGRPCOpts = []grpc.DialOption{
@@ -108,39 +107,6 @@ func (c *mockedEndpoint) Info(ctx context.Context, r *infopb.InfoRequest) (*info
 	return &c.info, nil
 }
 
-type mockedStoreSrv struct {
-	infoDelay time.Duration
-	info      storepb.InfoResponse
-	err       error
-}
-
-func (s *mockedStoreSrv) setResponseError(err error) {
-	s.err = err
-}
-
-func (s *mockedStoreSrv) Info(ctx context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil, context.Canceled
-	case <-time.After(s.infoDelay):
-	}
-
-	return &s.info, nil
-}
-func (s *mockedStoreSrv) Series(*storepb.SeriesRequest, storepb.Store_SeriesServer) error {
-	return nil
-}
-func (s *mockedStoreSrv) LabelNames(context.Context, *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	return nil, nil
-}
-func (s *mockedStoreSrv) LabelValues(context.Context, *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	return nil, nil
-}
-
 type APIs struct {
 	store          bool
 	metricMetadata bool
@@ -159,35 +125,14 @@ type testEndpointMeta struct {
 type testEndpoints struct {
 	srvs        map[string]*grpc.Server
 	endpoints   map[string]*mockedEndpoint
-	stores      map[string]*mockedStoreSrv
 	orderAddrs  []string
 	exposedAPIs map[string]*APIs
-}
-
-func componentTypeToStoreType(componentType string) storepb.StoreType {
-	switch componentType {
-	case component.Query.String():
-		return storepb.StoreType_QUERY
-	case component.Rule.String():
-		return storepb.StoreType_RULE
-	case component.Sidecar.String():
-		return storepb.StoreType_SIDECAR
-	case component.Store.String():
-		return storepb.StoreType_STORE
-	case component.Receive.String():
-		return storepb.StoreType_RECEIVE
-	case component.Debug.String():
-		return storepb.StoreType_DEBUG
-	default:
-		return storepb.StoreType_STORE
-	}
 }
 
 func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, error) {
 	e := &testEndpoints{
 		srvs:        map[string]*grpc.Server{},
 		endpoints:   map[string]*mockedEndpoint{},
-		stores:      map[string]*mockedStoreSrv{},
 		exposedAPIs: map[string]*APIs{},
 	}
 
@@ -201,20 +146,6 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 
 		srv := grpc.NewServer()
 		addr := listener.Addr().String()
-
-		storeSrv := &mockedStoreSrv{
-			err: meta.err,
-			info: storepb.InfoResponse{
-				LabelSets: meta.extlsetFn(listener.Addr().String()),
-				StoreType: componentTypeToStoreType(meta.ComponentType),
-			},
-			infoDelay: meta.infoDelay,
-		}
-
-		if meta.Store != nil {
-			storeSrv.info.MinTime = meta.Store.MinTime
-			storeSrv.info.MaxTime = meta.Store.MaxTime
-		}
 
 		endpointSrv := &mockedEndpoint{
 			err: meta.err,
@@ -231,7 +162,6 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 			infoDelay: meta.infoDelay,
 		}
 		infopb.RegisterInfoServer(srv, endpointSrv)
-		storepb.RegisterStoreServer(srv, storeSrv)
 		go func() {
 			_ = srv.Serve(listener)
 		}()
@@ -239,7 +169,6 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 		e.exposedAPIs[addr] = exposedAPIs(meta.ComponentType)
 		e.srvs[addr] = srv
 		e.endpoints[addr] = endpointSrv
-		e.stores[addr] = storeSrv
 		e.orderAddrs = append(e.orderAddrs, listener.Addr().String())
 	}
 
@@ -683,7 +612,6 @@ func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
 
 			addr := discoveredEndpointAddr[0]
 			endpoints.endpoints[addr].setResponseError(errors.New("failed info request"))
-			endpoints.stores[addr].setResponseError(errors.New("failed info request"))
 			endpointSet.Update(context.Background())
 
 			updateTime = updateTime.Add(10 * time.Minute)
@@ -825,7 +753,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	// Check stats.
 	expected := newEndpointAPIStats()
-	expected[component.Sidecar] = map[string]int{
+	expected[component.Sidecar.String()] = map[string]int{
 		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]): 1,
 		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]): 1,
 	}
@@ -838,7 +766,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	testutil.Equals(t, 2, len(endpointSet.endpoints))
 
 	endpoints.CloseOne(discoveredEndpointAddr[0])
-	delete(expected[component.Sidecar], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]))
+	delete(expected[component.Sidecar.String()], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]))
 
 	// We expect Update to tear down store client for closed store server.
 	endpointSet.Update(context.Background())
@@ -1086,22 +1014,22 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	// Check stats.
 	expected = newEndpointAPIStats()
-	expected[component.Query] = map[string]int{
+	expected[component.Query.String()] = map[string]int{
 		"{l1=\"v2\", l2=\"v3\"}":             1,
 		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
 	}
-	expected[component.Rule] = map[string]int{
+	expected[component.Rule.String()] = map[string]int{
 		"{l1=\"v2\", l2=\"v3\"}": 2,
 	}
-	expected[component.Sidecar] = map[string]int{
+	expected[component.Sidecar.String()] = map[string]int{
 		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]): 1,
 		"{l1=\"v2\", l2=\"v3\"}": 2,
 	}
-	expected[component.Store] = map[string]int{
+	expected[component.Store.String()] = map[string]int{
 		"":                                   2,
 		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 3,
 	}
-	expected[component.Receive] = map[string]int{
+	expected[component.Receive.String()] = map[string]int{
 		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
 	}
 	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)

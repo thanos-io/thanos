@@ -104,31 +104,6 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-// Info returns store information about the Prometheus instance.
-func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	minTime, err := s.db.StartTime()
-	if err != nil {
-		return nil, errors.Wrap(err, "TSDB min Time")
-	}
-
-	res := &storepb.InfoResponse{
-		Labels:    labelpb.PromLabelsToLabelpbLabels(s.getExtLset()),
-		StoreType: s.component.ToProto(),
-		MinTime:   minTime,
-		MaxTime:   math.MaxInt64,
-	}
-
-	// Until we deprecate the single labels in the reply, we just duplicate
-	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.LabelSet{}
-	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.LabelSet{
-			Labels: res.Labels,
-		})
-	}
-	return res, nil
-}
-
 func (s *TSDBStore) LabelSet() []labelpb.LabelSet {
 	labels := labelpb.PromLabelsToLabelpbLabels(s.getExtLset())
 	labelSets := []labelpb.LabelSet{}

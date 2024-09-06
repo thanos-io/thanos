@@ -15,9 +15,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -59,10 +57,6 @@ func getAndAssertTenant(ctx context.Context, t *testing.T) {
 	}
 	tenant := md.Get(tenancy.DefaultTenantHeader)[0]
 	testutil.Assert(t, tenant == testTenant)
-}
-
-func (s *mockedStoreAPI) Info(context.Context, *storepb.InfoRequest, ...grpc.CallOption) (*storepb.InfoResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *mockedStoreAPI) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
