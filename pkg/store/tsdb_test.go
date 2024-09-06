@@ -29,40 +29,6 @@ import (
 
 const skipMessage = "Chunk behavior changed due to https://github.com/prometheus/prometheus/pull/8723. Skip for now."
 
-func TestTSDBStore_Info(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
-	resp, err := tsdbStore.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, []labelpb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
-	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
-	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
-	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
-
-	app := db.Appender(context.Background())
-	_, err = app.Append(0, labels.FromStrings("a", "a"), 12, 0.1)
-	testutil.Ok(t, err)
-	testutil.Ok(t, app.Commit())
-
-	resp, err = tsdbStore.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, []labelpb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
-	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
-	testutil.Equals(t, int64(12), resp.MinTime)
-	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
-}
-
 func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 

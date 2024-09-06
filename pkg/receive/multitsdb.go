@@ -153,10 +153,6 @@ func (m *seriesClientMapper) SendMsg(_ interface{}) error {
 	return nil
 }
 
-func (l *localClient) Info(ctx context.Context, in *storepb.InfoRequest, opts ...grpc.CallOption) (*storepb.InfoResponse, error) {
-	return l.store.Info(ctx, in)
-}
-
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
 	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
 }
