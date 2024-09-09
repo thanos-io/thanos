@@ -44,3 +44,6 @@ validators:
     type: 'ignore'
   - regex: 'outshift\.cisco\.com\/blog\/multi-cluster-monitoring'
     type: 'ignore'
+  # Expired certificate
+  - regex: 'bestpractices\.coreinfrastructure\.org\/projects\/3048'
+    type: 'ignore'
