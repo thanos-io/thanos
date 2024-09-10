@@ -23,7 +23,7 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 	tests := []struct {
 		name      string
 		shardInfo *ShardInfo
-		series    []labelpb.Label
+		series    []*labelpb.Label
 		matches   bool
 	}{
 		{

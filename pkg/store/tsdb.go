@@ -104,11 +104,11 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.LabelSet {
+func (s *TSDBStore) LabelSet() []*labelpb.LabelSet {
 	labels := labelpb.PromLabelsToLabelpbLabels(s.getExtLset())
-	labelSets := []labelpb.LabelSet{}
+	labelSets := []*labelpb.LabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, labelpb.LabelSet{
+		labelSets = append(labelSets, &labelpb.LabelSet{
 			Labels: labels,
 		})
 	}
@@ -116,16 +116,16 @@ func (s *TSDBStore) LabelSet() []labelpb.LabelSet {
 	return labelSets
 }
 
-func (p *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
+func (p *TSDBStore) TSDBInfos() []*infopb.TSDBInfo {
 	labels := p.LabelSet()
 	if len(labels) == 0 {
-		return []infopb.TSDBInfo{}
+		return []*infopb.TSDBInfo{}
 	}
 
 	mint, maxt := p.TimeRange()
-	return []infopb.TSDBInfo{
+	return []*infopb.TSDBInfo{
 		{
-			Labels: labelpb.LabelSet{
+			Labels: &labelpb.LabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
@@ -269,7 +269,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		}
 		frameBytesLeft := bytesLeftForChunks
 
-		seriesChunks := []storepb.AggrChunk{}
+		seriesChunks := []*storepb.AggrChunk{}
 		chIter := series.Iterator(nil)
 		isNext := chIter.Next()
 		for isNext {
@@ -290,7 +290,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 				},
 			}
 			frameBytesLeft -= c.Size()
-			seriesChunks = append(seriesChunks, c)
+			seriesChunks = append(seriesChunks, &c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
 			isNext = chIter.Next()
@@ -303,7 +303,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 			if isNext {
 				frameBytesLeft = bytesLeftForChunks
-				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+				seriesChunks = make([]*storepb.AggrChunk, 0, len(seriesChunks))
 			}
 		}
 		if err := chIter.Err(); err != nil {

@@ -7,11 +7,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -94,7 +95,7 @@ func (PrometheusResponseExtractor) Extract(start, end int64, from Response) Resp
 	promRes := from.(*PrometheusResponse)
 	return &PrometheusResponse{
 		Status: StatusSuccess,
-		Data: PrometheusData{
+		Data: &PrometheusData{
 			ResultType: promRes.Data.ResultType,
 			Result:     extractMatrix(start, end, promRes.Data.Result),
 			Stats:      extractStats(start, end, promRes.Data.Stats),
@@ -111,7 +112,7 @@ func (PrometheusResponseExtractor) ResponseWithoutHeaders(resp Response) Respons
 	promRes := resp.(*PrometheusResponse)
 	return &PrometheusResponse{
 		Status: StatusSuccess,
-		Data: PrometheusData{
+		Data: &PrometheusData{
 			ResultType: promRes.Data.ResultType,
 			Result:     promRes.Data.Result,
 			Stats:      promRes.Data.Stats,
@@ -243,7 +244,7 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 
 	var (
 		key      = s.splitter.GenerateCacheKey(tenant.JoinTenantIDs(tenantIDs), r)
-		extents  []Extent
+		extents  []*Extent
 		response Response
 	)
 
@@ -405,7 +406,7 @@ func (s resultsCache) isOffsetCachable(r Request) bool {
 }
 
 func getHeaderValuesWithName(r Response, headerName string) (headerValues []string) {
-	for _, hv := range r.GetHeaders() {
+	for _, hv := range r.GetQueryRangeHeaders() {
 		if hv.GetName() != headerName {
 			continue
 		}
@@ -416,14 +417,14 @@ func getHeaderValuesWithName(r Response, headerName string) (headerValues []stri
 	return
 }
 
-func (s resultsCache) handleMiss(ctx context.Context, r Request, maxCacheTime int64) (Response, []Extent, error) {
+func (s resultsCache) handleMiss(ctx context.Context, r Request, maxCacheTime int64) (Response, []*Extent, error) {
 	response, err := s.next.Do(ctx, r)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if !s.shouldCacheResponse(ctx, r, response, maxCacheTime) {
-		return response, []Extent{}, nil
+		return response, []*Extent{}, nil
 	}
 
 	extent, err := toExtent(ctx, r, s.extractor.ResponseWithoutHeaders(response))
@@ -431,13 +432,13 @@ func (s resultsCache) handleMiss(ctx context.Context, r Request, maxCacheTime in
 		return nil, nil, err
 	}
 
-	extents := []Extent{
+	extents := []*Extent{
 		extent,
 	}
 	return response, extents, nil
 }
 
-func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent, maxCacheTime int64) (Response, []Extent, error) {
+func (s resultsCache) handleHit(ctx context.Context, r Request, extents []*Extent, maxCacheTime int64) (Response, []*Extent, error) {
 	var (
 		reqResps []RequestResponse
 		err      error
@@ -487,7 +488,7 @@ func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent
 	if err != nil {
 		return nil, nil, err
 	}
-	mergedExtents := make([]Extent, 0, len(extents))
+	mergedExtents := make([]*Extent, 0, len(extents))
 
 	for i := 1; i < len(extents); i++ {
 		if accumulator.End+r.GetStep() < extents[i].Start {
@@ -530,15 +531,15 @@ func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent
 
 type accumulator struct {
 	Response
-	Extent
+	*Extent
 }
 
-func merge(extents []Extent, acc *accumulator) ([]Extent, error) {
+func merge(extents []*Extent, acc *accumulator) ([]*Extent, error) {
 	any, err := types.MarshalAny(acc.Response)
 	if err != nil {
 		return nil, err
 	}
-	return append(extents, Extent{
+	return append(extents, &Extent{
 		Start:    acc.Extent.Start,
 		End:      acc.Extent.End,
 		Response: any,
@@ -546,7 +547,7 @@ func merge(extents []Extent, acc *accumulator) ([]Extent, error) {
 	}), nil
 }
 
-func newAccumulator(base Extent) (*accumulator, error) {
+func newAccumulator(base *Extent) (*accumulator, error) {
 	res, err := base.toResponse()
 	if err != nil {
 		return nil, err
@@ -557,12 +558,12 @@ func newAccumulator(base Extent) (*accumulator, error) {
 	}, nil
 }
 
-func toExtent(ctx context.Context, req Request, res Response) (Extent, error) {
+func toExtent(ctx context.Context, req Request, res Response) (*Extent, error) {
 	any, err := types.MarshalAny(res)
 	if err != nil {
-		return Extent{}, err
+		return &Extent{}, err
 	}
-	return Extent{
+	return &Extent{
 		Start:    req.GetStart(),
 		End:      req.GetEnd(),
 		Response: any,
@@ -572,7 +573,7 @@ func toExtent(ctx context.Context, req Request, res Response) (Extent, error) {
 
 // partition calculates the required requests to satisfy req given the cached data.
 // extents must be in order by start time.
-func (s resultsCache) partition(req Request, extents []Extent) ([]Request, []Response, error) {
+func (s resultsCache) partition(req Request, extents []*Extent) ([]Request, []Response, error) {
 	var requests []Request
 	var cachedResponses []Response
 	start := req.GetStart()
@@ -622,7 +623,7 @@ func (s resultsCache) partition(req Request, extents []Extent) ([]Request, []Res
 	return requests, cachedResponses, nil
 }
 
-func (s resultsCache) filterRecentExtents(req Request, maxCacheFreshness time.Duration, extents []Extent) ([]Extent, error) {
+func (s resultsCache) filterRecentExtents(req Request, maxCacheFreshness time.Duration, extents []*Extent) ([]*Extent, error) {
 	maxCacheTime := (int64(model.Now().Add(-maxCacheFreshness)) / req.GetStep()) * req.GetStep()
 	for i := range extents {
 		// Never cache data for the latest freshness period.
@@ -643,7 +644,7 @@ func (s resultsCache) filterRecentExtents(req Request, maxCacheFreshness time.Du
 	return extents, nil
 }
 
-func (s resultsCache) get(ctx context.Context, key string) ([]Extent, bool) {
+func (s resultsCache) get(ctx context.Context, key string) ([]*Extent, bool) {
 	found, bufs, _ := s.cache.Fetch(ctx, []string{cache.HashKey(key)})
 	if len(found) != 1 {
 		return nil, false
@@ -675,7 +676,7 @@ func (s resultsCache) get(ctx context.Context, key string) ([]Extent, bool) {
 	return resp.Extents, true
 }
 
-func (s resultsCache) put(ctx context.Context, key string, extents []Extent) {
+func (s resultsCache) put(ctx context.Context, key string, extents []*Extent) {
 	buf, err := proto.Marshal(&CachedResponse{
 		Key:     key,
 		Extents: extents,
@@ -719,8 +720,8 @@ func extractStats(start, end int64, stats *PrometheusResponseStats) *PrometheusR
 	return result
 }
 
-func extractMatrix(start, end int64, matrix []SampleStream) []SampleStream {
-	result := make([]SampleStream, 0, len(matrix))
+func extractMatrix(start, end int64, matrix []*SampleStream) []*SampleStream {
+	result := make([]*SampleStream, 0, len(matrix))
 	for _, stream := range matrix {
 		extracted, ok := extractSampleStream(start, end, stream)
 		if ok {
@@ -730,17 +731,17 @@ func extractMatrix(start, end int64, matrix []SampleStream) []SampleStream {
 	return result
 }
 
-func extractSampleStream(start, end int64, stream SampleStream) (SampleStream, bool) {
-	result := SampleStream{
+func extractSampleStream(start, end int64, stream *SampleStream) (*SampleStream, bool) {
+	result := &SampleStream{
 		Labels: stream.Labels,
 	}
 
 	if len(stream.Samples) > 0 {
-		result.Samples = make([]cortexpb.Sample, 0, len(stream.Samples))
+		result.Samples = make([]*cortexpb.Sample, 0, len(stream.Samples))
 	}
 
 	if len(stream.Histograms) > 0 {
-		result.Histograms = make([]SampleHistogramPair, 0, len(stream.Histograms))
+		result.Histograms = make([]*SampleHistogramPair, 0, len(stream.Histograms))
 	}
 
 	for _, sample := range stream.Samples {
@@ -754,7 +755,7 @@ func extractSampleStream(start, end int64, stream SampleStream) (SampleStream, b
 		}
 	}
 	if len(result.Samples) == 0 && len(result.Histograms) == 0 {
-		return SampleStream{}, false
+		return &SampleStream{}, false
 	}
 	return result, true
 }

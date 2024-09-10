@@ -82,20 +82,20 @@ func (*storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s *storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+func (s *storeSeriesSet) At() (labels.Labels, []*storepb.AggrChunk) {
 	return s.series[s.i].PromLabels(), s.series[s.i].Chunks
 }
 
 // chunkSeries implements storage.Series for a series on storepb types.
 type chunkSeries struct {
 	lset       labels.Labels
-	chunks     []storepb.AggrChunk
+	chunks     []*storepb.AggrChunk
 	mint, maxt int64
 	aggrs      []storepb.Aggr
 }
 
 // newChunkSeries allows to iterate over samples for each sorted and non-overlapped chunks.
-func newChunkSeries(lset labels.Labels, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
+func newChunkSeries(lset labels.Labels, chunks []*storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
 	return &chunkSeries{
 		lset:   lset,
 		chunks: chunks,

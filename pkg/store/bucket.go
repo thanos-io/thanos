@@ -407,7 +407,7 @@ type BucketStore struct {
 	partitioner Partitioner
 
 	filterConfig             *FilterConfig
-	advLabelSets             []labelpb.LabelSet
+	advLabelSets             []*labelpb.LabelSet
 	enableCompatibilityLabel bool
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
@@ -709,9 +709,9 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 
 	// Sync advertise labels.
 	s.mtx.Lock()
-	s.advLabelSets = make([]labelpb.LabelSet, 0, len(s.advLabelSets))
+	s.advLabelSets = make([]*labelpb.LabelSet, 0, len(s.advLabelSets))
 	for _, bs := range s.blockSets {
-		s.advLabelSets = append(s.advLabelSets, labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(bs.labels.Copy())})
+		s.advLabelSets = append(s.advLabelSets, &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(bs.labels.Copy())})
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
 		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
@@ -908,16 +908,16 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 }
 
 // TSDBInfos returns a list of infopb.TSDBInfos for blocks in the bucket store.
-func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
+func (s *BucketStore) TSDBInfos() []*infopb.TSDBInfo {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	infoMap := make(map[uint64][]infopb.TSDBInfo, len(s.blocks))
+	infoMap := make(map[uint64][]*infopb.TSDBInfo, len(s.blocks))
 	for _, b := range s.blocks {
 		lbls := labels.FromMap(b.meta.Thanos.Labels)
 		hash := lbls.Hash()
-		infoMap[hash] = append(infoMap[hash], infopb.TSDBInfo{
-			Labels: labelpb.LabelSet{
+		infoMap[hash] = append(infoMap[hash], &infopb.TSDBInfo{
+			Labels: &labelpb.LabelSet{
 				Labels: labelpb.PromLabelsToLabelpbLabels(lbls),
 			},
 			MinTime: b.meta.MinTime,
@@ -926,7 +926,7 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	}
 
 	// join adjacent blocks so we emit less TSDBInfos
-	res := make([]infopb.TSDBInfo, 0, len(s.blocks))
+	res := make([]*infopb.TSDBInfo, 0, len(s.blocks))
 	for _, infos := range infoMap {
 		sort.Slice(infos, func(i, j int) bool { return infos[i].MinTime < infos[j].MinTime })
 
@@ -947,13 +947,13 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	return res
 }
 
-func (s *BucketStore) LabelSet() []labelpb.LabelSet {
+func (s *BucketStore) LabelSet() []*labelpb.LabelSet {
 	s.mtx.RLock()
 	labelSets := s.advLabelSets
 	s.mtx.RUnlock()
 
 	if s.enableCompatibilityLabel && len(labelSets) > 0 {
-		labelSets = append(labelSets, labelpb.LabelSet{Labels: []labelpb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+		labelSets = append(labelSets, &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
 	}
 
 	return labelSets
@@ -990,7 +990,7 @@ func (s *BucketStore) limitMaxTime(maxt int64) int64 {
 type seriesEntry struct {
 	lset labels.Labels
 	refs []chunks.ChunkRef
-	chks []storepb.AggrChunk
+	chks []*storepb.AggrChunk
 }
 
 // blockSeriesClient is a storepb.Store_SeriesClient for a
@@ -1308,13 +1308,13 @@ OUTER:
 
 		// Schedule loading chunks.
 		s.refs = make([]chunks.ChunkRef, 0, len(b.chkMetas))
-		s.chks = make([]storepb.AggrChunk, 0, len(b.chkMetas))
+		s.chks = make([]*storepb.AggrChunk, 0, len(b.chkMetas))
 
 		for j, meta := range b.chkMetas {
 			if err := b.chunkr.addLoad(meta.Ref, len(b.entries), j); err != nil {
 				return errors.Wrap(err, "add chunk load")
 			}
-			s.chks = append(s.chks, storepb.AggrChunk{
+			s.chks = append(s.chks, &storepb.AggrChunk{
 				MinTime: meta.MinTime,
 				MaxTime: meta.MaxTime,
 			})
@@ -1764,7 +1764,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	return srv.Flush()
 }
 
-func chunksSize(chks []storepb.AggrChunk) (size int) {
+func chunksSize(chks []*storepb.AggrChunk) (size int) {
 	for _, chk := range chks {
 		size += chk.Size() // This gets the encoded proto size.
 	}
@@ -3650,7 +3650,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		chunkLen = n + 1 + int(chunkDataLen)
 		if chunkLen <= len(cb) {
 			c := rawChunk(cb[n:chunkLen])
-			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
+			err = populateChunk(res[pIdx.seriesEntry].chks[pIdx.chunk], &c, aggrs, r.save, calculateChunkChecksum)
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
@@ -3677,7 +3677,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 
 		stats.add(ChunksFetched, 1, len(*nb))
 		c := rawChunk((*nb)[n:])
-		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), &c, aggrs, r.save, calculateChunkChecksum)
+		err = populateChunk(res[pIdx.seriesEntry].chks[pIdx.chunk], &c, aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")
@@ -3882,8 +3882,14 @@ func (s *queryStats) toHints() *hintspb.QueryStats {
 		MergedSeriesCount:      int64(s.mergedSeriesCount),
 		MergedChunksCount:      int64(s.mergedChunksCount),
 		DataDownloadedSizeSum:  int64(s.DataDownloadedSizeSum),
-		GetAllDuration:         s.GetAllDuration,
-		MergeDuration:          s.MergeDuration,
+		GetAllDuration: &types.Duration{
+			Seconds: int64(s.GetAllDuration / time.Second),
+			Nanos:   int32(s.GetAllDuration % time.Second),
+		},
+		MergeDuration: &types.Duration{
+			Seconds: int64(s.MergeDuration / time.Second),
+			Nanos:   int32(s.MergeDuration % time.Second),
+		},
 	}
 }
 

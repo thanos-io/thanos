@@ -840,12 +840,12 @@ func promqlResults(fail bool) (*int, http.Handler) {
 	var lock sync.Mutex
 	q := queryrange.PrometheusResponse{
 		Status: "success",
-		Data: queryrange.PrometheusData{
+		Data: &queryrange.PrometheusData{
 			ResultType: string(parser.ValueTypeMatrix),
-			Result: []queryrange.SampleStream{
+			Result: []*queryrange.SampleStream{
 				{
-					Labels: []cortexpb.LabelAdapter{},
-					Samples: []cortexpb.Sample{
+					Labels: []*cortexpb.LabelPair{},
+					Samples: []*cortexpb.Sample{
 						{Value: 0, TimestampMs: 0},
 						{Value: 1, TimestampMs: 1},
 					},
@@ -876,12 +876,12 @@ func promqlResultsWithFailures(numFailures int) (*atomic.Int64, http.Handler) {
 	var lock sync.Mutex
 	q := queryrange.PrometheusResponse{
 		Status: "success",
-		Data: queryrange.PrometheusData{
+		Data: &queryrange.PrometheusData{
 			ResultType: string(parser.ValueTypeMatrix),
-			Result: []queryrange.SampleStream{
+			Result: []*queryrange.SampleStream{
 				{
-					Labels: []cortexpb.LabelAdapter{},
-					Samples: []cortexpb.Sample{
+					Labels: []*cortexpb.LabelPair{},
+					Samples: []*cortexpb.Sample{
 						{Value: 0, TimestampMs: 0},
 						{Value: 1, TimestampMs: 1},
 					},
@@ -950,7 +950,7 @@ func seriesResults(fail bool) (*int, http.Handler) {
 	var lock sync.Mutex
 	q := ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
+		Data:   []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
 	}
 
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

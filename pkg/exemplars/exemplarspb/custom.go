@@ -31,7 +31,7 @@ func (m *Exemplar) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	m.Labels = v.Labels
+	m.Labels = &v.Labels
 	m.Ts = int64(v.TimeStamp)
 	m.Value = float64(v.Value)
 
@@ -74,10 +74,10 @@ func (s1 *ExemplarData) Compare(s2 *ExemplarData) int {
 }
 
 func (s *ExemplarData) SetSeriesLabels(ls labels.Labels) {
-	var result labelpb.LabelSet
+	var result *labelpb.LabelSet
 
 	if !ls.IsEmpty() {
-		result = labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ls)}
+		result = &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ls)}
 	}
 
 	s.SeriesLabels = result
@@ -102,7 +102,7 @@ func ExemplarsFromPromExemplars(exemplars []exemplar.Exemplar) []*Exemplar {
 	ex := make([]*Exemplar, 0, len(exemplars))
 	for _, e := range exemplars {
 		ex = append(ex, &Exemplar{
-			Labels: labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(e.Labels)},
+			Labels: &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(e.Labels)},
 			Value:  e.Value,
 			Ts:     e.Ts,
 		})

@@ -329,14 +329,14 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 
 	seriesResponse := &ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
+		Data:   []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}},
 	}
 	seriesData, err := json.Marshal(seriesResponse)
 	testutil.Ok(t, err)
 
 	seriesResponseWithHeaders := &ThanosSeriesResponse{
 		Status:  "success",
-		Data:    []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
+		Data:    []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}},
 		Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
 	}
 	seriesDataWithHeaders, err := json.Marshal(seriesResponseWithHeaders)
@@ -468,45 +468,45 @@ func TestLabelsCodec_MergeResponse(t *testing.T) {
 		{
 			name: "One series response",
 			responses: []queryrange.Response{
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
 			},
-			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
 		},
 		{
 			name: "One series response and two empty responses",
 			responses: []queryrange.Response{
 				&ThanosSeriesResponse{Status: queryrange.StatusSuccess},
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
 				&ThanosSeriesResponse{Status: queryrange.StatusSuccess},
 			},
-			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
 		},
 		{
 			name: "Multiple duplicate series responses",
 			responses: []queryrange.Response{
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
 			},
-			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}}},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}}},
 		},
 		{
 			name: "Multiple unordered series responses",
 			responses: []queryrange.Response{
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{
-					{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}},
-					{Labels: []labelpb.Label{{Name: "test", Value: "aaa"}, {Name: "instance", Value: "localhost:9090"}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{
+					{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}},
+					{Labels: []*labelpb.Label{{Name: "test", Value: "aaa"}, {Name: "instance", Value: "localhost:9090"}}},
 				}},
-				&ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{
-					{Labels: []labelpb.Label{{Name: "foo", Value: "aaa"}}},
-					{Labels: []labelpb.Label{{Name: "test", Value: "bbb"}, {Name: "instance", Value: "localhost:9091"}}},
+				&ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{
+					{Labels: []*labelpb.Label{{Name: "foo", Value: "aaa"}}},
+					{Labels: []*labelpb.Label{{Name: "test", Value: "bbb"}, {Name: "instance", Value: "localhost:9091"}}},
 				}},
 			},
-			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.LabelSet{
-				{Labels: []labelpb.Label{{Name: "foo", Value: "aaa"}}},
-				{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}},
-				{Labels: []labelpb.Label{{Name: "test", Value: "aaa"}, {Name: "instance", Value: "localhost:9090"}}},
-				{Labels: []labelpb.Label{{Name: "test", Value: "bbb"}, {Name: "instance", Value: "localhost:9091"}}},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []*labelpb.LabelSet{
+				{Labels: []*labelpb.Label{{Name: "foo", Value: "aaa"}}},
+				{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}},
+				{Labels: []*labelpb.Label{{Name: "test", Value: "aaa"}, {Name: "instance", Value: "localhost:9090"}}},
+				{Labels: []*labelpb.Label{{Name: "test", Value: "bbb"}, {Name: "instance", Value: "localhost:9091"}}},
 			}},
 		},
 	} {
@@ -576,7 +576,7 @@ func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
 	b.Run("SeriesResponse", func(b *testing.B) {
 		seriesData, err := json.Marshal(&ThanosSeriesResponse{
 			Status: "success",
-			Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
+			Data:   []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}},
 		})
 		testutil.Ok(b, err)
 
@@ -595,7 +595,7 @@ func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
 	b.Run("SeriesResponseWithHeaders", func(b *testing.B) {
 		seriesDataWithHeaders, err := json.Marshal(&ThanosSeriesResponse{
 			Status:  "success",
-			Data:    []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
+			Data:    []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}},
 			Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
 		})
 		testutil.Ok(b, err)
@@ -707,11 +707,11 @@ func makeQueryRangeResponses(size int) ([]queryrange.Response, []queryrange.Resp
 			seriesResp,
 			&ThanosSeriesResponse{
 				Status: "success",
-				Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: fmt.Sprintf("foo-%d", i), Value: fmt.Sprintf("bar-%d", i)}}}},
+				Data:   []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: fmt.Sprintf("foo-%d", i), Value: fmt.Sprintf("bar-%d", i)}}}},
 			},
 			&ThanosSeriesResponse{
 				Status: "success",
-				Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: fmt.Sprintf("foo-%d", i+1), Value: fmt.Sprintf("bar-%d", i+1)}}}},
+				Data:   []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: fmt.Sprintf("foo-%d", i+1), Value: fmt.Sprintf("bar-%d", i+1)}}}},
 			},
 		)
 	}

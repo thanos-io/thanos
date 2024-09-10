@@ -46,12 +46,12 @@ func headersToQueryRangeHeaders(headers []*ResponseHeader) []*queryrange.Prometh
 }
 
 // GetHeaders returns the HTTP headers in the response.
-func (m *ThanosLabelsResponse) GetHeaders() []*queryrange.PrometheusResponseHeader {
+func (m *ThanosLabelsResponse) GetQueryRangeHeaders() []*queryrange.PrometheusResponseHeader {
 	return headersToQueryRangeHeaders(m.Headers)
 }
 
 // GetHeaders returns the HTTP headers in the response.
-func (m *ThanosSeriesResponse) GetHeaders() []*queryrange.PrometheusResponseHeader {
+func (m *ThanosSeriesResponse) GetQueryRangeHeaders() []*queryrange.PrometheusResponseHeader {
 	return headersToQueryRangeHeaders(m.Headers)
 }
 

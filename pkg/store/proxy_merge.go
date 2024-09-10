@@ -165,7 +165,7 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse, quorum b
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
-		return finalChunks[i].Compare(finalChunks[j]) > 0
+		return finalChunks[i].Compare(*finalChunks[j]) > 0
 	})
 
 	return storepb.NewSeriesResponse(&storepb.Series{

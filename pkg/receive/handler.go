@@ -455,7 +455,7 @@ type endpointReplica struct {
 
 type trackedSeries struct {
 	seriesIDs  []int
-	timeSeries []prompb.TimeSeries
+	timeSeries []*prompb.TimeSeries
 }
 
 type writeResponse struct {
@@ -847,7 +847,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 func (h *Handler) distributeTimeseriesToReplicas(
 	tenantHTTP string,
 	replicas []uint64,
-	timeseries []prompb.TimeSeries,
+	timeseries []*prompb.TimeSeries,
 ) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
@@ -873,7 +873,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		}
 
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := h.hashring.GetN(tenant, ts, rn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -887,7 +887,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 				writeDestination[endpointReplica] = map[string]trackedSeries{
 					tenant: {
 						seriesIDs:  make([]int, 0),
-						timeSeries: make([]prompb.TimeSeries, 0),
+						timeSeries: make([]*prompb.TimeSeries, 0),
 					},
 				}
 			}
@@ -953,7 +953,7 @@ func (h *Handler) sendLocalWrite(
 	span.SetTag("tenant", tenantHTTP)
 	span.SetTag("samples", len(trackedSeries.timeSeries))
 
-	tenantSeriesMapping := map[string][]prompb.TimeSeries{}
+	tenantSeriesMapping := map[string][]*prompb.TimeSeries{}
 	for _, ts := range trackedSeries.timeSeries {
 		var tenant = tenantHTTP
 		if h.splitTenantLabelName != "" {
@@ -1082,7 +1082,7 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	if len(h.options.RelabelConfigs) == 0 {
 		return
 	}
-	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	timeSeries := make([]*prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
 		lbls, keep := relabel.Process(labelpb.LabelpbLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)

@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -290,13 +289,15 @@ func TestMergeResponse(t *testing.T) {
 			req:  defaultReq,
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValScalar.String(),
 					Analysis: &queryrange.Analysis{
-						Name:          "foo",
-						ExecutionTime: queryrange.Duration(1 * time.Second),
+						Name: "foo",
+						ExecutionTime: &queryrange.Duration{
+							Seconds: 1,
+						},
 					},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Scalar{
 							Scalar: &cortexpb.Sample{
 								TimestampMs: 0,
@@ -309,13 +310,15 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValScalar.String(),
 						Analysis: &queryrange.Analysis{
-							Name:          "foo",
-							ExecutionTime: queryrange.Duration(1 * time.Second),
+							Name: "foo",
+							ExecutionTime: &queryrange.Duration{
+								Seconds: 1,
+							},
 						},
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Scalar{
 								Scalar: &cortexpb.Sample{
 									TimestampMs: 0,
@@ -333,10 +336,10 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					Analysis:   nil,
 					ResultType: model.ValVector.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{},
 					},
 				},
@@ -348,18 +351,18 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 1,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
-											})),
+											}),
 										},
 									},
 								},
@@ -370,19 +373,19 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Analysis:   nil,
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{
 									{
 										Timestamp:   0,
 										SampleValue: 1,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
-										})),
+										}),
 									},
 								},
 							},
@@ -399,19 +402,19 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 1,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -421,19 +424,19 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 2,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 									},
 								},
@@ -444,28 +447,28 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Analysis:   &queryrange.Analysis{},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{
 									{
 										Timestamp:   0,
 										SampleValue: 1,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
-										})),
+										}),
 									},
 									{
 										Timestamp:   0,
 										SampleValue: 2,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "bar",
-										})),
+										}),
 									},
 								},
 							},
@@ -482,19 +485,19 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 1,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -504,19 +507,19 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 2,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 									},
 								},
@@ -527,28 +530,28 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					Analysis:   &queryrange.Analysis{},
 					ResultType: model.ValVector.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{
 									{
 										Timestamp:   0,
 										SampleValue: 1,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
-										})),
+										}),
 									},
 									{
 										Timestamp:   0,
 										SampleValue: 2,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "bar",
-										})),
+										}),
 									},
 								},
 							},
@@ -563,19 +566,19 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 1,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -585,19 +588,19 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 2,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 									},
 								},
@@ -608,28 +611,28 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Analysis:   &queryrange.Analysis{},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{
 									{
 										Timestamp:   0,
 										SampleValue: 2,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "bar",
-										})),
+										}),
 									},
 									{
 										Timestamp:   0,
 										SampleValue: 1,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
-										})),
+										}),
 									},
 								},
 							},
@@ -728,19 +731,19 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   0,
 											SampleValue: 1,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -750,19 +753,19 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Vector{
 								Vector: &queryrange.Vector{
 									Samples: []*queryrange.Sample{
 										{
 											Timestamp:   1,
 											SampleValue: 2,
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -773,20 +776,20 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Analysis:   &queryrange.Analysis{},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{
 									{
 										Timestamp:   1,
 										SampleValue: 2,
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
-										})),
+										}),
 									},
 								},
 							},
@@ -801,9 +804,9 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValScalar.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Scalar{
 								Scalar: &cortexpb.Sample{
 									TimestampMs: 0,
@@ -815,9 +818,9 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValScalar.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Scalar{
 								Scalar: &cortexpb.Sample{
 									TimestampMs: 0,
@@ -830,10 +833,10 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Analysis:   &queryrange.Analysis{},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{},
@@ -849,25 +852,25 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 								Matrix: &queryrange.Matrix{
 									SampleStreams: []*queryrange.SampleStream{
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -877,25 +880,25 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 								Matrix: &queryrange.Matrix{
 									SampleStreams: []*queryrange.SampleStream{
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 2, Value: 3}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 2, Value: 3}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 2, Value: 3}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 2, Value: 3}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -906,26 +909,26 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
 					Analysis:   &queryrange.Analysis{},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 							Matrix: &queryrange.Matrix{
 								SampleStreams: []*queryrange.SampleStream{
 									{
-										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "bar",
-										})),
+										}),
 									},
 									{
-										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
-										})),
+										}),
 									},
 								},
 							},
@@ -940,26 +943,26 @@ func TestMergeResponse(t *testing.T) {
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
 						Analysis:   &queryrange.Analysis{},
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 								Matrix: &queryrange.Matrix{
 									SampleStreams: []*queryrange.SampleStream{
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -969,25 +972,25 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
+					Data: &queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult{
 							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 								Matrix: &queryrange.Matrix{
 									SampleStreams: []*queryrange.SampleStream{
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "bar",
-											})),
+											}),
 										},
 										{
-											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 												"__name__": "up",
 												"job":      "foo",
-											})),
+											}),
 										},
 									},
 								},
@@ -998,26 +1001,26 @@ func TestMergeResponse(t *testing.T) {
 			},
 			expectedResp: &queryrange.PrometheusInstantQueryResponse{
 				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
 					Analysis:   &queryrange.Analysis{},
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 							Matrix: &queryrange.Matrix{
 								SampleStreams: []*queryrange.SampleStream{
 									{
-										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "bar",
-										})),
+										}),
 									},
 									{
-										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Samples: []*cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
-										})),
+										}),
 									},
 								},
 							},
@@ -1065,13 +1068,15 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					Analysis: &queryrange.Analysis{
-						Name:          "[noArgFunction]",
-						ExecutionTime: queryrange.Duration(1 * time.Second),
+						Name: "[noArgFunction]",
+						ExecutionTime: &queryrange.Duration{
+							Seconds: 1,
+						},
 					},
 					ResultType: model.ValScalar.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Scalar{
 							Scalar: &cortexpb.Sample{TimestampMs: 1708690766576, Value: 1708690766.576},
 						},
@@ -1093,9 +1098,9 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{},
@@ -1129,18 +1134,18 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{
 									{
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"instance": "localhost:9090",
 											"job":      "prometheus",
-										})),
+										}),
 										Timestamp:   1661020672043,
 										SampleValue: 1,
 									},
@@ -1166,9 +1171,9 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValScalar.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Scalar{
 							Scalar: &cortexpb.Sample{TimestampMs: 1661020145547, Value: 1},
 						},
@@ -1191,9 +1196,9 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValString.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_StringSample{
 							StringSample: &queryrange.StringSample{TimestampMs: 1661020232424, Value: "test"},
 						},
@@ -1215,9 +1220,9 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 							Matrix: &queryrange.Matrix{
 								SampleStreams: []*queryrange.SampleStream{},
@@ -1265,19 +1270,19 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 							Matrix: &queryrange.Matrix{
 								SampleStreams: []*queryrange.SampleStream{
 									{
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "up",
 											"instance": "localhost:9090",
 											"job":      "prometheus",
-										})),
-										Samples: []cortexpb.Sample{
+										}),
+										Samples: []*cortexpb.Sample{
 											{TimestampMs: 1661020250310, Value: 1},
 											{TimestampMs: 1661020265309, Value: 1},
 											{TimestampMs: 1661020280309, Value: 1},
@@ -1358,21 +1363,21 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
-				Data: queryrange.PrometheusInstantQueryData{
+				Data: &queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult{
 						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 							Matrix: &queryrange.Matrix{
 								SampleStreams: []*queryrange.SampleStream{
 									{
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "prometheus_http_requests_total",
 											"code":     "200",
 											"handler":  "/favicon.ico",
 											"instance": "localhost:9090",
 											"job":      "prometheus",
-										})),
-										Samples: []cortexpb.Sample{
+										}),
+										Samples: []*cortexpb.Sample{
 											{TimestampMs: 1661020430311, Value: 1},
 											{TimestampMs: 1661020445312, Value: 1},
 											{TimestampMs: 1661020460313, Value: 1},
@@ -1380,14 +1385,14 @@ func TestDecodeResponse(t *testing.T) {
 										},
 									},
 									{
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+										Labels: cortexpb.LabelMapToCortexMetric(map[string]string{
 											"__name__": "prometheus_http_requests_total",
 											"code":     "200",
 											"handler":  "/metrics",
 											"instance": "localhost:9090",
 											"job":      "prometheus",
-										})),
-										Samples: []cortexpb.Sample{
+										}),
+										Samples: []*cortexpb.Sample{
 											{TimestampMs: 1661020430311, Value: 33},
 											{TimestampMs: 1661020445312, Value: 34},
 											{TimestampMs: 1661020460313, Value: 35},

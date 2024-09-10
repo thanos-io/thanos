@@ -64,9 +64,9 @@ func GRPCCodeFromWarn(warn string) codes.Code {
 
 type emptySeriesSet struct{}
 
-func (emptySeriesSet) Next() bool                       { return false }
-func (emptySeriesSet) At() (labels.Labels, []AggrChunk) { return labels.EmptyLabels(), nil }
-func (emptySeriesSet) Err() error                       { return nil }
+func (emptySeriesSet) Next() bool                        { return false }
+func (emptySeriesSet) At() (labels.Labels, []*AggrChunk) { return labels.EmptyLabels(), nil }
+func (emptySeriesSet) Err() error                        { return nil }
 
 // EmptySeriesSet returns a new series set that contains no series.
 func EmptySeriesSet() SeriesSet {
@@ -105,7 +105,7 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 // The set is sorted by the label sets. Chunks may be overlapping or expected of order.
 type SeriesSet interface {
 	Next() bool
-	At() (labels.Labels, []AggrChunk)
+	At() (labels.Labels, []*AggrChunk)
 	Err() error
 }
 
@@ -114,7 +114,7 @@ type mergedSeriesSet struct {
 	a, b SeriesSet
 
 	lset         labels.Labels
-	chunks       []AggrChunk
+	chunks       []*AggrChunk
 	adone, bdone bool
 }
 
@@ -128,7 +128,7 @@ func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	return s
 }
 
-func (s *mergedSeriesSet) At() (labels.Labels, []AggrChunk) {
+func (s *mergedSeriesSet) At() (labels.Labels, []*AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -177,7 +177,7 @@ func (s *mergedSeriesSet) Next() bool {
 
 	// Slice reuse is not generally safe with nested merge iterators.
 	// We err on the safe side an create a new slice.
-	s.chunks = make([]AggrChunk, 0, len(chksA)+len(chksB))
+	s.chunks = make([]*AggrChunk, 0, len(chksA)+len(chksB))
 
 	b := 0
 Outer:
@@ -189,7 +189,7 @@ Outer:
 				break Outer
 			}
 
-			cmp := chksA[a].Compare(chksB[b])
+			cmp := chksA[a].Compare(*chksB[b])
 			if cmp > 0 {
 				s.chunks = append(s.chunks, chksA[a])
 				break
@@ -222,14 +222,14 @@ type uniqueSeriesSet struct {
 	peek *Series
 
 	lset   labels.Labels
-	chunks []AggrChunk
+	chunks []*AggrChunk
 }
 
 func newUniqueSeriesSet(wrapped SeriesSet) *uniqueSeriesSet {
 	return &uniqueSeriesSet{SeriesSet: wrapped}
 }
 
-func (s *uniqueSeriesSet) At() (labels.Labels, []AggrChunk) {
+func (s *uniqueSeriesSet) At() (labels.Labels, []*AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -352,8 +352,8 @@ func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 
 // PromMatchersToMatchers returns proto matchers from Prometheus matchers.
 // NOTE: It allocates memory.
-func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
-	res := make([]LabelMatcher, 0, len(ms))
+func PromMatchersToMatchers(ms ...*labels.Matcher) ([]*LabelMatcher, error) {
+	res := make([]*LabelMatcher, 0, len(ms))
 	for _, m := range ms {
 		var t LabelMatcher_Type
 
@@ -369,14 +369,14 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 		default:
 			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
 		}
-		res = append(res, LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
+		res = append(res, &LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
 	}
 	return res, nil
 }
 
 // MatchersToPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
-func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
+func MatchersToPromMatchers(ms ...*LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
 		var t labels.MatchType
@@ -404,7 +404,7 @@ func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 
 // MatchersToString converts label matchers to string format.
 // String should be parsable as a valid PromQL query metric selector.
-func MatchersToString(ms ...LabelMatcher) string {
+func MatchersToString(ms ...*LabelMatcher) string {
 	var res string
 	for i, m := range ms {
 		res += m.PromString()
@@ -460,13 +460,13 @@ type LabelSet = labelpb.LabelSet
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func CompareLabels(a, b []Label) int {
+func CompareLabels(a, b []*Label) int {
 	return labels.Compare(labelpb.LabelpbLabelsToPromLabels(a), labelpb.LabelpbLabelsToPromLabels(b))
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
+func LabelsToPromLabelsUnsafe(lset []*Label) labels.Labels {
 	return labelpb.LabelpbLabelsToPromLabels(lset)
 }
 
@@ -493,7 +493,7 @@ type SeriesStatsCounter struct {
 	ChunkSt []ChunkStats
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.Label) {
+func (c *SeriesStatsCounter) CountSeries(seriesLabels []*labelpb.Label) {
 	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
