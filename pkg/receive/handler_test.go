@@ -688,22 +688,32 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 }
 
 func TestReceiveQuorumHashmod(t *testing.T) {
+	t.Parallel()
+
 	testReceiveQuorum(t, AlgorithmHashmod, false)
 }
 
 func TestReceiveQuorumKetama(t *testing.T) {
+	t.Parallel()
+
 	testReceiveQuorum(t, AlgorithmKetama, false)
 }
 
 func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
+	t.Parallel()
+
 	testReceiveQuorum(t, AlgorithmHashmod, true)
 }
 
 func TestReceiveWithConsistencyDelayKetama(t *testing.T) {
+	t.Parallel()
+
 	testReceiveQuorum(t, AlgorithmKetama, true)
 }
 
 func TestReceiveWriteRequestLimits(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name          string
 		status        int
@@ -892,6 +902,8 @@ func BenchmarkHandlerReceiveHTTP(b *testing.B) {
 }
 
 func TestHandlerReceiveHTTP(t *testing.T) {
+	t.Parallel()
+
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
 
@@ -1157,6 +1169,8 @@ func Heap(dir string) (err error) {
 }
 
 func TestIsTenantValid(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		name   string
 		tenant string
@@ -1573,6 +1587,8 @@ func TestRelabel(t *testing.T) {
 }
 
 func TestGetStatsLimitParameter(t *testing.T) {
+	t.Parallel()
+
 	t.Run("invalid limit parameter, not integer", func(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
 		testutil.Ok(t, err)
@@ -1620,6 +1636,8 @@ func TestGetStatsLimitParameter(t *testing.T) {
 }
 
 func TestSortedSliceDiff(t *testing.T) {
+	t.Parallel()
+
 	testutil.Equals(t, []string{"a"}, getSortedStringSliceDiff([]string{"a", "a", "foo"}, []string{"b", "b", "foo"}))
 	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{"b", "b", "foo"}))
 	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{}))
@@ -1652,6 +1670,8 @@ func TestHashringChangeCallsClose(t *testing.T) {
 }
 
 func TestHandlerEarlyStop(t *testing.T) {
+	t.Parallel()
+
 	h := NewHandler(nil, &Options{})
 	h.Close()
 
@@ -1675,6 +1695,8 @@ func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint6
 }
 
 func TestDistributeSeries(t *testing.T) {
+	t.Parallel()
+
 	const tenantIDLabelName = "thanos_tenant_id"
 	h := NewHandler(nil, &Options{
 		SplitTenantLabelName: tenantIDLabelName,
@@ -1712,6 +1734,8 @@ func TestDistributeSeries(t *testing.T) {
 }
 
 func TestHandlerFlippingHashrings(t *testing.T) {
+	t.Parallel()
+
 	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
 	t.Cleanup(h.Close)
 

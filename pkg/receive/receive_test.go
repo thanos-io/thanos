@@ -26,6 +26,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestAddingExternalLabelsForTenants(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name                      string
 		cfg                       []HashringConfig
@@ -238,6 +240,8 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 }
 
 func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
+	t.Parallel()
+
 	initialConfig := []HashringConfig{
 		{
 			Endpoints: []Endpoint{{Address: "node1"}},
@@ -347,6 +351,8 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 }
 
 func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
+	t.Parallel()
+
 	initialConfig := []HashringConfig{
 		{
 			Endpoints: []Endpoint{{Address: "node1"}},
@@ -577,6 +583,8 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 }
 
 func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
+	t.Parallel()
+
 	initialConfig := []HashringConfig{
 		{
 			Endpoints: []Endpoint{{Address: "node1"}},
@@ -745,6 +753,8 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 }
 
 func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
+	t.Parallel()
+
 	cfg := []HashringConfig{
 		{
 			Endpoints: []Endpoint{{Address: "node1"}},

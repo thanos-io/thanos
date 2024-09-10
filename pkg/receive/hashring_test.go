@@ -19,6 +19,8 @@ import (
 )
 
 func TestHashringGet(t *testing.T) {
+	t.Parallel()
+
 	ts := &prompb.TimeSeries{
 		Labels: []*labelpb.Label{
 			{
@@ -160,6 +162,8 @@ func TestHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringGet(t *testing.T) {
+	t.Parallel()
+
 	baseTS := &prompb.TimeSeries{
 		Labels: []*labelpb.Label{
 			{
@@ -242,11 +246,15 @@ func TestKetamaHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringBadConfigIsRejected(t *testing.T) {
+	t.Parallel()
+
 	_, err := newKetamaHashring([]Endpoint{{Address: "node-1"}}, 1, 2)
 	require.Error(t, err)
 }
 
 func TestKetamaHashringConsistency(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	ringA := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
@@ -267,6 +275,8 @@ func TestKetamaHashringConsistency(t *testing.T) {
 }
 
 func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
@@ -287,6 +297,8 @@ func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
 }
 
 func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-3"}}
@@ -307,6 +319,8 @@ func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 }
 
 func TestKetamaHashringReplicationConsistency(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-4"}, {Address: "node-5"}}
@@ -327,6 +341,8 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 }
 
 func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		initialRing []Endpoint
 		resizedRing []Endpoint
@@ -379,6 +395,8 @@ func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
 }
 
 func TestKetamaHashringEvenAZSpread(t *testing.T) {
+	t.Parallel()
+
 	tenant := "default-tenant"
 	ts := &prompb.TimeSeries{
 		Labels:  labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
@@ -482,6 +500,8 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 }
 
 func TestKetamaHashringEvenNodeSpread(t *testing.T) {
+	t.Parallel()
+
 	tenant := "default-tenant"
 
 	for _, tt := range []struct {
@@ -573,6 +593,8 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 }
 
 func TestInvalidAZHashringCfg(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		cfg           []HashringConfig
 		replicas      uint64
