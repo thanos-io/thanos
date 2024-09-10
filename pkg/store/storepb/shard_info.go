@@ -93,7 +93,7 @@ func (m *ShardInfo) labelSet() map[string]struct{} {
 		return nil
 	}
 	labelSet := make(map[string]struct{})
-	if m == nil || m.Labels == nil {
+	if m.Labels == nil {
 		return labelSet
 	}
 

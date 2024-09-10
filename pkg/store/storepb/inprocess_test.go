@@ -25,6 +25,8 @@ type testStoreServer struct {
 	labelValuesLastReq *LabelValuesRequest
 
 	err error
+
+	UnimplementedStoreServer
 }
 
 func (t *testStoreServer) Series(r *SeriesRequest, server Store_SeriesServer) error {

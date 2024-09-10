@@ -17,7 +17,7 @@
 syntax = "proto3";
 package prometheus_copy;
 
-option go_package = "prompb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/storepb/prompb";
 
 import "store/labelpb/types.proto";
 

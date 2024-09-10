@@ -30,6 +30,8 @@ type GRPCAPI struct {
 	defaultEngine               querypb.EngineType
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
+
+	querypb.UnimplementedQueryServer
 }
 
 func NewGRPCAPI(

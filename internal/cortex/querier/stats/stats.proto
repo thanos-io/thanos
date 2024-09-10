@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package stats;
 
-option go_package = "stats";
+option go_package = "github.com/thanos-io/thanos/internal/cortex/querier/stats";
 
 import "google/protobuf/duration.proto";
 

@@ -6,7 +6,7 @@ package thanos.info;
 
 import "store/labelpb/types.proto";
 
-option go_package = "infopb";
+option go_package = "github.com/thanos-io/thanos/pkg/info/infopb";
 
 // Info represents the API that is responsible for gathering metadata about the all APIs supported by the component.
 service Info {

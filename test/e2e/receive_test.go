@@ -20,14 +20,15 @@ import (
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	logkit "github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/prometheus/common/model"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/prometheus/prometheus/model/relabel"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -1007,12 +1008,12 @@ func TestReceiveGlob(t *testing.T) {
 
 	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
 		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
-			Timeseries: []prompb.TimeSeries{
+			Timeseries: []*prompb.TimeSeries{
 				{
-					Labels: []prompb.Label{
+					Labels: []*labelpb.Label{
 						{Name: "aa", Value: "bb"},
 					},
-					Samples: []prompb.Sample{
+					Samples: []*prompb.Sample{
 						{Value: 1, Timestamp: time.Now().UnixMilli()},
 					},
 				},
@@ -1048,13 +1049,13 @@ func TestReceiveExtractsTenant(t *testing.T) {
 	t.Run("tenant label is extracted", func(t *testing.T) {
 		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
 			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []prompb.Label{
+						Labels: []*labelpb.Label{
 							{Name: tenantLabelName, Value: "tenant-1"},
 							{Name: "aa", Value: "bb"},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
 						},
 					},
@@ -1068,22 +1069,22 @@ func TestReceiveExtractsTenant(t *testing.T) {
 	t.Run("tenant label is extracted from one series, default is used for the other one", func(t *testing.T) {
 		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
 			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []prompb.Label{
+						Labels: []*labelpb.Label{
 							{Name: tenantLabelName, Value: "tenant-2"},
 							{Name: "aa", Value: "bb"},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
 						},
 					},
 					{
-						Labels: []prompb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "aa", Value: "bb"},
 							{Name: "foo", Value: "bar"},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
 						},
 					},
@@ -1097,22 +1098,22 @@ func TestReceiveExtractsTenant(t *testing.T) {
 	t.Run("tenant label is extracted from one series, HTTP header is used for the other one", func(t *testing.T) {
 		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
 			req := &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []prompb.Label{
+						Labels: []*labelpb.Label{
 							{Name: tenantLabelName, Value: "tenant-3"},
 							{Name: "aa", Value: "bb"},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
 						},
 					},
 					{
-						Labels: []prompb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "aa", Value: "bb"},
 							{Name: "foo", Value: "bar"},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
 						},
 					},
@@ -1136,12 +1137,12 @@ func TestReceiveExtractsTenant(t *testing.T) {
 			}
 
 			var buf []byte
-			pBuf := proto.NewBuffer(nil)
-			if err := pBuf.Marshal(req); err != nil {
+			pBuf, err := proto.Marshal(req)
+			if err != nil {
 				return err
 			}
 
-			compressed := snappy.Encode(buf, pBuf.Bytes())
+			compressed := snappy.Encode(buf, pBuf)
 			return client.Store(context.Background(), compressed, 0)
 		}))
 
