@@ -6,21 +6,8 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
-import "gogoproto/gogo.proto";
-import "google/protobuf/timestamp.proto";
 
 option go_package = "rulespb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
 
 /// Rules represents API that is responsible for gathering rules and their statuses.
 service Rules {
@@ -65,21 +52,30 @@ message RulesResponse {
 ///
 /// For rule parsing from YAML configuration other struct is used: https://github.com/prometheus/prometheus/blob/20b1f596f6fb16107ef0c244d240b0ad6da36829/pkg/rulefmt/rulefmt.go#L105
 message RuleGroups {
-    repeated RuleGroup groups = 1 [(gogoproto.jsontag) = "groups" ];
+    // @gotags: json:"groups"
+    repeated RuleGroup groups = 1;
 }
 
 /// RuleGroup has info for rules which are part of a group.
 message RuleGroup {
-    string name                               = 1 [(gogoproto.jsontag) = "name" ];
-    string file                               = 2 [(gogoproto.jsontag) = "file" ];
-    repeated Rule rules                       = 3 [(gogoproto.jsontag) = "rules" ];
-    double interval                           = 4 [(gogoproto.jsontag) = "interval" ];
-    double evaluation_duration_seconds        = 5 [(gogoproto.jsontag) = "evaluationTime" ]; // TODO: Is it really second?
-    google.protobuf.Timestamp last_evaluation = 6 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
-    int64 limit                               = 9 [(gogoproto.jsontag) = "limit" ];
+    // @gotags: json:"name"
+    string name                               = 1;
+    // @gotags: json:"file"
+    string file                               = 2;
+    // @gotags: json:"rules"
+    repeated Rule rules                       = 3;
+    // @gotags: json:"interval"
+    double interval                           = 4;
+    // @gotags: json:"evaluationTime"
+    double evaluation_duration_seconds        = 5; // TODO: Is it really second?
+    // @gotags: json:"lastEvaluation"
+    Timestamp last_evaluation = 6;
+    // @gotags: json:"limit"
+    int64 limit                               = 9;
 
     // Thanos specific.
-    PartialResponseStrategy PartialResponseStrategy = 8 [(gogoproto.jsontag) = "partialResponseStrategy" ];
+    // @gotags: json:"partialResponseStrategy"
+    PartialResponseStrategy PartialResponseStrategy = 8;
 }
 
 message Rule {
@@ -106,38 +102,76 @@ enum AlertState {
 }
 
 message AlertInstance {
-    LabelSet labels                      = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    LabelSet annotations                 = 2 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
-    AlertState state                     = 3 [(gogoproto.jsontag) = "state" ];
-    google.protobuf.Timestamp active_at  = 4 [(gogoproto.jsontag) = "activeAt,omitempty", (gogoproto.stdtime) = true];
-    string value                         = 5 [(gogoproto.jsontag) = "value" ];
+    // @gotags: json:"labels"
+    LabelSet labels                      = 1;
+    // @gotags: json:"annotations"
+    LabelSet annotations                 = 2;
+    // @gotags: json:"state"
+    AlertState state                     = 3;
+    // @gotags: json:"activeAt,omitempty"
+    Timestamp active_at  = 4;
+    // @gotags: json:"value"
+    string value                         = 5;
 
     // Thanos specific. Used mainly for alert API purposes.
-    PartialResponseStrategy PartialResponseStrategy = 6 [(gogoproto.jsontag) = "partialResponseStrategy" ];
+    // @gotags: json:"partialResponseStrategy"
+    PartialResponseStrategy PartialResponseStrategy = 6;
 }
 
 message Alert {
     /// state returns the maximum state of alert instances for this rule.
-    AlertState state                          = 1 [(gogoproto.jsontag) = "state" ];
-    string name                               = 2 [(gogoproto.jsontag) = "name" ];
-    string query                              = 3 [(gogoproto.jsontag) = "query" ];
-    double duration_seconds                   = 4 [(gogoproto.jsontag) = "duration" ];
-    LabelSet labels                          = 5 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    LabelSet annotations                     = 6 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
-    repeated AlertInstance alerts             = 7 [(gogoproto.jsontag) = "alerts" ];
-    string health                             = 8 [(gogoproto.jsontag) = "health" ];
-    string last_error                         = 9 [(gogoproto.jsontag) = "lastError,omitempty" ];
-    double evaluation_duration_seconds        = 10 [(gogoproto.jsontag) = "evaluationTime" ];
-    google.protobuf.Timestamp last_evaluation = 11 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
-    double keep_firing_for_seconds            = 12 [(gogoproto.jsontag) = "keepFiringFor" ];
+    // @gotags: json:"state"
+    AlertState state                          = 1;
+    // @gotags: json:"name"
+    string name                               = 2;
+    // @gotags: json:"query"
+    string query                              = 3;
+    // @gotags: json:"duration"
+    double duration_seconds                   = 4;
+    // @gotags: json:"labels"
+    LabelSet labels                          = 5;
+    // @gotags: json:"annotations"
+    LabelSet annotations                     = 6;
+    // @gotags: json:"alerts"
+    repeated AlertInstance alerts             = 7;
+    // @gotags: json:"health"
+    string health                             = 8;
+    // @gotags: json:"lastError,omitempty"
+    string last_error                         = 9;
+    // @gotags: json:"evaluationTime"
+    double evaluation_duration_seconds        = 10;
+    // @gotags: json:"lastEvaluation,omitempty"
+    Timestamp last_evaluation = 11;
+    // @gotags: json:"keepFiringFor"
+    double keep_firing_for_seconds            = 12;
 }
 
 message RecordingRule {
-    string name                               = 1 [(gogoproto.jsontag) = "name" ];
-    string query                              = 2 [(gogoproto.jsontag) = "query" ];
-    LabelSet labels                          = 3 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    string health                             = 4 [(gogoproto.jsontag) = "health" ];
-    string last_error                         = 5 [(gogoproto.jsontag) = "lastError,omitempty" ];
-    double evaluation_duration_seconds        = 6 [(gogoproto.jsontag) = "evaluationTime" ];
-    google.protobuf.Timestamp last_evaluation = 7 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
+    // @gotags: json:"name"
+    string name                               = 1;
+    // @gotags: json:"query"
+    string query                              = 2;
+    // @gotags: json:"labels"
+    LabelSet labels                           = 3;
+    // @gotags: json:"health"
+    string health                             = 4;
+    // @gotags: json:"lastError,omitempty"
+    string last_error                         = 5;
+    // @gotags: json:"evaluationTime"
+    double evaluation_duration_seconds        = 6;
+    // @gotags: json:"lastEvaluation"
+    Timestamp last_evaluation = 7;
+}
+
+message Timestamp {
+    // Represents seconds of UTC time since Unix epoch
+    // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
+    // 9999-12-31T23:59:59Z inclusive.
+    int64 seconds = 1;
+
+    // Non-negative fractions of a second at nanosecond resolution. Negative
+    // second values with fractions must still have non-negative nanos values
+    // that count forward in time. Must be from 0 to 999,999,999
+    // inclusive.
+    int32 nanos = 2;
 }

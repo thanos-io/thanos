@@ -1246,7 +1246,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 	var s storepb.Series
 
 	for _, l := range lset {
-		s.Labels = append(s.Labels, labelpb.Label{Name: l.Name, Value: l.Value})
+		s.Labels = append(s.Labels, &labelpb.Label{Name: l.Name, Value: l.Value})
 	}
 
 	for _, smpls := range smplChunks {
@@ -1264,7 +1264,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		}
 
-		s.Chunks = append(s.Chunks, ch)
+		s.Chunks = append(s.Chunks, &ch)
 	}
 	return storepb.NewSeriesResponse(&s)
 }

@@ -77,8 +77,8 @@ func (r *ThanosQueryRangeRequest) GetStep() int64 { return r.Step }
 // GetQuery returns the query of the request.
 func (r *ThanosQueryRangeRequest) GetQuery() string { return r.Query }
 
-func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions {
-	return r.CachingOptions
+func (r *ThanosQueryRangeRequest) GetCachingOptions() *queryrange.CachingOptions {
+	return &r.CachingOptions
 }
 
 func (r *ThanosQueryRangeRequest) GetStats() string { return r.Stats }
@@ -178,8 +178,8 @@ func (r *ThanosQueryInstantRequest) GetStep() int64 { return 0 }
 // GetQuery returns the query of the request.
 func (r *ThanosQueryInstantRequest) GetQuery() string { return r.Query }
 
-func (r *ThanosQueryInstantRequest) GetCachingOptions() queryrange.CachingOptions {
-	return queryrange.CachingOptions{}
+func (r *ThanosQueryInstantRequest) GetCachingOptions() *queryrange.CachingOptions {
+	return &queryrange.CachingOptions{}
 }
 
 func (r *ThanosQueryInstantRequest) GetStats() string { return r.Stats }
@@ -264,7 +264,9 @@ func (r *ThanosLabelsRequest) GetStep() int64 { return 1 }
 // GetQuery returns the query of the request.
 func (r *ThanosLabelsRequest) GetQuery() string { return "" }
 
-func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
+func (r *ThanosLabelsRequest) GetCachingOptions() *queryrange.CachingOptions {
+	return &r.CachingOptions
+}
 
 func (r *ThanosLabelsRequest) GetStats() string { return r.Stats }
 
@@ -349,7 +351,9 @@ func (r *ThanosSeriesRequest) GetStep() int64 { return 1 }
 // GetQuery returns the query of the request.
 func (r *ThanosSeriesRequest) GetQuery() string { return "" }
 
-func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
+func (r *ThanosSeriesRequest) GetCachingOptions() *queryrange.CachingOptions {
+	return &r.CachingOptions
+}
 
 func (r *ThanosSeriesRequest) GetStats() string { return r.Stats }
 

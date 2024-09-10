@@ -10,7 +10,6 @@ import (
 	math "math"
 	math_bits "math/bits"
 
-	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	types "github.com/gogo/protobuf/types"
 	prompb "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -68,6 +67,9 @@ func (Aggr) EnumDescriptor() ([]byte, []int) {
 }
 
 type WriteResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *WriteResponse) Reset()         { *m = WriteResponse{} }
@@ -104,9 +106,12 @@ func (m *WriteResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_WriteResponse proto.InternalMessageInfo
 
 type WriteRequest struct {
-	Timeseries []prompb.TimeSeries `protobuf:"bytes,1,rep,name=timeseries,proto3" json:"timeseries"`
-	Tenant     string              `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
-	Replica    int64               `protobuf:"varint,3,opt,name=replica,proto3" json:"replica,omitempty"`
+	Timeseries           []*prompb.TimeSeries `protobuf:"bytes,1,rep,name=timeseries,proto3" json:"timeseries,omitempty"`
+	Tenant               string               `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	Replica              int64                `protobuf:"varint,3,opt,name=replica,proto3" json:"replica,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_unrecognized     []byte               `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
 func (m *WriteRequest) Reset()         { *m = WriteRequest{} }
@@ -142,12 +147,33 @@ func (m *WriteRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WriteRequest proto.InternalMessageInfo
 
+func (m *WriteRequest) GetTimeseries() []*prompb.TimeSeries {
+	if m != nil {
+		return m.Timeseries
+	}
+	return nil
+}
+
+func (m *WriteRequest) GetTenant() string {
+	if m != nil {
+		return m.Tenant
+	}
+	return ""
+}
+
+func (m *WriteRequest) GetReplica() int64 {
+	if m != nil {
+		return m.Replica
+	}
+	return 0
+}
+
 type SeriesRequest struct {
-	MinTime             int64          `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
-	MaxTime             int64          `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
-	Matchers            []LabelMatcher `protobuf:"bytes,3,rep,name=matchers,proto3" json:"matchers"`
-	MaxResolutionWindow int64          `protobuf:"varint,4,opt,name=max_resolution_window,json=maxResolutionWindow,proto3" json:"max_resolution_window,omitempty"`
-	Aggregates          []Aggr         `protobuf:"varint,5,rep,packed,name=aggregates,proto3,enum=thanos.Aggr" json:"aggregates,omitempty"`
+	MinTime             int64           `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
+	MaxTime             int64           `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	Matchers            []*LabelMatcher `protobuf:"bytes,3,rep,name=matchers,proto3" json:"matchers,omitempty"`
+	MaxResolutionWindow int64           `protobuf:"varint,4,opt,name=max_resolution_window,json=maxResolutionWindow,proto3" json:"max_resolution_window,omitempty"`
+	Aggregates          []Aggr          `protobuf:"varint,5,rep,packed,name=aggregates,proto3,enum=thanos.Aggr" json:"aggregates,omitempty"`
 	// Deprecated. Use partial_response_strategy instead.
 	PartialResponseDisabled bool `protobuf:"varint,6,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
 	// TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
@@ -181,7 +207,10 @@ type SeriesRequest struct {
 	// server supports it.
 	WithoutReplicaLabels []string `protobuf:"bytes,14,rep,name=without_replica_labels,json=withoutReplicaLabels,proto3" json:"without_replica_labels,omitempty"`
 	// limit is used to limit the number of results returned
-	Limit int64 `protobuf:"varint,15,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit                int64    `protobuf:"varint,15,opt,name=limit,proto3" json:"limit,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *SeriesRequest) Reset()         { *m = SeriesRequest{} }
@@ -217,6 +246,111 @@ func (m *SeriesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SeriesRequest proto.InternalMessageInfo
 
+func (m *SeriesRequest) GetMinTime() int64 {
+	if m != nil {
+		return m.MinTime
+	}
+	return 0
+}
+
+func (m *SeriesRequest) GetMaxTime() int64 {
+	if m != nil {
+		return m.MaxTime
+	}
+	return 0
+}
+
+func (m *SeriesRequest) GetMatchers() []*LabelMatcher {
+	if m != nil {
+		return m.Matchers
+	}
+	return nil
+}
+
+func (m *SeriesRequest) GetMaxResolutionWindow() int64 {
+	if m != nil {
+		return m.MaxResolutionWindow
+	}
+	return 0
+}
+
+func (m *SeriesRequest) GetAggregates() []Aggr {
+	if m != nil {
+		return m.Aggregates
+	}
+	return nil
+}
+
+func (m *SeriesRequest) GetPartialResponseDisabled() bool {
+	if m != nil {
+		return m.PartialResponseDisabled
+	}
+	return false
+}
+
+func (m *SeriesRequest) GetPartialResponseStrategy() PartialResponseStrategy {
+	if m != nil {
+		return m.PartialResponseStrategy
+	}
+	return PartialResponseStrategy_WARN
+}
+
+func (m *SeriesRequest) GetSkipChunks() bool {
+	if m != nil {
+		return m.SkipChunks
+	}
+	return false
+}
+
+func (m *SeriesRequest) GetHints() *types.Any {
+	if m != nil {
+		return m.Hints
+	}
+	return nil
+}
+
+func (m *SeriesRequest) GetStep() int64 {
+	if m != nil {
+		return m.Step
+	}
+	return 0
+}
+
+func (m *SeriesRequest) GetRange() int64 {
+	if m != nil {
+		return m.Range
+	}
+	return 0
+}
+
+func (m *SeriesRequest) GetQueryHints() *QueryHints {
+	if m != nil {
+		return m.QueryHints
+	}
+	return nil
+}
+
+func (m *SeriesRequest) GetShardInfo() *ShardInfo {
+	if m != nil {
+		return m.ShardInfo
+	}
+	return nil
+}
+
+func (m *SeriesRequest) GetWithoutReplicaLabels() []string {
+	if m != nil {
+		return m.WithoutReplicaLabels
+	}
+	return nil
+}
+
+func (m *SeriesRequest) GetLimit() int64 {
+	if m != nil {
+		return m.Limit
+	}
+	return 0
+}
+
 // QueryHints represents hints from PromQL that might help to
 // pre-aggregate or prepare series for faster use by clients.
 // Analogous to storage.SelectHints plus additional info.
@@ -229,7 +363,10 @@ type QueryHints struct {
 	// The grouping expression
 	Grouping *Grouping `protobuf:"bytes,4,opt,name=grouping,proto3" json:"grouping,omitempty"`
 	// Range vector selector.
-	Range *Range `protobuf:"bytes,5,opt,name=range,proto3" json:"range,omitempty"`
+	Range                *Range   `protobuf:"bytes,5,opt,name=range,proto3" json:"range,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *QueryHints) Reset()         { *m = QueryHints{} }
@@ -265,6 +402,34 @@ func (m *QueryHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueryHints proto.InternalMessageInfo
 
+func (m *QueryHints) GetStepMillis() int64 {
+	if m != nil {
+		return m.StepMillis
+	}
+	return 0
+}
+
+func (m *QueryHints) GetFunc() *Func {
+	if m != nil {
+		return m.Func
+	}
+	return nil
+}
+
+func (m *QueryHints) GetGrouping() *Grouping {
+	if m != nil {
+		return m.Grouping
+	}
+	return nil
+}
+
+func (m *QueryHints) GetRange() *Range {
+	if m != nil {
+		return m.Range
+	}
+	return nil
+}
+
 // ShardInfo are the parameters used to shard series in Stores.
 type ShardInfo struct {
 	// The index of the current shard.
@@ -274,7 +439,10 @@ type ShardInfo struct {
 	// Group by or without labels.
 	By bool `protobuf:"varint,3,opt,name=by,proto3" json:"by,omitempty"`
 	// Labels on which to partition series.
-	Labels []string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty"`
+	Labels               []string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ShardInfo) Reset()         { *m = ShardInfo{} }
@@ -310,9 +478,40 @@ func (m *ShardInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ShardInfo proto.InternalMessageInfo
 
+func (m *ShardInfo) GetShardIndex() int64 {
+	if m != nil {
+		return m.ShardIndex
+	}
+	return 0
+}
+
+func (m *ShardInfo) GetTotalShards() int64 {
+	if m != nil {
+		return m.TotalShards
+	}
+	return 0
+}
+
+func (m *ShardInfo) GetBy() bool {
+	if m != nil {
+		return m.By
+	}
+	return false
+}
+
+func (m *ShardInfo) GetLabels() []string {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
 type Func struct {
 	// The function or aggregation name
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Func) Reset()         { *m = Func{} }
@@ -348,11 +547,21 @@ func (m *Func) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Func proto.InternalMessageInfo
 
+func (m *Func) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
 type Grouping struct {
 	// Indicate whether it is without or by.
 	By bool `protobuf:"varint,1,opt,name=by,proto3" json:"by,omitempty"`
 	// List of label names used in the grouping.
-	Labels []string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"`
+	Labels               []string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Grouping) Reset()         { *m = Grouping{} }
@@ -388,8 +597,25 @@ func (m *Grouping) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Grouping proto.InternalMessageInfo
 
+func (m *Grouping) GetBy() bool {
+	if m != nil {
+		return m.By
+	}
+	return false
+}
+
+func (m *Grouping) GetLabels() []string {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
 type Range struct {
-	Millis int64 `protobuf:"varint,1,opt,name=millis,proto3" json:"millis,omitempty"`
+	Millis               int64    `protobuf:"varint,1,opt,name=millis,proto3" json:"millis,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Range) Reset()         { *m = Range{} }
@@ -425,12 +651,22 @@ func (m *Range) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Range proto.InternalMessageInfo
 
+func (m *Range) GetMillis() int64 {
+	if m != nil {
+		return m.Millis
+	}
+	return 0
+}
+
 type SeriesResponse struct {
 	// Types that are valid to be assigned to Result:
 	//	*SeriesResponse_Series
 	//	*SeriesResponse_Warning
 	//	*SeriesResponse_Hints
-	Result isSeriesResponse_Result `protobuf_oneof:"result"`
+	Result               isSeriesResponse_Result `protobuf_oneof:"result"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
 func (m *SeriesResponse) Reset()         { *m = SeriesResponse{} }
@@ -532,12 +768,15 @@ type LabelNamesRequest struct {
 	// hints is an opaque data structure that can be used to carry additional information.
 	// The content of this field and whether it's supported depends on the
 	// implementation of a specific store.
-	Hints    *types.Any     `protobuf:"bytes,5,opt,name=hints,proto3" json:"hints,omitempty"`
-	Matchers []LabelMatcher `protobuf:"bytes,6,rep,name=matchers,proto3" json:"matchers"`
+	Hints    *types.Any      `protobuf:"bytes,5,opt,name=hints,proto3" json:"hints,omitempty"`
+	Matchers []*LabelMatcher `protobuf:"bytes,6,rep,name=matchers,proto3" json:"matchers,omitempty"`
 	// same as in series request.
 	WithoutReplicaLabels []string `protobuf:"bytes,7,rep,name=without_replica_labels,json=withoutReplicaLabels,proto3" json:"without_replica_labels,omitempty"`
 	// limit is used to limit the number of results returned
-	Limit int64 `protobuf:"varint,8,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit                int64    `protobuf:"varint,8,opt,name=limit,proto3" json:"limit,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *LabelNamesRequest) Reset()         { *m = LabelNamesRequest{} }
@@ -573,13 +812,72 @@ func (m *LabelNamesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelNamesRequest proto.InternalMessageInfo
 
+func (m *LabelNamesRequest) GetPartialResponseDisabled() bool {
+	if m != nil {
+		return m.PartialResponseDisabled
+	}
+	return false
+}
+
+func (m *LabelNamesRequest) GetPartialResponseStrategy() PartialResponseStrategy {
+	if m != nil {
+		return m.PartialResponseStrategy
+	}
+	return PartialResponseStrategy_WARN
+}
+
+func (m *LabelNamesRequest) GetStart() int64 {
+	if m != nil {
+		return m.Start
+	}
+	return 0
+}
+
+func (m *LabelNamesRequest) GetEnd() int64 {
+	if m != nil {
+		return m.End
+	}
+	return 0
+}
+
+func (m *LabelNamesRequest) GetHints() *types.Any {
+	if m != nil {
+		return m.Hints
+	}
+	return nil
+}
+
+func (m *LabelNamesRequest) GetMatchers() []*LabelMatcher {
+	if m != nil {
+		return m.Matchers
+	}
+	return nil
+}
+
+func (m *LabelNamesRequest) GetWithoutReplicaLabels() []string {
+	if m != nil {
+		return m.WithoutReplicaLabels
+	}
+	return nil
+}
+
+func (m *LabelNamesRequest) GetLimit() int64 {
+	if m != nil {
+		return m.Limit
+	}
+	return 0
+}
+
 type LabelNamesResponse struct {
 	Names    []string `protobuf:"bytes,1,rep,name=names,proto3" json:"names,omitempty"`
 	Warnings []string `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	/// hints is an opaque data structure that can be used to carry additional information from
-	/// the store. The content of this field and whether it's supported depends on the
-	/// implementation of a specific store.
-	Hints *types.Any `protobuf:"bytes,3,opt,name=hints,proto3" json:"hints,omitempty"`
+	// / hints is an opaque data structure that can be used to carry additional information from
+	// / the store. The content of this field and whether it's supported depends on the
+	// / implementation of a specific store.
+	Hints                *types.Any `protobuf:"bytes,3,opt,name=hints,proto3" json:"hints,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_unrecognized     []byte     `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
 }
 
 func (m *LabelNamesResponse) Reset()         { *m = LabelNamesResponse{} }
@@ -615,6 +913,27 @@ func (m *LabelNamesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelNamesResponse proto.InternalMessageInfo
 
+func (m *LabelNamesResponse) GetNames() []string {
+	if m != nil {
+		return m.Names
+	}
+	return nil
+}
+
+func (m *LabelNamesResponse) GetWarnings() []string {
+	if m != nil {
+		return m.Warnings
+	}
+	return nil
+}
+
+func (m *LabelNamesResponse) GetHints() *types.Any {
+	if m != nil {
+		return m.Hints
+	}
+	return nil
+}
+
 type LabelValuesRequest struct {
 	Label                   string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	PartialResponseDisabled bool   `protobuf:"varint,2,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
@@ -625,12 +944,15 @@ type LabelValuesRequest struct {
 	// hints is an opaque data structure that can be used to carry additional information.
 	// The content of this field and whether it's supported depends on the
 	// implementation of a specific store.
-	Hints    *types.Any     `protobuf:"bytes,6,opt,name=hints,proto3" json:"hints,omitempty"`
-	Matchers []LabelMatcher `protobuf:"bytes,7,rep,name=matchers,proto3" json:"matchers"`
+	Hints    *types.Any      `protobuf:"bytes,6,opt,name=hints,proto3" json:"hints,omitempty"`
+	Matchers []*LabelMatcher `protobuf:"bytes,7,rep,name=matchers,proto3" json:"matchers,omitempty"`
 	// same as in series request.
 	WithoutReplicaLabels []string `protobuf:"bytes,8,rep,name=without_replica_labels,json=withoutReplicaLabels,proto3" json:"without_replica_labels,omitempty"`
 	// limit is used to limit the number of results returned
-	Limit int64 `protobuf:"varint,9,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit                int64    `protobuf:"varint,9,opt,name=limit,proto3" json:"limit,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *LabelValuesRequest) Reset()         { *m = LabelValuesRequest{} }
@@ -666,13 +988,79 @@ func (m *LabelValuesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesRequest proto.InternalMessageInfo
 
+func (m *LabelValuesRequest) GetLabel() string {
+	if m != nil {
+		return m.Label
+	}
+	return ""
+}
+
+func (m *LabelValuesRequest) GetPartialResponseDisabled() bool {
+	if m != nil {
+		return m.PartialResponseDisabled
+	}
+	return false
+}
+
+func (m *LabelValuesRequest) GetPartialResponseStrategy() PartialResponseStrategy {
+	if m != nil {
+		return m.PartialResponseStrategy
+	}
+	return PartialResponseStrategy_WARN
+}
+
+func (m *LabelValuesRequest) GetStart() int64 {
+	if m != nil {
+		return m.Start
+	}
+	return 0
+}
+
+func (m *LabelValuesRequest) GetEnd() int64 {
+	if m != nil {
+		return m.End
+	}
+	return 0
+}
+
+func (m *LabelValuesRequest) GetHints() *types.Any {
+	if m != nil {
+		return m.Hints
+	}
+	return nil
+}
+
+func (m *LabelValuesRequest) GetMatchers() []*LabelMatcher {
+	if m != nil {
+		return m.Matchers
+	}
+	return nil
+}
+
+func (m *LabelValuesRequest) GetWithoutReplicaLabels() []string {
+	if m != nil {
+		return m.WithoutReplicaLabels
+	}
+	return nil
+}
+
+func (m *LabelValuesRequest) GetLimit() int64 {
+	if m != nil {
+		return m.Limit
+	}
+	return 0
+}
+
 type LabelValuesResponse struct {
 	Values   []string `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
 	Warnings []string `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	/// hints is an opaque data structure that can be used to carry additional information from
-	/// the store. The content of this field and whether it's supported depends on the
-	/// implementation of a specific store.
-	Hints *types.Any `protobuf:"bytes,3,opt,name=hints,proto3" json:"hints,omitempty"`
+	// / hints is an opaque data structure that can be used to carry additional information from
+	// / the store. The content of this field and whether it's supported depends on the
+	// / implementation of a specific store.
+	Hints                *types.Any `protobuf:"bytes,3,opt,name=hints,proto3" json:"hints,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_unrecognized     []byte     `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
 }
 
 func (m *LabelValuesResponse) Reset()         { *m = LabelValuesResponse{} }
@@ -708,6 +1096,27 @@ func (m *LabelValuesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesResponse proto.InternalMessageInfo
 
+func (m *LabelValuesResponse) GetValues() []string {
+	if m != nil {
+		return m.Values
+	}
+	return nil
+}
+
+func (m *LabelValuesResponse) GetWarnings() []string {
+	if m != nil {
+		return m.Warnings
+	}
+	return nil
+}
+
+func (m *LabelValuesResponse) GetHints() *types.Any {
+	if m != nil {
+		return m.Hints
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("thanos.Aggr", Aggr_name, Aggr_value)
 	proto.RegisterType((*WriteResponse)(nil), "thanos.WriteResponse")
@@ -728,79 +1137,77 @@ func init() {
 func init() { proto.RegisterFile("store/storepb/rpc.proto", fileDescriptor_a938d55a388af629) }
 
 var fileDescriptor_a938d55a388af629 = []byte{
-	// 1149 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x56, 0x4b, 0x6f, 0x23, 0x45,
-	0x10, 0xf6, 0x78, 0x3c, 0x7e, 0x94, 0x13, 0xaf, 0xb7, 0xd7, 0xc9, 0x4e, 0xbc, 0x92, 0x63, 0x8c,
-	0x90, 0xac, 0x55, 0xe4, 0xac, 0xbc, 0x08, 0x09, 0xc4, 0x25, 0x09, 0x2c, 0x59, 0x89, 0x04, 0xe8,
-	0xec, 0x12, 0x04, 0x87, 0x51, 0xdb, 0xee, 0x8c, 0x47, 0x3b, 0xaf, 0x4c, 0xf7, 0x90, 0xf8, 0x0c,
-	0x67, 0xc4, 0x9d, 0xdb, 0xfe, 0x9a, 0xdc, 0xd8, 0x23, 0x27, 0x04, 0xc9, 0x1f, 0x41, 0xfd, 0x18,
-	0x3f, 0x82, 0xf7, 0xa5, 0xe4, 0x62, 0x75, 0x7d, 0x5f, 0x75, 0x4d, 0x75, 0xf5, 0x57, 0xe5, 0x86,
-	0xfb, 0x8c, 0x47, 0x09, 0xdd, 0x96, 0xbf, 0xf1, 0x60, 0x3b, 0x89, 0x87, 0xbd, 0x38, 0x89, 0x78,
-	0x84, 0x8a, 0x7c, 0x4c, 0xc2, 0x88, 0x35, 0x37, 0x16, 0x1d, 0xf8, 0x24, 0xa6, 0x4c, 0xb9, 0x34,
-	0x1b, 0x6e, 0xe4, 0x46, 0x72, 0xb9, 0x2d, 0x56, 0x1a, 0x6d, 0x2f, 0x6e, 0x88, 0x93, 0x28, 0xb8,
-	0xb6, 0x6f, 0xc3, 0x8d, 0x22, 0xd7, 0xa7, 0xdb, 0xd2, 0x1a, 0xa4, 0x27, 0xdb, 0x24, 0x9c, 0x28,
-	0xaa, 0x73, 0x07, 0x56, 0x8f, 0x13, 0x8f, 0x53, 0x4c, 0x59, 0x1c, 0x85, 0x8c, 0x76, 0x7e, 0x31,
-	0x60, 0x45, 0x23, 0xa7, 0x29, 0x65, 0x1c, 0xed, 0x00, 0x70, 0x2f, 0xa0, 0x8c, 0x26, 0x1e, 0x65,
-	0xb6, 0xd1, 0x36, 0xbb, 0xd5, 0xfe, 0x03, 0xb1, 0x3b, 0xa0, 0x7c, 0x4c, 0x53, 0xe6, 0x0c, 0xa3,
-	0x78, 0xd2, 0x7b, 0xe6, 0x05, 0xf4, 0x48, 0xba, 0xec, 0x16, 0x2e, 0xfe, 0xde, 0xcc, 0xe1, 0xb9,
-	0x4d, 0x68, 0x1d, 0x8a, 0x9c, 0x86, 0x24, 0xe4, 0x76, 0xbe, 0x6d, 0x74, 0x2b, 0x58, 0x5b, 0xc8,
-	0x86, 0x52, 0x42, 0x63, 0xdf, 0x1b, 0x12, 0xdb, 0x6c, 0x1b, 0x5d, 0x13, 0x67, 0x66, 0xe7, 0xa5,
-	0x05, 0xab, 0x2a, 0x5c, 0x96, 0xc6, 0x06, 0x94, 0x03, 0x2f, 0x74, 0x44, 0x54, 0xdb, 0x50, 0xce,
-	0x81, 0x17, 0x8a, 0xcf, 0x4a, 0x8a, 0x9c, 0x2b, 0x2a, 0xaf, 0x29, 0x72, 0x2e, 0xa9, 0x4f, 0x04,
-	0xc5, 0x87, 0x63, 0x9a, 0x30, 0xdb, 0x94, 0xa9, 0x37, 0x7a, 0xaa, 0xce, 0xbd, 0xaf, 0xc9, 0x80,
-	0xfa, 0x07, 0x8a, 0xd4, 0x39, 0x4f, 0x7d, 0x51, 0x1f, 0xd6, 0x44, 0xc8, 0x84, 0xb2, 0xc8, 0x4f,
-	0xb9, 0x17, 0x85, 0xce, 0x99, 0x17, 0x8e, 0xa2, 0x33, 0xbb, 0x20, 0xe3, 0xdf, 0x0b, 0xc8, 0x39,
-	0x9e, 0x72, 0xc7, 0x92, 0x42, 0x5b, 0x00, 0xc4, 0x75, 0x13, 0xea, 0x12, 0x4e, 0x99, 0x6d, 0xb5,
-	0xcd, 0x6e, 0xad, 0xbf, 0x92, 0x7d, 0x6d, 0xc7, 0x75, 0x13, 0x3c, 0xc7, 0xa3, 0xcf, 0x60, 0x23,
-	0x26, 0x09, 0xf7, 0x88, 0x2f, 0xbe, 0x22, 0x6b, 0xef, 0x8c, 0x3c, 0x46, 0x06, 0x3e, 0x1d, 0xd9,
-	0xc5, 0xb6, 0xd1, 0x2d, 0xe3, 0xfb, 0xda, 0x21, 0xbb, 0x9b, 0x2f, 0x34, 0x8d, 0x7e, 0x5a, 0xb2,
-	0x97, 0xf1, 0x84, 0x70, 0xea, 0x4e, 0xec, 0x52, 0xdb, 0xe8, 0xd6, 0xfa, 0x9b, 0xd9, 0x87, 0xbf,
-	0x5d, 0x8c, 0x71, 0xa4, 0xdd, 0xfe, 0x17, 0x3c, 0x23, 0xd0, 0x26, 0x54, 0xd9, 0x0b, 0x2f, 0x76,
-	0x86, 0xe3, 0x34, 0x7c, 0xc1, 0xec, 0xb2, 0x4c, 0x05, 0x04, 0xb4, 0x27, 0x11, 0xf4, 0x10, 0xac,
-	0xb1, 0x17, 0x72, 0x66, 0x57, 0xda, 0x86, 0x2c, 0xa8, 0x52, 0x57, 0x2f, 0x53, 0x57, 0x6f, 0x27,
-	0x9c, 0x60, 0xe5, 0x82, 0x10, 0x14, 0x18, 0xa7, 0xb1, 0x0d, 0xb2, 0x6c, 0x72, 0x8d, 0x1a, 0x60,
-	0x25, 0x24, 0x74, 0xa9, 0x5d, 0x95, 0xa0, 0x32, 0xd0, 0x63, 0xa8, 0x9e, 0xa6, 0x34, 0x99, 0x38,
-	0x2a, 0xf6, 0x8a, 0x8c, 0x8d, 0xb2, 0x53, 0x7c, 0x27, 0xa8, 0x7d, 0xc1, 0x60, 0x38, 0x9d, 0xae,
-	0xd1, 0x23, 0x00, 0x36, 0x26, 0xc9, 0xc8, 0xf1, 0xc2, 0x93, 0xc8, 0x5e, 0x95, 0x7b, 0xee, 0x66,
-	0x7b, 0x8e, 0x04, 0xf3, 0x34, 0x3c, 0x89, 0x70, 0x85, 0x65, 0x4b, 0xf4, 0x31, 0xac, 0x9f, 0x79,
-	0x7c, 0x1c, 0xa5, 0xdc, 0xd1, 0x5a, 0x73, 0x7c, 0x21, 0x04, 0x66, 0xd7, 0xda, 0x66, 0xb7, 0x82,
-	0x1b, 0x9a, 0xc5, 0x8a, 0x94, 0x22, 0x61, 0x22, 0x65, 0xdf, 0x0b, 0x3c, 0x6e, 0xdf, 0x51, 0x29,
-	0x4b, 0xa3, 0xf3, 0xd2, 0x00, 0x98, 0x25, 0x26, 0x0b, 0xc7, 0x69, 0xec, 0x04, 0x9e, 0xef, 0x7b,
-	0x4c, 0x8b, 0x14, 0x04, 0x74, 0x20, 0x11, 0xd4, 0x86, 0xc2, 0x49, 0x1a, 0x0e, 0xa5, 0x46, 0xab,
-	0x33, 0x69, 0x3c, 0x49, 0xc3, 0x21, 0x96, 0x0c, 0xda, 0x82, 0xb2, 0x9b, 0x44, 0x69, 0xec, 0x85,
-	0xae, 0x54, 0x5a, 0xb5, 0x5f, 0xcf, 0xbc, 0xbe, 0xd2, 0x38, 0x9e, 0x7a, 0xa0, 0x0f, 0xb3, 0x42,
-	0x5a, 0xd2, 0x75, 0x35, 0x73, 0xc5, 0x02, 0xd4, 0x75, 0xed, 0x9c, 0x41, 0x65, 0x5a, 0x08, 0x99,
-	0xa2, 0xae, 0xd7, 0x88, 0x9e, 0x4f, 0x53, 0x54, 0xfc, 0x88, 0x9e, 0xa3, 0x0f, 0x60, 0x85, 0x47,
-	0x9c, 0xf8, 0x8e, 0xc4, 0x98, 0x6e, 0xa7, 0xaa, 0xc4, 0x64, 0x18, 0x86, 0x6a, 0x90, 0x1f, 0x4c,
-	0x64, 0xbf, 0x96, 0x71, 0x7e, 0x30, 0x11, 0xcd, 0xad, 0x2b, 0x58, 0x90, 0x15, 0xd4, 0x56, 0xa7,
-	0x09, 0x05, 0x71, 0x32, 0x21, 0x81, 0x90, 0xe8, 0xa6, 0xad, 0x60, 0xb9, 0xee, 0xf4, 0xa1, 0x9c,
-	0x9d, 0x47, 0xc7, 0x33, 0x96, 0xc4, 0x33, 0x17, 0xe2, 0x6d, 0x82, 0x25, 0x0f, 0x26, 0x1c, 0x16,
-	0x4a, 0xac, 0xad, 0xce, 0x6f, 0x06, 0xd4, 0xb2, 0x99, 0xa1, 0x34, 0x8d, 0xba, 0x50, 0x9c, 0xce,
-	0x2d, 0x51, 0xa2, 0xda, 0x54, 0x1b, 0x12, 0xdd, 0xcf, 0x61, 0xcd, 0xa3, 0x26, 0x94, 0xce, 0x48,
-	0x12, 0x8a, 0xc2, 0xcb, 0x19, 0xb5, 0x9f, 0xc3, 0x19, 0x80, 0xb6, 0x32, 0xc1, 0x9b, 0xaf, 0x17,
-	0xfc, 0x7e, 0x4e, 0x4b, 0x7e, 0xb7, 0x0c, 0xc5, 0x84, 0xb2, 0xd4, 0xe7, 0x9d, 0x5f, 0x4d, 0xb8,
-	0x2b, 0x05, 0x74, 0x48, 0x82, 0xd9, 0x20, 0x7b, 0x63, 0xe3, 0x1b, 0x37, 0x68, 0xfc, 0xfc, 0x0d,
-	0x1b, 0xbf, 0x01, 0x16, 0xe3, 0x24, 0xe1, 0x7a, 0x16, 0x2b, 0x03, 0xd5, 0xc1, 0xa4, 0xe1, 0x48,
-	0xcf, 0x3d, 0xb1, 0x9c, 0xf5, 0xbf, 0xf5, 0xf6, 0xfe, 0x9f, 0x9f, 0xbf, 0xc5, 0xf7, 0x98, 0xbf,
-	0xaf, 0x6f, 0xd3, 0xd2, 0xbb, 0xb4, 0x69, 0x79, 0xbe, 0x4d, 0x13, 0x40, 0xf3, 0xb7, 0xa0, 0xa5,
-	0xd1, 0x00, 0x4b, 0x48, 0x51, 0xfd, 0xa3, 0x55, 0xb0, 0x32, 0x50, 0x13, 0xca, 0xfa, 0xd6, 0x85,
-	0xf6, 0x05, 0x31, 0xb5, 0x67, 0xe7, 0x36, 0xdf, 0x7a, 0xee, 0xce, 0x1f, 0xa6, 0xfe, 0xe8, 0xf7,
-	0xc4, 0x4f, 0x67, 0x77, 0x2f, 0x12, 0x14, 0xa8, 0x6e, 0x06, 0x65, 0xbc, 0x59, 0x11, 0xf9, 0x1b,
-	0x28, 0xc2, 0xbc, 0x2d, 0x45, 0x14, 0x96, 0x28, 0xc2, 0x5a, 0xa2, 0x88, 0xe2, 0xfb, 0x29, 0xa2,
-	0x74, 0x2b, 0x8a, 0x28, 0xbf, 0x8b, 0x22, 0x2a, 0xf3, 0x8a, 0x48, 0xe1, 0xde, 0xc2, 0xe5, 0x68,
-	0x49, 0xac, 0x43, 0xf1, 0x67, 0x89, 0x68, 0x4d, 0x68, 0xeb, 0xb6, 0x44, 0xf1, 0x70, 0x17, 0x0a,
-	0xe2, 0x19, 0x80, 0x4a, 0x60, 0xe2, 0x9d, 0xe3, 0x7a, 0x0e, 0x55, 0xc0, 0xda, 0xfb, 0xe6, 0xf9,
-	0xe1, 0xb3, 0xba, 0x21, 0xb0, 0xa3, 0xe7, 0x07, 0xf5, 0xbc, 0x58, 0x1c, 0x3c, 0x3d, 0xac, 0x9b,
-	0x72, 0xb1, 0xf3, 0x43, 0xbd, 0x80, 0xaa, 0x50, 0x92, 0x5e, 0x5f, 0xe2, 0xba, 0xd5, 0xff, 0xd3,
-	0x00, 0xeb, 0x48, 0xbc, 0xf4, 0xd0, 0xa7, 0x50, 0x54, 0x53, 0x0c, 0xad, 0x2d, 0x4e, 0x35, 0x2d,
-	0xb6, 0xe6, 0xfa, 0x75, 0x58, 0x1d, 0xf3, 0x91, 0x81, 0xf6, 0x00, 0x66, 0x1d, 0x81, 0x36, 0x16,
-	0xea, 0x3f, 0x3f, 0xab, 0x9a, 0xcd, 0x65, 0x94, 0xae, 0xd6, 0x13, 0xa8, 0xce, 0x15, 0x11, 0x2d,
-	0xba, 0x2e, 0xc8, 0xbe, 0xf9, 0x60, 0x29, 0xa7, 0xe2, 0xf4, 0x0f, 0xa1, 0x26, 0xdf, 0x9b, 0x42,
-	0xcf, 0xea, 0x64, 0x9f, 0x43, 0x15, 0xd3, 0x20, 0xe2, 0x54, 0xe2, 0x68, 0xaa, 0x8f, 0xf9, 0x67,
-	0x69, 0x73, 0xed, 0x1a, 0xaa, 0x9f, 0xaf, 0xb9, 0xdd, 0x8f, 0x2e, 0xfe, 0x6d, 0xe5, 0x2e, 0x2e,
-	0x5b, 0xc6, 0xab, 0xcb, 0x96, 0xf1, 0xcf, 0x65, 0xcb, 0xf8, 0xfd, 0xaa, 0x95, 0x7b, 0x75, 0xd5,
-	0xca, 0xfd, 0x75, 0xd5, 0xca, 0xfd, 0x58, 0xd2, 0xcf, 0xe4, 0x41, 0x51, 0xde, 0xd0, 0xe3, 0xff,
-	0x02, 0x00, 0x00, 0xff, 0xff, 0x84, 0xe1, 0x09, 0x34, 0x90, 0x0b, 0x00, 0x00,
+	// 1113 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x56, 0xcd, 0x6e, 0x1b, 0x37,
+	0x10, 0xf6, 0x6a, 0xb5, 0xfa, 0x19, 0xd9, 0x8a, 0xc2, 0xd8, 0xce, 0x5a, 0x01, 0x6c, 0x55, 0xbd,
+	0x08, 0x81, 0x21, 0x1b, 0x4a, 0x2f, 0xfd, 0xb9, 0xd8, 0x6e, 0x53, 0x07, 0xa8, 0xdd, 0x96, 0x4e,
+	0xea, 0xa2, 0x3d, 0x08, 0x94, 0x44, 0xaf, 0x16, 0xd9, 0x3f, 0x2f, 0xb9, 0xb5, 0x75, 0xe8, 0x2b,
+	0xf4, 0xd6, 0x5b, 0x4f, 0x7d, 0x9a, 0xde, 0xda, 0x47, 0x28, 0xfc, 0x20, 0x45, 0xc1, 0x21, 0x57,
+	0x3f, 0xae, 0x92, 0xb8, 0x70, 0x2e, 0x02, 0x67, 0xbe, 0xd9, 0xe1, 0xf0, 0xe3, 0x37, 0x23, 0xc2,
+	0x63, 0x21, 0xe3, 0x94, 0xef, 0xe1, 0x6f, 0x32, 0xd8, 0x4b, 0x93, 0x61, 0x37, 0x49, 0x63, 0x19,
+	0x93, 0x92, 0x1c, 0xb3, 0x28, 0x16, 0xcd, 0xad, 0xc5, 0x00, 0x39, 0x49, 0xb8, 0xd0, 0x21, 0xcd,
+	0xd6, 0x22, 0x94, 0xa4, 0x71, 0x78, 0x2b, 0x62, 0xcb, 0x8b, 0x63, 0x2f, 0xe0, 0x7b, 0x68, 0x0d,
+	0xb2, 0x8b, 0x3d, 0x16, 0x4d, 0x34, 0xd4, 0x7e, 0x00, 0x6b, 0xe7, 0xa9, 0x2f, 0x39, 0xe5, 0x22,
+	0x89, 0x23, 0xc1, 0xdb, 0x3f, 0xc3, 0xaa, 0x71, 0x5c, 0x66, 0x5c, 0x48, 0xf2, 0x29, 0x80, 0xf4,
+	0x43, 0x2e, 0x78, 0xea, 0x73, 0xe1, 0x5a, 0x2d, 0xbb, 0x53, 0xeb, 0x3d, 0x51, 0x1f, 0x87, 0x5c,
+	0x8e, 0x79, 0x26, 0xfa, 0xc3, 0x38, 0x99, 0x74, 0x5f, 0xfa, 0x21, 0x3f, 0xc3, 0x10, 0x3a, 0x17,
+	0x4e, 0x36, 0xa1, 0x24, 0x79, 0xc4, 0x22, 0xe9, 0x16, 0x5a, 0x56, 0xa7, 0x4a, 0x8d, 0x45, 0x5c,
+	0x28, 0xa7, 0x3c, 0x09, 0xfc, 0x21, 0x73, 0xed, 0x96, 0xd5, 0xb1, 0x69, 0x6e, 0xb6, 0x7f, 0x73,
+	0x60, 0xcd, 0x24, 0x32, 0x05, 0x6c, 0x41, 0x25, 0xf4, 0xa3, 0xbe, 0xca, 0xea, 0x5a, 0x3a, 0x38,
+	0xf4, 0x23, 0xb5, 0x21, 0x42, 0xec, 0x5a, 0x43, 0x05, 0x03, 0xb1, 0x6b, 0x84, 0xf6, 0x15, 0x24,
+	0x87, 0x63, 0x9e, 0x0a, 0xd7, 0xc6, 0xa2, 0xd7, 0xbb, 0x9a, 0xca, 0xee, 0x57, 0x6c, 0xc0, 0x83,
+	0x13, 0x0d, 0xd2, 0x69, 0x14, 0xe9, 0xc1, 0x86, 0x4a, 0x96, 0x72, 0x11, 0x07, 0x99, 0xf4, 0xe3,
+	0xa8, 0x7f, 0xe5, 0x47, 0xa3, 0xf8, 0xca, 0x2d, 0x62, 0xe6, 0x47, 0x21, 0xbb, 0xa6, 0x53, 0xec,
+	0x1c, 0x21, 0xb2, 0x0b, 0xc0, 0x3c, 0x2f, 0xe5, 0x1e, 0x93, 0x5c, 0xb8, 0x4e, 0xcb, 0xee, 0xd4,
+	0x7b, 0xab, 0xf9, 0x3e, 0x07, 0x9e, 0x97, 0xd2, 0x39, 0x9c, 0x7c, 0x02, 0x5b, 0x09, 0x4b, 0xa5,
+	0xcf, 0x02, 0xb5, 0x0b, 0xd2, 0xdd, 0x1f, 0xf9, 0x82, 0x0d, 0x02, 0x3e, 0x72, 0x4b, 0x2d, 0xab,
+	0x53, 0xa1, 0x8f, 0x4d, 0x40, 0x7e, 0x1d, 0x9f, 0x1b, 0x98, 0xfc, 0xb8, 0xe4, 0x5b, 0x21, 0x53,
+	0x26, 0xb9, 0x37, 0x71, 0xcb, 0x2d, 0xab, 0x53, 0xef, 0xed, 0xe4, 0x1b, 0x7f, 0xb3, 0x98, 0xe3,
+	0xcc, 0x84, 0xfd, 0x27, 0x79, 0x0e, 0x90, 0x1d, 0xa8, 0x89, 0xd7, 0x7e, 0xd2, 0x1f, 0x8e, 0xb3,
+	0xe8, 0xb5, 0x70, 0x2b, 0x58, 0x0a, 0x28, 0xd7, 0x11, 0x7a, 0xc8, 0x53, 0x70, 0xc6, 0x7e, 0x24,
+	0x85, 0x5b, 0x6d, 0x59, 0x48, 0xa5, 0x16, 0x54, 0x37, 0x17, 0x54, 0xf7, 0x20, 0x9a, 0x50, 0x1d,
+	0x42, 0x08, 0x14, 0x85, 0xe4, 0x89, 0x0b, 0x48, 0x1b, 0xae, 0xc9, 0x3a, 0x38, 0x29, 0x8b, 0x3c,
+	0xee, 0xd6, 0xd0, 0xa9, 0x0d, 0xf2, 0x0c, 0x6a, 0x97, 0x19, 0x4f, 0x27, 0x7d, 0x9d, 0x7b, 0x15,
+	0x73, 0x93, 0xfc, 0x14, 0xdf, 0x2a, 0xe8, 0x58, 0x21, 0x14, 0x2e, 0xa7, 0x6b, 0xb2, 0x0f, 0x20,
+	0xc6, 0x2c, 0x1d, 0xf5, 0xfd, 0xe8, 0x22, 0x76, 0xd7, 0xf0, 0x9b, 0x87, 0xf9, 0x37, 0x67, 0x0a,
+	0x79, 0x11, 0x5d, 0xc4, 0xb4, 0x2a, 0xf2, 0x25, 0xf9, 0x08, 0x36, 0xaf, 0x7c, 0x39, 0x8e, 0x33,
+	0xd9, 0x37, 0x2a, 0xeb, 0x07, 0x4a, 0x02, 0xc2, 0xad, 0xb7, 0xec, 0x4e, 0x95, 0xae, 0x1b, 0x94,
+	0x6a, 0x10, 0xe5, 0x21, 0x54, 0xc9, 0x81, 0x1f, 0xfa, 0xd2, 0x7d, 0xa0, 0x4b, 0x46, 0xa3, 0xfd,
+	0xbb, 0x05, 0x30, 0x2b, 0x0c, 0x89, 0x93, 0x3c, 0xe9, 0x87, 0x7e, 0x10, 0xf8, 0xc2, 0xc8, 0x13,
+	0x94, 0xeb, 0x04, 0x3d, 0xa4, 0x05, 0xc5, 0x8b, 0x2c, 0x1a, 0xa2, 0x3a, 0x6b, 0x33, 0x69, 0x3c,
+	0xcf, 0xa2, 0x21, 0x45, 0x84, 0xec, 0x42, 0xc5, 0x4b, 0xe3, 0x2c, 0xf1, 0x23, 0x0f, 0x95, 0x56,
+	0xeb, 0x35, 0xf2, 0xa8, 0x2f, 0x8d, 0x9f, 0x4e, 0x23, 0xc8, 0x87, 0x39, 0x91, 0x0e, 0x86, 0xae,
+	0xe5, 0xa1, 0x54, 0x39, 0x0d, 0xaf, 0xed, 0x2b, 0xa8, 0x4e, 0x89, 0xc0, 0x12, 0x0d, 0x5f, 0x23,
+	0x7e, 0x3d, 0x2d, 0x51, 0xe3, 0x23, 0x7e, 0x4d, 0x3e, 0x80, 0x55, 0x19, 0x4b, 0x16, 0xf4, 0xd1,
+	0x27, 0x4c, 0x23, 0xd5, 0xd0, 0x87, 0x69, 0x04, 0xa9, 0x43, 0x61, 0x30, 0xc1, 0x4e, 0xad, 0xd0,
+	0xc2, 0x60, 0xa2, 0xda, 0xda, 0x30, 0x58, 0x44, 0x06, 0x8d, 0xd5, 0x6e, 0x42, 0x51, 0x9d, 0x4c,
+	0x49, 0x20, 0x62, 0xa6, 0x5d, 0xab, 0x14, 0xd7, 0xed, 0x1e, 0x54, 0xf2, 0xf3, 0x98, 0x7c, 0xd6,
+	0x92, 0x7c, 0xf6, 0x42, 0xbe, 0x1d, 0x70, 0xf0, 0x60, 0x2a, 0x60, 0x81, 0x62, 0x63, 0xb5, 0x7f,
+	0xb1, 0xa0, 0x9e, 0x4f, 0x0b, 0xad, 0x69, 0xd2, 0x81, 0xd2, 0x74, 0x56, 0x29, 0x8a, 0xea, 0x53,
+	0x6d, 0xa0, 0xf7, 0x78, 0x85, 0x1a, 0x9c, 0x34, 0xa1, 0x7c, 0xc5, 0xd2, 0x48, 0x11, 0x8f, 0xd3,
+	0xe9, 0x78, 0x85, 0xe6, 0x0e, 0xb2, 0x9b, 0x0b, 0xde, 0x7e, 0xb3, 0xe0, 0x8f, 0x57, 0x8c, 0xe4,
+	0x0f, 0x2b, 0x50, 0x4a, 0xb9, 0xc8, 0x02, 0xd9, 0xfe, 0xa7, 0x00, 0x0f, 0x51, 0x40, 0xa7, 0x2c,
+	0x9c, 0x8d, 0xb0, 0xb7, 0x36, 0xbe, 0x75, 0x8f, 0xc6, 0x2f, 0xdc, 0xb3, 0xf1, 0xd7, 0xc1, 0x11,
+	0x92, 0xa5, 0xd2, 0x4c, 0x61, 0x6d, 0x90, 0x06, 0xd8, 0x3c, 0x1a, 0x99, 0xb9, 0xa7, 0x96, 0xb3,
+	0xfe, 0x77, 0xde, 0xdd, 0xff, 0xf3, 0x93, 0xb7, 0x74, 0xa7, 0xc9, 0xfb, 0xe6, 0x06, 0x2d, 0xdf,
+	0xa5, 0x41, 0x2b, 0xf3, 0x0d, 0x9a, 0x02, 0x99, 0xe7, 0xdf, 0x88, 0x62, 0x1d, 0x1c, 0x25, 0x42,
+	0xfd, 0xff, 0x55, 0xa5, 0xda, 0x20, 0x4d, 0xa8, 0x98, 0xfb, 0x56, 0xaa, 0x57, 0xc0, 0xd4, 0x9e,
+	0x9d, 0xd8, 0x7e, 0xe7, 0x89, 0xdb, 0xbf, 0xda, 0x66, 0xd3, 0xef, 0x58, 0x90, 0xcd, 0x6e, 0x5d,
+	0x15, 0xa8, 0xbc, 0xa6, 0x0d, 0xb4, 0xf1, 0x76, 0x2d, 0x14, 0xee, 0xa1, 0x05, 0xfb, 0x7d, 0x69,
+	0xa1, 0xb8, 0x44, 0x0b, 0xce, 0x12, 0x2d, 0x94, 0xfe, 0x9f, 0x16, 0xca, 0xf7, 0xd4, 0x42, 0xe5,
+	0x2e, 0x5a, 0xa8, 0xce, 0x6b, 0x21, 0x83, 0x47, 0x0b, 0xd7, 0x62, 0xc4, 0xb0, 0x09, 0xa5, 0x9f,
+	0xd0, 0x63, 0xd4, 0x60, 0xac, 0xf7, 0x25, 0x87, 0xa7, 0x87, 0x50, 0x54, 0x7f, 0xfd, 0xa4, 0x0c,
+	0x36, 0x3d, 0x38, 0x6f, 0xac, 0x90, 0x2a, 0x38, 0x47, 0x5f, 0xbf, 0x3a, 0x7d, 0xd9, 0xb0, 0x94,
+	0xef, 0xec, 0xd5, 0x49, 0xa3, 0xa0, 0x16, 0x27, 0x2f, 0x4e, 0x1b, 0x36, 0x2e, 0x0e, 0xbe, 0x6f,
+	0x14, 0x49, 0x0d, 0xca, 0x18, 0xf5, 0x05, 0x6d, 0x38, 0xbd, 0x3f, 0x2d, 0x70, 0xce, 0xd4, 0x83,
+	0x8e, 0x7c, 0x0c, 0x25, 0x3d, 0xb9, 0xc8, 0xc6, 0xe2, 0x24, 0x33, 0x32, 0x6b, 0x6e, 0xde, 0x76,
+	0xeb, 0x63, 0xee, 0x5b, 0xe4, 0x08, 0x60, 0xd6, 0x0b, 0x64, 0x6b, 0x81, 0xf9, 0xf9, 0xf9, 0xd4,
+	0x6c, 0x2e, 0x83, 0x0c, 0x5b, 0xcf, 0xa1, 0x36, 0x47, 0x22, 0x59, 0x0c, 0x5d, 0x10, 0x7c, 0xf3,
+	0xc9, 0x52, 0x4c, 0xe7, 0xe9, 0x9d, 0x42, 0x1d, 0xdf, 0x95, 0x4a, 0xc9, 0xfa, 0x64, 0x9f, 0x41,
+	0x8d, 0xf2, 0x30, 0x96, 0x1c, 0xfd, 0x64, 0xaa, 0x8c, 0xf9, 0xe7, 0x67, 0x73, 0xe3, 0x96, 0xd7,
+	0xbc, 0x52, 0x57, 0x0e, 0x37, 0xfe, 0xb8, 0xd9, 0xb6, 0xfe, 0xba, 0xd9, 0xb6, 0xfe, 0xbe, 0xd9,
+	0xb6, 0x7e, 0x28, 0x9b, 0xd7, 0xef, 0xa0, 0x84, 0x37, 0xf2, 0xec, 0xdf, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0x8f, 0xaf, 0x7d, 0x15, 0x51, 0x0b, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -815,19 +1222,19 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type StoreClient interface {
-	/// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
-	///
-	/// Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
-	/// partition of the single series, but once a new series is started to be streamed it means that no more data will
-	/// be sent for previous one.
-	/// Series has to be sorted.
-	///
-	/// There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
-	/// This heavily optimizes the resource usage on Querier / Federated Queries.
+	// / Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
+	// /
+	// / Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
+	// / partition of the single series, but once a new series is started to be streamed it means that no more data will
+	// / be sent for previous one.
+	// / Series has to be sorted.
+	// /
+	// / There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
+	// / This heavily optimizes the resource usage on Querier / Federated Queries.
 	Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (Store_SeriesClient, error)
-	/// LabelNames returns all label names constrained by the given matchers.
+	// / LabelNames returns all label names constrained by the given matchers.
 	LabelNames(ctx context.Context, in *LabelNamesRequest, opts ...grpc.CallOption) (*LabelNamesResponse, error)
-	/// LabelValues returns all label values for given label name.
+	// / LabelValues returns all label values for given label name.
 	LabelValues(ctx context.Context, in *LabelValuesRequest, opts ...grpc.CallOption) (*LabelValuesResponse, error)
 }
 
@@ -891,19 +1298,19 @@ func (c *storeClient) LabelValues(ctx context.Context, in *LabelValuesRequest, o
 
 // StoreServer is the server API for Store service.
 type StoreServer interface {
-	/// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
-	///
-	/// Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
-	/// partition of the single series, but once a new series is started to be streamed it means that no more data will
-	/// be sent for previous one.
-	/// Series has to be sorted.
-	///
-	/// There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
-	/// This heavily optimizes the resource usage on Querier / Federated Queries.
+	// / Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
+	// /
+	// / Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
+	// / partition of the single series, but once a new series is started to be streamed it means that no more data will
+	// / be sent for previous one.
+	// / Series has to be sorted.
+	// /
+	// / There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
+	// / This heavily optimizes the resource usage on Querier / Federated Queries.
 	Series(*SeriesRequest, Store_SeriesServer) error
-	/// LabelNames returns all label names constrained by the given matchers.
+	// / LabelNames returns all label names constrained by the given matchers.
 	LabelNames(context.Context, *LabelNamesRequest) (*LabelNamesResponse, error)
-	/// LabelValues returns all label values for given label name.
+	// / LabelValues returns all label values for given label name.
 	LabelValues(context.Context, *LabelValuesRequest) (*LabelValuesResponse, error)
 }
 
@@ -1099,6 +1506,10 @@ func (m *WriteResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -1122,6 +1533,10 @@ func (m *WriteRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Replica != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.Replica))
 		i--
@@ -1171,6 +1586,10 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Limit != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.Limit))
 		i--
@@ -1326,6 +1745,10 @@ func (m *QueryHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Range != nil {
 		{
 			size, err := m.Range.MarshalToSizedBuffer(dAtA[:i])
@@ -1390,6 +1813,10 @@ func (m *ShardInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Labels[iNdEx])
@@ -1442,6 +1869,10 @@ func (m *Func) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Name) > 0 {
 		i -= len(m.Name)
 		copy(dAtA[i:], m.Name)
@@ -1472,6 +1903,10 @@ func (m *Grouping) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Labels[iNdEx])
@@ -1514,6 +1949,10 @@ func (m *Range) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Millis != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.Millis))
 		i--
@@ -1542,6 +1981,10 @@ func (m *SeriesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Result != nil {
 		{
 			size := m.Result.Size()
@@ -1630,6 +2073,10 @@ func (m *LabelNamesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Limit != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.Limit))
 		i--
@@ -1718,6 +2165,10 @@ func (m *LabelNamesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Hints != nil {
 		{
 			size, err := m.Hints.MarshalToSizedBuffer(dAtA[:i])
@@ -1771,6 +2222,10 @@ func (m *LabelValuesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Limit != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.Limit))
 		i--
@@ -1866,6 +2321,10 @@ func (m *LabelValuesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Hints != nil {
 		{
 			size, err := m.Hints.MarshalToSizedBuffer(dAtA[:i])
@@ -1916,6 +2375,9 @@ func (m *WriteResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1937,6 +2399,9 @@ func (m *WriteRequest) Size() (n int) {
 	}
 	if m.Replica != 0 {
 		n += 1 + sovRpc(uint64(m.Replica))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2005,6 +2470,9 @@ func (m *SeriesRequest) Size() (n int) {
 	if m.Limit != 0 {
 		n += 1 + sovRpc(uint64(m.Limit))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -2028,6 +2496,9 @@ func (m *QueryHints) Size() (n int) {
 	if m.Range != nil {
 		l = m.Range.Size()
 		n += 1 + l + sovRpc(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2053,6 +2524,9 @@ func (m *ShardInfo) Size() (n int) {
 			n += 1 + l + sovRpc(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -2065,6 +2539,9 @@ func (m *Func) Size() (n int) {
 	l = len(m.Name)
 	if l > 0 {
 		n += 1 + l + sovRpc(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2084,6 +2561,9 @@ func (m *Grouping) Size() (n int) {
 			n += 1 + l + sovRpc(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -2096,6 +2576,9 @@ func (m *Range) Size() (n int) {
 	if m.Millis != 0 {
 		n += 1 + sovRpc(uint64(m.Millis))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -2107,6 +2590,9 @@ func (m *SeriesResponse) Size() (n int) {
 	_ = l
 	if m.Result != nil {
 		n += m.Result.Size()
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2182,6 +2668,9 @@ func (m *LabelNamesRequest) Size() (n int) {
 	if m.Limit != 0 {
 		n += 1 + sovRpc(uint64(m.Limit))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -2206,6 +2695,9 @@ func (m *LabelNamesResponse) Size() (n int) {
 	if m.Hints != nil {
 		l = m.Hints.Size()
 		n += 1 + l + sovRpc(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2251,6 +2743,9 @@ func (m *LabelValuesRequest) Size() (n int) {
 	if m.Limit != 0 {
 		n += 1 + sovRpc(uint64(m.Limit))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -2275,6 +2770,9 @@ func (m *LabelValuesResponse) Size() (n int) {
 	if m.Hints != nil {
 		l = m.Hints.Size()
 		n += 1 + l + sovRpc(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2326,6 +2824,7 @@ func (m *WriteResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2393,7 +2892,7 @@ func (m *WriteRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Timeseries = append(m.Timeseries, prompb.TimeSeries{})
+			m.Timeseries = append(m.Timeseries, &prompb.TimeSeries{})
 			if err := m.Timeseries[len(m.Timeseries)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2461,6 +2960,7 @@ func (m *WriteRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2566,7 +3066,7 @@ func (m *SeriesRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Matchers = append(m.Matchers, LabelMatcher{})
+			m.Matchers = append(m.Matchers, &LabelMatcher{})
 			if err := m.Matchers[len(m.Matchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2927,6 +3427,7 @@ func (m *SeriesRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3104,6 +3605,7 @@ func (m *QueryHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3244,6 +3746,7 @@ func (m *ShardInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3326,6 +3829,7 @@ func (m *Func) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3428,6 +3932,7 @@ func (m *Grouping) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3497,6 +4002,7 @@ func (m *Range) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3649,6 +4155,7 @@ func (m *SeriesResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3829,7 +4336,7 @@ func (m *LabelNamesRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Matchers = append(m.Matchers, LabelMatcher{})
+			m.Matchers = append(m.Matchers, &LabelMatcher{})
 			if err := m.Matchers[len(m.Matchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3897,6 +4404,7 @@ func (m *LabelNamesRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4047,6 +4555,7 @@ func (m *LabelNamesResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4259,7 +4768,7 @@ func (m *LabelValuesRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Matchers = append(m.Matchers, LabelMatcher{})
+			m.Matchers = append(m.Matchers, &LabelMatcher{})
 			if err := m.Matchers[len(m.Matchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -4327,6 +4836,7 @@ func (m *LabelValuesRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4477,6 +4987,7 @@ func (m *LabelValuesResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

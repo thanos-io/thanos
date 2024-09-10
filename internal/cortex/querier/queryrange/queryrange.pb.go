@@ -6,25 +6,19 @@ package queryrange
 import (
 	encoding_binary "encoding/binary"
 	fmt "fmt"
-
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-	types "github.com/gogo/protobuf/types"
-	cortexpb "github.com/thanos-io/thanos/internal/cortex/cortexpb"
-	github_com_thanos_io_thanos_internal_cortex_cortexpb "github.com/thanos-io/thanos/internal/cortex/cortexpb"
-
 	io "io"
 	math "math"
 	math_bits "math/bits"
-	time "time"
+
+	proto "github.com/gogo/protobuf/proto"
+	types "github.com/gogo/protobuf/types"
+	cortexpb "github.com/thanos-io/thanos/internal/cortex/cortexpb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -33,7 +27,9 @@ var _ = time.Kitchen
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type PrometheusRequestHeader struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=Name,proto3" json:"-"`
+	// @gotags: json:"-"
+	Name string `protobuf:"bytes,1,opt,name=Name,proto3" json:"-"`
+	// @gotags: json:"-"
 	Values               []string `protobuf:"bytes,2,rep,name=Values,proto3" json:"-"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -88,13 +84,14 @@ func (m *PrometheusRequestHeader) GetValues() []string {
 }
 
 type PrometheusRequest struct {
-	Path                 string                     `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Start                int64                      `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
-	End                  int64                      `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
-	Step                 int64                      `protobuf:"varint,4,opt,name=step,proto3" json:"step,omitempty"`
-	Timeout              time.Duration              `protobuf:"bytes,5,opt,name=timeout,proto3,stdduration" json:"timeout"`
-	Query                string                     `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
-	CachingOptions       CachingOptions             `protobuf:"bytes,7,opt,name=cachingOptions,proto3" json:"cachingOptions"`
+	Path           string          `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Start          int64           `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
+	End            int64           `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
+	Step           int64           `protobuf:"varint,4,opt,name=step,proto3" json:"step,omitempty"`
+	Timeout        *Duration       `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Query          string          `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
+	CachingOptions *CachingOptions `protobuf:"bytes,7,opt,name=cachingOptions,proto3" json:"cachingOptions,omitempty"`
+	// @gotags: json:"-"
 	Headers              []*PrometheusRequestHeader `protobuf:"bytes,8,rep,name=Headers,proto3" json:"-"`
 	Stats                string                     `protobuf:"bytes,9,opt,name=stats,proto3" json:"stats,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
@@ -163,11 +160,11 @@ func (m *PrometheusRequest) GetStep() int64 {
 	return 0
 }
 
-func (m *PrometheusRequest) GetTimeout() time.Duration {
+func (m *PrometheusRequest) GetTimeout() *Duration {
 	if m != nil {
 		return m.Timeout
 	}
-	return 0
+	return nil
 }
 
 func (m *PrometheusRequest) GetQuery() string {
@@ -177,11 +174,11 @@ func (m *PrometheusRequest) GetQuery() string {
 	return ""
 }
 
-func (m *PrometheusRequest) GetCachingOptions() CachingOptions {
+func (m *PrometheusRequest) GetCachingOptions() *CachingOptions {
 	if m != nil {
 		return m.CachingOptions
 	}
-	return CachingOptions{}
+	return nil
 }
 
 func (m *PrometheusRequest) GetHeaders() []*PrometheusRequestHeader {
@@ -199,7 +196,9 @@ func (m *PrometheusRequest) GetStats() string {
 }
 
 type PrometheusResponseHeader struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=Name,proto3" json:"-"`
+	// @gotags: json:"-"
+	Name string `protobuf:"bytes,1,opt,name=Name,proto3" json:"-"`
+	// @gotags: json:"-"
 	Values               []string `protobuf:"bytes,2,rep,name=Values,proto3" json:"-"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -254,15 +253,21 @@ func (m *PrometheusResponseHeader) GetValues() []string {
 }
 
 type PrometheusResponse struct {
-	Status               string                      `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
-	Data                 PrometheusData              `protobuf:"bytes,2,opt,name=Data,proto3" json:"data,omitempty"`
-	ErrorType            string                      `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
-	Error                string                      `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
-	Headers              []*PrometheusResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
-	Warnings             []string                    `protobuf:"bytes,6,rep,name=Warnings,proto3" json:"warnings,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
-	XXX_unrecognized     []byte                      `json:"-"`
-	XXX_sizecache        int32                       `json:"-"`
+	// @gotags: json:"status"
+	Status string `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
+	// @gotags: json:"data,omitempty"
+	Data *PrometheusData `protobuf:"bytes,2,opt,name=Data,proto3" json:"data,omitempty"`
+	// @gotags: json:"errorType,omitempty"
+	ErrorType string `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
+	// @gotags: json:"error,omitempty"
+	Error string `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
+	// @gotags: json:"-"
+	Headers []*PrometheusResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
+	// @gotags: json:"warnings,omitempty"
+	Warnings             []string `protobuf:"bytes,6,rep,name=Warnings,proto3" json:"warnings,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *PrometheusResponse) Reset()         { *m = PrometheusResponse{} }
@@ -305,11 +310,11 @@ func (m *PrometheusResponse) GetStatus() string {
 	return ""
 }
 
-func (m *PrometheusResponse) GetData() PrometheusData {
+func (m *PrometheusResponse) GetData() *PrometheusData {
 	if m != nil {
 		return m.Data
 	}
-	return PrometheusData{}
+	return nil
 }
 
 func (m *PrometheusResponse) GetErrorType() string {
@@ -341,13 +346,17 @@ func (m *PrometheusResponse) GetWarnings() []string {
 }
 
 type PrometheusData struct {
-	ResultType           string                   `protobuf:"bytes,1,opt,name=ResultType,proto3" json:"resultType"`
-	Result               []SampleStream           `protobuf:"bytes,2,rep,name=Result,proto3" json:"result"`
-	Stats                *PrometheusResponseStats `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
-	Analysis             *Analysis                `protobuf:"bytes,4,opt,name=analysis,proto3" json:"analysis"`
-	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
-	XXX_unrecognized     []byte                   `json:"-"`
-	XXX_sizecache        int32                    `json:"-"`
+	// @gotags: json:"resultType"
+	ResultType string `protobuf:"bytes,1,opt,name=ResultType,proto3" json:"resultType"`
+	// @gotags: json:"result"
+	Result []*SampleStream `protobuf:"bytes,2,rep,name=Result,proto3" json:"result"`
+	// @gotags: json:"stats,omitempty"
+	Stats *PrometheusResponseStats `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
+	// @gotags: json:"analysis"
+	Analysis             *Analysis `protobuf:"bytes,4,opt,name=analysis,proto3" json:"analysis"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_unrecognized     []byte    `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
 func (m *PrometheusData) Reset()         { *m = PrometheusData{} }
@@ -390,7 +399,7 @@ func (m *PrometheusData) GetResultType() string {
 	return ""
 }
 
-func (m *PrometheusData) GetResult() []SampleStream {
+func (m *PrometheusData) GetResult() []*SampleStream {
 	if m != nil {
 		return m.Result
 	}
@@ -412,15 +421,21 @@ func (m *PrometheusData) GetAnalysis() *Analysis {
 }
 
 type PrometheusInstantQueryResponse struct {
-	Status               string                      `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
-	Data                 PrometheusInstantQueryData  `protobuf:"bytes,2,opt,name=Data,proto3" json:"data,omitempty"`
-	ErrorType            string                      `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
-	Error                string                      `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
-	Headers              []*PrometheusResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
-	Warnings             []string                    `protobuf:"bytes,6,rep,name=Warnings,proto3" json:"warnings,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
-	XXX_unrecognized     []byte                      `json:"-"`
-	XXX_sizecache        int32                       `json:"-"`
+	// @gotags: json:"status"
+	Status string `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
+	// @gotags: json:"data,omitempty"
+	Data *PrometheusInstantQueryData `protobuf:"bytes,2,opt,name=Data,proto3" json:"data,omitempty"`
+	// @gotags: json:"errorType,omitempty"
+	ErrorType string `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
+	// @gotags: json:"error,omitempty"
+	Error string `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
+	// @gotags: json:"-"
+	Headers []*PrometheusResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
+	// @gotags: json:"warnings,omitempty"
+	Warnings             []string `protobuf:"bytes,6,rep,name=Warnings,proto3" json:"warnings,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *PrometheusInstantQueryResponse) Reset()         { *m = PrometheusInstantQueryResponse{} }
@@ -463,11 +478,11 @@ func (m *PrometheusInstantQueryResponse) GetStatus() string {
 	return ""
 }
 
-func (m *PrometheusInstantQueryResponse) GetData() PrometheusInstantQueryData {
+func (m *PrometheusInstantQueryResponse) GetData() *PrometheusInstantQueryData {
 	if m != nil {
 		return m.Data
 	}
-	return PrometheusInstantQueryData{}
+	return nil
 }
 
 func (m *PrometheusInstantQueryResponse) GetErrorType() string {
@@ -499,13 +514,17 @@ func (m *PrometheusInstantQueryResponse) GetWarnings() []string {
 }
 
 type PrometheusInstantQueryData struct {
-	ResultType           string                       `protobuf:"bytes,1,opt,name=ResultType,proto3" json:"resultType"`
-	Result               PrometheusInstantQueryResult `protobuf:"bytes,2,opt,name=Result,proto3" json:"result"`
-	Stats                *PrometheusResponseStats     `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
-	Analysis             *Analysis                    `protobuf:"bytes,4,opt,name=analysis,proto3" json:"analysis"`
-	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
-	XXX_unrecognized     []byte                       `json:"-"`
-	XXX_sizecache        int32                        `json:"-"`
+	// @gotags: json:"resultType"
+	ResultType string `protobuf:"bytes,1,opt,name=ResultType,proto3" json:"resultType"`
+	// @gotags: json:"result"
+	Result *PrometheusInstantQueryResult `protobuf:"bytes,2,opt,name=Result,proto3" json:"result"`
+	// @gotags: json:"stats,omitempty"
+	Stats *PrometheusResponseStats `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
+	// @gotags: json:"analysis"
+	Analysis             *Analysis `protobuf:"bytes,4,opt,name=analysis,proto3" json:"analysis"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_unrecognized     []byte    `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
 func (m *PrometheusInstantQueryData) Reset()         { *m = PrometheusInstantQueryData{} }
@@ -548,11 +567,11 @@ func (m *PrometheusInstantQueryData) GetResultType() string {
 	return ""
 }
 
-func (m *PrometheusInstantQueryData) GetResult() PrometheusInstantQueryResult {
+func (m *PrometheusInstantQueryData) GetResult() *PrometheusInstantQueryResult {
 	if m != nil {
 		return m.Result
 	}
-	return PrometheusInstantQueryResult{}
+	return nil
 }
 
 func (m *PrometheusInstantQueryData) GetStats() *PrometheusResponseStats {
@@ -779,6 +798,7 @@ func (m *Matrix) GetSampleStreams() []*SampleStream {
 }
 
 type PrometheusResponseStats struct {
+	// @gotags: json:"samples"
 	Samples              *PrometheusResponseSamplesStats `protobuf:"bytes,1,opt,name=samples,proto3" json:"samples"`
 	XXX_NoUnkeyedLiteral struct{}                        `json:"-"`
 	XXX_unrecognized     []byte                          `json:"-"`
@@ -826,7 +846,9 @@ func (m *PrometheusResponseStats) GetSamples() *PrometheusResponseSamplesStats {
 }
 
 type PrometheusResponseSamplesStats struct {
-	TotalQueryableSamples        int64                                             `protobuf:"varint,1,opt,name=totalQueryableSamples,proto3" json:"totalQueryableSamples"`
+	// @gotags: json:"totalQueryableSamples"
+	TotalQueryableSamples int64 `protobuf:"varint,1,opt,name=totalQueryableSamples,proto3" json:"totalQueryableSamples"`
+	// @gotags: json:"totalQueryableSamplesPerStep"
 	TotalQueryableSamplesPerStep []*PrometheusResponseQueryableSamplesStatsPerStep `protobuf:"bytes,2,rep,name=totalQueryableSamplesPerStep,proto3" json:"totalQueryableSamplesPerStep"`
 	XXX_NoUnkeyedLiteral         struct{}                                          `json:"-"`
 	XXX_unrecognized             []byte                                            `json:"-"`
@@ -940,12 +962,15 @@ func (m *PrometheusResponseQueryableSamplesStatsPerStep) GetTimestampMs() int64 
 }
 
 type SampleStream struct {
-	Labels               []github_com_thanos_io_thanos_internal_cortex_cortexpb.LabelAdapter `protobuf:"bytes,1,rep,name=labels,proto3,customtype=github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter" json:"metric"`
-	Samples              []cortexpb.Sample                                                   `protobuf:"bytes,2,rep,name=samples,proto3" json:"values"`
-	Histograms           []SampleHistogramPair                                               `protobuf:"bytes,3,rep,name=histograms,proto3" json:"histogram"`
-	XXX_NoUnkeyedLiteral struct{}                                                            `json:"-"`
-	XXX_unrecognized     []byte                                                              `json:"-"`
-	XXX_sizecache        int32                                                               `json:"-"`
+	// @gotags: json:"metric"
+	Labels []*cortexpb.LabelPair `protobuf:"bytes,1,rep,name=labels,proto3" json:"metric"`
+	// @gotags: json:"values"
+	Samples []*cortexpb.Sample `protobuf:"bytes,2,rep,name=samples,proto3" json:"values"`
+	// @gotags: json:"histogram"
+	Histograms           []*SampleHistogramPair `protobuf:"bytes,3,rep,name=histograms,proto3" json:"histogram"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_unrecognized     []byte                 `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
 func (m *SampleStream) Reset()         { *m = SampleStream{} }
@@ -981,14 +1006,21 @@ func (m *SampleStream) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SampleStream proto.InternalMessageInfo
 
-func (m *SampleStream) GetSamples() []cortexpb.Sample {
+func (m *SampleStream) GetLabels() []*cortexpb.LabelPair {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
+func (m *SampleStream) GetSamples() []*cortexpb.Sample {
 	if m != nil {
 		return m.Samples
 	}
 	return nil
 }
 
-func (m *SampleStream) GetHistograms() []SampleHistogramPair {
+func (m *SampleStream) GetHistograms() []*SampleHistogramPair {
 	if m != nil {
 		return m.Histograms
 	}
@@ -996,13 +1028,16 @@ func (m *SampleStream) GetHistograms() []SampleHistogramPair {
 }
 
 type Sample struct {
-	Labels               []github_com_thanos_io_thanos_internal_cortex_cortexpb.LabelAdapter `protobuf:"bytes,1,rep,name=labels,proto3,customtype=github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter" json:"metric"`
-	SampleValue          float64                                                             `protobuf:"fixed64,2,opt,name=sampleValue,proto3" json:"value"`
-	Timestamp            int64                                                               `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Histogram            *SampleHistogram                                                    `protobuf:"bytes,4,opt,name=histogram,proto3" json:"histogram"`
-	XXX_NoUnkeyedLiteral struct{}                                                            `json:"-"`
-	XXX_unrecognized     []byte                                                              `json:"-"`
-	XXX_sizecache        int32                                                               `json:"-"`
+	// @gotags: json:"metric"
+	Labels []*cortexpb.LabelPair `protobuf:"bytes,1,rep,name=labels,proto3" json:"metric"`
+	// @gotags: json:"value"
+	SampleValue float64 `protobuf:"fixed64,2,opt,name=sampleValue,proto3" json:"value"`
+	Timestamp   int64   `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// @gotags: json:"histogram"
+	Histogram            *SampleHistogram `protobuf:"bytes,4,opt,name=histogram,proto3" json:"histogram"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
 func (m *Sample) Reset()         { *m = Sample{} }
@@ -1037,6 +1072,13 @@ func (m *Sample) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_Sample proto.InternalMessageInfo
+
+func (m *Sample) GetLabels() []*cortexpb.LabelPair {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
 
 func (m *Sample) GetSampleValue() float64 {
 	if m != nil {
@@ -1115,11 +1157,11 @@ func (m *StringSample) GetTimestampMs() int64 {
 }
 
 type SampleHistogramPair struct {
-	Timestamp            int64           `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Histogram            SampleHistogram `protobuf:"bytes,2,opt,name=histogram,proto3" json:"histogram"`
-	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
-	XXX_unrecognized     []byte          `json:"-"`
-	XXX_sizecache        int32           `json:"-"`
+	Timestamp            int64            `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Histogram            *SampleHistogram `protobuf:"bytes,2,opt,name=histogram,proto3" json:"histogram,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
 func (m *SampleHistogramPair) Reset()         { *m = SampleHistogramPair{} }
@@ -1162,11 +1204,11 @@ func (m *SampleHistogramPair) GetTimestamp() int64 {
 	return 0
 }
 
-func (m *SampleHistogramPair) GetHistogram() SampleHistogram {
+func (m *SampleHistogramPair) GetHistogram() *SampleHistogram {
 	if m != nil {
 		return m.Histogram
 	}
-	return SampleHistogram{}
+	return nil
 }
 
 type SampleHistogram struct {
@@ -1304,12 +1346,14 @@ func (m *HistogramBucket) GetCount() float64 {
 }
 
 type CachedResponse struct {
+	// @gotags: json:"key"
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key"`
 	// List of cached responses; non-overlapping and in order.
-	Extents              []Extent `protobuf:"bytes,2,rep,name=extents,proto3" json:"extents"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	// @gotags: json:"extents"
+	Extents              []*Extent `protobuf:"bytes,2,rep,name=extents,proto3" json:"extents"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_unrecognized     []byte    `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
 func (m *CachedResponse) Reset()         { *m = CachedResponse{} }
@@ -1352,7 +1396,7 @@ func (m *CachedResponse) GetKey() string {
 	return ""
 }
 
-func (m *CachedResponse) GetExtents() []Extent {
+func (m *CachedResponse) GetExtents() []*Extent {
 	if m != nil {
 		return m.Extents
 	}
@@ -1360,9 +1404,13 @@ func (m *CachedResponse) GetExtents() []Extent {
 }
 
 type Extent struct {
-	Start                int64      `protobuf:"varint,1,opt,name=start,proto3" json:"start"`
-	End                  int64      `protobuf:"varint,2,opt,name=end,proto3" json:"end"`
-	TraceId              string     `protobuf:"bytes,4,opt,name=trace_id,json=traceId,proto3" json:"-"`
+	// @gotags: json:"start"
+	Start int64 `protobuf:"varint,1,opt,name=start,proto3" json:"start"`
+	// @gotags: json:"end"
+	End int64 `protobuf:"varint,2,opt,name=end,proto3" json:"end"`
+	// @gotags: json:"-"
+	TraceId string `protobuf:"bytes,4,opt,name=trace_id,json=traceId,proto3" json:"-"`
+	// @gotags: json:"response"
 	Response             *types.Any `protobuf:"bytes,5,opt,name=response,proto3" json:"response"`
 	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
 	XXX_unrecognized     []byte     `json:"-"`
@@ -1478,7 +1526,9 @@ func (m *CachingOptions) GetDisabled() bool {
 }
 
 type Explanation struct {
-	Name                 string         `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
+	// @gotags: json:"name"
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
+	// @gotags: json:"children"
 	Children             []*Explanation `protobuf:"bytes,2,rep,name=children,proto3" json:"children"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
@@ -1532,9 +1582,134 @@ func (m *Explanation) GetChildren() []*Explanation {
 	return nil
 }
 
+// A Duration represents a signed, fixed-length span of time represented
+// as a count of seconds and fractions of seconds at nanosecond
+// resolution. It is independent of any calendar and concepts like "day"
+// or "month". It is related to Timestamp in that the difference between
+// two Timestamp values is a Duration and it can be added or subtracted
+// from a Timestamp. Range is approximately +-10,000 years.
+//
+// # Examples
+//
+// Example 1: Compute Duration from two Timestamps in pseudo code.
+//
+//	Timestamp start = ...;
+//	Timestamp end = ...;
+//	Duration duration = ...;
+//
+//	duration.seconds = end.seconds - start.seconds;
+//	duration.nanos = end.nanos - start.nanos;
+//
+//	if (duration.seconds < 0 && duration.nanos > 0) {
+//	  duration.seconds += 1;
+//	  duration.nanos -= 1000000000;
+//	} else if (duration.seconds > 0 && duration.nanos < 0) {
+//	  duration.seconds -= 1;
+//	  duration.nanos += 1000000000;
+//	}
+//
+// Example 2: Compute Timestamp from Timestamp + Duration in pseudo code.
+//
+//	Timestamp start = ...;
+//	Duration duration = ...;
+//	Timestamp end = ...;
+//
+//	end.seconds = start.seconds + duration.seconds;
+//	end.nanos = start.nanos + duration.nanos;
+//
+//	if (end.nanos < 0) {
+//	  end.seconds -= 1;
+//	  end.nanos += 1000000000;
+//	} else if (end.nanos >= 1000000000) {
+//	  end.seconds += 1;
+//	  end.nanos -= 1000000000;
+//	}
+//
+// Example 3: Compute Duration from datetime.timedelta in Python.
+//
+//	td = datetime.timedelta(days=3, minutes=10)
+//	duration = Duration()
+//	duration.FromTimedelta(td)
+//
+// # JSON Mapping
+//
+// In JSON format, the Duration type is encoded as a string rather than an
+// object, where the string ends in the suffix "s" (indicating seconds) and
+// is preceded by the number of seconds, with nanoseconds expressed as
+// fractional seconds. For example, 3 seconds with 0 nanoseconds should be
+// encoded in JSON format as "3s", while 3 seconds and 1 nanosecond should
+// be expressed in JSON format as "3.000000001s", and 3 seconds and 1
+// microsecond should be expressed in JSON format as "3.000001s".
+type Duration struct {
+	// Signed seconds of the span of time. Must be from -315,576,000,000
+	// to +315,576,000,000 inclusive. Note: these bounds are computed from:
+	// 60 sec/min * 60 min/hr * 24 hr/day * 365.25 days/year * 10000 years
+	Seconds int64 `protobuf:"varint,1,opt,name=seconds,proto3" json:"seconds,omitempty"`
+	// Signed fractions of a second at nanosecond resolution of the span
+	// of time. Durations less than one second are represented with a 0
+	// `seconds` field and a positive or negative `nanos` field. For durations
+	// of one second or more, a non-zero value for the `nanos` field must be
+	// of the same sign as the `seconds` field. Must be from -999,999,999
+	// to +999,999,999 inclusive.
+	Nanos                int32    `protobuf:"varint,2,opt,name=nanos,proto3" json:"nanos,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *Duration) Reset()         { *m = Duration{} }
+func (m *Duration) String() string { return proto.CompactTextString(m) }
+func (*Duration) ProtoMessage()    {}
+func (*Duration) Descriptor() ([]byte, []int) {
+	return fileDescriptor_9af7607b46ac39b7, []int{23}
+}
+func (m *Duration) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Duration) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Duration.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Duration) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Duration.Merge(m, src)
+}
+func (m *Duration) XXX_Size() int {
+	return m.Size()
+}
+func (m *Duration) XXX_DiscardUnknown() {
+	xxx_messageInfo_Duration.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Duration proto.InternalMessageInfo
+
+func (m *Duration) GetSeconds() int64 {
+	if m != nil {
+		return m.Seconds
+	}
+	return 0
+}
+
+func (m *Duration) GetNanos() int32 {
+	if m != nil {
+		return m.Nanos
+	}
+	return 0
+}
+
 type Analysis struct {
-	Name                 string      `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
-	ExecutionTime        Duration    `protobuf:"bytes,2,opt,name=executionTime,proto3,customtype=Duration" json:"executionTime"`
+	// @gotags: json:"name"
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
+	// @gotags: json:"executionTime"
+	ExecutionTime *Duration `protobuf:"bytes,2,opt,name=executionTime,proto3" json:"executionTime"`
+	// @gotags: json:"children"
 	Children             []*Analysis `protobuf:"bytes,3,rep,name=children,proto3" json:"children"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
@@ -1545,7 +1720,7 @@ func (m *Analysis) Reset()         { *m = Analysis{} }
 func (m *Analysis) String() string { return proto.CompactTextString(m) }
 func (*Analysis) ProtoMessage()    {}
 func (*Analysis) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9af7607b46ac39b7, []int{23}
+	return fileDescriptor_9af7607b46ac39b7, []int{24}
 }
 func (m *Analysis) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1581,6 +1756,13 @@ func (m *Analysis) GetName() string {
 	return ""
 }
 
+func (m *Analysis) GetExecutionTime() *Duration {
+	if m != nil {
+		return m.ExecutionTime
+	}
+	return nil
+}
+
 func (m *Analysis) GetChildren() []*Analysis {
 	if m != nil {
 		return m.Children
@@ -1612,6 +1794,7 @@ func init() {
 	proto.RegisterType((*Extent)(nil), "queryrange.Extent")
 	proto.RegisterType((*CachingOptions)(nil), "queryrange.CachingOptions")
 	proto.RegisterType((*Explanation)(nil), "queryrange.Explanation")
+	proto.RegisterType((*Duration)(nil), "queryrange.Duration")
 	proto.RegisterType((*Analysis)(nil), "queryrange.Analysis")
 }
 
@@ -1620,102 +1803,85 @@ func init() {
 }
 
 var fileDescriptor_9af7607b46ac39b7 = []byte{
-	// 1505 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x58, 0xcd, 0x6f, 0xdb, 0x46,
-	0x16, 0x0f, 0x25, 0x99, 0x96, 0x9e, 0x1c, 0x3b, 0x19, 0x7b, 0x13, 0xd9, 0xeb, 0x35, 0x1d, 0x66,
-	0xb1, 0xf0, 0x66, 0x13, 0x19, 0xf0, 0x22, 0x7b, 0x08, 0xb0, 0xd9, 0x35, 0x1b, 0xb7, 0x4e, 0x91,
-	0x0f, 0x67, 0x1c, 0xa4, 0x40, 0x2f, 0xc1, 0x48, 0x9a, 0xca, 0x6c, 0x28, 0x92, 0x99, 0x19, 0x26,
-	0xf6, 0xad, 0x7f, 0x43, 0xd1, 0x43, 0x8f, 0x2d, 0xd0, 0x63, 0xd1, 0xbf, 0x23, 0x87, 0x1e, 0x7a,
-	0x2e, 0x50, 0xb6, 0xc8, 0x91, 0xa7, 0x5e, 0x7a, 0x2f, 0xe6, 0x83, 0x22, 0x29, 0xdb, 0x32, 0x8c,
-	0x5e, 0x5a, 0xf4, 0x62, 0xcd, 0xbc, 0xef, 0xf7, 0x7b, 0x6f, 0x86, 0x6f, 0x0c, 0x37, 0xfa, 0x11,
-	0x13, 0xf4, 0x70, 0xf3, 0x65, 0x42, 0x99, 0x4f, 0x99, 0xfa, 0x3d, 0x62, 0x24, 0x1c, 0xd2, 0xd2,
-	0xb2, 0x1b, 0xb3, 0x48, 0x44, 0x08, 0x0a, 0xca, 0xca, 0xd2, 0x30, 0x1a, 0x46, 0x8a, 0xbc, 0x29,
-	0x57, 0x5a, 0x62, 0x65, 0x6d, 0x18, 0x45, 0xc3, 0x80, 0x6e, 0xaa, 0x5d, 0x2f, 0xf9, 0x68, 0x73,
-	0x90, 0x30, 0x22, 0xfc, 0x28, 0x34, 0xfc, 0x55, 0xe3, 0x4d, 0xff, 0xc4, 0x3d, 0xb3, 0x30, 0xdc,
-	0xe5, 0x49, 0x6d, 0x12, 0x1e, 0x69, 0x96, 0xbb, 0x0f, 0x57, 0xf7, 0x58, 0x34, 0xa2, 0xe2, 0x80,
-	0x26, 0x1c, 0xd3, 0x97, 0x09, 0xe5, 0x62, 0x97, 0x92, 0x01, 0x65, 0x68, 0x19, 0x1a, 0x8f, 0xc8,
-	0x88, 0x76, 0xac, 0x75, 0x6b, 0xa3, 0xe5, 0xcd, 0x64, 0xa9, 0x63, 0xdd, 0xc2, 0x8a, 0x84, 0xfe,
-	0x06, 0xf6, 0x33, 0x12, 0x24, 0x94, 0x77, 0x6a, 0xeb, 0xf5, 0x82, 0x69, 0x88, 0x6e, 0x5a, 0x83,
-	0xcb, 0xc7, 0xac, 0x22, 0x04, 0x8d, 0x98, 0x88, 0x03, 0x6d, 0x0f, 0xab, 0x35, 0x5a, 0x82, 0x19,
-	0x2e, 0x08, 0x13, 0x9d, 0xda, 0xba, 0xb5, 0x51, 0xc7, 0x7a, 0x83, 0x2e, 0x41, 0x9d, 0x86, 0x83,
-	0x4e, 0x5d, 0xd1, 0xe4, 0x52, 0xea, 0x72, 0x41, 0xe3, 0x4e, 0x43, 0x91, 0xd4, 0x1a, 0xfd, 0x17,
-	0x66, 0x85, 0x3f, 0xa2, 0x51, 0x22, 0x3a, 0x33, 0xeb, 0xd6, 0x46, 0x7b, 0x6b, 0xb9, 0xab, 0xf3,
-	0xec, 0xe6, 0x79, 0x76, 0xef, 0x19, 0x94, 0xbc, 0xe6, 0x9b, 0xd4, 0xb9, 0xf0, 0xf9, 0x8f, 0x8e,
-	0x85, 0x73, 0x1d, 0xe9, 0x5a, 0xc1, 0xde, 0xb1, 0x55, 0x3c, 0x7a, 0x83, 0x76, 0x61, 0xbe, 0x4f,
-	0xfa, 0x07, 0x7e, 0x38, 0x7c, 0x1c, 0x4b, 0x4d, 0xde, 0x99, 0x55, 0xb6, 0x57, 0xba, 0xa5, 0xaa,
-	0xbd, 0x53, 0x91, 0xf0, 0x1a, 0xd2, 0x38, 0x9e, 0xd0, 0x43, 0xf7, 0x60, 0x56, 0x03, 0xc9, 0x3b,
-	0xcd, 0xf5, 0xfa, 0x46, 0x7b, 0xeb, 0x7a, 0xd9, 0xc4, 0x29, 0xa0, 0xe7, 0x48, 0xe6, 0xaa, 0x06,
-	0x20, 0xc1, 0x3b, 0x2d, 0x1d, 0xa5, 0xda, 0xb8, 0x4f, 0xa1, 0x53, 0x36, 0xc0, 0xe3, 0x28, 0xe4,
-	0xf4, 0x37, 0x97, 0xed, 0x87, 0x1a, 0xa0, 0xe3, 0x66, 0x91, 0x0b, 0xf6, 0xbe, 0x20, 0x22, 0xe1,
-	0xc6, 0x24, 0x64, 0xa9, 0x63, 0x73, 0x45, 0xc1, 0x86, 0x83, 0xde, 0x85, 0xc6, 0x3d, 0x22, 0x88,
-	0x2a, 0xe3, 0x04, 0x58, 0x85, 0x45, 0x29, 0xe1, 0x5d, 0x91, 0x60, 0x65, 0xa9, 0x33, 0x3f, 0x20,
-	0x82, 0xdc, 0x8c, 0x46, 0xbe, 0xa0, 0xa3, 0x58, 0x1c, 0x61, 0xa5, 0x8f, 0x6e, 0x43, 0x6b, 0x87,
-	0xb1, 0x88, 0x3d, 0x3d, 0x8a, 0xa9, 0xaa, 0x7f, 0xcb, 0xbb, 0x9a, 0xa5, 0xce, 0x22, 0xcd, 0x89,
-	0x25, 0x8d, 0x42, 0x12, 0xfd, 0x13, 0x66, 0xd4, 0x46, 0xf5, 0x47, 0xcb, 0x5b, 0xcc, 0x52, 0x67,
-	0x41, 0xa9, 0x94, 0xc4, 0xb5, 0x04, 0xda, 0x29, 0xca, 0x32, 0xa3, 0xca, 0xf2, 0xf7, 0xd3, 0xca,
-	0x52, 0x46, 0xf5, 0x58, 0x5d, 0xb6, 0xa0, 0xf9, 0x01, 0x61, 0xa1, 0x1f, 0x0e, 0x79, 0xc7, 0x56,
-	0x60, 0x5e, 0xc9, 0x52, 0x07, 0xbd, 0x36, 0xb4, 0x92, 0xdf, 0xb1, 0x9c, 0xfb, 0x69, 0x0d, 0xe6,
-	0xab, 0x68, 0xa0, 0x2e, 0x00, 0xa6, 0x3c, 0x09, 0x84, 0x4a, 0x58, 0xe3, 0x3b, 0x9f, 0xa5, 0x0e,
-	0xb0, 0x31, 0x15, 0x97, 0x24, 0xd0, 0xff, 0xc1, 0xd6, 0x3b, 0x55, 0xc1, 0xf6, 0x56, 0xa7, 0x1c,
-	0xfc, 0x3e, 0x19, 0xc5, 0x01, 0xdd, 0x17, 0x8c, 0x92, 0x91, 0x37, 0x6f, 0x70, 0xb6, 0xb5, 0x25,
-	0x6c, 0xf4, 0xd0, 0xa3, 0xbc, 0xa1, 0xea, 0xaa, 0x54, 0xd7, 0xa7, 0x67, 0x2f, 0xcb, 0xcb, 0x35,
-	0x9e, 0x4a, 0xab, 0x8c, 0xa7, 0x22, 0xa0, 0xbb, 0xd0, 0x24, 0x21, 0x09, 0x8e, 0xb8, 0xcf, 0x15,
-	0xfa, 0xed, 0xad, 0xa5, 0xb2, 0xc9, 0x6d, 0xc3, 0xf3, 0xe6, 0xb2, 0xd4, 0x19, 0x4b, 0xe2, 0xf1,
-	0xca, 0xfd, 0xa5, 0x06, 0x6b, 0x85, 0xdf, 0xfb, 0x21, 0x17, 0x24, 0x14, 0x4f, 0xa4, 0x81, 0x73,
-	0x35, 0x20, 0xae, 0x34, 0xe0, 0x3f, 0x4e, 0xce, 0xaa, 0x6c, 0xfd, 0xcf, 0xde, 0x8c, 0xdf, 0xd4,
-	0x60, 0xe5, 0x74, 0x64, 0xce, 0xdd, 0x98, 0x7b, 0xa5, 0xc6, 0x94, 0x15, 0xd8, 0x38, 0xbb, 0x02,
-	0x5a, 0xfe, 0x0f, 0xd3, 0xa8, 0x3f, 0x5b, 0xb0, 0x3a, 0x2d, 0x11, 0x74, 0x03, 0x6c, 0xde, 0x27,
-	0x01, 0x61, 0x0a, 0xae, 0xf6, 0xd6, 0xa5, 0x6e, 0xfe, 0x35, 0x36, 0x27, 0x73, 0xf7, 0x02, 0x36,
-	0x12, 0xe8, 0x2e, 0xcc, 0x71, 0xc1, 0xfc, 0x70, 0xa8, 0x39, 0x06, 0xb4, 0xea, 0x69, 0x2e, 0xf1,
-	0x77, 0x2f, 0xe0, 0x8a, 0x3c, 0xba, 0x09, 0xf6, 0x2b, 0xda, 0x17, 0x11, 0x33, 0xe8, 0xa0, 0xb2,
-	0xe6, 0x33, 0xc5, 0x91, 0xde, 0xb4, 0x8c, 0x94, 0x1e, 0x11, 0xc1, 0xfc, 0x43, 0x93, 0x78, 0x45,
-	0xfa, 0xa1, 0xe2, 0x48, 0x69, 0x2d, 0xe3, 0x35, 0xc1, 0x94, 0xc2, 0xfd, 0x0f, 0xd8, 0xcf, 0x72,
-	0x0b, 0xb3, 0x5c, 0x79, 0x96, 0x67, 0xb0, 0x3e, 0x69, 0x42, 0x07, 0x85, 0x73, 0x11, 0x77, 0x17,
-	0x6c, 0x6d, 0x15, 0xdd, 0x85, 0x8b, 0xbc, 0x74, 0x2b, 0xe5, 0xda, 0xa7, 0x5e, 0x5b, 0xb8, 0x2a,
-	0xee, 0x06, 0xd5, 0xf1, 0xa4, 0x54, 0x6b, 0xf4, 0xa4, 0x1c, 0x92, 0xcc, 0xea, 0xc6, 0x19, 0x1d,
-	0xa2, 0x85, 0x75, 0xa3, 0xb4, 0xb3, 0xd4, 0xc9, 0xd5, 0x8b, 0xb8, 0x3f, 0xab, 0xdc, 0x45, 0x27,
-	0x29, 0xa2, 0xc7, 0xf0, 0x17, 0x11, 0x09, 0x12, 0xa8, 0xc2, 0x93, 0x5e, 0x90, 0x73, 0x55, 0x0c,
-	0x75, 0x6f, 0x39, 0x4b, 0x9d, 0x93, 0x05, 0xf0, 0xc9, 0x64, 0xf4, 0x85, 0x05, 0xab, 0x27, 0x72,
-	0xf6, 0x28, 0xdb, 0x97, 0x23, 0x8f, 0xbe, 0xe8, 0xef, 0x4c, 0x4f, 0x6e, 0x52, 0x59, 0x05, 0x6b,
-	0x2c, 0x78, 0xeb, 0x59, 0xea, 0x4c, 0xf5, 0x81, 0xa7, 0x72, 0x5d, 0x1f, 0xce, 0xe9, 0x51, 0x4e,
-	0x2d, 0xaf, 0xe4, 0x4c, 0xa1, 0x51, 0xc1, 0x7a, 0x83, 0xae, 0xc1, 0x9c, 0x1c, 0xbe, 0xb8, 0x20,
-	0xa3, 0xf8, 0xf9, 0x88, 0x9b, 0x99, 0xaf, 0x3d, 0xa6, 0x3d, 0xe4, 0xee, 0x97, 0x35, 0x98, 0x2b,
-	0xf7, 0x03, 0xfa, 0xc4, 0x02, 0x3b, 0x20, 0x3d, 0x1a, 0xe4, 0xad, 0xb3, 0x58, 0x9c, 0xaa, 0x07,
-	0x92, 0xbe, 0x47, 0x7c, 0xe6, 0xed, 0xcb, 0x3b, 0xe4, 0xfb, 0xd4, 0xd9, 0x1e, 0xfa, 0xe2, 0x20,
-	0xe9, 0x75, 0xfb, 0xd1, 0x68, 0x53, 0x1c, 0x90, 0x30, 0xe2, 0xb7, 0xfc, 0xc8, 0xac, 0x36, 0xfd,
-	0x50, 0x50, 0x16, 0x92, 0x60, 0x73, 0x62, 0x56, 0xd6, 0x76, 0xb6, 0x07, 0x24, 0x16, 0x94, 0xc9,
-	0x8b, 0x68, 0x44, 0x05, 0xf3, 0xfb, 0xd8, 0xf8, 0x45, 0x77, 0x8a, 0x46, 0xd3, 0xb5, 0x38, 0x76,
-	0xb0, 0x8b, 0x3b, 0x4c, 0x25, 0x5a, 0x74, 0x14, 0xc2, 0x00, 0x07, 0x3e, 0x17, 0xd1, 0x90, 0xc9,
-	0xe6, 0xaf, 0x2b, 0x75, 0xe7, 0x78, 0xf3, 0xef, 0xe6, 0x32, 0x2a, 0x9b, 0xcb, 0xc6, 0x5a, 0x6b,
-	0xac, 0x8a, 0x4b, 0x56, 0xdc, 0xaf, 0x6a, 0x60, 0x9b, 0x6b, 0xe0, 0x77, 0x80, 0xce, 0xbf, 0xa0,
-	0xad, 0x93, 0x55, 0x43, 0xa4, 0xaa, 0xa9, 0xe5, 0xb5, 0xb2, 0xd4, 0xd1, 0x45, 0xc7, 0x65, 0x2e,
-	0x5a, 0x85, 0xd6, 0xb8, 0xda, 0x66, 0xbc, 0x2f, 0x08, 0xe8, 0x01, 0x14, 0x19, 0x9b, 0x9b, 0xea,
-	0xaf, 0x53, 0xb0, 0x52, 0x38, 0x59, 0x55, 0x9c, 0x8a, 0xa5, 0xfb, 0x1e, 0xcc, 0x95, 0xaf, 0xd0,
-	0x6a, 0x4f, 0xb6, 0xce, 0xd1, 0x93, 0x02, 0x16, 0x4f, 0xa8, 0x52, 0x35, 0x17, 0x6b, 0x32, 0x97,
-	0xff, 0x95, 0x73, 0xa9, 0x9d, 0x9d, 0x8b, 0x7e, 0x43, 0x94, 0xc2, 0x8f, 0x61, 0x61, 0x42, 0x46,
-	0x66, 0xd0, 0x8f, 0x92, 0x50, 0x28, 0x6f, 0x16, 0xd6, 0x1b, 0xf9, 0x58, 0xe2, 0x89, 0xf6, 0x61,
-	0x61, 0xb9, 0x44, 0xb7, 0x61, 0xb6, 0x97, 0xf4, 0x5f, 0x50, 0x91, 0x77, 0x5c, 0xc5, 0x73, 0xe1,
-	0x53, 0xc9, 0xe0, 0x5c, 0xd6, 0xe5, 0xb0, 0x30, 0xc1, 0x43, 0x6b, 0x00, 0xbd, 0x28, 0x09, 0x07,
-	0x84, 0xf9, 0xe6, 0x8a, 0x9b, 0xc1, 0x25, 0x8a, 0x8c, 0x28, 0x88, 0x5e, 0x53, 0x66, 0xbc, 0xeb,
-	0x8d, 0xa4, 0x26, 0x71, 0x4c, 0xf5, 0xb7, 0xc9, 0xc2, 0x7a, 0x53, 0x44, 0xdf, 0x28, 0x45, 0xef,
-	0x7e, 0x0c, 0xf3, 0xf2, 0x35, 0x45, 0x07, 0xe3, 0x69, 0x6f, 0x19, 0xea, 0x2f, 0xe8, 0x91, 0x19,
-	0x39, 0x66, 0xb3, 0xd4, 0x91, 0x5b, 0x2c, 0xff, 0xc8, 0x17, 0x1f, 0x3d, 0x14, 0x34, 0x14, 0xf9,
-	0x49, 0xac, 0x7c, 0x85, 0x76, 0x14, 0xcb, 0x5b, 0x30, 0xa7, 0x27, 0x17, 0xc5, 0xf9, 0xc2, 0xfd,
-	0xda, 0x02, 0x5b, 0x0b, 0x21, 0x27, 0x7f, 0x77, 0xea, 0x6b, 0x5b, 0xf5, 0xab, 0x22, 0xe4, 0x4f,
-	0xd0, 0x65, 0xfd, 0x04, 0x55, 0xed, 0xa0, 0xa3, 0xa0, 0xe1, 0x40, 0xbf, 0x45, 0xd7, 0xa1, 0x29,
-	0x18, 0xe9, 0xd3, 0xe7, 0xfe, 0xc0, 0x8c, 0x78, 0xf9, 0x3c, 0xa6, 0xc8, 0xf7, 0x07, 0x72, 0xd4,
-	0x60, 0x26, 0x1d, 0xf3, 0x34, 0x5d, 0x3a, 0xf6, 0x34, 0xdd, 0x0e, 0x8f, 0xf4, 0xa8, 0x91, 0x4b,
-	0xe2, 0xf1, 0xea, 0xfd, 0x46, 0xb3, 0x7e, 0xa9, 0xe1, 0xde, 0xd4, 0xd0, 0x94, 0x9e, 0x94, 0x2b,
-	0xd0, 0x1c, 0xf8, 0x5c, 0x5e, 0xba, 0x03, 0x15, 0x78, 0x13, 0x8f, 0xf7, 0x6e, 0x08, 0xed, 0x9d,
-	0xc3, 0x38, 0x20, 0xa1, 0x7a, 0xf0, 0xa2, 0x55, 0x68, 0x84, 0xc5, 0x2b, 0xb0, 0x99, 0xa5, 0x8e,
-	0xda, 0x63, 0xf5, 0x17, 0x6d, 0x43, 0xb3, 0x7f, 0xe0, 0x07, 0x03, 0x46, 0x43, 0x83, 0xe4, 0xd5,
-	0x2a, 0x92, 0x63, 0x43, 0x3a, 0xc6, 0x5c, 0x18, 0x8f, 0x57, 0xee, 0xb7, 0x16, 0x34, 0xf3, 0x99,
-	0xe9, 0x0c, 0x6f, 0x3d, 0xb8, 0x48, 0x0f, 0x69, 0x3f, 0x91, 0xf6, 0x9e, 0xfa, 0xa3, 0x7c, 0xda,
-	0x99, 0xf2, 0x5c, 0xbf, 0x66, 0x6e, 0xac, 0x66, 0x4e, 0xc9, 0x52, 0xa7, 0x6a, 0x03, 0x57, 0xb7,
-	0x12, 0xf2, 0x71, 0x46, 0xba, 0xe9, 0xa7, 0x4c, 0x77, 0xc7, 0xd3, 0xf1, 0x3a, 0x6f, 0xde, 0xae,
-	0x59, 0xdf, 0xbd, 0x5d, 0xb3, 0x7e, 0x7a, 0xbb, 0x66, 0x7d, 0x58, 0xfa, 0x87, 0x4c, 0xcf, 0x56,
-	0xe1, 0xfd, 0xfb, 0xd7, 0x00, 0x00, 0x00, 0xff, 0xff, 0xf5, 0x48, 0xa7, 0xb6, 0xd1, 0x11, 0x00,
-	0x00,
+	// 1235 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0x4f, 0x6f, 0x1b, 0x45,
+	0x14, 0xef, 0xda, 0xce, 0xda, 0x7e, 0x4e, 0xdb, 0x30, 0x2d, 0x74, 0x6b, 0xa2, 0x60, 0xb6, 0x08,
+	0x59, 0xa1, 0x72, 0xab, 0x14, 0x90, 0x1a, 0x89, 0x42, 0x43, 0x03, 0x29, 0xa2, 0x10, 0x26, 0x55,
+	0x90, 0xb8, 0x54, 0x63, 0x7b, 0x70, 0x56, 0x5d, 0xcf, 0x6e, 0x67, 0x66, 0x4b, 0x7c, 0xe1, 0x02,
+	0x47, 0x3e, 0x08, 0x47, 0x3e, 0x03, 0x27, 0x6e, 0x70, 0xe2, 0x8c, 0x7a, 0x85, 0x03, 0x1f, 0x01,
+	0xcd, 0x9f, 0xdd, 0x9d, 0x75, 0x1c, 0x47, 0xe1, 0x02, 0xa7, 0x9d, 0x37, 0xef, 0x37, 0x6f, 0x7e,
+	0xf3, 0x7b, 0xf3, 0xe7, 0x2d, 0x6c, 0x8e, 0x12, 0x2e, 0xe9, 0xf1, 0xad, 0x67, 0x19, 0xe5, 0x11,
+	0xe5, 0xfa, 0x3b, 0xe3, 0x84, 0x4d, 0xa8, 0xd3, 0x1c, 0xa4, 0x3c, 0x91, 0x09, 0x82, 0xb2, 0xa7,
+	0xbb, 0x6e, 0xc7, 0x99, 0x4f, 0x3a, 0xb4, 0x0d, 0x83, 0xec, 0x5e, 0x9f, 0x24, 0xc9, 0x24, 0xa6,
+	0xb7, 0xb4, 0x35, 0xcc, 0xbe, 0xbe, 0x45, 0xd8, 0xcc, 0xb8, 0xc2, 0x5d, 0xb8, 0xb6, 0xcf, 0x93,
+	0x29, 0x95, 0x47, 0x34, 0x13, 0x98, 0x3e, 0xcb, 0xa8, 0x90, 0x7b, 0x94, 0x8c, 0x29, 0x47, 0x08,
+	0x1a, 0x9f, 0x91, 0x29, 0x0d, 0xbc, 0x9e, 0xd7, 0x6f, 0x63, 0xdd, 0x46, 0xaf, 0x80, 0x7f, 0x48,
+	0xe2, 0x8c, 0x8a, 0xa0, 0xd6, 0xab, 0xf7, 0xdb, 0xd8, 0x5a, 0xe1, 0xcf, 0x35, 0x78, 0xe9, 0x44,
+	0x1c, 0x15, 0x21, 0x25, 0xf2, 0x28, 0x8f, 0xa0, 0xda, 0xe8, 0x2a, 0xac, 0x08, 0x49, 0xb8, 0x0c,
+	0x6a, 0x3d, 0xaf, 0x5f, 0xc7, 0xc6, 0x40, 0x6b, 0x50, 0xa7, 0x6c, 0x1c, 0xd4, 0x75, 0x9f, 0x6a,
+	0xaa, 0xb1, 0x42, 0xd2, 0x34, 0x68, 0xe8, 0x2e, 0xdd, 0x46, 0x03, 0x68, 0xca, 0x68, 0x4a, 0x93,
+	0x4c, 0x06, 0x2b, 0x3d, 0xaf, 0xdf, 0xd9, 0xba, 0x3a, 0x70, 0x54, 0x79, 0x90, 0x71, 0x22, 0xa3,
+	0x84, 0xe1, 0x1c, 0xa4, 0xe6, 0xd2, 0xfe, 0xc0, 0xd7, 0x04, 0x8c, 0x81, 0x76, 0xe0, 0xd2, 0x88,
+	0x8c, 0x8e, 0x22, 0x36, 0xf9, 0x3c, 0x55, 0x78, 0x11, 0x34, 0x75, 0xb0, 0xae, 0x1b, 0xec, 0xc3,
+	0x0a, 0x02, 0xcf, 0x8d, 0x40, 0xef, 0x41, 0xd3, 0xa8, 0x24, 0x82, 0x56, 0xaf, 0xde, 0xef, 0x6c,
+	0xdd, 0x70, 0x07, 0x9f, 0xa2, 0x28, 0xce, 0xc7, 0x58, 0x11, 0xa4, 0x08, 0xda, 0x86, 0x98, 0x36,
+	0xc2, 0x8f, 0x20, 0x70, 0x47, 0x8a, 0x34, 0x61, 0x82, 0xfe, 0x8b, 0x64, 0xfc, 0xe5, 0x01, 0x3a,
+	0x19, 0x48, 0xc1, 0x0f, 0x24, 0x91, 0x99, 0xb0, 0x41, 0xac, 0x85, 0x06, 0xd0, 0x78, 0x40, 0x24,
+	0xd1, 0x09, 0x99, 0x53, 0xa1, 0x8c, 0xa2, 0x10, 0x58, 0xe3, 0xd0, 0x3a, 0xb4, 0x77, 0x39, 0x4f,
+	0xf8, 0xe3, 0x59, 0x4a, 0x75, 0xc6, 0xda, 0xb8, 0xec, 0x50, 0x4b, 0xd3, 0x86, 0x4e, 0x5c, 0x1b,
+	0x1b, 0x03, 0xdd, 0x2b, 0xf5, 0x5a, 0xd1, 0x7a, 0xbd, 0x71, 0x9a, 0x5e, 0xee, 0xaa, 0x4b, 0xc1,
+	0xba, 0xd0, 0xfa, 0x92, 0x70, 0x16, 0xb1, 0x89, 0x08, 0x7c, 0xbd, 0xd8, 0xc2, 0x0e, 0x7f, 0xf5,
+	0xe0, 0x52, 0x95, 0x28, 0xda, 0x00, 0xc0, 0x54, 0x64, 0xb1, 0xd4, 0x1c, 0xcd, 0x72, 0x9d, 0x1e,
+	0x74, 0x1b, 0x7c, 0x63, 0x69, 0xe5, 0x3a, 0x5b, 0x81, 0xcb, 0xe6, 0x80, 0x4c, 0xd3, 0x98, 0x1e,
+	0x48, 0x4e, 0xc9, 0x14, 0x5b, 0x1c, 0xba, 0x9b, 0x67, 0xac, 0xae, 0x55, 0xba, 0xb1, 0x9c, 0xbe,
+	0x52, 0x56, 0xd8, 0xb4, 0xa2, 0xdb, 0xd0, 0x22, 0x8c, 0xc4, 0x33, 0x11, 0x09, 0x2d, 0xca, 0xdc,
+	0xb6, 0xbd, 0x6f, 0x7d, 0xb8, 0x40, 0x85, 0xdf, 0xd7, 0x60, 0xa3, 0x0c, 0xfa, 0x90, 0x09, 0x49,
+	0x98, 0xfc, 0x42, 0x0d, 0x39, 0x33, 0x99, 0xdb, 0x95, 0x64, 0xbe, 0xb9, 0x98, 0xa6, 0x1b, 0xf1,
+	0x7f, 0x9c, 0xd8, 0x3f, 0x3d, 0xe8, 0x9e, 0x4e, 0xfa, 0xcc, 0x24, 0x7f, 0xe0, 0x24, 0x59, 0x89,
+	0xd1, 0x3f, 0x5b, 0x0c, 0x83, 0xff, 0x6f, 0x92, 0xfe, 0xb7, 0x07, 0xeb, 0xcb, 0x58, 0xa1, 0x4d,
+	0xf0, 0xc5, 0x88, 0xc4, 0x84, 0xeb, 0xb5, 0x76, 0xb6, 0xd6, 0x06, 0xf9, 0x6d, 0x6f, 0xb7, 0xec,
+	0xde, 0x05, 0x6c, 0x11, 0xe8, 0x1e, 0xac, 0x0a, 0xc9, 0x23, 0x36, 0x31, 0x1e, 0xab, 0x40, 0x75,
+	0x9b, 0x3b, 0xfe, 0xbd, 0x0b, 0xb8, 0x82, 0x47, 0x37, 0xc1, 0x7f, 0x4e, 0x47, 0x32, 0xe1, 0x76,
+	0xe9, 0xc8, 0x1d, 0x79, 0xa8, 0x3d, 0x6a, 0x36, 0x83, 0x51, 0xe8, 0x29, 0x91, 0x3c, 0x3a, 0xb6,
+	0x4b, 0xad, 0xa0, 0x1f, 0x69, 0x8f, 0x42, 0x1b, 0xcc, 0x4e, 0x0b, 0x7c, 0xae, 0x57, 0x14, 0xbe,
+	0x0b, 0xfe, 0x61, 0x1e, 0xa1, 0x29, 0xf4, 0xcc, 0x6a, 0x3f, 0xd7, 0xe7, 0x43, 0x18, 0x52, 0x38,
+	0x87, 0x84, 0x7b, 0xe0, 0x9b, 0xa8, 0xe8, 0x1e, 0x5c, 0x14, 0xce, 0x71, 0xcd, 0x47, 0x9f, 0x7e,
+	0x9e, 0xab, 0xf0, 0xf0, 0x49, 0xf5, 0xf9, 0x73, 0x12, 0x89, 0x1e, 0xb8, 0x94, 0xd4, 0xaa, 0x36,
+	0xcf, 0x48, 0xbf, 0x01, 0x9b, 0x5d, 0x50, 0x50, 0xfd, 0xdd, 0x73, 0x8f, 0xf2, 0x22, 0x2c, 0x7a,
+	0x1b, 0x5e, 0x96, 0x89, 0x24, 0xb1, 0xce, 0x35, 0x19, 0xc6, 0xb9, 0x57, 0x4f, 0x5b, 0xc7, 0x8b,
+	0x9d, 0xe8, 0x5b, 0x58, 0x5f, 0xe8, 0xd8, 0xa7, 0xfc, 0x40, 0xbd, 0x9b, 0xe6, 0x62, 0xdb, 0x5e,
+	0xce, 0x79, 0x7e, 0xb0, 0x26, 0x64, 0x23, 0xe0, 0xa5, 0xf1, 0xc3, 0x08, 0xce, 0x19, 0x4f, 0x5d,
+	0x20, 0xcf, 0xd5, 0x03, 0x65, 0xd7, 0x65, 0x0c, 0xf4, 0x3a, 0xac, 0xaa, 0xe7, 0x5a, 0x48, 0x32,
+	0x4d, 0x9f, 0x4c, 0x85, 0x2d, 0x0b, 0x3a, 0x45, 0xdf, 0x23, 0x11, 0xfe, 0xe8, 0xc1, 0xaa, 0x9b,
+	0x44, 0xf4, 0x16, 0xf8, 0x31, 0x19, 0xd2, 0x38, 0x4f, 0xf7, 0x95, 0xf2, 0x24, 0x7c, 0xaa, 0xfa,
+	0xf7, 0x49, 0xc4, 0xb1, 0x85, 0xa0, 0xcd, 0x32, 0x8f, 0x46, 0x93, 0x13, 0xe7, 0xa6, 0xc8, 0x16,
+	0x7a, 0x1f, 0xe0, 0x28, 0x12, 0x32, 0x99, 0x70, 0xb5, 0x97, 0xea, 0x1a, 0xfe, 0xda, 0xc9, 0xbd,
+	0xb4, 0x97, 0x63, 0xf4, 0x44, 0xce, 0x90, 0xf0, 0x27, 0x0f, 0x7c, 0x7b, 0x84, 0xce, 0x45, 0xb2,
+	0x07, 0x1d, 0xc3, 0x41, 0x3f, 0xe1, 0x5a, 0x04, 0x0f, 0xbb, 0x5d, 0xea, 0x72, 0x2e, 0x34, 0xb1,
+	0x75, 0x52, 0xd9, 0x81, 0xee, 0x42, 0xbb, 0x60, 0x61, 0x0f, 0xe1, 0xab, 0x4b, 0x78, 0xe3, 0x12,
+	0x1d, 0x7e, 0x0c, 0xab, 0xee, 0x55, 0x50, 0x4d, 0x53, 0xfb, 0x1c, 0x69, 0x62, 0x70, 0x65, 0x81,
+	0x3c, 0x55, 0xe2, 0xde, 0x52, 0xe2, 0xb5, 0x73, 0x11, 0x4f, 0xe1, 0xf2, 0x9c, 0x57, 0x71, 0x1f,
+	0x25, 0x19, 0x93, 0x7a, 0x1e, 0x0f, 0x1b, 0x43, 0x15, 0x97, 0x22, 0x9b, 0x5a, 0x51, 0x55, 0x13,
+	0xbd, 0x03, 0xcd, 0x61, 0x36, 0x7a, 0x4a, 0x65, 0x9e, 0xe4, 0xca, 0x9c, 0x45, 0xbc, 0x1d, 0x8d,
+	0xc1, 0x39, 0x36, 0x14, 0x70, 0x79, 0xce, 0xa7, 0x1e, 0xa1, 0x61, 0x92, 0xb1, 0x31, 0xe1, 0x91,
+	0x3d, 0xb1, 0x2b, 0xd8, 0xe9, 0x51, 0x8c, 0xe2, 0xe4, 0x1b, 0xca, 0xed, 0xec, 0xc6, 0x50, 0xbd,
+	0x59, 0x9a, 0x52, 0x73, 0xbb, 0x7a, 0xd8, 0x18, 0x25, 0xfb, 0x86, 0xc3, 0x3e, 0xdc, 0x87, 0x4b,
+	0xaa, 0x18, 0xa5, 0xe3, 0xe2, 0xed, 0x5f, 0x83, 0xfa, 0x53, 0x3a, 0xb3, 0xf9, 0x51, 0x4d, 0x75,
+	0x7d, 0xd2, 0x63, 0x49, 0x99, 0xcc, 0xf7, 0x78, 0xe5, 0xfa, 0xdc, 0xd5, 0x2e, 0x9c, 0x43, 0xc2,
+	0xef, 0x3c, 0xf0, 0x4d, 0x5f, 0x59, 0x8d, 0x7b, 0x0b, 0xaa, 0xf1, 0x5a, 0x59, 0x8d, 0x5f, 0x87,
+	0x96, 0xe4, 0x64, 0x44, 0x9f, 0x44, 0x63, 0xfb, 0xfe, 0x37, 0xb5, 0xfd, 0x70, 0xac, 0x5e, 0x3a,
+	0x6e, 0x99, 0x15, 0x55, 0xb9, 0xf9, 0xdf, 0x18, 0xe4, 0xff, 0x1b, 0x83, 0xfb, 0x6c, 0x86, 0x0b,
+	0xd4, 0x27, 0x8d, 0x56, 0x7d, 0xad, 0x11, 0xde, 0x34, 0xeb, 0x72, 0x8a, 0xea, 0x2e, 0xb4, 0xc6,
+	0x91, 0x50, 0xd7, 0xc7, 0x58, 0xf3, 0x69, 0xe1, 0xc2, 0x0e, 0x0f, 0xa1, 0xb3, 0x7b, 0x9c, 0xc6,
+	0x84, 0xe9, 0x12, 0x5f, 0x95, 0xc3, 0xcc, 0x29, 0x87, 0x55, 0x1b, 0xdd, 0x81, 0xd6, 0xe8, 0x28,
+	0x8a, 0xc7, 0x9c, 0x32, 0xab, 0xc2, 0xb5, 0xaa, 0x0a, 0xc5, 0x70, 0x5c, 0x00, 0xc3, 0x6d, 0x68,
+	0xe5, 0xff, 0x0d, 0x28, 0x80, 0xa6, 0xa0, 0xa3, 0x84, 0x8d, 0xf3, 0xab, 0x37, 0x37, 0x95, 0x4c,
+	0x8c, 0xb0, 0xc4, 0x6c, 0xfb, 0x15, 0x6c, 0x8c, 0xf0, 0x07, 0x0f, 0x5a, 0xf9, 0x43, 0xbe, 0x90,
+	0xd1, 0x36, 0x5c, 0xa4, 0xc7, 0x74, 0x94, 0xa9, 0xe8, 0x8f, 0xa3, 0x69, 0xfe, 0x0c, 0x2f, 0xfe,
+	0x6b, 0xa9, 0x42, 0x95, 0xac, 0xc5, 0x6a, 0xcc, 0x1e, 0x3d, 0xa5, 0x80, 0xc8, 0x51, 0x3b, 0xc1,
+	0x2f, 0x2f, 0x36, 0xbc, 0xdf, 0x5e, 0x6c, 0x78, 0x7f, 0xbc, 0xd8, 0xf0, 0xbe, 0x72, 0xfe, 0x0e,
+	0x87, 0xbe, 0x4e, 0xc4, 0x9d, 0x7f, 0x02, 0x00, 0x00, 0xff, 0xff, 0x35, 0x8c, 0x05, 0x1e, 0x5e,
+	0x0e, 0x00, 0x00,
 }
 
 func (m *PrometheusRequestHeader) Marshal() (dAtA []byte, err error) {
@@ -1806,16 +1972,18 @@ func (m *PrometheusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0x42
 		}
 	}
-	{
-		size, err := m.CachingOptions.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
+	if m.CachingOptions != nil {
+		{
+			size, err := m.CachingOptions.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
 		}
-		i -= size
-		i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x3a
 	}
-	i--
-	dAtA[i] = 0x3a
 	if len(m.Query) > 0 {
 		i -= len(m.Query)
 		copy(dAtA[i:], m.Query)
@@ -1823,14 +1991,18 @@ func (m *PrometheusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x32
 	}
-	n2, err2 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.Timeout, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.Timeout):])
-	if err2 != nil {
-		return 0, err2
+	if m.Timeout != nil {
+		{
+			size, err := m.Timeout.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
 	}
-	i -= n2
-	i = encodeVarintQueryrange(dAtA, i, uint64(n2))
-	i--
-	dAtA[i] = 0x2a
 	if m.Step != 0 {
 		i = encodeVarintQueryrange(dAtA, i, uint64(m.Step))
 		i--
@@ -1960,16 +2132,18 @@ func (m *PrometheusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x1a
 	}
-	{
-		size, err := m.Data.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
+	if m.Data != nil {
+		{
+			size, err := m.Data.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
 		}
-		i -= size
-		i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x12
 	}
-	i--
-	dAtA[i] = 0x12
 	if len(m.Status) > 0 {
 		i -= len(m.Status)
 		copy(dAtA[i:], m.Status)
@@ -2113,16 +2287,18 @@ func (m *PrometheusInstantQueryResponse) MarshalToSizedBuffer(dAtA []byte) (int,
 		i--
 		dAtA[i] = 0x1a
 	}
-	{
-		size, err := m.Data.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
+	if m.Data != nil {
+		{
+			size, err := m.Data.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
 		}
-		i -= size
-		i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x12
 	}
-	i--
-	dAtA[i] = 0x12
 	if len(m.Status) > 0 {
 		i -= len(m.Status)
 		copy(dAtA[i:], m.Status)
@@ -2181,16 +2357,18 @@ func (m *PrometheusInstantQueryData) MarshalToSizedBuffer(dAtA []byte) (int, err
 		i--
 		dAtA[i] = 0x1a
 	}
-	{
-		size, err := m.Result.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
+	if m.Result != nil {
+		{
+			size, err := m.Result.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
 		}
-		i -= size
-		i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x12
 	}
-	i--
-	dAtA[i] = 0x12
 	if len(m.ResultType) > 0 {
 		i -= len(m.ResultType)
 		copy(dAtA[i:], m.ResultType)
@@ -2580,11 +2758,11 @@ func (m *SampleStream) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size := m.Labels[iNdEx].Size()
-				i -= size
-				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
 					return 0, err
 				}
+				i -= size
 				i = encodeVarintQueryrange(dAtA, i, uint64(size))
 			}
 			i--
@@ -2644,11 +2822,11 @@ func (m *Sample) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size := m.Labels[iNdEx].Size()
-				i -= size
-				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
 					return 0, err
 				}
+				i -= size
 				i = encodeVarintQueryrange(dAtA, i, uint64(size))
 			}
 			i--
@@ -2721,16 +2899,18 @@ func (m *SampleHistogramPair) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	{
-		size, err := m.Histogram.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
+	if m.Histogram != nil {
+		{
+			size, err := m.Histogram.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
 		}
-		i -= size
-		i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x12
 	}
-	i--
-	dAtA[i] = 0x12
 	if m.Timestamp != 0 {
 		i = encodeVarintQueryrange(dAtA, i, uint64(m.Timestamp))
 		i--
@@ -3031,6 +3211,43 @@ func (m *Explanation) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *Duration) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Duration) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Duration) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Nanos != 0 {
+		i = encodeVarintQueryrange(dAtA, i, uint64(m.Nanos))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Seconds != 0 {
+		i = encodeVarintQueryrange(dAtA, i, uint64(m.Seconds))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *Analysis) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -3069,16 +3286,18 @@ func (m *Analysis) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0x1a
 		}
 	}
-	{
-		size := m.ExecutionTime.Size()
-		i -= size
-		if _, err := m.ExecutionTime.MarshalTo(dAtA[i:]); err != nil {
-			return 0, err
+	if m.ExecutionTime != nil {
+		{
+			size, err := m.ExecutionTime.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQueryrange(dAtA, i, uint64(size))
 		}
-		i = encodeVarintQueryrange(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x12
 	}
-	i--
-	dAtA[i] = 0x12
 	if len(m.Name) > 0 {
 		i -= len(m.Name)
 		copy(dAtA[i:], m.Name)
@@ -3141,14 +3360,18 @@ func (m *PrometheusRequest) Size() (n int) {
 	if m.Step != 0 {
 		n += 1 + sovQueryrange(uint64(m.Step))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.Timeout)
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.Timeout != nil {
+		l = m.Timeout.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	l = len(m.Query)
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
 	}
-	l = m.CachingOptions.Size()
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.CachingOptions != nil {
+		l = m.CachingOptions.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	if len(m.Headers) > 0 {
 		for _, e := range m.Headers {
 			l = e.Size()
@@ -3197,8 +3420,10 @@ func (m *PrometheusResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
 	}
-	l = m.Data.Size()
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.Data != nil {
+		l = m.Data.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	l = len(m.ErrorType)
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
@@ -3265,8 +3490,10 @@ func (m *PrometheusInstantQueryResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
 	}
-	l = m.Data.Size()
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.Data != nil {
+		l = m.Data.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	l = len(m.ErrorType)
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
@@ -3303,8 +3530,10 @@ func (m *PrometheusInstantQueryData) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
 	}
-	l = m.Result.Size()
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.Result != nil {
+		l = m.Result.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	if m.Stats != nil {
 		l = m.Stats.Size()
 		n += 1 + l + sovQueryrange(uint64(l))
@@ -3559,8 +3788,10 @@ func (m *SampleHistogramPair) Size() (n int) {
 	if m.Timestamp != 0 {
 		n += 1 + sovQueryrange(uint64(m.Timestamp))
 	}
-	l = m.Histogram.Size()
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.Histogram != nil {
+		l = m.Histogram.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3700,6 +3931,24 @@ func (m *Explanation) Size() (n int) {
 	return n
 }
 
+func (m *Duration) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Seconds != 0 {
+		n += 1 + sovQueryrange(uint64(m.Seconds))
+	}
+	if m.Nanos != 0 {
+		n += 1 + sovQueryrange(uint64(m.Nanos))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *Analysis) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3710,8 +3959,10 @@ func (m *Analysis) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovQueryrange(uint64(l))
 	}
-	l = m.ExecutionTime.Size()
-	n += 1 + l + sovQueryrange(uint64(l))
+	if m.ExecutionTime != nil {
+		l = m.ExecutionTime.Size()
+		n += 1 + l + sovQueryrange(uint64(l))
+	}
 	if len(m.Children) > 0 {
 		for _, e := range m.Children {
 			l = e.Size()
@@ -3992,7 +4243,10 @@ func (m *PrometheusRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.Timeout, dAtA[iNdEx:postIndex]); err != nil {
+			if m.Timeout == nil {
+				m.Timeout = &Duration{}
+			}
+			if err := m.Timeout.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4056,6 +4310,9 @@ func (m *PrometheusRequest) Unmarshal(dAtA []byte) error {
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.CachingOptions == nil {
+				m.CachingOptions = &CachingOptions{}
 			}
 			if err := m.CachingOptions.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4354,6 +4611,9 @@ func (m *PrometheusResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
+			if m.Data == nil {
+				m.Data = &PrometheusData{}
+			}
 			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -4600,7 +4860,7 @@ func (m *PrometheusData) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Result = append(m.Result, SampleStream{})
+			m.Result = append(m.Result, &SampleStream{})
 			if err := m.Result[len(m.Result)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -4788,6 +5048,9 @@ func (m *PrometheusInstantQueryResponse) Unmarshal(dAtA []byte) error {
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.Data == nil {
+				m.Data = &PrometheusInstantQueryData{}
 			}
 			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5034,6 +5297,9 @@ func (m *PrometheusInstantQueryData) Unmarshal(dAtA []byte) error {
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.Result == nil {
+				m.Result = &PrometheusInstantQueryResult{}
 			}
 			if err := m.Result.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5832,7 +6098,7 @@ func (m *SampleStream) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, github_com_thanos_io_thanos_internal_cortex_cortexpb.LabelAdapter{})
+			m.Labels = append(m.Labels, &cortexpb.LabelPair{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -5866,7 +6132,7 @@ func (m *SampleStream) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Samples = append(m.Samples, cortexpb.Sample{})
+			m.Samples = append(m.Samples, &cortexpb.Sample{})
 			if err := m.Samples[len(m.Samples)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -5900,7 +6166,7 @@ func (m *SampleStream) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Histograms = append(m.Histograms, SampleHistogramPair{})
+			m.Histograms = append(m.Histograms, &SampleHistogramPair{})
 			if err := m.Histograms[len(m.Histograms)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -5985,7 +6251,7 @@ func (m *Sample) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, github_com_thanos_io_thanos_internal_cortex_cortexpb.LabelAdapter{})
+			m.Labels = append(m.Labels, &cortexpb.LabelPair{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6256,6 +6522,9 @@ func (m *SampleHistogramPair) Unmarshal(dAtA []byte) error {
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.Histogram == nil {
+				m.Histogram = &SampleHistogram{}
 			}
 			if err := m.Histogram.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -6583,7 +6852,7 @@ func (m *CachedResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Extents = append(m.Extents, Extent{})
+			m.Extents = append(m.Extents, &Extent{})
 			if err := m.Extents[len(m.Extents)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6955,6 +7224,95 @@ func (m *Explanation) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *Duration) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQueryrange
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Duration: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Duration: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Seconds", wireType)
+			}
+			m.Seconds = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Seconds |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nanos", wireType)
+			}
+			m.Nanos = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Nanos |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQueryrange(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *Analysis) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7044,6 +7402,9 @@ func (m *Analysis) Unmarshal(dAtA []byte) error {
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.ExecutionTime == nil {
+				m.ExecutionTime = &Duration{}
 			}
 			if err := m.ExecutionTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

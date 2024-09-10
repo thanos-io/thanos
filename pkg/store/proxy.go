@@ -56,7 +56,7 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	// TSDBInfos returns metadata about each TSDB backed by the client.
-	TSDBInfos() []infopb.TSDBInfo
+	TSDBInfos() []*infopb.TSDBInfo
 
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
@@ -165,10 +165,10 @@ func NewProxyStore(
 	return s
 }
 
-func (s *ProxyStore) LabelSet() []labelpb.LabelSet {
+func (s *ProxyStore) LabelSet() []*labelpb.LabelSet {
 	stores := s.stores()
 	if len(stores) == 0 {
-		return []labelpb.LabelSet{}
+		return []*labelpb.LabelSet{}
 	}
 
 	mergedLabelSets := make(map[uint64]labelpb.LabelSet, len(stores))
@@ -179,9 +179,11 @@ func (s *ProxyStore) LabelSet() []labelpb.LabelSet {
 		}
 	}
 
-	labelSets := make([]labelpb.LabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]*labelpb.LabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
-		labelSets = append(labelSets, v)
+		v := v
+
+		labelSets = append(labelSets, &v)
 	}
 
 	// We always want to enforce announcing the subset of data that
@@ -190,7 +192,7 @@ func (s *ProxyStore) LabelSet() []labelpb.LabelSet {
 	// announcing this subset by announcing the selector as the label-set.
 	selectorLabels := labelpb.PromLabelsToLabelpbLabels(s.selectorLabels)
 	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, labelpb.LabelSet{Labels: selectorLabels})
+		labelSets = append(labelSets, &labelpb.LabelSet{Labels: selectorLabels})
 	}
 
 	return labelSets
@@ -216,8 +218,8 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	return minTime, maxTime
 }
 
-func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
-	infos := make([]infopb.TSDBInfo, 0)
+func (s *ProxyStore) TSDBInfos() []*infopb.TSDBInfo {
+	infos := make([]*infopb.TSDBInfo, 0)
 	for _, st := range s.stores() {
 		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {

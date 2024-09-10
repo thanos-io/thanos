@@ -48,7 +48,7 @@ func PromLabelSetsToString(lsets []labels.Labels) string {
 // ValidateLabels validates label names and values (checks for empty
 // names and values, out of order labels and duplicate label names)
 // Returns appropriate error if validation fails on a label.
-func ValidateLabels(lbls []Label) error {
+func ValidateLabels(lbls []*Label) error {
 	if len(lbls) == 0 {
 		return ErrEmptyLabels
 	}
@@ -79,19 +79,23 @@ func ValidateLabels(lbls []Label) error {
 	return nil
 }
 
-func PromLabelsToLabelpbLabels(lbls labels.Labels) []Label {
+func PromLabelsToLabelpbLabels(lbls labels.Labels) []*Label {
 	if lbls.Len() == 0 {
-		return []Label(nil)
+		return []*Label(nil)
 	}
-	lset := make([]Label, 0, lbls.Len())
+	lset := make([]*Label, 0, lbls.Len())
 	lbls.Range(func(l labels.Label) {
-		lset = append(lset, Label{Name: l.Name, Value: l.Value})
+		lset = append(lset, &Label{Name: l.Name, Value: l.Value})
+	})
+
+	sort.Slice(lset, func(i, j int) bool {
+		return lset[i].Compare(lset[j]) < 0
 	})
 
 	return lset
 }
 
-func LabelpbLabelsToPromLabels(lbls []Label) labels.Labels {
+func LabelpbLabelsToPromLabels(lbls []*Label) labels.Labels {
 	lblSlice := make([]string, 0, len(lbls)*2)
 	for _, l := range lbls {
 		lblSlice = append(lblSlice, l.Name, l.Value)
@@ -103,7 +107,7 @@ func (l *Label) Equal(other Label) bool {
 	return l.Name == other.Name && l.Value == other.Value
 }
 
-func (m *Label) Compare(other Label) int {
+func (m *Label) Compare(other *Label) int {
 	if c := strings.Compare(m.Name, other.Name); c != 0 {
 		return c
 	}
@@ -111,10 +115,13 @@ func (m *Label) Compare(other Label) int {
 }
 
 func (m *LabelSet) PromLabels() labels.Labels {
+	if m == nil {
+		return labels.EmptyLabels()
+	}
 	return LabelpbLabelsToPromLabels(m.Labels)
 }
 
-func LabelpbLabelSetsToPromLabels(lss ...LabelSet) []labels.Labels {
+func LabelpbLabelSetsToPromLabels(lss ...*LabelSet) []labels.Labels {
 	res := make([]labels.Labels, 0, len(lss))
 	for _, ls := range lss {
 		res = append(res, ls.PromLabels())
@@ -123,7 +130,7 @@ func LabelpbLabelSetsToPromLabels(lss ...LabelSet) []labels.Labels {
 }
 
 // HashWithPrefix returns a hash for the given prefix and labels.
-func HashWithPrefix(prefix string, lbls []Label) uint64 {
+func HashWithPrefix(prefix string, lbls []*Label) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
 	b := make([]byte, 0, 1024)
 	b = append(b, prefix...)
@@ -150,7 +157,7 @@ func HashWithPrefix(prefix string, lbls []Label) uint64 {
 	return xxhash.Sum64(b)
 }
 
-type LabelSets []LabelSet
+type LabelSets []*LabelSet
 
 func (z LabelSets) Len() int { return len(z) }
 
@@ -192,5 +199,8 @@ func (m *LabelSet) UnmarshalJSON(entry []byte) error {
 }
 
 func (m *LabelSet) MarshalJSON() ([]byte, error) {
+	if m == nil || len(m.Labels) == 0 {
+		return []byte("{}"), nil
+	}
 	return m.PromLabels().MarshalJSON()
 }

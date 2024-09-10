@@ -258,7 +258,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 				{
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) labelpb.LabelSets {
-						return []labelpb.LabelSet{
+						return []*labelpb.LabelSet{
 							{
 								Labels: labelpb.PromLabelsToLabelpbLabels(
 									labels.FromStrings("addr", addr, "a", "b"),
@@ -283,7 +283,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 					err:          fmt.Errorf("endpoint unavailable"),
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) labelpb.LabelSets {
-						return []labelpb.LabelSet{
+						return []*labelpb.LabelSet{
 							{
 								Labels: labelpb.PromLabelsToLabelpbLabels(
 									labels.FromStrings("addr", addr, "a", "b"),
@@ -304,7 +304,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 					infoDelay:    5 * time.Second,
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) labelpb.LabelSets {
-						return []labelpb.LabelSet{
+						return []*labelpb.LabelSet{
 							{
 								Labels: labelpb.PromLabelsToLabelpbLabels(
 									labels.FromStrings("addr", addr, "a", "b"),
@@ -324,7 +324,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 				{
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) labelpb.LabelSets {
-						return []labelpb.LabelSet{
+						return []*labelpb.LabelSet{
 							{
 								Labels: labelpb.PromLabelsToLabelpbLabels(
 									labels.FromStrings("addr", addr, "a", "b"),
@@ -396,7 +396,7 @@ func TestEndpointSetUpdate_DuplicateSpecs(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
 						Labels: labelpb.PromLabelsToLabelpbLabels(
 							labels.FromStrings("addr", addr, "a", "b"),
@@ -424,7 +424,7 @@ func TestEndpointSetUpdate_EndpointGoingAway(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
 						Labels: labelpb.PromLabelsToLabelpbLabels(
 							labels.FromStrings("addr", addr, "a", "b"),
@@ -536,7 +536,7 @@ func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
 				{
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) labelpb.LabelSets {
-						return []labelpb.LabelSet{
+						return []*labelpb.LabelSet{
 							{
 								Labels: labelpb.PromLabelsToLabelpbLabels(
 									labels.FromStrings("addr", addr, "a", "b"),
@@ -555,7 +555,7 @@ func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
 				{
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) labelpb.LabelSets {
-						return []labelpb.LabelSet{
+						return []*labelpb.LabelSet{
 							{
 								Labels: labelpb.PromLabelsToLabelpbLabels(
 									labels.FromStrings("addr", addr, "a", "b"),
@@ -632,14 +632,14 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "addr", Value: addr},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "a", Value: "b"},
 						},
 					},
@@ -649,14 +649,14 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "addr", Value: addr},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "a", Value: "b"},
 						},
 					},
@@ -666,14 +666,14 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: queryInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "addr", Value: addr},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "a", Value: "b"},
 						},
 					},
@@ -764,15 +764,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: queryInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -783,15 +783,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			// Duplicated Querier, in previous versions it would be deduplicated. Now it should be not.
 			InfoResponse: queryInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -801,9 +801,9 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -815,9 +815,9 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			// Duplicated Sidecar, in previous versions it would be deduplicated. Now it should be not.
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -829,9 +829,9 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			// Querier that duplicates with sidecar, in previous versions it would be deduplicated. Now it should be not.
 			InfoResponse: queryInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -844,9 +844,9 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			// Warning should be produced.
 			InfoResponse: ruleInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -858,9 +858,9 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			// Duplicated Rule, in previous versions it would be deduplicated. Now it should be not. Warning should be produced.
 			InfoResponse: ruleInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -872,13 +872,13 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: storeGWInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 		{
 			InfoResponse: storeGWInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 		// Regression tests against https://github.com/thanos-io/thanos/issues/1632: From v0.8.0 stores advertise labels.
@@ -886,15 +886,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: storeGWInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -905,15 +905,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: storeGWInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -924,15 +924,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: storeGWInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -942,15 +942,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: receiveInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -961,15 +961,15 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 		{
 			InfoResponse: receiveInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -1026,9 +1026,9 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -1041,9 +1041,9 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -1098,9 +1098,9 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 				Targets:        &infopb.TargetsInfo{},
 			},
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -1123,9 +1123,9 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 				Targets:        &infopb.TargetsInfo{},
 			},
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -1149,9 +1149,9 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 				Targets:        &infopb.TargetsInfo{},
 			},
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
-						Labels: []labelpb.Label{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -1227,31 +1227,31 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 		{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 		{
 			InfoResponse: ruleInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 		{
 			InfoResponse: receiveInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 		{
 			InfoResponse: storeGWInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 		{
 			InfoResponse: queryInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{}
+				return []*labelpb.LabelSet{}
 			},
 		},
 	})
@@ -1446,7 +1446,7 @@ func makeInfoResponses(n int) []testEndpointMeta {
 		responses = append(responses, testEndpointMeta{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) labelpb.LabelSets {
-				return []labelpb.LabelSet{
+				return []*labelpb.LabelSet{
 					{
 						Labels: labelpb.PromLabelsToLabelpbLabels(
 							labels.FromStrings("addr", addr, "a", "b"),
