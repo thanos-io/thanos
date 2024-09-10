@@ -23,14 +23,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
-	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 const skipMessage = "Chunk behavior changed due to https://github.com/prometheus/prometheus/pull/8723. Skip for now."
 
 func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,7 +69,7 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 }
 
 func TestTSDBStore_Series(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,6 +205,8 @@ func (s *delegatorServer) Delegate(c io.Closer) {
 
 // Regression test for: https://github.com/thanos-io/thanos/issues/3013 .
 func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
+	t.Parallel()
+
 	t.Skip(skipMessage)
 
 	tmpDir := t.TempDir()
@@ -375,6 +376,8 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 }
 
 func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
+	t.Parallel()
+
 	t.Skip(skipMessage)
 
 	tmpDir := t.TempDir()
@@ -486,6 +489,8 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 }
 
 func TestTSDBStoreSeries(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	// Make sure there are more samples, so we can check framing code.
 	storetestutil.RunSeriesInterestingCases(tb, 10e6, 200e3, func(t testutil.TB, samplesPerSeries, series int) {

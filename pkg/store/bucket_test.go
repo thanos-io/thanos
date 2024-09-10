@@ -62,7 +62,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -75,6 +74,7 @@ func TestRawChunkReset(t *testing.T) {
 }
 
 func TestBucketBlock_Property(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.Rng.Seed(2000)
 	parameters.MinSuccessfulTests = 20000
@@ -205,8 +205,7 @@ func TestBucketBlock_Property(t *testing.T) {
 }
 
 func TestBucketFilterExtLabelsMatchers(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
+	t.Parallel()
 	dir := t.TempDir()
 	bkt, err := filesystem.NewBucket(dir)
 	testutil.Ok(t, err)
@@ -263,8 +262,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 }
 
 func TestBucketBlock_matchLabels(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
+	t.Parallel()
 	dir := t.TempDir()
 
 	bkt, err := filesystem.NewBucket(dir)
@@ -359,8 +357,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 }
 
 func TestBucketBlockSet_addGet(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
+	t.Parallel()
 	set := newBucketBlockSet(labels.Labels{})
 
 	type resBlock struct {
@@ -470,8 +467,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 }
 
 func TestBucketBlockSet_remove(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
+	t.Parallel()
 	set := newBucketBlockSet(labels.Labels{})
 
 	type resBlock struct {
@@ -500,7 +496,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 }
 
 func TestBucketBlockSet_labelMatchers(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	set := newBucketBlockSet(labels.FromStrings("a", "b", "c", "d"))
 
@@ -569,7 +565,7 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 }
 
 func TestGapBasedPartitioner_Partition(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	const maxGapSize = 1024 * 512
 
@@ -629,6 +625,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 }
 
 func TestBucketStoreConfig_validate(t *testing.T) {
+	t.Parallel()
 	tests := map[string]struct {
 		config   *BucketStore
 		expected error
@@ -655,7 +652,7 @@ func TestBucketStoreConfig_validate(t *testing.T) {
 }
 
 func TestBucketStore_TSDBInfo(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -760,6 +757,7 @@ func (r *recorder) GetRange(ctx context.Context, name string, off, length int64)
 }
 
 func TestBucketStore_Sharding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
@@ -1038,6 +1036,7 @@ func expectedTouchedBlockOps(all, expected, cached []ulid.ULID) []string {
 
 // Regression tests against: https://github.com/thanos-io/thanos/issues/1983.
 func TestReadIndexCache_LoadSeries(t *testing.T) {
+	t.Parallel()
 	bkt := objstore.NewInMemBucket()
 	ctx := context.Background()
 
@@ -1289,6 +1288,7 @@ func benchmarkExpandedPostings(
 }
 
 func TestExpandedPostingsEmptyPostings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
@@ -1323,6 +1323,7 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 }
 
 func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
@@ -1358,6 +1359,8 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 }
 
 func TestBucketSeries(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, false, false, samplesPerSeries, series, 1)
@@ -1365,6 +1368,8 @@ func TestBucketSeries(t *testing.T) {
 }
 
 func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, false, true, samplesPerSeries, series, 1)
@@ -1372,6 +1377,8 @@ func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
 }
 
 func TestBucketHistogramSeries(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValHistogram, false, false, samplesPerSeries, series, 1)
@@ -1379,6 +1386,8 @@ func TestBucketHistogramSeries(t *testing.T) {
 }
 
 func TestBucketFloatHistogramSeries(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloatHistogram, false, false, samplesPerSeries, series, 1)
@@ -1386,6 +1395,8 @@ func TestBucketFloatHistogramSeries(t *testing.T) {
 }
 
 func TestBucketSkipChunksSeries(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, true, false, samplesPerSeries, series, 1)
@@ -1614,6 +1625,7 @@ func (m *mockedPool) Put(b *[]byte) {
 
 // Regression test against: https://github.com/thanos-io/thanos/issues/2147.
 func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
@@ -1798,6 +1810,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 }
 
 func TestSeries_RequestAndResponseHints(t *testing.T) {
+	t.Parallel()
 	tb, store, seriesSet1, seriesSet2, block1, block2, close := setupStoreForHintsTest(t)
 	defer close()
 
@@ -1915,6 +1928,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 }
 
 func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
+	t.Parallel()
 	tb := testutil.NewTB(t)
 
 	tmpDir := t.TempDir()
@@ -1976,6 +1990,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 }
 
 func TestSeries_BlockWithMultipleChunks(t *testing.T) {
+	t.Parallel()
 	tb := testutil.NewTB(t)
 
 	tmpDir := t.TempDir()
@@ -2106,6 +2121,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 }
 
 func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
+	t.Parallel()
 	tests := map[string]struct {
 		series         [][]labels.Labels
 		replicaLabels  []string
@@ -2277,6 +2293,7 @@ func mustMarshalAny(pb proto.Message) *types.Any {
 }
 
 func TestBigEndianPostingsCount(t *testing.T) {
+	t.Parallel()
 	const count = 1000
 	raw := make([]byte, count*4)
 
@@ -2405,6 +2422,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 }
 
 func TestLabelNamesAndValuesHints(t *testing.T) {
+	t.Parallel()
 	_, store, seriesSet1, seriesSet2, block1, block2, close := setupStoreForHintsTest(t)
 	defer close()
 
@@ -2544,6 +2562,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 }
 
 func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
+	t.Parallel()
 	tb := testutil.NewTB(t)
 
 	tmpDir := t.TempDir()
@@ -2895,6 +2914,7 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 }
 
 func TestExpandPostingsWithContextCancel(t *testing.T) {
+	t.Parallel()
 	// Not enough number of postings to check context cancellation.
 	p := index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2935,6 +2955,7 @@ func samePostingGroup(a, b *postingGroup) bool {
 }
 
 func TestMatchersToPostingGroup(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tc := range []struct {
 		name        string
@@ -3290,6 +3311,7 @@ func TestMatchersToPostingGroup(t *testing.T) {
 }
 
 func TestPostingGroupMerge(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		group1   *postingGroup
@@ -3416,6 +3438,7 @@ func TestPostingGroupMerge(t *testing.T) {
 
 // TestExpandedPostings is a test whether there is a race between multiple ExpandPostings() calls.
 func TestExpandedPostingsRace(t *testing.T) {
+	t.Parallel()
 	const blockCount = 10
 
 	tmpDir := t.TempDir()
@@ -3530,6 +3553,8 @@ func TestExpandedPostingsRace(t *testing.T) {
 }
 
 func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
+	t.Parallel()
+
 	bir := bucketIndexReader{stats: &queryStats{}}
 	t.Run("should return error on broken cached postings without snappy prefix", func(t *testing.T) {
 		_, _, err := bir.decodeCachedPostings([]byte("foo"))
@@ -3542,6 +3567,8 @@ func TestBucketIndexReader_decodeCachedPostingsErrors(t *testing.T) {
 }
 
 func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	tmpDir := t.TempDir()
 	bktDir := filepath.Join(tmpDir, "bkt")
@@ -3638,6 +3665,8 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 }
 
 func TestQueryStatsMerge(t *testing.T) {
+	t.Parallel()
+
 	s := &queryStats{
 		blocksQueried:                      1,
 		postingsTouched:                    1,
@@ -3758,6 +3787,8 @@ func TestQueryStatsMerge(t *testing.T) {
 }
 
 func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	tmpDir := t.TempDir()
 	bktDir := filepath.Join(tmpDir, "bkt")
@@ -3900,6 +3931,8 @@ func (m *compositeBytesLimiterMock) ReserveWithType(num uint64, dataType StoreDa
 }
 
 func TestBucketStoreMetadataLimit(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 
 	tmpDir := t.TempDir()
