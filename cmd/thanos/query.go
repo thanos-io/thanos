@@ -124,6 +124,7 @@ func registerQuery(app *extkingpin.App) {
 
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
+	queryPartitionLabels := cmd.Flag("query.partition-label", "Labels that partition the leaf queriers. This is used to scope down the labelsets of leaf queriers when using the distributed query mode. If set, these labels must form a partition of the leaf queriers. Partition labels must not intersect with replica labels. Every TSDB of a leaf querier must have these labels. This is useful when there are multiple external labels that are irrelevant for the partition as it allows the distributed engine to ignore them for some optimizations. If this is empty then all labels are used ase partition labels.").Strings()
 
 	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
@@ -326,6 +327,7 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*storeResponseTimeout),
 			*queryConnMetricLabels,
 			*queryReplicaLabels,
+			*queryPartitionLabels,
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
 			*endpoints,
@@ -407,6 +409,7 @@ func runQuery(
 	storeResponseTimeout time.Duration,
 	queryConnMetricLabels []string,
 	queryReplicaLabels []string,
+	queryPartitionLabels []string,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
 	endpointAddrs []string,
@@ -682,6 +685,7 @@ func runQuery(
 		remoteEngineEndpoints = query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
 			AutoDownsample:        enableAutodownsampling,
 			ReplicaLabels:         queryReplicaLabels,
+			PartitionLabels:       queryPartitionLabels,
 			Timeout:               queryTimeout,
 			EnablePartialResponse: enableQueryPartialResponse,
 		})
