@@ -483,7 +483,6 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 	} else if res.(*PrometheusResponse).Data.SeriesStatsCounter != nil {
 		// Pantheon code path
 		httpHeader[QueryBytesFetchedHeaderName] = []string{strconv.FormatInt(res.(*PrometheusResponse).Data.SeriesStatsCounter.Bytes, 10)}
-		httpHeader[QuerySeriesFetchedHeaderName] = []string{strconv.FormatInt(res.(*PrometheusResponse).Data.SeriesStatsCounter.Series, 10)}
 	}
 	resp := http.Response{
 		Header:        httpHeader,
