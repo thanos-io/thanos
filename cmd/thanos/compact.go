@@ -576,7 +576,7 @@ func runCompact(
 
 			ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
-			global := ui.NewBucketUI(logger, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, component)
+			global := ui.NewBucketUI(logger, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, component, conf.enableNewUI)
 			global.Register(r, ins)
 
 			// Configure Request Logging for HTTP calls.
@@ -739,6 +739,7 @@ type compactConfig struct {
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
 	disableAdminOperations                         bool
+	enableNewUI                                    bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -852,4 +853,5 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
 
 	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&cc.disableAdminOperations)
+	cmd.Flag("enable-new-ui", "Enable new Mantine UI based React UI.").Default("false").BoolVar(&cc.enableNewUI)
 }

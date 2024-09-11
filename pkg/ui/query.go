@@ -30,7 +30,7 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string, tenantHeader string, defaultTenant string, enforceTenancy bool) *Query {
+func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string, tenantHeader string, defaultTenant string, enforceTenancy, enableNewUI bool) *Query {
 	displayTenantBox := "none"
 	if enforceTenancy {
 		displayTenantBox = "inline-block"
@@ -47,7 +47,7 @@ func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefi
 	tmplFuncs := queryTmplFuncs()
 
 	return &Query{
-		BaseUI:         NewBaseUI(logger, tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Query),
+		BaseUI:         NewBaseUI(logger, tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Query, enableNewUI),
 		endpointSet:    endpointSet,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,

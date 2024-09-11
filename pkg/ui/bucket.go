@@ -19,7 +19,7 @@ type Bucket struct {
 	Err                          error
 }
 
-func NewBucketUI(logger log.Logger, externalPrefix, prefixHeader string, comp component.Component) *Bucket {
+func NewBucketUI(logger log.Logger, externalPrefix, prefixHeader string, comp component.Component, enableNewUI bool) *Bucket {
 	tmplVariables := map[string]string{
 		"Component": comp.String(),
 	}
@@ -27,7 +27,7 @@ func NewBucketUI(logger log.Logger, externalPrefix, prefixHeader string, comp co
 	tmplFuncs := queryTmplFuncs()
 
 	return &Bucket{
-		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), tmplFuncs, tmplVariables, externalPrefix, prefixHeader, comp),
+		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), tmplFuncs, tmplVariables, externalPrefix, prefixHeader, comp, enableNewUI),
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 	}

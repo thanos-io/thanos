@@ -86,6 +86,11 @@ REACT_APP_SOURCE_FILES = $(shell find $(REACT_APP_PATH)/public/ $(REACT_APP_PATH
 REACT_APP_OUTPUT_DIR = pkg/ui/static/react
 REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
 
+MANTINE_UI_PATH = pkg/ui/mantine-ui
+MANTINE_UI_SOURCE_FILES = $(shell find $(MANTINE_UI_PATH)/public/ $(MANTINE_UI_PATH)/src/ $(MANTINE_UI_PATH)/package.json)
+MANTINE_UI_OUTPUT_DIR = pkg/ui/static/mantine-ui
+MANTINE_UI_NODE_MODULES_PATH = $(MANTINE_UI_PATH)/node_modules
+
 define require_clean_work_tree
 	@git update-index -q --ignore-submodules --refresh
 
@@ -118,8 +123,18 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 	   @echo ">> building React app"
 	   @scripts/build-react-app.sh
 
+$(MANTINE_UI_NODE_MODULES_PATH): $(MANTINE_UI_PATH)/package.json $(MANTINE_UI_PATH)/package-lock.json
+	   cd $(MANTINE_UI_PATH) && npm i
+
+$(MANTINE_UI_OUTPUT_DIR): $(MANTINE_UI_NODE_MODULES_PATH) $(MANTINE_UI_SOURCE_FILES)
+	   @echo ">> building React Mantine-UI app"
+	   @scripts/build-mantine-ui.sh
+
 .PHONY: react-app
 react-app: $(REACT_APP_OUTPUT_DIR)
+
+.PHONY: mantine-ui
+mantine-ui: $(MANTINE_UI_OUTPUT_DIR)
 
 .PHONY: check-react-app
 check-react-app: react-app
@@ -130,10 +145,20 @@ react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
 	   cd $(REACT_APP_PATH) && npm run lint:ci
 
+.PHONY: mantine-ui-lint
+mantine-ui-lint: $(MANTINE_UI_NODE_MODULES_PATH)
+	   @echo ">> running React Mantine-UI linting"
+	   cd $(MANTINE_UI_PATH) && npm run lint
+
 .PHONY: react-app-lint-fix
 react-app-lint-fix: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app linting and fixing errors where possible"
 	cd $(REACT_APP_PATH) && npm run lint
+
+.PHONY: mantine-ui-lint-fix
+mantine-ui-lint-fix: $(MANTINE_UI_NODE_MODULES_PATH)
+	   @echo ">> running React Mantine-UI linting and fixing errors where possible"
+	   cd $(MANTINE_UI_PATH) && npm run lint:fix
 
 .PHONY: react-app-test
 react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint

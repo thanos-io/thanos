@@ -101,6 +101,8 @@ type storeConfig struct {
 	lazyExpandedPostingsEnabled bool
 
 	indexHeaderLazyDownloadStrategy string
+
+	enableNewUI bool
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -218,6 +220,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").BoolVar(&sc.webConfig.disableCORS)
 
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&sc.label)
+	cmd.Flag("enable-new-ui", "Enable new Mantine UI based React UI.").Default("false").BoolVar(&sc.enableNewUI)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
@@ -546,7 +549,7 @@ func runStore(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		if !conf.disableWeb {
-			compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component)
+			compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component, conf.enableNewUI)
 			compactorView.Register(r, ins)
 
 			// Configure Request Logging for HTTP calls.

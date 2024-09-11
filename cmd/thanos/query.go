@@ -232,6 +232,8 @@ func registerQuery(app *extkingpin.App) {
 	enforceTenancy := cmd.Flag("query.enforce-tenancy", "Enforce tenancy on Query APIs. Responses are returned only if the label value of the configured tenant-label-name and the value of the tenant header matches.").Default("false").Bool()
 	tenantLabel := cmd.Flag("query.tenant-label-name", "Label name to use when enforcing tenancy (if --query.enforce-tenancy is enabled).").Default(tenancy.DefaultTenantLabel).String()
 
+	enableNewUI := cmd.Flag("enable-new-ui", "Enable new Mantine UI based React UI.").Default("false").Bool()
+
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -368,6 +370,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantCertField,
 			*enforceTenancy,
 			*tenantLabel,
+			*enableNewUI,
 		)
 	})
 }
@@ -449,6 +452,7 @@ func runQuery(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	enableNewUI bool,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -718,7 +722,7 @@ func runQuery(
 
 		ins := extpromhttp.NewTenantInstrumentationMiddleware(tenantHeader, defaultTenant, reg, nil)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL, tenantHeader, defaultTenant, enforceTenancy).Register(router, ins)
+		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL, tenantHeader, defaultTenant, enforceTenancy, enableNewUI).Register(router, ins)
 
 		api := apiv1.NewQueryAPI(
 			logger,

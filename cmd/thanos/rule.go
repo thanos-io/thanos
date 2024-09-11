@@ -110,6 +110,8 @@ type ruleConfig struct {
 	storeRateLimits   store.SeriesSelectLimits
 
 	extendedFunctionsEnabled bool
+
+	enableNewUI bool
 }
 
 type Expression struct {
@@ -159,6 +161,8 @@ func registerRule(app *extkingpin.App) {
 
 	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
+
+	cmd.Flag("enable-new-ui", "Enable new Mantine UI based React UI.").Default("false").BoolVar(&conf.enableNewUI)
 
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
 
@@ -802,7 +806,7 @@ func runRule(
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewRuleUI(logger, reg, ruleMgr, conf.alertQueryURL.String(), conf.web.externalPrefix, conf.web.prefixHeaderName).Register(router, ins)
+		ui.NewRuleUI(logger, reg, ruleMgr, conf.alertQueryURL.String(), conf.web.externalPrefix, conf.web.prefixHeaderName, conf.enableNewUI).Register(router, ins)
 
 		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, conf.web.disableCORS, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)

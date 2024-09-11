@@ -44,23 +44,44 @@ var reactRouterPaths = []string{
 //go:embed static/react
 var reactUI embed.FS
 
+//go:embed static/mantine-ui
+var mantineUI embed.FS
+
+const (
+	reactUIAssetsPath   = "static/react"
+	mantineUIAssetsPath = "static/mantine-ui"
+)
+
 type BaseUI struct {
 	logger                       log.Logger
 	tmplFuncs                    template.FuncMap
 	tmplVariables                map[string]string
 	externalPrefix, prefixHeader string
 	component                    component.Component
+	enableMantineUI              bool
 }
 
-func NewBaseUI(logger log.Logger, funcMap template.FuncMap, tmplVariables map[string]string, externalPrefix, prefixHeader string, component component.Component) *BaseUI {
+func NewBaseUI(logger log.Logger, funcMap template.FuncMap, tmplVariables map[string]string, externalPrefix, prefixHeader string, component component.Component, enableMantineUI bool) *BaseUI {
 	funcMap["pathPrefix"] = func() string { return "" }
 	funcMap["buildVersion"] = func() string { return version.Revision }
 
-	return &BaseUI{logger: logger, tmplFuncs: funcMap, tmplVariables: tmplVariables, externalPrefix: externalPrefix, prefixHeader: prefixHeader, component: component}
+	return &BaseUI{
+		logger:          logger,
+		tmplFuncs:       funcMap,
+		tmplVariables:   tmplVariables,
+		externalPrefix:  externalPrefix,
+		prefixHeader:    prefixHeader,
+		component:       component,
+		enableMantineUI: enableMantineUI,
+	}
 }
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
-	bu.serveReactIndex("static/react/index.html", w, req)
+	if bu.enableMantineUI {
+		bu.serveReactIndex(filepath.Join(mantineUIAssetsPath, "index.html"), w, req)
+	} else {
+		bu.serveReactIndex(filepath.Join(reactUIAssetsPath, "index.html"), w, req)
+	}
 }
 
 func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http.Request) {
@@ -87,6 +108,10 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 
 func (bu *BaseUI) getAssetFile(filename string) (os.FileInfo, []byte, error) {
 	filesys := fs.FS(reactUI)
+
+	if bu.enableMantineUI {
+		filesys = fs.FS(mantineUI)
+	}
 
 	info, err := fs.Stat(filesys, filename)
 	if err != nil {
@@ -151,7 +176,10 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	// The favicon and manifest are bundled as part of the React app, but we want to serve
 	// them on the root.
 	for _, p := range []string{"/favicon.ico", "/manifest.json"} {
-		assetPath := "static/react" + p
+		assetPath := reactUIAssetsPath + p
+		if bu.enableMantineUI {
+			assetPath = mantineUIAssetsPath + p
+		}
 		r.Get(p, func(w http.ResponseWriter, r *http.Request) {
 			if err := bu.serveAsset(assetPath, w, r); err != nil {
 				level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", assetPath)
@@ -163,8 +191,11 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	// Static files required by the React app.
 	r.Get("/static/*filepath", func(w http.ResponseWriter, r *http.Request) {
 		fp := route.Param(r.Context(), "filepath")
-		fp = filepath.Join("static/react/static", fp)
-		if err := bu.serveAsset(fp, w, r); err != nil {
+		staticAssetPath := filepath.Join(reactUIAssetsPath, "static", fp)
+		if bu.enableMantineUI {
+			staticAssetPath = filepath.Join(mantineUIAssetsPath, "assets", fp)
+		}
+		if err := bu.serveAsset(staticAssetPath, w, r); err != nil {
 			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 			w.WriteHeader(http.StatusNotFound)
 		}
