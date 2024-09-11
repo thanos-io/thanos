@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/internal/cortex/frontend/transport/utils"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -212,6 +213,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
 	}
 	if f.cfg.QueryStatsEnabled {
+		stats.FetchedChunkBytes = queryrange.GetQueryBytesFetchedFromHeader(resp.Header)
+		stats.FetchedSeriesCount = queryrange.GetQuerySeriesFetchedFromHeader(resp.Header)
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
 	}
 }
