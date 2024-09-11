@@ -21,19 +21,19 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-  IconBell,
+  // IconBell,
   IconBellFilled,
   IconBook,
   IconChevronDown,
   IconChevronRight,
-  IconCloudDataConnection,
-  IconDatabase,
+  // IconCloudDataConnection,
+  // IconDatabase,
   IconFlag,
   IconHeartRateMonitor,
   IconInfoCircle,
   IconSearch,
   IconServer,
-  IconServerCog,
+  // IconServerCog,
 } from "@tabler/icons-react";
 import {
   BrowserRouter,
@@ -50,9 +50,9 @@ import AlertsPage from "./pages/AlertsPage";
 import RulesPage from "./pages/RulesPage";
 import TargetsPage from "./pages/targets/TargetsPage";
 import StatusPage from "./pages/StatusPage";
-import TSDBStatusPage from "./pages/TSDBStatusPage";
+// import TSDBStatusPage from "./pages/TSDBStatusPage";
 import FlagsPage from "./pages/FlagsPage";
-import ConfigPage from "./pages/ConfigPage";
+// import ConfigPage from "./pages/ConfigPage";
 import { Suspense, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeSelector } from "./components/ThemeSelector";
@@ -63,8 +63,8 @@ import SettingsMenu from "./components/SettingsMenu";
 import ReadinessWrapper from "./components/ReadinessWrapper";
 import { QueryParamProvider } from "use-query-params";
 import { ReactRouter6Adapter } from "use-query-params/adapters/react-router-6";
-import ServiceDiscoveryPage from "./pages/service-discovery/ServiceDiscoveryPage";
-import AlertmanagerDiscoveryPage from "./pages/AlertmanagerDiscoveryPage";
+// import ServiceDiscoveryPage from "./pages/service-discovery/ServiceDiscoveryPage";
+// import AlertmanagerDiscoveryPage from "./pages/AlertmanagerDiscoveryPage";
 
 const queryClient = new QueryClient();
 
@@ -76,14 +76,12 @@ const mainNavPages = [
     path: "/query",
     icon: <IconSearch style={navIconStyle} />,
     element: <QueryPage />,
-    inAgentMode: false,
   },
   {
     title: "Alerts",
     path: "/alerts",
     icon: <IconBellFilled style={navIconStyle} />,
     element: <AlertsPage />,
-    inAgentMode: false,
   },
 ];
 
@@ -93,22 +91,19 @@ const monitoringStatusPages = [
     path: "/targets",
     icon: <IconHeartRateMonitor style={navIconStyle} />,
     element: <TargetsPage />,
-    inAgentMode: true,
   },
   {
     title: "Rule health",
     path: "/rules",
     icon: <IconTable style={navIconStyle} />,
     element: <RulesPage />,
-    inAgentMode: false,
   },
-  {
-    title: "Service discovery",
-    path: "/service-discovery",
-    icon: <IconCloudDataConnection style={navIconStyle} />,
-    element: <ServiceDiscoveryPage />,
-    inAgentMode: true,
-  },
+  // {
+  //   title: "Service discovery",
+  //   path: "/service-discovery",
+  //   icon: <IconCloudDataConnection style={navIconStyle} />,
+  //   element: <ServiceDiscoveryPage />,
+  // },
 ];
 
 const serverStatusPages = [
@@ -117,36 +112,31 @@ const serverStatusPages = [
     path: "/status",
     icon: <IconInfoCircle style={navIconStyle} />,
     element: <StatusPage />,
-    inAgentMode: true,
   },
-  {
-    title: "TSDB status",
-    path: "/tsdb-status",
-    icon: <IconDatabase style={navIconStyle} />,
-    element: <TSDBStatusPage />,
-    inAgentMode: false,
-  },
+  // {
+  //   title: "TSDB status",
+  //   path: "/tsdb-status",
+  //   icon: <IconDatabase style={navIconStyle} />,
+  //   element: <TSDBStatusPage />,
+  // },
   {
     title: "Command-line flags",
     path: "/flags",
     icon: <IconFlag style={navIconStyle} />,
     element: <FlagsPage />,
-    inAgentMode: true,
   },
-  {
-    title: "Configuration",
-    path: "/config",
-    icon: <IconServerCog style={navIconStyle} />,
-    element: <ConfigPage />,
-    inAgentMode: true,
-  },
-  {
-    title: "Alertmanager discovery",
-    path: "/alertmanager-discovery",
-    icon: <IconBell style={navIconStyle} />,
-    element: <AlertmanagerDiscoveryPage />,
-    inAgentMode: false,
-  },
+  // {
+  //   title: "Configuration",
+  //   path: "/config",
+  //   icon: <IconServerCog style={navIconStyle} />,
+  //   element: <ConfigPage />,
+  // },
+  // {
+  //   title: "Alertmanager discovery",
+  //   path: "/alertmanager-discovery",
+  //   icon: <IconBell style={navIconStyle} />,
+  //   element: <AlertmanagerDiscoveryPage />,
+  // },
 ];
 
 const allStatusPages = [...monitoringStatusPages, ...serverStatusPages];
@@ -176,10 +166,7 @@ const getPathPrefix = (path: string) => {
     path = path.slice(0, -1);
   }
 
-  const pagePaths = [
-    ...mainNavPages,
-    ...allStatusPages,
-  ].map((p) => p.path);
+  const pagePaths = [...mainNavPages, ...allStatusPages].map((p) => p.path);
 
   const pagePath = pagePaths.find((p) => path.endsWith(p));
   return path.slice(0, path.length - (pagePath || "").length);
@@ -197,47 +184,43 @@ function App() {
     dispatch(updateSettings({ pathPrefix }));
   }, [pathPrefix, dispatch]);
 
-
   const navLinks = (
     <>
-
-      {mainNavPages
-        .map((p) => (
-          <Button
-            key={p.path}
-            component={NavLink}
-            to={p.path}
-            className={classes.link}
-            leftSection={p.icon}
-            px={navLinkXPadding}
-          >
-            {p.title}
-          </Button>
-        ))}
+      {mainNavPages.map((p) => (
+        <Button
+          key={p.path}
+          component={NavLink}
+          to={p.path}
+          className={classes.link}
+          leftSection={p.icon}
+          px={navLinkXPadding}
+        >
+          {p.title}
+        </Button>
+      ))}
 
       <Menu shadow="md" width={240}>
         <Routes>
-          {allStatusPages
-            .map((p) => (
-              <Route
-                key={p.path}
-                path={p.path}
-                element={
-                  <Menu.Target>
-                    <Button
-                      component={NavLink}
-                      to={p.path}
-                      className={classes.link}
-                      leftSection={p.icon}
-                      rightSection={<IconChevronDown style={navIconStyle} />}
-                      px={navLinkXPadding}
-                    >
-                      Status <IconChevronRight style={navIconStyle} /> {p.title}
-                    </Button>
-                  </Menu.Target>
-                }
-              />
-            ))}
+          {allStatusPages.map((p) => (
+            <Route
+              key={p.path}
+              path={p.path}
+              element={
+                <Menu.Target>
+                  <Button
+                    component={NavLink}
+                    to={p.path}
+                    className={classes.link}
+                    leftSection={p.icon}
+                    rightSection={<IconChevronDown style={navIconStyle} />}
+                    px={navLinkXPadding}
+                  >
+                    Status <IconChevronRight style={navIconStyle} /> {p.title}
+                  </Button>
+                </Menu.Target>
+              }
+            />
+          ))}
           <Route
             path="*"
             element={
@@ -262,31 +245,29 @@ function App() {
 
         <Menu.Dropdown>
           <Menu.Label>Monitoring status</Menu.Label>
-          {monitoringStatusPages
-            .map((p) => (
-              <Menu.Item
-                key={p.path}
-                component={NavLink}
-                to={p.path}
-                leftSection={p.icon}
-              >
-                {p.title}
-              </Menu.Item>
-            ))}
+          {monitoringStatusPages.map((p) => (
+            <Menu.Item
+              key={p.path}
+              component={NavLink}
+              to={p.path}
+              leftSection={p.icon}
+            >
+              {p.title}
+            </Menu.Item>
+          ))}
 
           <Menu.Divider />
           <Menu.Label>Server status</Menu.Label>
-          {serverStatusPages
-            .map((p) => (
-              <Menu.Item
-                key={p.path}
-                component={NavLink}
-                to={p.path}
-                leftSection={p.icon}
-              >
-                {p.title}
-              </Menu.Item>
-            ))}
+          {serverStatusPages.map((p) => (
+            <Menu.Item
+              key={p.path}
+              component={NavLink}
+              to={p.path}
+              leftSection={p.icon}
+            >
+              {p.title}
+            </Menu.Item>
+          ))}
         </Menu.Dropdown>
       </Menu>
     </>
@@ -390,34 +371,27 @@ function App() {
                     <Routes>
                       <Route
                         path="/"
-                        element={
-                          <Navigate
-                            to="/query"
-                            replace
-                          />
-                        }
+                        element={<Navigate to="/query" replace />}
                       />
-                      
-                      
-                        <>
-                          <Route
-                            path="/query"
-                            element={
-                              <ReadinessWrapper>
-                                <QueryPage />
-                              </ReadinessWrapper>
-                            }
-                          />
-                          <Route
-                            path="/alerts"
-                            element={
-                              <ReadinessWrapper>
-                                <AlertsPage />
-                              </ReadinessWrapper>
-                            }
-                          />
-                        </>
-                      
+                      <>
+                        <Route
+                          path="/query"
+                          element={
+                            <ReadinessWrapper>
+                              <QueryPage />
+                            </ReadinessWrapper>
+                          }
+                        />
+                        <Route
+                          path="/alerts"
+                          element={
+                            <ReadinessWrapper>
+                              <AlertsPage />
+                            </ReadinessWrapper>
+                          }
+                        />
+                      </>
+
                       {allStatusPages.map((p) => (
                         <Route
                           key={p.path}
