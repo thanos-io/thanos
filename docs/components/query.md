@@ -435,7 +435,7 @@ Flags:
                                  labels that are irrelevant for the partition as
                                  it allows the distributed engine to ignore them
                                  for some optimizations. If this is empty then
-                                 all labels are used ase partition labels.
+                                 all labels are used as partition labels.
       --query.promql-engine=prometheus
                                  Default PromQL engine to use.
       --query.replica-label=QUERY.REPLICA-LABEL ...
