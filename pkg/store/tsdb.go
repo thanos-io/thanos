@@ -48,7 +48,6 @@ type TSDBStore struct {
 
 	extLset labels.Labels
 	mtx     sync.RWMutex
-
 	skipMatchExternalLabels bool
 }
 
@@ -265,7 +264,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
+			bytesLeftForChunks -= lbl.SizeVT()
 		}
 		frameBytesLeft := bytesLeftForChunks
 
@@ -289,7 +288,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 					Hash: hashChunk(hasher, chunkBytes, enableChunkHashCalculation),
 				},
 			}
-			frameBytesLeft -= c.Size()
+			frameBytesLeft -= c.SizeVT()
 			seriesChunks = append(seriesChunks, &c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.

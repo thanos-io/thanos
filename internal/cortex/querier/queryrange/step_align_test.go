@@ -51,7 +51,7 @@ func TestStepAlign(t *testing.T) {
 			}
 			_, err := s.Do(context.Background(), tc.input)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, result)
+			require.Equal(t, true, tc.expected.EqualVT(result))
 		})
 	}
 }

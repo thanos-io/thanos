@@ -592,11 +592,11 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 	}
 }
 
-func makeSeries() []prompb.TimeSeries {
+func makeSeries() []*prompb.TimeSeries {
 	numSeries := 10000
-	series := make([]prompb.TimeSeries, numSeries)
+	series := make([]*prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
-		series[i] = prompb.TimeSeries{
+		series[i] = &prompb.TimeSeries{
 			Labels: []*labelpb.Label{
 				{
 					Name:  "pod",
@@ -608,7 +608,7 @@ func makeSeries() []prompb.TimeSeries {
 	return series
 }
 
-func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, newSeries prompb.TimeSeries) bool {
+func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string, newSeries *prompb.TimeSeries) bool {
 	for _, oldSeries := range initialAssignments[node] {
 		l1 := labelpb.LabelpbLabelsToPromLabels(newSeries.Labels)
 		l2 := labelpb.LabelpbLabelsToPromLabels(oldSeries.Labels)
@@ -620,19 +620,19 @@ func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, 
 	return false
 }
 
-func assignSeries(series []prompb.TimeSeries, nodes []Endpoint) (map[string][]prompb.TimeSeries, error) {
+func assignSeries(series []*prompb.TimeSeries, nodes []Endpoint) (map[string][]*prompb.TimeSeries, error) {
 	return assignReplicatedSeries(series, nodes, 0)
 }
 
-func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]prompb.TimeSeries, error) {
+func assignReplicatedSeries(series []*prompb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]*prompb.TimeSeries, error) {
 	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas)
 	if err != nil {
 		return nil, err
 	}
-	assignments := make(map[string][]prompb.TimeSeries)
+	assignments := make(map[string][]*prompb.TimeSeries)
 	for i := uint64(0); i < replicas; i++ {
 		for _, ts := range series {
-			result, err := hashRing.GetN("tenant", &ts, i)
+			result, err := hashRing.GetN("tenant", ts, i)
 			if err != nil {
 				return nil, err
 			}

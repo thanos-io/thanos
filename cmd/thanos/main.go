@@ -25,12 +25,65 @@ import (
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/common/version"
 	"go.uber.org/automaxprocs/maxprocs"
+	_ "google.golang.org/grpc/encoding/proto"
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
+
+	// use the original golang/protobuf package we can continue serializing
+	// messages from our dependencies, particularly from OTEL. Original version
+	// from Vitess.
+	"google.golang.org/protobuf/proto"
+
+	"google.golang.org/grpc/encoding"
+	_ "google.golang.org/grpc/encoding/proto"
 )
+
+// Name is the name registered for the proto compressor.
+const Name = "proto"
+
+// vtprotoCodec is like the vtprotobuf codec
+// but also handles non-vtproto messages that are needed
+// for stuff like OpenTelemetry. Otherwise, such errors appear:
+// error while marshaling: failed to marshal, message is *v1.ExportTraceServiceRequest (missing vtprotobuf helpers).
+type vtprotoCodec struct{}
+
+type vtprotoMessage interface {
+	MarshalVT() ([]byte, error)
+	UnmarshalVT([]byte) error
+}
+
+func (vtprotoCodec) Marshal(v any) ([]byte, error) {
+	switch v := v.(type) {
+	case vtprotoMessage:
+		return v.MarshalVT()
+	case proto.Message:
+		return proto.Marshal(v)
+	default:
+		return nil, fmt.Errorf("failed to marshal, message is %T, must satisfy the vtprotoMessage interface or want proto.Message", v)
+	}
+}
+
+func (vtprotoCodec) Unmarshal(data []byte, v any) error {
+	switch v := v.(type) {
+	case vtprotoMessage:
+		return v.UnmarshalVT(data)
+	case proto.Message:
+		return proto.Unmarshal(data, v)
+	default:
+		return fmt.Errorf("failed to unmarshal, message is %T, must satisfy the vtprotoMessage interface or want proto.Message", v)
+	}
+}
+
+func (vtprotoCodec) Name() string {
+	return Name
+}
+
+func init() {
+	encoding.RegisterCodec(vtprotoCodec{})
+}
 
 func main() {
 	// We use mmaped resources in most of the components so hardcode PanicOnFault to true. This allows us to recover (if we can e.g if queries

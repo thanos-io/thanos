@@ -1274,12 +1274,12 @@ func TestRelabel(t *testing.T) {
 	for _, tcase := range []struct {
 		name                 string
 		relabel              []*relabel.Config
-		writeRequest         prompb.WriteRequest
-		expectedWriteRequest prompb.WriteRequest
+		writeRequest         *prompb.WriteRequest
+		expectedWriteRequest *prompb.WriteRequest
 	}{
 		{
 			name: "empty relabel configs",
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1301,7 +1301,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1335,7 +1335,7 @@ func TestRelabel(t *testing.T) {
 					Replacement:  "baz",
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1357,7 +1357,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1396,7 +1396,7 @@ func TestRelabel(t *testing.T) {
 					Replacement: "foo",
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1418,7 +1418,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1449,7 +1449,7 @@ func TestRelabel(t *testing.T) {
 					Regex:  relabel.MustNewRegexp("foo"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1471,7 +1471,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1499,7 +1499,7 @@ func TestRelabel(t *testing.T) {
 					Regex:        relabel.MustNewRegexp("bar"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1521,7 +1521,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{},
 			},
 		},
@@ -1533,7 +1533,7 @@ func TestRelabel(t *testing.T) {
 					Regex:  relabel.MustNewRegexp("foo"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1561,7 +1561,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1595,7 +1595,7 @@ func TestRelabel(t *testing.T) {
 					Regex:        relabel.MustNewRegexp("bar"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1623,7 +1623,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{},
 			},
 		},
@@ -1633,7 +1633,7 @@ func TestRelabel(t *testing.T) {
 				RelabelConfigs: tcase.relabel,
 			})
 
-			h.relabel(&tcase.writeRequest)
+			h.relabel(tcase.writeRequest)
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}

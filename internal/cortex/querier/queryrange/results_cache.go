@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
@@ -535,7 +536,7 @@ type accumulator struct {
 }
 
 func merge(extents []*Extent, acc *accumulator) ([]*Extent, error) {
-	any, err := types.MarshalAny(acc.Response)
+	any, err := anypb.New(acc.Response)
 	if err != nil {
 		return nil, err
 	}
@@ -559,7 +560,7 @@ func newAccumulator(base *Extent) (*accumulator, error) {
 }
 
 func toExtent(ctx context.Context, req Request, res Response) (*Extent, error) {
-	any, err := types.MarshalAny(res)
+	any, err := anypb.New(res)
 	if err != nil {
 		return &Extent{}, err
 	}
@@ -634,7 +635,7 @@ func (s resultsCache) filterRecentExtents(req Request, maxCacheFreshness time.Du
 				return nil, err
 			}
 			extracted := s.extractor.Extract(extents[i].Start, maxCacheTime, res)
-			any, err := types.MarshalAny(extracted)
+			any, err := anypb.New(extracted)
 			if err != nil {
 				return nil, err
 			}
@@ -761,12 +762,12 @@ func extractSampleStream(start, end int64, stream *SampleStream) (*SampleStream,
 }
 
 func (e *Extent) toResponse() (Response, error) {
-	msg, err := types.EmptyAny(e.Response)
+	msg, err := e.Response.UnmarshalNew()
 	if err != nil {
 		return nil, err
 	}
 
-	if err := types.UnmarshalAny(e.Response, msg); err != nil {
+	if err := anypb.UnmarshalTo(e.Response, msg, proto.UnmarshalOptions{}); err != nil {
 		return nil, err
 	}
 

@@ -4,7 +4,7 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "storepb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/storepb";
 
 import "store/labelpb/types.proto";
 

@@ -7,7 +7,7 @@ package hintspb;
 import "google/protobuf/duration.proto";
 import "store/storepb/types.proto";
 
-option go_package = "hintspb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/hintspb";
 
 message SeriesRequestHints {
     /// block_matchers is a list of label matchers that are evaluated against each single block's

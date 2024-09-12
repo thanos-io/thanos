@@ -4,7 +4,7 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "labelpb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/labelpb";
 
 message Label {
     string name  = 1;

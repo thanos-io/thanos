@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"github.com/prometheus/prometheus/rules"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -122,6 +122,8 @@ type Manager struct {
 	mtx         sync.RWMutex
 	ruleFiles   map[string]string
 	externalURL string
+
+	rulespb.UnimplementedRulesServer
 }
 
 // NewManager creates new Manager.

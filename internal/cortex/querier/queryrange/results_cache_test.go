@@ -11,11 +11,12 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/user"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
@@ -93,26 +94,6 @@ var (
 		},
 		Warnings: []string{"test-warn"},
 	}
-	parsedHistogramResponse = &PrometheusResponse{
-		Status: "success",
-		Data: &PrometheusData{
-			ResultType: model.ValMatrix.String(),
-			Analysis:   (*Analysis)(nil),
-			Result: []*SampleStream{
-				{
-					Labels: []*cortexpb.LabelPair{
-						{Name: []byte("fake"), Value: []byte("histogram")},
-					},
-					Histograms: []*SampleHistogramPair{
-						{
-							Timestamp: 1536673680000,
-							Histogram: genSampleHistogram(),
-						},
-					},
-				},
-			},
-		},
-	}
 )
 
 func mkAPIResponse(start, end, step int64) *PrometheusResponse {
@@ -173,7 +154,7 @@ func mkExtentWithStep(start, end, step int64) *Extent {
 
 func mkExtentWithStepWithStats(start, end, step int64, withStats bool) *Extent {
 	res := mkAPIResponseWithStats(start, end, step, withStats)
-	any, err := types.MarshalAny(res)
+	any, err := anypb.New(res)
 	if err != nil {
 		panic(err)
 	}
@@ -260,7 +241,7 @@ func TestStatsCacheQuerySamples(t *testing.T) {
 			ctx := user.InjectOrgID(context.Background(), "1")
 			r, err := rc.Do(ctx, tc.req)
 			require.Equal(t, tc.err, err)
-			require.Equal(t, tc.expectedResponse, r)
+			require.Equal(t, true, proto.Equal(tc.expectedResponse, r))
 		})
 	}
 }
@@ -840,8 +821,15 @@ func TestPartition(t *testing.T) {
 			}
 			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse)
 			require.Nil(t, err)
-			require.Equal(t, tc.expectedRequests, reqs)
-			require.Equal(t, tc.expectedCachedResponse, resps)
+
+			require.Equal(t, len(tc.expectedRequests), len(reqs))
+			for i := range reqs {
+				require.Equal(t, true, tc.expectedRequests[i].(*PrometheusRequest).EqualMessageVT(reqs[i].(*PrometheusRequest)))
+			}
+			require.Equal(t, len(tc.expectedCachedResponse), len(resps))
+			for i := range resps {
+				require.Equal(t, true, tc.expectedCachedResponse[i].(*PrometheusResponse).EqualMessageVT(resps[i].(*PrometheusResponse)))
+			}
 		})
 	}
 }
@@ -1048,7 +1036,7 @@ func TestHandleHit(t *testing.T) {
 			require.NoError(t, err)
 
 			expectedResponse := mkAPIResponse(tc.input.GetStart(), tc.input.GetEnd(), tc.input.GetStep())
-			require.Equal(t, expectedResponse, response, "response does not match the expectation")
+			require.Equal(t, true, expectedResponse.EqualMessageVT(response))
 			require.Equal(t, tc.expectedUpdatedCachedEntry, updatedExtents, "updated cache entry does not match the expectation")
 		})
 	}
@@ -1074,24 +1062,42 @@ func TestResultsCache(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	useResp := *parsedResponse
+	useResp := &PrometheusResponse{
+		Status: "success",
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("foo"), Value: []byte("bar")},
+					},
+					Samples: []*cortexpb.Sample{
+						{Value: 137, TimestampMs: 1536673680000},
+						{Value: 137, TimestampMs: 1536673780000},
+					},
+				},
+			},
+		},
+		Warnings: []string{"test-warn"},
+	}
 	useResp.Data.Analysis = &Analysis{}
 
 	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
 		calls++
-		return &useResp, nil
+		return useResp, nil
 	}))
 	ctx := user.InjectOrgID(context.Background(), "1")
 	resp, err := rc.Do(ctx, parsedRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualVT(resp.(*PrometheusResponse)))
 
 	// Doing same request again shouldn't change anything.
 	resp, err = rc.Do(ctx, parsedRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualVT(resp.(*PrometheusResponse)))
 
 	// Doing request with new end time should do one more query.
 	req := parsedRequest.WithStartEnd(parsedRequest.GetStart(), parsedRequest.GetEnd()+100)
@@ -1358,24 +1364,43 @@ func TestNativeHistograms(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	useResp := *parsedHistogramResponse
+	useResp := &PrometheusResponse{
+		Status: "success",
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("fake"), Value: []byte("histogram")},
+					},
+					Histograms: []*SampleHistogramPair{
+						{
+							Timestamp: 1536673680000,
+							Histogram: genSampleHistogram(),
+						},
+					},
+				},
+			},
+		},
+	}
 	useResp.Data.Analysis = &Analysis{}
 
 	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
 		calls++
-		return &useResp, nil
+		return useResp, nil
 	}))
 	ctx := user.InjectOrgID(context.Background(), "1")
 	resp, err := rc.Do(ctx, parsedHistogramRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualVT(resp.(*PrometheusResponse)))
 
 	// Doing same request again shouldn't change anything.
 	resp, err = rc.Do(ctx, parsedHistogramRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualMessageVT(resp))
 
 	// Doing request with new end time should do one more query.
 	req := parsedHistogramRequest.WithStartEnd(parsedHistogramRequest.GetStart(), parsedHistogramRequest.GetEnd()+100)
