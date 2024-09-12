@@ -22,10 +22,16 @@ import (
 )
 
 func TestRequest(t *testing.T) {
-	// Create a Copy parsedRequest to assign the expected headers to the request without affecting other tests using the global.
-	// The test below adds a Test-Header header to the request and expects it back once the encode/decode of request is done via PrometheusCodec
-	parsedRequestWithHeaders := *parsedRequest
-	parsedRequestWithHeaders.Headers = reqHeaders
+	parsedRequestWithHeaders := &PrometheusRequest{
+		Path:    "/api/v1/query_range",
+		Start:   1536673680 * 1e3,
+		End:     1536716898 * 1e3,
+		Step:    120 * 1e3,
+		Query:   "sum(container_memory_rss) by (namespace)",
+		Stats:   "all",
+		Headers: reqHeaders,
+	}
+
 	for _, tc := range []struct {
 		url         string
 		expected    Request
@@ -33,7 +39,7 @@ func TestRequest(t *testing.T) {
 	}{
 		{
 			url:      query,
-			expected: &parsedRequestWithHeaders,
+			expected: parsedRequestWithHeaders,
 		},
 		{
 			url:         "api/v1/query_range?start=foo&stats=all",
@@ -85,17 +91,60 @@ func TestRequest(t *testing.T) {
 }
 
 func TestResponse(t *testing.T) {
+	parsedResponse := &PrometheusResponse{
+		Status: "success",
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("foo"), Value: []byte("bar")},
+					},
+					Samples: []*cortexpb.Sample{
+						{Value: 137, TimestampMs: 1536673680000},
+						{Value: 137, TimestampMs: 1536673780000},
+					},
+				},
+			},
+		},
+		Warnings: []string{"test-warn"},
+		Headers:  respHeaders,
+	}
+
+	parsedHistogramResponse := &PrometheusResponse{
+		Status:  "success",
+		Headers: respHeaders,
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("fake"), Value: []byte("histogram")},
+					},
+					Histograms: []*SampleHistogramPair{
+						{
+							Timestamp: 1536673680000,
+							Histogram: genSampleHistogram(),
+						},
+					},
+				},
+			},
+		},
+	}
+
 	for i, tc := range []struct {
 		body     string
 		expected *PrometheusResponse
 	}{
 		{
 			body:     responseBody,
-			expected: withHeaders(parsedResponse, respHeaders),
+			expected: parsedResponse,
 		},
 		{
 			body:     histogramResponseBody,
-			expected: withHeaders(parsedHistogramResponse, respHeaders),
+			expected: parsedHistogramResponse,
 		},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -813,10 +862,4 @@ func mustParse(t *testing.T, response string) Response {
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	require.NoError(t, json.Unmarshal([]byte(response), &resp))
 	return &resp
-}
-
-func withHeaders(response *PrometheusResponse, headers []*PrometheusResponseHeader) *PrometheusResponse {
-	r := *response
-	r.Headers = headers
-	return &r
 }

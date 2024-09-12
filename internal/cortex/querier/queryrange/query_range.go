@@ -18,7 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/opentracing/opentracing-go"
@@ -27,6 +26,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -91,7 +91,6 @@ type Request interface {
 	WithStartEnd(startTime int64, endTime int64) Request
 	// WithQuery clone the current request with a different query.
 	WithQuery(string) Request
-	proto.Message
 	// LogToSpan writes information about this request to an OpenTracing span
 	LogToSpan(opentracing.Span)
 	// GetStats returns the stats of the request.
@@ -113,24 +112,24 @@ type prometheusCodec struct{}
 
 // WithStartEnd clones the current `PrometheusRequest` with a new `start` and `end` timestamp.
 func (q *PrometheusRequest) WithStartEnd(start int64, end int64) Request {
-	new := *q
+	new := proto.Clone(q).(*PrometheusRequest)
 	new.Start = start
 	new.End = end
-	return &new
+	return new
 }
 
 // WithQuery clones the current `PrometheusRequest` with a new query.
 func (q *PrometheusRequest) WithQuery(query string) Request {
-	new := *q
+	new := proto.Clone(q).(*PrometheusRequest)
 	new.Query = query
-	return &new
+	return new
 }
 
 // WithStats clones the current `PrometheusRequest` with a new stats.
 func (q *PrometheusRequest) WithStats(stats string) Request {
-	new := *q
+	new := proto.Clone(q).(*PrometheusRequest)
 	new.Stats = stats
-	return &new
+	return new
 }
 
 // LogToSpan logs the current `PrometheusRequest` parameters to the specified span.
@@ -515,7 +514,7 @@ func (s *SampleStream) MarshalJSON() ([]byte, error) {
 
 	sampleStream.Histograms = make([]model.SampleHistogramPair, 0, len(s.Histograms))
 	for _, h := range s.Histograms {
-		sampleStream.Histograms = append(sampleStream.Histograms, toModelSampleHistogramPair(*h))
+		sampleStream.Histograms = append(sampleStream.Histograms, toModelSampleHistogramPair(h))
 	}
 
 	return json.Marshal(sampleStream)
@@ -555,7 +554,7 @@ func (s *Sample) MarshalJSON() ([]byte, error) {
 }
 
 // MarshalJSON implements json.Marshaler.
-func (s StringSample) MarshalJSON() ([]byte, error) {
+func (s *StringSample) MarshalJSON() ([]byte, error) {
 	v, err := jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(model.String{
 		Value:     s.Value,
 		Timestamp: model.Time(s.TimestampMs),
@@ -916,7 +915,7 @@ func init() {
 	jsoniter.RegisterTypeDecoderFunc("queryrange.PrometheusResponseQueryableSamplesStatsPerStep", PrometheusResponseQueryableSamplesStatsPerStepJsoniterDecode)
 }
 
-func (d Duration) MarshalJSON() ([]byte, error) {
+func (d *Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d.Seconds*int64(time.Second) + int64(d.Nanos)).String())
 }
 

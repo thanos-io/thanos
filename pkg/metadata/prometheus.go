@@ -16,6 +16,8 @@ import (
 type Prometheus struct {
 	base   *url.URL
 	client *promclient.Client
+
+	metadatapb.UnimplementedMetadataServer
 }
 
 // NewPrometheus creates a new metadata.Prometheus.

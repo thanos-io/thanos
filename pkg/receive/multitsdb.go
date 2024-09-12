@@ -109,12 +109,12 @@ type seriesClientMapper struct {
 	initiated bool
 
 	store *store.TSDBStore
-	req   storepb.SeriesRequest
+	req   *storepb.SeriesRequest
 }
 
 func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
 	if !m.initiated {
-		series, err := m.store.SeriesLocal(m.ctx, &m.req)
+		series, err := m.store.SeriesLocal(m.ctx, m.req)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +154,7 @@ func (m *seriesClientMapper) SendMsg(_ interface{}) error {
 }
 
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
+	return &seriesClientMapper{ctx: ctx, store: l.store, req: in}, nil
 }
 
 func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type contextKey int
@@ -17,7 +18,9 @@ var ctxKey = contextKey(0)
 
 // ContextWithEmptyStats returns a context with empty stats.
 func ContextWithEmptyStats(ctx context.Context) (*Stats, context.Context) {
-	stats := &Stats{}
+	stats := &Stats{
+		WallTime: &durationpb.Duration{},
+	}
 	ctx = context.WithValue(ctx, ctxKey, stats)
 	return stats, ctx
 }
@@ -45,7 +48,8 @@ func (s *Stats) AddWallTime(t time.Duration) {
 		return
 	}
 
-	atomic.AddInt64((*int64)(&s.WallTime), int64(t))
+	atomic.AddInt64((*int64)(&s.WallTime.Seconds), int64(t/time.Second))
+	atomic.AddInt32((*int32)(&s.WallTime.Nanos), int32(t%time.Second))
 }
 
 // LoadWallTime returns current wall time.
@@ -54,7 +58,7 @@ func (s *Stats) LoadWallTime() time.Duration {
 		return 0
 	}
 
-	return time.Duration(atomic.LoadInt64((*int64)(&s.WallTime)))
+	return time.Duration(atomic.LoadInt64((*int64)(&s.WallTime.Seconds))*int64(time.Second) + int64(atomic.LoadInt32((*int32)(&s.WallTime.Nanos))))
 }
 
 func (s *Stats) AddFetchedSeries(series uint64) {

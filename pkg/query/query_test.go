@@ -19,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestMain(m *testing.M) {
@@ -131,7 +132,7 @@ func (s *selectStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesS
 	matchers := make([]*storepb.LabelMatcher, 0, len(r.Matchers))
 	matchers = append(matchers, r.Matchers...)
 
-	req := *r
+	req := proto.Clone(r).(*storepb.SeriesRequest)
 	req.Matchers = matchers
-	return s.StoreServer.Series(&req, srv)
+	return s.StoreServer.Series(req, srv)
 }

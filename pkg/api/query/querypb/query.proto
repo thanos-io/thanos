@@ -4,7 +4,7 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "querypb";
+option go_package = "github.com/thanos-io/thanos/pkg/api/query/querypb";
 
 import "store/storepb/types.proto";
 import "store/storepb/rpc.proto";
