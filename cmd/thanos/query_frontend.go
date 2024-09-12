@@ -148,7 +148,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
 	cmd.Flag("query-frontend.log-queries-more-expensive-than", "Log queries that fetch more data than the specified bytes. "+
-		"Set to 0 to disable. Otherwise must be a positive value.").Default("0").Uint64Var(&cfg.CortexHandlerConfig.LogQueriesMoreExpensiveThan)
+		"Set to 0 to disable. Otherwise must be a positive value. Default is 1GB").Default("1073741824").Uint64Var(&cfg.CortexHandlerConfig.LogQueriesMoreExpensiveThan)
 
 	cmd.Flag("query-frontend.log-failed-queries", "Log failed queries due to any reason").Default("true").BoolVar(&cfg.CortexHandlerConfig.LogFailedQueries)
 
