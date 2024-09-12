@@ -192,9 +192,16 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	r.Get("/static/*filepath", func(w http.ResponseWriter, r *http.Request) {
 		fp := route.Param(r.Context(), "filepath")
 		staticAssetPath := filepath.Join(reactUIAssetsPath, "static", fp)
-		if bu.enableMantineUI {
-			staticAssetPath = filepath.Join(mantineUIAssetsPath, "assets", fp)
+		if err := bu.serveAsset(staticAssetPath, w, r); err != nil {
+			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
+			w.WriteHeader(http.StatusNotFound)
 		}
+	})
+
+	// Static files required by the React app.
+	r.Get("/assets/*filepath", func(w http.ResponseWriter, r *http.Request) {
+		fp := route.Param(r.Context(), "filepath")
+		staticAssetPath := filepath.Join(mantineUIAssetsPath, "assets", fp)
 		if err := bu.serveAsset(staticAssetPath, w, r); err != nil {
 			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 			w.WriteHeader(http.StatusNotFound)

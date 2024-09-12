@@ -41,6 +41,7 @@ func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefi
 		"tenantHeader":     tenantHeader,
 		"defaultTenant":    defaultTenant,
 		"displayTenantBox": displayTenantBox,
+		"ready":            "true",
 	}
 	runtimeInfo := api.GetRuntimeInfoFunc(logger)
 

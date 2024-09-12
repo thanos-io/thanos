@@ -37,7 +37,7 @@ export const localStorageKeyEnableLinter = "settings.enableLinter";
 export const localStorageKeyShowAnnotations = "settings.showAnnotations";
 
 export const initialState: Settings = {
-  ready: GLOBAL_READY === "true",
+  ready: GLOBAL_READY === "true" || GLOBAL_READY === "" || GLOBAL_READY === "{{ .ready }}",
   lookbackDelta: "1h",
   component: THANOS_COMPONENT,
   queryURL: THANOS_QUERY_URL,

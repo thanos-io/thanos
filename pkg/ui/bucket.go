@@ -22,6 +22,7 @@ type Bucket struct {
 func NewBucketUI(logger log.Logger, externalPrefix, prefixHeader string, comp component.Component, enableNewUI bool) *Bucket {
 	tmplVariables := map[string]string{
 		"Component": comp.String(),
+		"ready":     "true",
 	}
 
 	tmplFuncs := queryTmplFuncs()

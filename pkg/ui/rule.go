@@ -34,6 +34,7 @@ func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanos
 	tmplVariables := map[string]string{
 		"Component": component.Rule.String(),
 		"queryURL":  queryURL,
+		"ready":     "true",
 	}
 
 	tmplFuncs := ruleTmplFuncs(queryURL)
