@@ -41,6 +41,24 @@ var reactRouterPaths = []string{
 	"/tsdb-status",
 }
 
+var mantineUIRouterPaths = []string{
+	"/",
+	"/alerts",
+	"/blocks",
+	"/config",
+	"/flags",
+	"/global",
+	"/query",
+	"/loaded",
+	"/rules",
+	"/service-discovery",
+	"/status",
+	"/stores",
+	"/targets",
+	"/tsdb-status",
+	"/alertmanager-discovery",
+}
+
 //go:embed static/react
 var reactUI embed.FS
 
@@ -169,7 +187,11 @@ func instrf(name string, ins extpromhttp.InstrumentationMiddleware, next func(w 
 }
 
 func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware, bu *BaseUI) {
-	for _, p := range reactRouterPaths {
+	routerPaths := reactRouterPaths
+	if bu.enableMantineUI {
+		routerPaths = mantineUIRouterPaths
+	}
+	for _, p := range routerPaths {
 		r.Get(p, instrf("react-static", ins, bu.serveReactUI))
 	}
 
@@ -192,16 +214,9 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	r.Get("/static/*filepath", func(w http.ResponseWriter, r *http.Request) {
 		fp := route.Param(r.Context(), "filepath")
 		staticAssetPath := filepath.Join(reactUIAssetsPath, "static", fp)
-		if err := bu.serveAsset(staticAssetPath, w, r); err != nil {
-			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
-			w.WriteHeader(http.StatusNotFound)
+		if bu.enableMantineUI {
+			staticAssetPath = filepath.Join(mantineUIAssetsPath, "static", fp)
 		}
-	})
-
-	// Static files required by the React app.
-	r.Get("/assets/*filepath", func(w http.ResponseWriter, r *http.Request) {
-		fp := route.Param(r.Context(), "filepath")
-		staticAssetPath := filepath.Join(mantineUIAssetsPath, "assets", fp)
 		if err := bu.serveAsset(staticAssetPath, w, r); err != nil {
 			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 			w.WriteHeader(http.StatusNotFound)
