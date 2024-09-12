@@ -218,7 +218,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldReportSlowQuery {
-		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
+		f.reportSlowQuery(r, hs, queryString, queryBytesFetched, queryResponseTime)
 	}
 	if shouldReportExpensiveQuery {
 		f.reportExpensiveQuery(r, queryString, queryBytesFetched, queryResponseTime)
@@ -287,7 +287,7 @@ func (f *Handler) reportExpensiveQuery(r *http.Request, queryString url.Values, 
 }
 
 // reportSlowQuery reports slow queries.
-func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
+func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryBytesFetched uint64, queryResponseTime time.Duration) {
 	f.slowQueryCount.Inc()
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
@@ -319,6 +319,7 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		"remote_user", remoteUser,
 		"remote_addr", r.RemoteAddr,
 		"time_taken", queryResponseTime.String(),
+		"query_megabytes_fetched", queryBytesFetched / (1024 * 1024),
 		"grafana_dashboard_uid", grafanaDashboardUID,
 		"grafana_panel_id", grafanaPanelID,
 		"trace_id", thanosTraceID,
