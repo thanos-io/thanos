@@ -286,6 +286,9 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 	r.Get("/query_range_explain", instr("query", qapi.queryRangeExplain))
 	r.Post("/query_range_explain", instr("query", qapi.queryRangeExplain))
 
+	r.Get("/parse_query", instr("parse_query", qapi.parseQuery))
+	r.Post("/parse_query", instr("parse_query", qapi.parseQuery))
+
 	r.Get("/label/:name/values", instr("label_values", qapi.labelValues))
 
 	r.Get("/series", instr("series", qapi.series))
@@ -1042,6 +1045,145 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		Stats:         qs,
 		QueryAnalysis: analysis,
 	}, res.Warnings.AsErrors(), nil, qry.Close
+}
+
+func (qapi *QueryAPI) parseQuery(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	expr, err := parser.ParseExpr(r.FormValue("query"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid parameter: query")}, func() {}
+	}
+
+	// All functions taken from https://github.com/prometheus/prometheus/blob/5aa3d8260a7335a0da6946dea82f608cafa46c20/web/api/v1/translate_ast.go
+	sanitizeList := func(l []string) []string {
+		if l == nil {
+			return []string{}
+		}
+		return l
+	}
+	translateMatchers := func(in []*labels.Matcher) interface{} {
+		out := []map[string]interface{}{}
+		for _, m := range in {
+			out = append(out, map[string]interface{}{
+				"name":  m.Name,
+				"value": m.Value,
+				"type":  m.Type.String(),
+			})
+		}
+		return out
+	}
+	getStartOrEnd := func(startOrEnd parser.ItemType) interface{} {
+		if startOrEnd == 0 {
+			return nil
+		}
+		return startOrEnd.String()
+	}
+
+	var translateAST func(node parser.Expr) interface{}
+	translateAST = func(node parser.Expr) interface{} {
+		if node == nil {
+			return nil
+		}
+		switch n := node.(type) {
+		case *parser.AggregateExpr:
+			return map[string]interface{}{
+				"type":     "aggregation",
+				"op":       n.Op.String(),
+				"expr":     translateAST(n.Expr),
+				"param":    translateAST(n.Param),
+				"grouping": sanitizeList(n.Grouping),
+				"without":  n.Without,
+			}
+		case *parser.BinaryExpr:
+			var matching interface{}
+			if m := n.VectorMatching; m != nil {
+				matching = map[string]interface{}{
+					"card":    m.Card.String(),
+					"labels":  sanitizeList(m.MatchingLabels),
+					"on":      m.On,
+					"include": sanitizeList(m.Include),
+				}
+			}
+
+			return map[string]interface{}{
+				"type":     "binaryExpr",
+				"op":       n.Op.String(),
+				"lhs":      translateAST(n.LHS),
+				"rhs":      translateAST(n.RHS),
+				"matching": matching,
+				"bool":     n.ReturnBool,
+			}
+		case *parser.Call:
+			args := []interface{}{}
+			for _, arg := range n.Args {
+				args = append(args, translateAST(arg))
+			}
+
+			return map[string]interface{}{
+				"type": "call",
+				"func": map[string]interface{}{
+					"name":       n.Func.Name,
+					"argTypes":   n.Func.ArgTypes,
+					"variadic":   n.Func.Variadic,
+					"returnType": n.Func.ReturnType,
+				},
+				"args": args,
+			}
+		case *parser.MatrixSelector:
+			vs := n.VectorSelector.(*parser.VectorSelector)
+			return map[string]interface{}{
+				"type":       "matrixSelector",
+				"name":       vs.Name,
+				"range":      n.Range.Milliseconds(),
+				"offset":     vs.OriginalOffset.Milliseconds(),
+				"matchers":   translateMatchers(vs.LabelMatchers),
+				"timestamp":  vs.Timestamp,
+				"startOrEnd": getStartOrEnd(vs.StartOrEnd),
+			}
+		case *parser.SubqueryExpr:
+			return map[string]interface{}{
+				"type":       "subquery",
+				"expr":       translateAST(n.Expr),
+				"range":      n.Range.Milliseconds(),
+				"offset":     n.OriginalOffset.Milliseconds(),
+				"step":       n.Step.Milliseconds(),
+				"timestamp":  n.Timestamp,
+				"startOrEnd": getStartOrEnd(n.StartOrEnd),
+			}
+		case *parser.NumberLiteral:
+			return map[string]string{
+				"type": "numberLiteral",
+				"val":  strconv.FormatFloat(n.Val, 'f', -1, 64),
+			}
+		case *parser.ParenExpr:
+			return map[string]interface{}{
+				"type": "parenExpr",
+				"expr": translateAST(n.Expr),
+			}
+		case *parser.StringLiteral:
+			return map[string]interface{}{
+				"type": "stringLiteral",
+				"val":  n.Val,
+			}
+		case *parser.UnaryExpr:
+			return map[string]interface{}{
+				"type": "unaryExpr",
+				"op":   n.Op.String(),
+				"expr": translateAST(n.Expr),
+			}
+		case *parser.VectorSelector:
+			return map[string]interface{}{
+				"type":       "vectorSelector",
+				"name":       n.Name,
+				"offset":     n.OriginalOffset.Milliseconds(),
+				"matchers":   translateMatchers(n.LabelMatchers),
+				"timestamp":  n.Timestamp,
+				"startOrEnd": getStartOrEnd(n.StartOrEnd),
+			}
+		}
+		panic("unsupported node type")
+	}
+
+	return translateAST(expr), nil, nil, func() {}
 }
 
 func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.ApiError, func()) {

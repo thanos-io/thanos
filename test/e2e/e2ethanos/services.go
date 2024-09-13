@@ -431,6 +431,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
 	})
+	args = append(args, "--enable-new-ui")
 
 	for _, repl := range q.replicaLabels {
 		args = append(args, "--query.replica-label="+repl)
