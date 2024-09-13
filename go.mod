@@ -97,7 +97,7 @@ require (
 )
 
 require (
-	github.com/efficientgo/core v1.0.0-rc.2
+	github.com/efficientgo/core v1.0.0-rc.3
 	github.com/minio/sha256-simd v1.0.1
 )
 
@@ -268,7 +268,7 @@ require (
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
 	golang.org/x/mod v0.20.0 // indirect
 	golang.org/x/oauth2 v0.22.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
 	gonum.org/v1/gonum v0.15.0 // indirect
 	google.golang.org/protobuf v1.34.2
