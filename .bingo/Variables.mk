@@ -17,11 +17,11 @@ GO     ?= $(shell which go)
 #	@echo "Running alertmanager"
 #	@$(ALERTMANAGER) <flags/args..>
 #
-ALERTMANAGER := $(GOBIN)/alertmanager-v0.24.0
+ALERTMANAGER := $(GOBIN)/alertmanager-v0.27.0
 $(ALERTMANAGER): $(BINGO_DIR)/alertmanager.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/alertmanager-v0.24.0"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.24.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
+	@echo "(re)installing $(GOBIN)/alertmanager-v0.27.0"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.27.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
 
 BINGO := $(GOBIN)/bingo-v0.9.0
 $(BINGO): $(BINGO_DIR)/bingo.mod
