@@ -12,6 +12,8 @@ PROTOC_GO_INJECT_TAG_BIN=${PROTOC_GO_INJECT_TAG_BIN:-protoc-go-inject-tag}
 PROTOC_GEN_GO_BIN=${PROTOC_GEN_GO_BIN:-protoc-gen-go}
 PROTOC_GEN_GO_GRPC_BIN=${PROTOC_GEN_GO_GRPC_BIN:-protoc-gen-go-grpc}
 PROTOC_GEN_GO_VTPROTO_BIN=${PROTOC_GEN_GO_VTPROTO_BIN:-protoc-gen-go-vtproto}
+VTPROTOBUF_VERSION="$(go list -m all | grep 'github.com/planetscale/vtprotobuf' | awk '{ print $2 }')"
+VTPROTOBUF_INCLUDE_PATH="$(go env GOMODCACHE)/github.com/planetscale/vtprotobuf@${VTPROTOBUF_VERSION}/include"
 
 if ! [[ "scripts/genproto.sh" =~ $0 ]]; then
   echo "must be run from repository root"
@@ -34,7 +36,7 @@ for dir in ${DIRS}; do
     --plugin=protoc-gen-go-grpc=${PROTOC_GEN_GO_GRPC_BIN} \
     --plugin=protoc-gen-go-vtproto=${PROTOC_GEN_GO_VTPROTO_BIN} \
     --go_out=. --go_opt=paths=source_relative \
-    --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} \
+    --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} -I=${VTPROTOBUF_INCLUDE_PATH} \
     --go_opt=Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb \
     --go_opt=Mrules/rulespb/rpc.proto=github.com/thanos-io/thanos/pkg/rules/rulespb \
     --go-vtproto_out=. --go-vtproto_opt=features=marshal+unmarshal+size+equal,paths=source_relative \
@@ -57,7 +59,7 @@ for dir in ${CORTEX_DIRS}; do
     --plugin=protoc-gen-go-grpc=${PROTOC_GEN_GO_GRPC_BIN} \
     --plugin=protoc-gen-go-vtproto=${PROTOC_GEN_GO_VTPROTO_BIN} \
     --go_out=. --go_opt=paths=source_relative \
-    --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} \
+    --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} -I=${VTPROTOBUF_INCLUDE_PATH} \
     --go_opt=Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb \
     --go_opt=Mrules/rulespb/rpc.proto=github.com/thanos-io/thanos/pkg/rules/rulespb \
     --go-vtproto_out=. --go-vtproto_opt=features=marshal+unmarshal+size+equal,paths=source_relative \
