@@ -452,7 +452,9 @@ func runReceive(
 				level.Error(logger).Log("msg", "getting top metrics")
 				for _, ts := range dbs.TenantStats(conf.numTopMetricsPerTenant, labels.MetricName) {
 					for _, ms := range ts.Stats.IndexPostingStats.CardinalityMetricsStats {
-						topMetricNumSeries.WithLabelValues(ts.Tenant, ms.Name).Set(float64(ms.Count))
+						if ms.Count >= conf.topMetricsMinimumCardinality {
+							topMetricNumSeries.WithLabelValues(ts.Tenant, ms.Name).Set(float64(ms.Count))
+						}
 					}
 				}
 				return nil
@@ -876,8 +878,9 @@ type receiveConfig struct {
 
 	asyncForwardWorkerCount uint
 
-	numTopMetricsPerTenant   int
-	topMetricsUpdateInterval time.Duration
+	numTopMetricsPerTenant       int
+	topMetricsMinimumCardinality uint64
+	topMetricsUpdateInterval     time.Duration
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1024,7 +1027,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
 
 	cmd.Flag("receive.num-top-metrics-per-tenant", "The number of top metrics to track for each tenant.").
-		Default("5").IntVar(&rc.numTopMetricsPerTenant)
+		Default("100").IntVar(&rc.numTopMetricsPerTenant)
+	cmd.Flag("receive.top-metrics-minimum-cardinality", "The minimum cardinality for a metric to be considered top metric.").
+		Default("10000").Uint64Var(&rc.topMetricsMinimumCardinality)
 	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
 }
