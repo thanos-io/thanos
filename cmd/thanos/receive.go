@@ -448,9 +448,9 @@ func runReceive(
 		}, []string{"tenant", "metric_name"})
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(conf.topMetricsUpdateInterval, ctx.Done(), func() error {
 				level.Error(logger).Log("msg", "getting top metrics")
-				for _, ts := range dbs.TenantStats(10, labels.MetricName) {
+				for _, ts := range dbs.TenantStats(conf.numTopMetricsPerTenant, labels.MetricName) {
 					for _, ms := range ts.Stats.IndexPostingStats.CardinalityMetricsStats {
 						topMetricNumSeries.WithLabelValues(ts.Tenant, ms.Name).Set(float64(ms.Count))
 					}
@@ -875,6 +875,9 @@ type receiveConfig struct {
 	limitsConfigReloadTimer time.Duration
 
 	asyncForwardWorkerCount uint
+
+	numTopMetricsPerTenant   int
+	topMetricsUpdateInterval time.Duration
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1019,6 +1022,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.writeLimitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
 	cmd.Flag("receive.limits-config-reload-timer", "Minimum amount of time to pass for the limit configuration to be reloaded. Helps to avoid excessive reloads.").
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
+
+	cmd.Flag("receive.num-top-metrics-per-tenant", "The number of top metrics to track for each tenant.").
+		Default("5").IntVar(&rc.numTopMetricsPerTenant)
+	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
+		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
