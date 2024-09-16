@@ -440,6 +440,29 @@ func runReceive(
 		})
 	}
 
+	level.Debug(logger).Log("msg", "setting up periodic top metrics collection")
+	topMetricsSeriesCount := promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "thanos_receive_top_metrics_series_count",
+		Help: "Number of series in top metrics.",
+	}, []string{"tenant", "metric_name"})
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				level.Error(logger).Log("msg", "getting top metrics")
+				for _, ts := range dbs.TenantStats(10, labels.MetricName) {
+					for _, ms := range ts.Stats.IndexPostingStats.CardinalityMetricsStats {
+						level.Error(logger).Log("msg", "tenant", ts.Tenant, "metric_name", ms.Name, "count", ms.Count)
+						topMetricsSeriesCount.WithLabelValues(ts.Tenant, ms.Name).Set(float64(ms.Count))
+					}
+				}
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
+	}
+
 	{
 		if limiter.CanReload() {
 			ctx, cancel := context.WithCancel(context.Background())
