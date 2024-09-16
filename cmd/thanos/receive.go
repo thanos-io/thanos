@@ -419,7 +419,7 @@ func runReceive(
 		}
 	}
 
-	level.Error(logger).Log("msg", "setting up periodic tenant pruning")
+	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -440,19 +440,18 @@ func runReceive(
 		})
 	}
 
-	level.Error(logger).Log("msg", "setting up periodic top metrics collection")
-	topMetricNumSeries := promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-		Name: "thanos_receive_top_metric_num_series",
-		Help: "Number of series in top metric.",
-	}, []string{"tenant", "metric_name"})
+	level.Debug(logger).Log("msg", "setting up periodic top metrics collection")
 	{
+		topMetricNumSeries := promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			Name: "thanos_receive_top_metric_num_series",
+			Help: "Number of series in top metric.",
+		}, []string{"tenant", "metric_name"})
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				level.Error(logger).Log("msg", "getting top metrics")
 				for _, ts := range dbs.TenantStats(10, labels.MetricName) {
 					for _, ms := range ts.Stats.IndexPostingStats.CardinalityMetricsStats {
-						level.Error(logger).Log("msg", "tenant", ts.Tenant, "metric_name", ms.Name, "count", ms.Count)
 						topMetricNumSeries.WithLabelValues(ts.Tenant, ms.Name).Set(float64(ms.Count))
 					}
 				}
