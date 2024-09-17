@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+
 	extsnappy "github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/pool"
 )
@@ -192,7 +193,7 @@ func maximumDecodedLenSnappyStreamed(in []byte) (int, error) {
 	return maxDecodedLen, nil
 }
 
-var decodedBufPool = pool.MustNewBucketedBytes(1024, 65536, 2, 0)
+var decodedBufPool = pool.MustNewBucketedPool[byte](1024, 65536, 2, 0)
 
 func newStreamedDiffVarintPostings(input []byte, disablePooling bool) (closeablePostings, error) {
 	// We can't use the regular s2.Reader because it assumes a stream.
@@ -449,7 +450,7 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 }
 
 // Creating 15 buckets from 1k to 32mb.
-var snappyDecodePool = pool.MustNewBucketedBytes(1024, 32*1024*1024, 2, 0)
+var snappyDecodePool = pool.MustNewBucketedPool[byte](1024, 32*1024*1024, 2, 0)
 
 type closeablePostings interface {
 	index.Postings
