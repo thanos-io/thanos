@@ -12,6 +12,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
@@ -28,7 +29,7 @@ import (
 func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
 	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
 	engineFactory := &QueryEngineFactory{
@@ -74,7 +75,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
 	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
 	tests := []struct {
@@ -185,7 +186,7 @@ type queryServer struct {
 	querypb.Query_QueryServer
 
 	ctx       context.Context
-	responses []querypb.QueryResponse
+	responses []*querypb.QueryResponse
 }
 
 func newQueryServer(ctx context.Context) *queryServer {
@@ -193,7 +194,7 @@ func newQueryServer(ctx context.Context) *queryServer {
 }
 
 func (q *queryServer) Send(r *querypb.QueryResponse) error {
-	q.responses = append(q.responses, *r)
+	q.responses = append(q.responses, r)
 	return nil
 }
 
@@ -205,7 +206,7 @@ type queryRangeServer struct {
 	querypb.Query_QueryRangeServer
 
 	ctx       context.Context
-	responses []querypb.QueryRangeResponse
+	responses []*querypb.QueryRangeResponse
 }
 
 func newQueryRangeServer(ctx context.Context) *queryRangeServer {
@@ -213,7 +214,7 @@ func newQueryRangeServer(ctx context.Context) *queryRangeServer {
 }
 
 func (q *queryRangeServer) Send(r *querypb.QueryRangeResponse) error {
-	q.responses = append(q.responses, *r)
+	q.responses = append(q.responses, r)
 	return nil
 }
 

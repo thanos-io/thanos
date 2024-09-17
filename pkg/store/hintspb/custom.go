@@ -6,19 +6,19 @@ package hintspb
 import "github.com/oklog/ulid"
 
 func (m *SeriesResponseHints) AddQueriedBlock(id ulid.ULID) {
-	m.QueriedBlocks = append(m.QueriedBlocks, Block{
+	m.QueriedBlocks = append(m.QueriedBlocks, &Block{
 		Id: id.String(),
 	})
 }
 
 func (m *LabelNamesResponseHints) AddQueriedBlock(id ulid.ULID) {
-	m.QueriedBlocks = append(m.QueriedBlocks, Block{
+	m.QueriedBlocks = append(m.QueriedBlocks, &Block{
 		Id: id.String(),
 	})
 }
 
 func (m *LabelValuesResponseHints) AddQueriedBlock(id ulid.ULID) {
-	m.QueriedBlocks = append(m.QueriedBlocks, Block{
+	m.QueriedBlocks = append(m.QueriedBlocks, &Block{
 		Id: id.String(),
 	})
 }
@@ -48,6 +48,9 @@ func (m *QueryStats) Merge(other *QueryStats) {
 	m.ChunksTouched += other.ChunksTouched
 	m.ChunksTouchedSizeSum += other.ChunksTouchedSizeSum
 
-	m.GetAllDuration += other.GetAllDuration
-	m.MergeDuration += other.MergeDuration
+	m.GetAllDuration.Seconds += other.GetAllDuration.Seconds
+	m.GetAllDuration.Nanos += other.GetAllDuration.Nanos
+
+	m.MergeDuration.Seconds += other.MergeDuration.Seconds
+	m.MergeDuration.Nanos += other.MergeDuration.Nanos
 }

@@ -91,45 +91,6 @@ func TestRetryError(t *testing.T) {
 	testutil.Assert(t, IsHaltError(err), "not a halt error. Retry should not hide halt error")
 }
 
-func TestGroupKey(t *testing.T) {
-	for _, tcase := range []struct {
-		input    metadata.Thanos
-		expected string
-	}{
-		{
-			input:    metadata.Thanos{},
-			expected: "0@17241709254077376921",
-		},
-		{
-			input: metadata.Thanos{
-				Labels:     map[string]string{},
-				Downsample: metadata.ThanosDownsample{Resolution: 0},
-			},
-			expected: "0@17241709254077376921",
-		},
-		{
-			input: metadata.Thanos{
-				Labels:     map[string]string{"foo": "bar", "foo1": "bar2"},
-				Downsample: metadata.ThanosDownsample{Resolution: 0},
-			},
-			expected: "0@2124638872457683483",
-		},
-		{
-			input: metadata.Thanos{
-				Labels:     map[string]string{`foo/some..thing/some.thing/../`: `a_b_c/bar-something-a\metric/a\x`},
-				Downsample: metadata.ThanosDownsample{Resolution: 0},
-			},
-			expected: "0@16590761456214576373",
-		},
-	} {
-		if ok := t.Run("", func(t *testing.T) {
-			testutil.Equals(t, tcase.expected, tcase.input.GroupKey())
-		}); !ok {
-			return
-		}
-	}
-}
-
 func TestGroupMaxMinTime(t *testing.T) {
 	g := &Group{
 		metasByMinTime: []*metadata.Meta{

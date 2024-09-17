@@ -23,7 +23,7 @@ type ExemplarStore struct {
 // UnmarshalJSON implements json.Unmarshaler.
 func (m *Exemplar) UnmarshalJSON(b []byte) error {
 	v := struct {
-		Labels    labelpb.ZLabelSet
+		Labels    labelpb.LabelSet
 		TimeStamp model.Time
 		Value     model.SampleValue
 	}{}
@@ -31,7 +31,7 @@ func (m *Exemplar) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	m.Labels = v.Labels
+	m.Labels = &v.Labels
 	m.Ts = int64(v.TimeStamp)
 	m.Value = float64(v.Value)
 
@@ -45,7 +45,7 @@ func (m *Exemplar) MarshalJSON() ([]byte, error) {
 		TimeStamp model.Time        `json:"timestamp"`
 		Value     model.SampleValue `json:"value"`
 	}{
-		Labels:    labelpb.ZLabelsToPromLabels(m.Labels.Labels),
+		Labels:    labelpb.LabelpbLabelsToPromLabels(m.Labels.Labels),
 		TimeStamp: model.Time(m.Ts),
 		Value:     model.SampleValue(m.Value),
 	}
@@ -74,10 +74,10 @@ func (s1 *ExemplarData) Compare(s2 *ExemplarData) int {
 }
 
 func (s *ExemplarData) SetSeriesLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
+	var result *labelpb.LabelSet
 
 	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ls)}
 	}
 
 	s.SeriesLabels = result
@@ -102,7 +102,7 @@ func ExemplarsFromPromExemplars(exemplars []exemplar.Exemplar) []*Exemplar {
 	ex := make([]*Exemplar, 0, len(exemplars))
 	for _, e := range exemplars {
 		ex = append(ex, &Exemplar{
-			Labels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(e.Labels)},
+			Labels: &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(e.Labels)},
 			Value:  e.Value,
 			Ts:     e.Ts,
 		})

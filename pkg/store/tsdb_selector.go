@@ -57,7 +57,7 @@ func (sr *TSDBSelector) runRelabelRules(labelSets []labels.Labels) []labels.Labe
 }
 
 // MatchersForLabelSets generates a list of label matchers for the given label sets.
-func MatchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
+func MatchersForLabelSets(labelSets []labels.Labels) []*storepb.LabelMatcher {
 	var (
 		// labelNameCounts tracks how many times a label name appears in the given label
 		// sets. This is used to make sure that an explicit empty value matcher is
@@ -86,11 +86,11 @@ func MatchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
 		}
 	}
 
-	matchers := make([]storepb.LabelMatcher, 0, len(labelNameValues))
+	matchers := make([]*storepb.LabelMatcher, 0, len(labelNameValues))
 	for lblName, lblVals := range labelNameValues {
 		values := maps.Keys(lblVals)
 		sort.Strings(values)
-		matcher := storepb.LabelMatcher{
+		matcher := &storepb.LabelMatcher{
 			Name:  lblName,
 			Value: strings.Join(values, "|"),
 			Type:  storepb.LabelMatcher_RE,

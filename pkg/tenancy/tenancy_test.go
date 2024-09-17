@@ -10,14 +10,13 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -59,10 +58,6 @@ func getAndAssertTenant(ctx context.Context, t *testing.T) {
 	}
 	tenant := md.Get(tenancy.DefaultTenantHeader)[0]
 	testutil.Assert(t, tenant == testTenant)
-}
-
-func (s *mockedStoreAPI) Info(context.Context, *storepb.InfoRequest, ...grpc.CallOption) (*storepb.InfoResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *mockedStoreAPI) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
@@ -135,13 +130,13 @@ func TestTenantProxyPassing(t *testing.T) {
 			nil,
 			func() []store.Client { return cls },
 			component.Query,
-			nil, 0*time.Second, store.EagerRetrieval,
+			labels.EmptyLabels(), 0*time.Second, store.EagerRetrieval,
 		)
 		// We assert directly in the mocked store apis LabelValues/LabelNames/Series funcs
 		_, _ = q.LabelValues(ctx, &storepb.LabelValuesRequest{})
 		_, _ = q.LabelNames(ctx, &storepb.LabelNamesRequest{})
 
-		seriesMatchers := []storepb.LabelMatcher{
+		seriesMatchers := []*storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 		}
 
@@ -180,14 +175,14 @@ func TestTenantProxyPassing(t *testing.T) {
 			nil,
 			func() []store.Client { return cls },
 			component.Query,
-			nil, 0*time.Second, store.EagerRetrieval,
+			labels.EmptyLabels(), 0*time.Second, store.EagerRetrieval,
 		)
 
 		// We assert directly in the mocked store apis LabelValues/LabelNames/Series funcs
 		_, _ = q.LabelValues(ctx, &storepb.LabelValuesRequest{})
 		_, _ = q.LabelNames(ctx, &storepb.LabelNamesRequest{})
 
-		seriesMatchers := []storepb.LabelMatcher{
+		seriesMatchers := []*storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 		}
 

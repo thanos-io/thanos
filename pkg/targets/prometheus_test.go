@@ -13,7 +13,6 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/util/annotations"
@@ -22,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestPrometheus_Targets_e2e(t *testing.T) {
@@ -73,7 +73,7 @@ scrape_configs:
 	expected := &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 					{Name: "__address__", Value: p.Addr()},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -82,7 +82,7 @@ scrape_configs:
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
 				}},
-				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 					{Name: "instance", Value: p.Addr()},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
@@ -91,13 +91,13 @@ scrape_configs:
 				ScrapeUrl:          fmt.Sprintf("http://%s/metrics", p.Addr()),
 				GlobalUrl:          "",
 				Health:             targetspb.TargetHealth_UP,
-				LastScrape:         time.Time{},
+				LastScrape:         nil,
 				LastScrapeDuration: 0,
 			},
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -148,7 +148,7 @@ scrape_configs:
 
 			for i := range targets.ActiveTargets {
 				targets.ActiveTargets[i].LastScrapeDuration = 0
-				targets.ActiveTargets[i].LastScrape = time.Time{}
+				targets.ActiveTargets[i].LastScrape = nil
 				targets.ActiveTargets[i].LastError = ""
 				targets.ActiveTargets[i].GlobalUrl = ""
 			}

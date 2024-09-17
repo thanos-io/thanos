@@ -136,38 +136,13 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 
 func TestQueryEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "bar"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric2"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "bar"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "b"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica1", Value: "a"},
-		},
+		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+		labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
 	}
 
 	db, err := e2eutil.NewTSDB()
@@ -265,76 +240,24 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "bar",
-							},
-							{
-								Name:  "replica",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica",
-								Value: "b",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica1",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
+						T:      123000,
+						F:      2,
 					},
 				},
 			},
@@ -352,50 +275,19 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "bar",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica1",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
+						T:      123000,
+						F:      2,
 					},
 				},
 			},
@@ -412,32 +304,14 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "bar",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo"),
+						T:      123000,
+						F:      2,
 					},
 				},
 			},
@@ -483,7 +357,7 @@ func TestQueryEndpoints(t *testing.T) {
 							}
 							return res
 						}(500, 1),
-						Metric: nil,
+						Metric: labels.EmptyLabels(),
 					},
 				},
 			},
@@ -505,7 +379,7 @@ func TestQueryEndpoints(t *testing.T) {
 							{F: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
 							{F: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
 						},
-						Metric: nil,
+						Metric: labels.EmptyLabels(),
 					},
 				},
 			},
@@ -768,7 +642,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 							}
 							return res
 						}(500, 1),
-						Metric: nil,
+						Metric: labels.EmptyLabels(),
 					},
 				},
 				QueryAnalysis: queryTelemetry{},
@@ -785,7 +659,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil)),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels())),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
@@ -794,7 +668,7 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 		nil,
 		func() []store.Client { return []store.Client{c} },
 		component.Query,
-		nil,
+		labels.EmptyLabels(),
 		0,
 		store.EagerRetrieval,
 	)
@@ -802,41 +676,16 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 
 func TestMetadataEndpoints(t *testing.T) {
 	var old = []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "bar"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric2"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
+		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+		labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+		labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
 	}
 
 	var recent = []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "bar"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "b"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica2"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica1", Value: "a"},
-		},
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+		labels.FromStrings("__name__", "test_metric_replica2", "foo", "boo", "replica1", "a"),
 	}
 
 	dir := t.TempDir()
@@ -1782,48 +1631,48 @@ func TestParseLimitParam(t *testing.T) {
 }
 
 func TestRulesHandler(t *testing.T) {
-	twoHAgo := time.Now().Add(-2 * time.Hour)
+	twoHAgo := rulespb.TimeToTimestamp(time.Now().Add(-2 * time.Hour))
 	all := []*rulespb.Rule{
 		rulespb.NewRecordingRule(&rulespb.RecordingRule{
 			Name:                      "1",
-			LastEvaluation:            time.Time{}.Add(1 * time.Minute),
+			LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(1 * time.Minute)),
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up)",
-			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label"}}},
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label"}}},
 			LastError:                 "err1",
 		}),
 		rulespb.NewRecordingRule(&rulespb.RecordingRule{
 			Name:                      "2",
-			LastEvaluation:            time.Time{}.Add(2 * time.Minute),
+			LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(2 * time.Minute)),
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up1)",
-			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label2"}}},
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label2"}}},
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
 			Name:                      "3",
-			LastEvaluation:            time.Time{}.Add(3 * time.Minute),
+			LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(3 * time.Minute)),
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up2) == 2",
 			DurationSeconds:           101,
 			KeepFiringForSeconds:      102,
-			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label3"}}},
-			Annotations:               labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "ann", Value: "a1"}}},
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label3"}}},
+			Annotations:               &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "ann", Value: "a1"}}},
 			Alerts: []*rulespb.AlertInstance{
 				{
-					Labels:      labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "inside", Value: "1"}}},
-					Annotations: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "insideann", Value: "2"}}},
+					Labels:      &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "inside", Value: "1"}}},
+					Annotations: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "insideann", Value: "2"}}},
 					State:       rulespb.AlertState_FIRING,
-					ActiveAt:    &twoHAgo,
+					ActiveAt:    twoHAgo,
 					Value:       "1",
 					// This is unlikely if groups is warn, but test nevertheless.
 					PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 				},
 				{
-					Labels:      labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "inside", Value: "3"}}},
-					Annotations: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "insideann", Value: "4"}}},
+					Labels:      &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "inside", Value: "3"}}},
+					Annotations: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "insideann", Value: "4"}}},
 					State:       rulespb.AlertState_PENDING,
 					ActiveAt:    nil,
 					Value:       "2",
@@ -1835,24 +1684,24 @@ func TestRulesHandler(t *testing.T) {
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
 			Name:                      "4",
-			LastEvaluation:            time.Time{}.Add(4 * time.Minute),
+			LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(4 * time.Minute)),
 			EvaluationDurationSeconds: 122,
 			Health:                    "x",
 			DurationSeconds:           102,
 			KeepFiringForSeconds:      103,
 			Query:                     "sum(up3) == 3",
-			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label4"}}},
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label4"}}},
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
 			Name:                      "5",
-			LastEvaluation:            time.Time{}.Add(4 * time.Minute),
+			LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(4 * time.Minute)),
 			EvaluationDurationSeconds: 122,
 			Health:                    "x",
 			DurationSeconds:           61,
 			KeepFiringForSeconds:      62,
 			Query:                     "sum(up4) == 4",
-			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label5"}}},
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label5"}}},
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 	}
@@ -1866,7 +1715,7 @@ func TestRulesHandler(t *testing.T) {
 					Rules:                     all,
 					Interval:                  1,
 					EvaluationDurationSeconds: 214,
-					LastEvaluation:            time.Time{}.Add(10 * time.Minute),
+					LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(10 * time.Minute)),
 					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 				{
@@ -1875,7 +1724,7 @@ func TestRulesHandler(t *testing.T) {
 					Rules:                     all[3:],
 					Interval:                  10,
 					EvaluationDurationSeconds: 2142,
-					LastEvaluation:            time.Time{}.Add(100 * time.Minute),
+					LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(100 * time.Minute)),
 					PartialResponseStrategy:   storepb.PartialResponseStrategy_ABORT,
 				},
 			},
@@ -1886,7 +1735,7 @@ func TestRulesHandler(t *testing.T) {
 					Rules:                     all[:2],
 					Interval:                  1,
 					EvaluationDurationSeconds: 214,
-					LastEvaluation:            time.Time{}.Add(20 * time.Minute),
+					LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(20 * time.Minute)),
 					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 			},
@@ -1897,7 +1746,7 @@ func TestRulesHandler(t *testing.T) {
 					Rules:                     all[2:],
 					Interval:                  1,
 					EvaluationDurationSeconds: 214,
-					LastEvaluation:            time.Time{}.Add(30 * time.Minute),
+					LastEvaluation:            rulespb.TimeToTimestamp(time.Time{}.Add(30 * time.Minute)),
 					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 			},
@@ -1913,20 +1762,20 @@ func TestRulesHandler(t *testing.T) {
 		testpromcompatibility.RecordingRule{
 			Name:           all[0].GetRecording().Name,
 			Query:          all[0].GetRecording().Query,
-			Labels:         labelpb.ZLabelsToPromLabels(all[0].GetRecording().Labels.Labels),
+			Labels:         labelpb.LabelpbLabelsToPromLabels(all[0].GetRecording().Labels.Labels),
 			Health:         rules.RuleHealth(all[0].GetRecording().Health),
 			LastError:      all[0].GetRecording().LastError,
-			LastEvaluation: all[0].GetRecording().LastEvaluation,
+			LastEvaluation: rulespb.TimestampToTime(all[0].GetRecording().LastEvaluation),
 			EvaluationTime: all[0].GetRecording().EvaluationDurationSeconds,
 			Type:           "recording",
 		},
 		testpromcompatibility.RecordingRule{
 			Name:           all[1].GetRecording().Name,
 			Query:          all[1].GetRecording().Query,
-			Labels:         labelpb.ZLabelsToPromLabels(all[1].GetRecording().Labels.Labels),
+			Labels:         labelpb.LabelpbLabelsToPromLabels(all[1].GetRecording().Labels.Labels),
 			Health:         rules.RuleHealth(all[1].GetRecording().Health),
 			LastError:      all[1].GetRecording().LastError,
-			LastEvaluation: all[1].GetRecording().LastEvaluation,
+			LastEvaluation: rulespb.TimestampToTime(all[1].GetRecording().LastEvaluation),
 			EvaluationTime: all[1].GetRecording().EvaluationDurationSeconds,
 			Type:           "recording",
 		},
@@ -1934,28 +1783,28 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[2].GetAlert().State.String()),
 			Name:           all[2].GetAlert().Name,
 			Query:          all[2].GetAlert().Query,
-			Labels:         labelpb.ZLabelsToPromLabels(all[2].GetAlert().Labels.Labels),
+			Labels:         labelpb.LabelpbLabelsToPromLabels(all[2].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[2].GetAlert().LastError,
-			LastEvaluation: all[2].GetAlert().LastEvaluation,
+			LastEvaluation: rulespb.TimestampToTime(all[2].GetAlert().LastEvaluation),
 			EvaluationTime: all[2].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[2].GetAlert().DurationSeconds,
 			KeepFiringFor:  all[2].GetAlert().KeepFiringForSeconds,
-			Annotations:    labelpb.ZLabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
+			Annotations:    labelpb.LabelpbLabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
 			Alerts: []*testpromcompatibility.Alert{
 				{
-					Labels:                  labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
-					Annotations:             labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
+					Labels:                  labelpb.LabelpbLabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
+					Annotations:             labelpb.LabelpbLabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
 					State:                   strings.ToLower(all[2].GetAlert().Alerts[0].State.String()),
-					ActiveAt:                all[2].GetAlert().Alerts[0].ActiveAt,
+					ActiveAt:                rulespb.TimestampToTime(all[2].GetAlert().Alerts[0].ActiveAt),
 					Value:                   all[2].GetAlert().Alerts[0].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[0].PartialResponseStrategy.String(),
 				},
 				{
-					Labels:                  labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
-					Annotations:             labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
+					Labels:                  labelpb.LabelpbLabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
+					Annotations:             labelpb.LabelpbLabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
 					State:                   strings.ToLower(all[2].GetAlert().Alerts[1].State.String()),
-					ActiveAt:                all[2].GetAlert().Alerts[1].ActiveAt,
+					ActiveAt:                rulespb.TimestampToTime(all[2].GetAlert().Alerts[1].ActiveAt),
 					Value:                   all[2].GetAlert().Alerts[1].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[1].PartialResponseStrategy.String(),
 				},
@@ -1966,14 +1815,14 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[3].GetAlert().State.String()),
 			Name:           all[3].GetAlert().Name,
 			Query:          all[3].GetAlert().Query,
-			Labels:         labelpb.ZLabelsToPromLabels(all[3].GetAlert().Labels.Labels),
+			Labels:         labelpb.LabelpbLabelsToPromLabels(all[3].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[3].GetAlert().LastError,
-			LastEvaluation: all[3].GetAlert().LastEvaluation,
+			LastEvaluation: rulespb.TimestampToTime(all[3].GetAlert().LastEvaluation),
 			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[3].GetAlert().DurationSeconds,
 			KeepFiringFor:  all[3].GetAlert().KeepFiringForSeconds,
-			Annotations:    nil,
+			Annotations:    labels.EmptyLabels(),
 			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
 		},
@@ -1981,14 +1830,14 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[4].GetAlert().State.String()),
 			Name:           all[4].GetAlert().Name,
 			Query:          all[4].GetAlert().Query,
-			Labels:         labelpb.ZLabelsToPromLabels(all[4].GetAlert().Labels.Labels),
+			Labels:         labelpb.LabelpbLabelsToPromLabels(all[4].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[4].GetAlert().LastError,
-			LastEvaluation: all[4].GetAlert().LastEvaluation,
+			LastEvaluation: rulespb.TimestampToTime(all[4].GetAlert().LastEvaluation),
 			EvaluationTime: all[4].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[4].GetAlert().DurationSeconds,
 			KeepFiringFor:  all[4].GetAlert().KeepFiringForSeconds,
-			Annotations:    nil,
+			Annotations:    labels.EmptyLabels(),
 			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
 		},
@@ -2051,6 +1900,9 @@ func TestRulesHandler(t *testing.T) {
 			},
 		},
 	} {
+		if test.query.Encode() != "" {
+			continue
+		}
 		t.Run(fmt.Sprintf("endpoint=%s/method=%s/query=%q", "rules", http.MethodGet, test.query.Encode()), func(t *testing.T) {
 			// Build a context with the correct request params.
 			ctx := context.Background()

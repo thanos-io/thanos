@@ -5,22 +5,10 @@ syntax = "proto3";
 package thanos;
 
 import "store/storepb/types.proto";
-import "gogoproto/gogo.proto";
 import "store/labelpb/types.proto";
-import "google/protobuf/timestamp.proto";
+import "rules/rulespb/rpc.proto";
 
-option go_package = "targetspb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
+option go_package = "github.com/thanos-io/thanos/pkg/targets/targetspb";
 
 /// Targets represents API that is responsible for gathering targets and their states.
 service Targets {
@@ -53,8 +41,10 @@ message TargetsResponse {
 }
 
 message TargetDiscovery {
-    repeated ActiveTarget activeTargets = 1 [(gogoproto.jsontag) = "activeTargets"];
-    repeated DroppedTarget droppedTargets = 2 [(gogoproto.jsontag) = "droppedTargets"];
+    // @gotags: json:"activeTargets"
+    repeated ActiveTarget activeTargets = 1;
+    // @gotags: json:"droppedTargets"
+    repeated DroppedTarget droppedTargets = 2;
 }
 
 enum TargetHealth {
@@ -64,17 +54,27 @@ enum TargetHealth {
 }
 
 message ActiveTarget {
-    ZLabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
-    ZLabelSet labels = 2 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
-    string scrapePool = 3 [(gogoproto.jsontag) = "scrapePool"];
-    string scrapeUrl = 4 [(gogoproto.jsontag) = "scrapeUrl"];
-    string globalUrl = 5 [(gogoproto.jsontag) = "globalUrl"];
-    string lastError = 6 [(gogoproto.jsontag) = "lastError"];
-    google.protobuf.Timestamp lastScrape = 7 [(gogoproto.jsontag) = "lastScrape", (gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    double lastScrapeDuration = 8 [(gogoproto.jsontag) = "lastScrapeDuration"];
-    TargetHealth health = 9 [(gogoproto.jsontag) = "health"];
+    // @gotags: json:"discoveredLabels"
+    LabelSet discoveredLabels = 1;
+    // @gotags: json:"labels"
+    LabelSet labels = 2;
+    // @gotags: json:"scrapePool"
+    string scrapePool = 3;
+    // @gotags: json:"scrapeUrl"
+    string scrapeUrl = 4;
+    // @gotags: json:"globalUrl"
+    string globalUrl = 5;
+    // @gotags: json:"lastError"
+    string lastError = 6;
+    // @gotags: json:"lastScrape"
+    Timestamp lastScrape = 7;
+    // @gotags: json:"lastScrapeDuration"
+    double lastScrapeDuration = 8;
+    // @gotags: json:"health"
+    TargetHealth health = 9;
 }
 
 message DroppedTarget {
-    ZLabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
+    // @gotags: json:"discoveredLabels"
+    LabelSet discoveredLabels = 1;
 }

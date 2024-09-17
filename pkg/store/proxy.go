@@ -56,7 +56,7 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	// TSDBInfos returns metadata about each TSDB backed by the client.
-	TSDBInfos() []infopb.TSDBInfo
+	TSDBInfos() []*infopb.TSDBInfo
 
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
@@ -86,6 +86,8 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
+
+	storepb.UnimplementedStoreServer
 }
 
 type proxyStoreMetrics struct {
@@ -165,78 +167,24 @@ func NewProxyStore(
 	return s
 }
 
-// Info returns store information about the external labels this store have.
-func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	res := &storepb.InfoResponse{
-		StoreType: s.component.ToProto(),
-		Labels:    labelpb.ZLabelsFromPromLabels(s.selectorLabels),
-	}
-
-	minTime := int64(math.MaxInt64)
-	maxTime := int64(0)
+func (s *ProxyStore) LabelSet() []*labelpb.LabelSet {
 	stores := s.stores()
-
-	// Edge case: we have no data if there are no stores.
 	if len(stores) == 0 {
-		res.MaxTime = 0
-		res.MinTime = 0
-
-		return res, nil
+		return []*labelpb.LabelSet{}
 	}
 
-	for _, s := range stores {
-		mint, maxt := s.TimeRange()
-		if mint < minTime {
-			minTime = mint
-		}
-		if maxt > maxTime {
-			maxTime = maxt
-		}
-	}
-
-	res.MaxTime = maxTime
-	res.MinTime = minTime
-
-	labelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]*labelpb.LabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			labelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(mergedLabelSet)}
 		}
 	}
 
-	res.LabelSets = make([]labelpb.ZLabelSet, 0, len(labelSets))
-	for _, v := range labelSets {
-		res.LabelSets = append(res.LabelSets, v)
-	}
-
-	// We always want to enforce announcing the subset of data that
-	// selector-labels represents. If no label-sets are announced by the
-	// store-proxy's discovered stores, then we still want to enforce
-	// announcing this subset by announcing the selector as the label-set.
-	if len(res.LabelSets) == 0 && len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{Labels: res.Labels})
-	}
-
-	return res, nil
-}
-
-func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
-	stores := s.stores()
-	if len(stores) == 0 {
-		return []labelpb.ZLabelSet{}
-	}
-
-	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
-	for _, st := range stores {
-		for _, lset := range st.LabelSets() {
-			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
-		}
-	}
-
-	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]*labelpb.LabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
+		v := v
+
 		labelSets = append(labelSets, v)
 	}
 
@@ -244,9 +192,9 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 	// selector-labels represents. If no label-sets are announced by the
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
-	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
+	selectorLabels := labelpb.PromLabelsToLabelpbLabels(s.selectorLabels)
 	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
+		labelSets = append(labelSets, &labelpb.LabelSet{Labels: selectorLabels})
 	}
 
 	return labelSets
@@ -272,8 +220,8 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	return minTime, maxTime
 }
 
-func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
-	infos := make([]infopb.TSDBInfo, 0)
+func (s *ProxyStore) TSDBInfos() []*infopb.TSDBInfo {
+	infos := make([]*infopb.TSDBInfo, 0)
 	for _, st := range s.stores() {
 		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {
@@ -327,6 +275,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	r := &storepb.SeriesRequest{
 		MinTime:                 originalRequest.MinTime,
 		MaxTime:                 originalRequest.MaxTime,
+		Limit:                   originalRequest.Limit,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		Aggregates:              originalRequest.Aggregates,
 		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
@@ -363,7 +312,13 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
 	respHeap := NewResponseDeduplicator(NewProxyResponseLoserTree(storeResponses...))
+
+	i := 0
 	for respHeap.Next() {
+		i++
+		if r.Limit > 0 && i > int(r.Limit) {
+			break
+		}
 		resp := respHeap.At()
 
 		if resp.GetWarning() != "" && (r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
@@ -371,6 +326,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		}
 
 		if err := srv.Send(resp); err != nil {
+			level.Error(reqLogger).Log("msg", "failed to stream response", "error", err)
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
 	}
@@ -419,6 +375,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		Hints:                   originalRequest.Hints,
 	}
 
 	var (
@@ -465,8 +422,10 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		return nil, err
 	}
 
+	result := strutil.MergeUnsortedSlices(int(originalRequest.Limit), names...)
+
 	return &storepb.LabelNamesResponse{
-		Names:    strutil.MergeUnsortedSlices(names...),
+		Names:    result,
 		Warnings: warnings,
 	}, nil
 }
@@ -520,6 +479,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		Limit:                   originalRequest.Limit,
 	}
 
 	var (
@@ -567,8 +527,10 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		return nil, err
 	}
 
+	vals := strutil.MergeUnsortedSlices(int(originalRequest.Limit), all...)
+
 	return &storepb.LabelValuesResponse{
-		Values:   strutil.MergeUnsortedSlices(all...),
+		Values:   vals,
 		Warnings: warnings,
 	}, nil
 }

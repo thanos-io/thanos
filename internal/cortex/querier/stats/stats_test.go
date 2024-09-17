@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestStats_WallTime(t *testing.T) {
@@ -64,12 +65,16 @@ func TestStats_AddFetchedChunkBytes(t *testing.T) {
 
 func TestStats_Merge(t *testing.T) {
 	t.Run("merge two stats objects", func(t *testing.T) {
-		stats1 := &Stats{}
+		stats1 := &Stats{
+			WallTime: &durationpb.Duration{},
+		}
 		stats1.AddWallTime(time.Millisecond)
 		stats1.AddFetchedSeries(50)
 		stats1.AddFetchedChunkBytes(42)
 
-		stats2 := &Stats{}
+		stats2 := &Stats{
+			WallTime: &durationpb.Duration{},
+		}
 		stats2.AddWallTime(time.Second)
 		stats2.AddFetchedSeries(60)
 		stats2.AddFetchedChunkBytes(100)

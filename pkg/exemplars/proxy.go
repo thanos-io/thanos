@@ -31,6 +31,8 @@ type Proxy struct {
 	logger         log.Logger
 	exemplars      func() []*exemplarspb.ExemplarStore
 	selectorLabels labels.Labels
+
+	exemplarspb.UnimplementedExemplarsServer
 }
 
 // RegisterExemplarsServer register exemplars server.

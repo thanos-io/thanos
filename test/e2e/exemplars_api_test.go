@@ -89,7 +89,7 @@ config:
 	end := timestamp.FromTime(now.Add(time.Hour))
 
 	// Send HTTP requests to thanos query to trigger exemplars.
-	labelNames(t, ctx, q.Endpoint("http"), nil, start, end, func(res []string) bool { return true })
+	labelNames(t, ctx, q.Endpoint("http"), nil, start, end, 0, func(res []string) bool { return true })
 
 	t.Run("Basic exemplars query", func(t *testing.T) {
 		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names"}`, start, end, exemplarsOnExpectedSeries(map[string]string{
@@ -131,7 +131,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 		}
 
 		// Compare series labels.
-		seriesLabels := labelpb.ZLabelSetsToPromLabelSets(data[0].SeriesLabels)
+		seriesLabels := labelpb.LabelpbLabelSetsToPromLabels(data[0].SeriesLabels)
 		for _, lbls := range seriesLabels {
 			for k, v := range requiredSeriesLabels {
 				if lbls.Get(k) != v {
@@ -142,7 +142,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 
 		// Make sure the exemplar contains the correct traceID label.
 		for _, exemplar := range data[0].Exemplars {
-			for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
+			for _, lbls := range labelpb.LabelpbLabelSetsToPromLabels(exemplar.Labels) {
 				if !lbls.Has(traceIDLabel) {
 					return errors.Errorf("unexpected labels in exemplar, expected %v, got: %v", traceIDLabel, exemplar.Labels)
 				}

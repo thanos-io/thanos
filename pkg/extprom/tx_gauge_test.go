@@ -483,16 +483,16 @@ func sortDtoMessages(msgs []proto.Message) {
 		m1 := msgs[i].(*dto.Metric)
 		m2 := msgs[j].(*dto.Metric)
 
-		lbls1 := labels.Labels{}
+		b1 := labels.NewBuilder(labels.EmptyLabels())
 		for _, p := range m1.GetLabel() {
-			lbls1 = append(lbls1, labels.Label{Name: *p.Name, Value: *p.Value})
+			b1.Set(*p.Name, *p.Value)
 		}
-		lbls2 := labels.Labels{}
+		b2 := labels.NewBuilder(labels.EmptyLabels())
 		for _, p := range m2.GetLabel() {
-			lbls2 = append(lbls2, labels.Label{Name: *p.Name, Value: *p.Value})
+			b2.Set(*p.Name, *p.Value)
 		}
 
-		return labels.Compare(lbls1, lbls2) < 0
+		return labels.Compare(b1.Labels(), b2.Labels()) < 0
 	})
 }
 

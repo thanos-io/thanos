@@ -63,7 +63,7 @@ ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
-PROTOC_VERSION    ?= 3.20.1
+PROTOC_VERSION    ?= 3.20.0
 GIT               ?= $(shell which git)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
@@ -292,8 +292,8 @@ go-format: $(GOIMPORTS)
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
-proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" scripts/genproto.sh
+proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST) $(PROTOC_GO_INJECT_TAG) $(PROTOC_GEN_GO_VTPROTO) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_VTPROTO)
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" PROTOC_GO_INJECT_TAG_BIN="$(PROTOC_GO_INJECT_TAG)" PROTOC_GEN_GO_VTPROTO_BIN="$(PROTOC_GEN_GO_VTPROTO)" PROTOC_GEN_GO_BIN="$(PROTOC_GEN_GO)" PROTOC_GEN_GO_GRPC_BIN="$(PROTOC_GEN_GO_GRPC)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
@@ -312,7 +312,7 @@ test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
-	@go test -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+	@go test -race -tags stringlabels -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
@@ -397,6 +397,9 @@ go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
 github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
+github.com/prometheus/prometheus/prompb=github.com/thanos-io/thanos/pkg/store/storepb/prompb,\
+github.com/gogo/protobuf=google.golang.org/protobuf,\
+github.com/gogo/protobuf/proto=google.golang.org/protobuf/proto,\
 github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/testutil,\
 github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\

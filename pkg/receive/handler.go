@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/jpillora/backoff"
 	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
@@ -38,6 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
@@ -129,6 +129,8 @@ type Handler struct {
 	writeTimeseriesTotal *prometheus.HistogramVec
 
 	Limiter *Limiter
+
+	storepb.UnimplementedWriteableStoreServer
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -441,7 +443,7 @@ type endpointReplica struct {
 
 type trackedSeries struct {
 	seriesIDs  []int
-	timeSeries []prompb.TimeSeries
+	timeSeries []*prompb.TimeSeries
 }
 
 type writeResponse struct {
@@ -526,9 +528,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
-	// from the whole request. Ensure that we always copy those when we want to
-	// store them for longer time.
 	var wreq prompb.WriteRequest
 	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -681,29 +680,38 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(localWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
 	var stats tenantRequestStats = make(tenantRequestStats)
 
-	for er := range localWrites {
-		for tenant, series := range localWrites[er] {
-			samples := 0
+	for _, write := range writes {
+		for er := range write {
+			for tenant, series := range write[er] {
+				samples := 0
 
-			for _, ts := range series.timeSeries {
-				samples += len(ts.Samples)
-			}
+				for _, ts := range series.timeSeries {
+					samples += len(ts.Samples)
+				}
 
-			if st, ok := stats[tenant]; ok {
-				st.timeseries += len(series.timeSeries)
-				st.totalSamples += samples
+				if st, ok := stats[tenant]; ok {
+					st.timeseries += len(series.timeSeries)
+					st.totalSamples += samples
 
-				stats[tenant] = st
-			} else {
-				stats[tenant] = requestStats{
-					timeseries:   len(series.timeSeries),
-					totalSamples: samples,
+					stats[tenant] = st
+				} else {
+					stats[tenant] = requestStats{
+						timeseries:   len(series.timeSeries),
+						totalSamples: samples,
+					}
 				}
 			}
 		}
+	}
+
+	// adjust counters by the replication factor
+	for tenant, st := range stats {
+		st.timeseries /= rf
+		st.totalSamples /= rf
+		stats[tenant] = st
 	}
 
 	return stats
@@ -736,7 +744,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		return stats, err
 	}
 
-	stats = h.gatherWriteStats(localWrites)
+	stats = h.gatherWriteStats(len(params.replicas), localWrites, remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
@@ -811,7 +819,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 func (h *Handler) distributeTimeseriesToReplicas(
 	tenantHTTP string,
 	replicas []uint64,
-	timeseries []prompb.TimeSeries,
+	timeseries []*prompb.TimeSeries,
 ) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
@@ -821,7 +829,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		var tenant = tenantHTTP
 
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+			lbls := labelpb.LabelpbLabelsToPromLabels(ts.Labels)
 
 			tenantLabel := lbls.Get(h.splitTenantLabelName)
 			if tenantLabel != "" {
@@ -830,14 +838,14 @@ func (h *Handler) distributeTimeseriesToReplicas(
 				newLabels := labels.NewBuilder(lbls)
 				newLabels.Del(h.splitTenantLabelName)
 
-				ts.Labels = labelpb.ZLabelsFromPromLabels(
+				ts.Labels = labelpb.PromLabelsToLabelpbLabels(
 					newLabels.Labels(),
 				)
 			}
 		}
 
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := h.hashring.GetN(tenant, ts, rn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -851,7 +859,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 				writeDestination[endpointReplica] = map[string]trackedSeries{
 					tenant: {
 						seriesIDs:  make([]int, 0),
-						timeSeries: make([]prompb.TimeSeries, 0),
+						timeSeries: make([]*prompb.TimeSeries, 0),
 					},
 				}
 			}
@@ -909,11 +917,11 @@ func (h *Handler) sendLocalWrite(
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
 
-	tenantSeriesMapping := map[string][]prompb.TimeSeries{}
+	tenantSeriesMapping := map[string][]*prompb.TimeSeries{}
 	for _, ts := range trackedSeries.timeSeries {
 		var tenant = tenantHTTP
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+			lbls := labelpb.LabelpbLabelsToPromLabels(ts.Labels)
 			if tnt := lbls.Get(h.splitTenantLabelName); tnt != "" {
 				tenant = tnt
 			}
@@ -1038,14 +1046,14 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	if len(h.options.RelabelConfigs) == 0 {
 		return
 	}
-	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	timeSeries := make([]*prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(labelpb.LabelpbLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
 		if !keep {
 			continue
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		ts.Labels = labelpb.PromLabelsToLabelpbLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries

@@ -423,6 +423,19 @@ Flags:
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
+      --query.partition-label=QUERY.PARTITION-LABEL ...
+                                 Labels that partition the leaf queriers. This
+                                 is used to scope down the labelsets of leaf
+                                 queriers when using the distributed query mode.
+                                 If set, these labels must form a partition
+                                 of the leaf queriers. Partition labels must
+                                 not intersect with replica labels. Every TSDB
+                                 of a leaf querier must have these labels.
+                                 This is useful when there are multiple external
+                                 labels that are irrelevant for the partition as
+                                 it allows the distributed engine to ignore them
+                                 for some optimizations. If this is empty then
+                                 all labels are used as partition labels.
       --query.promql-engine=prometheus
                                  Default PromQL engine to use.
       --query.replica-label=QUERY.REPLICA-LABEL ...

@@ -35,6 +35,7 @@ import (
 type Opts struct {
 	AutoDownsample        bool
 	ReplicaLabels         []string
+	PartitionLabels       []string
 	Timeout               time.Duration
 	EnablePartialResponse bool
 }
@@ -118,8 +119,8 @@ func (r *remoteEngine) MinT() int64 {
 			hashBuf               = make([]byte, 0, 128)
 			highestMintByLabelSet = make(map[uint64]int64)
 		)
-		for _, lset := range r.infosWithoutReplicaLabels() {
-			key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+		for _, lset := range r.adjustedInfos() {
+			key, _ := labelpb.LabelpbLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
 			lsetMinT, ok := highestMintByLabelSet[key]
 			if !ok {
 				highestMintByLabelSet[key] = lset.MinTime
@@ -152,15 +153,21 @@ func (r *remoteEngine) MaxT() int64 {
 
 func (r *remoteEngine) LabelSets() []labels.Labels {
 	r.labelSetsOnce.Do(func() {
-		r.labelSets = r.infosWithoutReplicaLabels().LabelSets()
+		r.labelSets = r.adjustedInfos().LabelSets()
 	})
 	return r.labelSets
 }
 
-func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
+// adjustedInfos strips out replica labels and scopes the remaining labels
+// onto the partition labels if they are set.
+func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
 	replicaLabelSet := make(map[string]struct{})
 	for _, lbl := range r.opts.ReplicaLabels {
 		replicaLabelSet[lbl] = struct{}{}
+	}
+	partitionLabelsSet := make(map[string]struct{})
+	for _, lbl := range r.opts.PartitionLabels {
+		partitionLabelsSet[lbl] = struct{}{}
 	}
 
 	// Strip replica labels from the result.
@@ -172,12 +179,15 @@ func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 			if _, ok := replicaLabelSet[lbl.Name]; ok {
 				continue
 			}
+			if _, ok := partitionLabelsSet[lbl.Name]; !ok && len(partitionLabelsSet) > 0 {
+				continue
+			}
 			builder.Add(lbl.Name, lbl.Value)
 		}
 		infos = append(infos, infopb.NewTSDBInfo(
 			info.MinTime,
 			info.MaxTime,
-			labelpb.ZLabelsFromPromLabels(builder.Labels())),
+			labelpb.PromLabelsToLabelpbLabels(builder.Labels())),
 		)
 	}
 
@@ -296,7 +306,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			result   = make(promql.Vector, 0)
 			warnings annotations.Annotations
 			builder  = labels.NewScratchBuilder(8)
-			qryStats querypb.QueryStats
+			qryStats *querypb.QueryStats
 		)
 		for {
 			msg, err := qry.Recv()
@@ -312,7 +322,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				continue
 			}
 			if s := msg.GetStats(); s != nil {
-				qryStats = *s
+				qryStats = s
 				continue
 			}
 
@@ -333,8 +343,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
 		}
-		r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
-		r.samplesStats.TotalSamples = qryStats.SamplesTotal
+		if qryStats != nil {
+			r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
+			r.samplesStats.TotalSamples = qryStats.SamplesTotal
+		}
 
 		return &promql.Result{
 			Value:    result,
@@ -365,7 +377,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		result   = make(promql.Matrix, 0)
 		warnings annotations.Annotations
 		builder  = labels.NewScratchBuilder(8)
-		qryStats querypb.QueryStats
+		qryStats *querypb.QueryStats
 	)
 	for {
 		msg, err := qry.Recv()
@@ -381,7 +393,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			continue
 		}
 		if s := msg.GetStats(); s != nil {
-			qryStats = *s
+			qryStats = s
 			continue
 		}
 
@@ -412,8 +424,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
-	r.samplesStats.TotalSamples = qryStats.SamplesTotal
+	if qryStats != nil {
+		r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
+		r.samplesStats.TotalSamples = qryStats.SamplesTotal
+	}
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }

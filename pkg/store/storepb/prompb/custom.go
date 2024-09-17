@@ -7,12 +7,12 @@ import (
 	"github.com/prometheus/prometheus/model/histogram"
 )
 
-func (h Histogram) IsFloatHistogram() bool {
+func (h *Histogram) IsFloatHistogram() bool {
 	_, ok := h.GetCount().(*Histogram_CountFloat)
 	return ok
 }
 
-func FromProtoHistogram(h Histogram) *histogram.FloatHistogram {
+func FromProtoHistogram(h *Histogram) *histogram.FloatHistogram {
 	if h.IsFloatHistogram() {
 		return FloatHistogramProtoToFloatHistogram(h)
 	} else {
