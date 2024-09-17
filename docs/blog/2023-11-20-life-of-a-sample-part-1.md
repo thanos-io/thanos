@@ -18,7 +18,7 @@ Thanos is a sophisticated distributed system with a broad range of capabilities,
 
 The objective of this series of articles is to make Thanos more accessible to new users, helping to alleviate any initial apprehensions. We will also assume that the working environment is Kubernetes. Given the extensive ground to cover, our goal is to remain concise throughout this exploration.
 
-Before diving deeper, please check annexes to clarify some essential terminology. If you are already familiar with these concepts, feel free to skip ahead.
+Before diving deeper, please check the annexes to clarify some essential terminology. If you are already familiar with these concepts, feel free to skip ahead.
 
 ### The Sample Origin: Do You Have Close Integration Capabilities?
 
