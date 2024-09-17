@@ -10,21 +10,22 @@ author: Thibault Mangé (https://github.com/thibaultmg)
 
 Thanos is a sophisticated distributed system with a broad range of capabilities, and with that comes a certain level of configuration complexity. In this series of articles, we will take a deep dive into the lifecycle of a sample within Thanos, tracking its journey from initial ingestion to final retrieval. Our focus will be to explain Thanos's critical internal mechanisms and highlight the essential configurations for each component, guiding you toward achieving your desired operational results. We will be covering the following Thanos components:
 
-* **Receive**: Ingests samples from Prometheus servers and prepares them for object storage.
+* **Receive**: Ingests samples from remote Prometheus instances and uploads blocks to object storage.
+* **Sidecar**: Attaches to Prometheus pods as a sidecar container, ingests its data and uploads blocks to object storage.
 * **Compactor**: Merges and deduplicates blocks in object storage.
 * **Store**: Exposes blocks in object storage for querying.
 * **Query**: Retrieves data from stores and processes queries.
-* **Query Frontend**: Distributes queries to query instances.
+* **Query Frontend**: Distributes incoming queries to Querier instances.
 
 The objective of this series of articles is to make Thanos more accessible to new users, helping alleviate any initial apprehensions. We will also assume that the working environment is Kubernetes. Given the extensive ground to cover, our goal is to remain concise throughout this exploration.
 
-Before diving deeper, please check the annexes to clarify some essential terminology. If you are already familiar with these concepts, feel free to skip ahead.
+Before diving deeper, please check the [annexes](#annexes) to clarify some essential terminology. If you are already familiar with these concepts, feel free to skip ahead.
 
 ### The Sample Origin: Do You Have Close Integration Capabilities?
 
 The sample usually originates from a Prometheus instance that is scraping targets in a cluster. There are two possible scenarios:
 
-* The **Prometheus instances are under your control and you can access it from your Thanos deployment**. In this case, you can use the Thanos sidecar, which you will attach to the pod running the Prometheus server. The Thanos sidecar will directly read the raw samples from the Prometheus server using the [remote read API](https://prometheus.io/docs/prometheus/latest/querying/remote_read_api/). Then, the sidecar will behave similarly to the other scenario. It will expose its local data via the Store API as a **Receiver**, without the routing and ingestion parts. Thus, we will not delve further into this use case
+* The **Prometheus instances are under your control and you can access it from your Thanos deployment**. In this case, you can use the Thanos sidecar, which you will attach to the pod running the Prometheus server. The Thanos sidecar will directly read the raw samples from the Prometheus server using the [remote read API](https://prometheus.io/docs/prometheus/latest/querying/remote_read_api/). Then, the sidecar will behave similarly to the other scenario. It will expose its local data via the Store API as a **Receiver**, without the routing and ingestion parts. Thus, we will not delve further into this use case.
 * The **Prometheus servers are running in clusters that you do not control**. In this case, you cannot attach a sidecar to the Prometheus server and you cannot fetch its data. The samples will travel to your Thanos system using the remote write protocol. This is the scenario we will focus on. 
 
 Also, bear in mind that if adding Thanos for collecting your cluster’s metrics removes the need for a full fledged local Prometheus (with querying and alerting), you can save some resources by using the [Prometheus Agent mode](https://prometheus.io/docs/prometheus/latest/feature_flags/#prometheus-agent). In this configuration, it will only scrape the targets and forward the data to the Thanos system.
@@ -155,11 +156,11 @@ Additionally, consider setting the `tsdb.too-far-in-future.time-window` flag to 
 
 In this first part, we have covered the initial steps of the sample lifecycle in Thanos, focusing on the ingestion process. We have explored the remote write protocol, the Receive component, and the critical configurations needed to ensure high availability and durability. Now, our sample is safely ingested and stored in the system. In the next part, we will continue following our sample's journey, delving into the data management and querying processes.
 
-See the full list of articles in this series:
+See the full list of articles in this series (links will be updated as they are published):
 
 * [Life of a sample in thanos, and how to configure it – Ingestion – Part I](2023-11-20-life-of-a-sample-part-1.md)
-* [Life of a sample in thanos, and how to configure it – Data Management – Part II](2023-11-20-life-of-a-sample-part-2.md)
-* [Life of a sample in thanos, and how to configure it – Querying – Part III](2023-11-20-life-of-a-sample-part-3.md)
+* Life of a sample in thanos, and how to configure it – Data Management – Part II
+* Life of a sample in thanos, and how to configure it – Querying – Part III
 
 ### Annexes
 
