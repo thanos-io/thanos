@@ -711,11 +711,11 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(localWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+func (h *Handler) gatherWriteStats(remoteWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
 	var stats tenantRequestStats = make(tenantRequestStats)
 
-	for er := range localWrites {
-		for tenant, series := range localWrites[er] {
+	for er := range remoteWrites {
+		for tenant, series := range remoteWrites[er] {
 			samples := 0
 
 			for _, ts := range series.timeSeries {
@@ -743,7 +743,6 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
-	var stats tenantRequestStats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -763,10 +762,11 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
-		return stats, err
+		return tenantRequestStats{}, err
 	}
 
-	stats = h.gatherWriteStats(localWrites)
+	// Specific to Databricks setup, we only measure remote writes
+	stats := h.gatherWriteStats(remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.

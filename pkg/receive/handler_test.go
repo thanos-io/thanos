@@ -65,11 +65,11 @@ type dnsResolver struct {
 	logger    log.Logger
 	target    resolver.Target
 	cc        resolver.ClientConn
-	addrStore map[string][]string
+	addrStore *dnsResolverBuilder
 }
 
 func (r *dnsResolver) start() {
-	addrStrs := r.addrStore[r.target.Endpoint()]
+	addrStrs := r.addrStore.get(r.target.Endpoint())
 	addrs := make([]resolver.Address, len(addrStrs))
 	for i, s := range addrStrs {
 		addrs[i] = resolver.Address{Addr: s}
@@ -88,6 +88,20 @@ func (*dnsResolver) Close() {}
 type dnsResolverBuilder struct {
 	logger    log.Logger
 	addrStore map[string][]string
+
+	sync.Mutex
+}
+
+func (b *dnsResolverBuilder) get(addr string) []string {
+	b.Lock()
+	defer b.Unlock()
+	return b.addrStore[addr]
+}
+
+func (b *dnsResolverBuilder) updateStore(addr string, ips []string) {
+	b.Lock()
+	defer b.Unlock()
+	b.addrStore[addr] = ips
 }
 
 func (b *dnsResolverBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
@@ -95,7 +109,7 @@ func (b *dnsResolverBuilder) Build(target resolver.Target, cc resolver.ClientCon
 		logger:    b.logger,
 		target:    target,
 		cc:        cc,
-		addrStore: b.addrStore,
+		addrStore: b,
 	}
 	r.start()
 	return r, nil
@@ -1841,8 +1855,6 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 }
 
 func TestIngestorRestart(t *testing.T) {
-	// TODO: fix this test. It has a data race.
-	t.Skip("Skipping this test case temporarily due to a data race")
 	var err error
 	logger := log.NewLogfmtLogger(os.Stderr)
 	addr1, addr2, addr3 := "localhost:14090", "localhost:14091", "localhost:14092"
@@ -1884,15 +1896,18 @@ func TestIngestorRestart(t *testing.T) {
 		},
 	}
 
-	_, err = client.handleRequest(ctx, 0, "test", data)
+	stats, err := client.handleRequest(ctx, 0, "test", data)
 	require.NoError(t, err)
+	require.Equal(t, tenantRequestStats{
+		"test": requestStats{timeseries: 2, totalSamples: 2},
+	}, stats)
 
 	// close srv2 to simulate ingestor down
 	ing2.Shutdown(err)
 	ing3 := startIngestor(logger, addr3, 2*time.Second)
 	defer ing3.Shutdown(err)
 	// bind the new backend to the same DNS
-	dnsBuilder.addrStore[clientAddr] = []string{addr3}
+	dnsBuilder.updateStore(clientAddr, []string{addr3})
 
 	iter, errs := 10, 0
 	for i := 0; i < iter; i++ {
