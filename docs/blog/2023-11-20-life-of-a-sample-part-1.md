@@ -8,7 +8,7 @@ author: Thibault Mangé (https://github.com/thibaultmg)
 
 ### Introduction
 
-Thanos is a sophisticated distributed system with a broad range of capabilities, and with that comes a certain level of configuration complexity. In this series of articles, we will take a deep dive into the lifecycle of a sample within Thanos, tracking its journey from initial ingestion to final retrieval. Our focus will be to explain Thanos's critical internal mechanisms and highlight the essential configurations for each component, guiding you toward achieving the operational results you are aiming for. We will be covering the following Thanos components:
+Thanos is a sophisticated distributed system with a broad range of capabilities, and with that comes a certain level of configuration complexity. In this series of articles, we will take a deep dive into the lifecycle of a sample within Thanos, tracking its journey from initial ingestion to final retrieval. Our focus will be to explain Thanos's critical internal mechanisms and highlight the essential configurations for each component, guiding you toward achieving your desired operational results. We will be covering the following Thanos components:
 
 * **Receive**: Ingests samples from Prometheus servers and prepares them for object storage.
 * **Compactor**: Merges and deduplicates blocks in object storage.
