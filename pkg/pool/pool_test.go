@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestBytesPool(t *testing.T) {
-	chunkPool, err := NewBucketedBytes(10, 100, 2, 1000)
+	chunkPool, err := NewBucketedPool[byte](10, 100, 2, 1000)
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []int{10, 20, 40, 80}, chunkPool.sizes)
@@ -65,7 +65,7 @@ func TestBytesPool(t *testing.T) {
 }
 
 func TestRacePutGet(t *testing.T) {
-	chunkPool, err := NewBucketedBytes(3, 100, 2, 5000)
+	chunkPool, err := NewBucketedPool[byte](3, 100, 2, 5000)
 	testutil.Ok(t, err)
 
 	s := sync.WaitGroup{}
