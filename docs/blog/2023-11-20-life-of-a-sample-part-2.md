@@ -29,7 +29,7 @@ The Receive is also able to [isolate data](https://thanos.io/tip/components/rece
 * It allows for parallelization of the block-building process, especially on the compactor side as we will see later.
 * It allows for smaller indexes. Indeed, labels tend to be similar for samples coming from the same source, leading to more effective compression.
 
-<img src="img/life-of-a-sample/multi-tsdb.png" alt="Data expansion" width="400"/>
+<img src="img/life-of-a-sample/multi-tsdb.png" alt="Data expansion" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 When a block is ready, it is uploaded to the object store with the block external label defined by the flag `--receive.tenant-label-name`. This corresponds to the `thanos.labels` field of the [block metadata](https://thanos.io/tip/thanos/storage.md/#metadata-file-metajson). This will be used by the compactor to group blocks together, as we will see later.
 
@@ -37,7 +37,7 @@ When a block is ready, it is uploaded to the object store with the block externa
 
 During the block-building phase, the data is not accessible to the Store Gateway as it has not been uploaded to the object store yet. To counter that, the Receive component also serves as a data store, making the local data available for query through the `Store API`. This is a common gRPC API used across all Thanos components for time series data access, set with the `--grpc-address` flag. The Receive will serve all data is has. The more data it serves, the more resources it will use for this duty in addition to ingesting client data. 
 
-<img src="img/life-of-a-sample/receive-store-api.png" alt="Data expansion" width="400"/>
+<img src="img/life-of-a-sample/receive-store-api.png" alt="Data expansion" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 The amount of data the Receive component serves can be managed through two parameters:
 
@@ -61,7 +61,7 @@ The Receive component implements many strategies to ingest samples reliably. How
 
 The following diagram illustrates the impact on data expansion in object storage when samples from a given target are ingested from a high-availability Prometheus setup (with 2 instances) and replication is set on the Receive (factor 3):
 
-<img src="img/life-of-a-sample/data-expansion.png" alt="Data expansion" width="400"/>
+<img src="img/life-of-a-sample/data-expansion.png" alt="Data expansion" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 This leads to a threefold increase in label volume (one for each block) and a sixfold increase in sample volume! This is where the Compactor comes into play.
 
@@ -80,7 +80,7 @@ During this compaction, the Compactor will also deduplicate samples. This is cal
 
 Here is a diagram illustrating how Prometheus replicas generate samples with different timestamps that cannot be deduplicated with the `one-to-one` mode:
 
-<img src="img/life-of-a-sample/ha-prometheus-duplicates.png" alt="High availability prometheus duplication" width="500"/>
+<img src="img/life-of-a-sample/ha-prometheus-duplicates.png" alt="High availability prometheus duplication" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 Getting back to our example illustrating the data duplication happening in the object storage, here is how each compaction process will impact the data:
 
