@@ -205,6 +205,8 @@ Understanding the retrieval algorithm highlights the critical role of an externa
 
 Moreover, the direct retrieval of chunks from object storage can be suboptimal, and result in excessive costs, especially with a high volume of queries. To mitigate this, employing a [caching bucket](https://thanos.io/tip/components/store.md/#caching-bucket) can significantly reduce the number of queries to the object storage. This is configured using the `--store.caching-bucket.config` flag. This chunk caching strategy is particularly effective when data access patterns are predominantly focused on recent data. By caching these frequently accessed chunks, query performance is enhanced, and the load on object storage is reduced.
 
+Finally, you can implement the same safeguards as the Receive component by setting limits on the number of samples and series that can be queried. This is accomplished using the same `--store.limits.request-samples` and `--store.limits.request-series` flags.
+
 #### Scaling the Store Gateway
 
 The performance of Thanos Store components can be notably improved by managing concurrency and implementing sharding strategies.
