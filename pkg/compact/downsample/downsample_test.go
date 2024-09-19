@@ -1770,10 +1770,10 @@ func (b *memBlock) addSeries(s *series) {
 	b.postings = append(b.postings, sid)
 	b.series = append(b.series, s)
 
-	for _, l := range s.lset {
+	s.lset.Range(func(l labels.Label) {
 		b.symbols[l.Name] = struct{}{}
 		b.symbols[l.Value] = struct{}{}
-	}
+	})
 
 	for i, cm := range s.chunks {
 		if b.minTime == -1 || cm.MinTime < b.minTime {

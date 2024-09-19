@@ -11,11 +11,12 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/user"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
@@ -57,7 +58,7 @@ var (
 		End:            1536716898 * 1e3,
 		Step:           120 * 1e3,
 		Query:          "sum(container_memory_rss) by (namespace)",
-		CachingOptions: CachingOptions{Disabled: true},
+		CachingOptions: &CachingOptions{Disabled: true},
 	}
 	noCacheRequestWithStats = &PrometheusRequest{
 		Path:           "/api/v1/query_range",
@@ -66,7 +67,7 @@ var (
 		Step:           120 * 1e3,
 		Stats:          "all",
 		Query:          "sum(container_memory_rss) by (namespace)",
-		CachingOptions: CachingOptions{Disabled: true},
+		CachingOptions: &CachingOptions{Disabled: true},
 	}
 	respHeaders = []*PrometheusResponseHeader{
 		{
@@ -76,15 +77,15 @@ var (
 	}
 	parsedResponse = &PrometheusResponse{
 		Status: "success",
-		Data: PrometheusData{
+		Data: &PrometheusData{
 			ResultType: model.ValMatrix.String(),
 			Analysis:   (*Analysis)(nil),
-			Result: []SampleStream{
+			Result: []*SampleStream{
 				{
-					Labels: []cortexpb.LabelAdapter{
-						{Name: "foo", Value: "bar"},
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("foo"), Value: []byte("bar")},
 					},
-					Samples: []cortexpb.Sample{
+					Samples: []*cortexpb.Sample{
 						{Value: 137, TimestampMs: 1536673680000},
 						{Value: 137, TimestampMs: 1536673780000},
 					},
@@ -93,26 +94,6 @@ var (
 		},
 		Warnings: []string{"test-warn"},
 	}
-	parsedHistogramResponse = &PrometheusResponse{
-		Status: "success",
-		Data: PrometheusData{
-			ResultType: model.ValMatrix.String(),
-			Analysis:   (*Analysis)(nil),
-			Result: []SampleStream{
-				{
-					Labels: []cortexpb.LabelAdapter{
-						{Name: "fake", Value: "histogram"},
-					},
-					Histograms: []SampleHistogramPair{
-						{
-							Timestamp: 1536673680000,
-							Histogram: genSampleHistogram(),
-						},
-					},
-				},
-			},
-		},
-	}
 )
 
 func mkAPIResponse(start, end, step int64) *PrometheusResponse {
@@ -120,13 +101,13 @@ func mkAPIResponse(start, end, step int64) *PrometheusResponse {
 }
 
 func mkAPIResponseWithStats(start, end, step int64, withStats bool) *PrometheusResponse {
-	var samples []cortexpb.Sample
+	var samples []*cortexpb.Sample
 	var stats *PrometheusResponseStats
 	if withStats {
 		stats = &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}}
 	}
 	for i := start; i <= end; i += step {
-		samples = append(samples, cortexpb.Sample{
+		samples = append(samples, &cortexpb.Sample{
 			TimestampMs: int64(i),
 			Value:       float64(i),
 		})
@@ -143,14 +124,14 @@ func mkAPIResponseWithStats(start, end, step int64, withStats bool) *PrometheusR
 
 	return &PrometheusResponse{
 		Status: StatusSuccess,
-		Data: PrometheusData{
+		Data: &PrometheusData{
 			ResultType: matrix,
 			Stats:      stats,
 			Analysis:   &Analysis{},
-			Result: []SampleStream{
+			Result: []*SampleStream{
 				{
-					Labels: []cortexpb.LabelAdapter{
-						{Name: "foo", Value: "bar"},
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("foo"), Value: []byte("bar")},
 					},
 					Samples: samples,
 				},
@@ -159,25 +140,25 @@ func mkAPIResponseWithStats(start, end, step int64, withStats bool) *PrometheusR
 	}
 }
 
-func mkExtentWithStats(start, end int64) Extent {
+func mkExtentWithStats(start, end int64) *Extent {
 	return mkExtentWithStepWithStats(start, end, 10, true)
 }
 
-func mkExtent(start, end int64) Extent {
+func mkExtent(start, end int64) *Extent {
 	return mkExtentWithStepWithStats(start, end, 10, false)
 }
 
-func mkExtentWithStep(start, end, step int64) Extent {
+func mkExtentWithStep(start, end, step int64) *Extent {
 	return mkExtentWithStepWithStats(start, end, step, false)
 }
 
-func mkExtentWithStepWithStats(start, end, step int64, withStats bool) Extent {
+func mkExtentWithStepWithStats(start, end, step int64, withStats bool) *Extent {
 	res := mkAPIResponseWithStats(start, end, step, withStats)
-	any, err := types.MarshalAny(res)
+	any, err := anypb.New(res)
 	if err != nil {
 		panic(err)
 	}
-	return Extent{
+	return &Extent{
 		Start:    start,
 		End:      end,
 		Response: any,
@@ -260,7 +241,7 @@ func TestStatsCacheQuerySamples(t *testing.T) {
 			ctx := user.InjectOrgID(context.Background(), "1")
 			r, err := rc.Do(ctx, tc.req)
 			require.Equal(t, tc.err, err)
-			require.Equal(t, tc.expectedResponse, r)
+			require.Equal(t, true, proto.Equal(tc.expectedResponse, r))
 		})
 	}
 }
@@ -590,7 +571,7 @@ func TestPartition(t *testing.T) {
 	for _, tc := range []struct {
 		name                   string
 		input                  Request
-		prevCachedResponse     []Extent
+		prevCachedResponse     []*Extent
 		expectedRequests       []Request
 		expectedCachedResponse []Response
 	}{
@@ -600,7 +581,7 @@ func TestPartition(t *testing.T) {
 				Start: 0,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(0, 100),
 			},
 			expectedCachedResponse: []Response{
@@ -614,7 +595,7 @@ func TestPartition(t *testing.T) {
 				Start: 0,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(110, 210),
 			},
 			expectedRequests: []Request{
@@ -629,7 +610,7 @@ func TestPartition(t *testing.T) {
 				Start: 0,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(50, 100),
 			},
 			expectedRequests: []Request{
@@ -648,7 +629,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   200,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(50, 120),
 				mkExtent(160, 250),
 			},
@@ -669,7 +650,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   160,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(50, 120),
 				mkExtent(122, 130),
 			},
@@ -689,7 +670,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(50, 90),
 			},
 			expectedRequests: []Request{
@@ -706,7 +687,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtent(100, 100),
 			},
 			expectedCachedResponse: []Response{
@@ -719,7 +700,7 @@ func TestPartition(t *testing.T) {
 				Start: 0,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(0, 100),
 			},
 			expectedCachedResponse: []Response{
@@ -733,7 +714,7 @@ func TestPartition(t *testing.T) {
 				Start: 0,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(110, 210),
 			},
 			expectedRequests: []Request{
@@ -748,7 +729,7 @@ func TestPartition(t *testing.T) {
 				Start: 0,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(50, 100),
 			},
 			expectedRequests: []Request{
@@ -767,7 +748,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   200,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(50, 120),
 				mkExtentWithStats(160, 250),
 			},
@@ -788,7 +769,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   160,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(50, 120),
 				mkExtentWithStats(122, 130),
 			},
@@ -808,7 +789,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(50, 90),
 			},
 			expectedRequests: []Request{
@@ -825,7 +806,7 @@ func TestPartition(t *testing.T) {
 				Start: 100,
 				End:   100,
 			},
-			prevCachedResponse: []Extent{
+			prevCachedResponse: []*Extent{
 				mkExtentWithStats(100, 100),
 			},
 			expectedCachedResponse: []Response{
@@ -840,8 +821,15 @@ func TestPartition(t *testing.T) {
 			}
 			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse)
 			require.Nil(t, err)
-			require.Equal(t, tc.expectedRequests, reqs)
-			require.Equal(t, tc.expectedCachedResponse, resps)
+
+			require.Equal(t, len(tc.expectedRequests), len(reqs))
+			for i := range reqs {
+				require.Equal(t, true, tc.expectedRequests[i].(*PrometheusRequest).EqualMessageVT(reqs[i].(*PrometheusRequest)))
+			}
+			require.Equal(t, len(tc.expectedCachedResponse), len(resps))
+			for i := range resps {
+				require.Equal(t, true, tc.expectedCachedResponse[i].(*PrometheusResponse).EqualMessageVT(resps[i].(*PrometheusResponse)))
+			}
 		})
 	}
 }
@@ -850,8 +838,8 @@ func TestHandleHit(t *testing.T) {
 	for _, tc := range []struct {
 		name                       string
 		input                      Request
-		cachedEntry                []Extent
-		expectedUpdatedCachedEntry []Extent
+		cachedEntry                []*Extent
+		expectedUpdatedCachedEntry []*Extent
 	}{
 		{
 			name: "Should drop tiny extent that overlaps with non-tiny request only",
@@ -860,14 +848,14 @@ func TestHandleHit(t *testing.T) {
 				End:   120,
 				Step:  5,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(0, 50, 5),
 				mkExtentWithStep(60, 65, 5),
 				mkExtentWithStep(100, 105, 5),
 				mkExtentWithStep(110, 150, 5),
 				mkExtentWithStep(160, 165, 5),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(0, 50, 5),
 				mkExtentWithStep(60, 65, 5),
 				mkExtentWithStep(100, 150, 5),
@@ -881,7 +869,7 @@ func TestHandleHit(t *testing.T) {
 				End:   200,
 				Step:  5,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(0, 50, 5),
 				mkExtentWithStep(60, 65, 5),
 				mkExtentWithStep(100, 105, 5),
@@ -890,7 +878,7 @@ func TestHandleHit(t *testing.T) {
 				mkExtentWithStep(220, 225, 5),
 				mkExtentWithStep(240, 250, 5),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(0, 50, 5),
 				mkExtentWithStep(60, 65, 5),
 				mkExtentWithStep(100, 200, 5),
@@ -905,7 +893,7 @@ func TestHandleHit(t *testing.T) {
 				End:   105,
 				Step:  5,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(0, 50, 5),
 				mkExtentWithStep(60, 65, 5),
 				mkExtentWithStep(100, 105, 5),
@@ -920,7 +908,7 @@ func TestHandleHit(t *testing.T) {
 				End:   108,
 				Step:  2,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(60, 64, 2),
 				mkExtentWithStep(104, 110, 2),
 				mkExtentWithStep(160, 166, 2),
@@ -934,12 +922,12 @@ func TestHandleHit(t *testing.T) {
 				End:   106,
 				Step:  2,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(60, 64, 2),
 				mkExtentWithStep(104, 110, 2),
 				mkExtentWithStep(160, 166, 2),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(60, 64, 2),
 				mkExtentWithStep(100, 110, 2),
 				mkExtentWithStep(160, 166, 2),
@@ -952,12 +940,12 @@ func TestHandleHit(t *testing.T) {
 				End:   106,
 				Step:  2,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(60, 64, 2),
 				mkExtentWithStep(98, 102, 2),
 				mkExtentWithStep(160, 166, 2),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(60, 64, 2),
 				mkExtentWithStep(98, 106, 2),
 				mkExtentWithStep(160, 166, 2),
@@ -970,11 +958,11 @@ func TestHandleHit(t *testing.T) {
 				End:   80,
 				Step:  20,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(0, 20, 20),
 				mkExtentWithStep(80, 100, 20),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(0, 100, 20),
 			},
 		},
@@ -985,10 +973,10 @@ func TestHandleHit(t *testing.T) {
 				End:   80,
 				Step:  20,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(60, 160, 20),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(40, 160, 20),
 			},
 		},
@@ -999,10 +987,10 @@ func TestHandleHit(t *testing.T) {
 				End:   180,
 				Step:  20,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				mkExtentWithStep(60, 160, 20),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(60, 180, 20),
 			},
 		},
@@ -1015,7 +1003,7 @@ func TestHandleHit(t *testing.T) {
 				End:   180,
 				Step:  20,
 			},
-			cachedEntry: []Extent{
+			cachedEntry: []*Extent{
 				{
 					Start: 60,
 					End:   80,
@@ -1027,7 +1015,7 @@ func TestHandleHit(t *testing.T) {
 				},
 				mkExtentWithStep(60, 160, 20),
 			},
-			expectedUpdatedCachedEntry: []Extent{
+			expectedUpdatedCachedEntry: []*Extent{
 				mkExtentWithStep(60, 180, 20),
 			},
 		},
@@ -1048,7 +1036,7 @@ func TestHandleHit(t *testing.T) {
 			require.NoError(t, err)
 
 			expectedResponse := mkAPIResponse(tc.input.GetStart(), tc.input.GetEnd(), tc.input.GetStep())
-			require.Equal(t, expectedResponse, response, "response does not match the expectation")
+			require.Equal(t, true, expectedResponse.EqualMessageVT(response))
 			require.Equal(t, tc.expectedUpdatedCachedEntry, updatedExtents, "updated cache entry does not match the expectation")
 		})
 	}
@@ -1074,24 +1062,42 @@ func TestResultsCache(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	useResp := *parsedResponse
+	useResp := &PrometheusResponse{
+		Status: "success",
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("foo"), Value: []byte("bar")},
+					},
+					Samples: []*cortexpb.Sample{
+						{Value: 137, TimestampMs: 1536673680000},
+						{Value: 137, TimestampMs: 1536673780000},
+					},
+				},
+			},
+		},
+		Warnings: []string{"test-warn"},
+	}
 	useResp.Data.Analysis = &Analysis{}
 
 	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
 		calls++
-		return &useResp, nil
+		return useResp, nil
 	}))
 	ctx := user.InjectOrgID(context.Background(), "1")
 	resp, err := rc.Do(ctx, parsedRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualVT(resp.(*PrometheusResponse)))
 
 	// Doing same request again shouldn't change anything.
 	resp, err = rc.Do(ctx, parsedRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualVT(resp.(*PrometheusResponse)))
 
 	// Doing request with new end time should do one more query.
 	req := parsedRequest.WithStartEnd(parsedRequest.GetStart(), parsedRequest.GetEnd()+100)
@@ -1190,7 +1196,7 @@ func TestResultsCacheMaxFreshness(t *testing.T) {
 
 			// fill cache
 			key := constSplitter(day).GenerateCacheKey("1", req)
-			rc.(*resultsCache).put(ctx, key, []Extent{mkExtent(int64(modelNow)-(600*1e3), int64(modelNow))})
+			rc.(*resultsCache).put(ctx, key, []*Extent{mkExtent(int64(modelNow)-(600*1e3), int64(modelNow))})
 
 			resp, err := rc.Do(ctx, req)
 			require.NoError(t, err)
@@ -1221,13 +1227,13 @@ func Test_resultsCache_MissingData(t *testing.T) {
 	ctx := context.Background()
 
 	// fill up the cache
-	rc.put(ctx, "empty", []Extent{{
+	rc.put(ctx, "empty", []*Extent{{
 		Start:    100,
 		End:      200,
 		Response: nil,
 	}})
-	rc.put(ctx, "notempty", []Extent{mkExtent(100, 120)})
-	rc.put(ctx, "mixed", []Extent{mkExtent(100, 120), {
+	rc.put(ctx, "notempty", []*Extent{mkExtent(100, 120)})
+	rc.put(ctx, "mixed", []*Extent{mkExtent(100, 120), {
 		Start:    120,
 		End:      200,
 		Response: nil,
@@ -1358,24 +1364,43 @@ func TestNativeHistograms(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	useResp := *parsedHistogramResponse
+	useResp := &PrometheusResponse{
+		Status: "success",
+		Data: &PrometheusData{
+			ResultType: model.ValMatrix.String(),
+			Analysis:   (*Analysis)(nil),
+			Result: []*SampleStream{
+				{
+					Labels: []*cortexpb.LabelPair{
+						{Name: []byte("fake"), Value: []byte("histogram")},
+					},
+					Histograms: []*SampleHistogramPair{
+						{
+							Timestamp: 1536673680000,
+							Histogram: genSampleHistogram(),
+						},
+					},
+				},
+			},
+		},
+	}
 	useResp.Data.Analysis = &Analysis{}
 
 	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
 		calls++
-		return &useResp, nil
+		return useResp, nil
 	}))
 	ctx := user.InjectOrgID(context.Background(), "1")
 	resp, err := rc.Do(ctx, parsedHistogramRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualVT(resp.(*PrometheusResponse)))
 
 	// Doing same request again shouldn't change anything.
 	resp, err = rc.Do(ctx, parsedHistogramRequest)
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
-	require.Equal(t, &useResp, resp)
+	require.Equal(t, true, useResp.EqualMessageVT(resp))
 
 	// Doing request with new end time should do one more query.
 	req := parsedHistogramRequest.WithStartEnd(parsedHistogramRequest.GetStart(), parsedHistogramRequest.GetEnd()+100)
@@ -1399,8 +1424,8 @@ func (mockCacheGenNumberLoader) GetResultsCacheGenNumber(tenantIDs []string) str
 	return ""
 }
 
-func genSampleHistogram() SampleHistogram {
-	return SampleHistogram{
+func genSampleHistogram() *SampleHistogram {
+	return &SampleHistogram{
 		Count: 5,
 		Sum:   18.4,
 		Buckets: []*HistogramBucket{

@@ -58,7 +58,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_query_metadata_apis_dns_provider_results"}, e2emon.WaitMissingMetrics()))
 
-	var promMeta map[string][]metadatapb.Meta
+	var promMeta map[string][]*metadatapb.Meta
 	// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+prom1.Endpoint("http")), "", -1)
@@ -71,7 +71,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 		return fmt.Errorf("empty metadata response from Prometheus")
 	}))
 
-	var thanosMeta map[string][]metadatapb.Meta
+	var thanosMeta map[string][]*metadatapb.Meta
 	// Retry until length of metadata response is the same as Prometheus.
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		thanosMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
@@ -111,7 +111,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	testutil.Assert(t, len(thanosMeta) == 1 && len(thanosMeta["prometheus_build_info"]) > 0, "expected one prometheus_build_info metadata from Thanos, got %v", thanosMeta)
 }
 
-func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
+func metadataEqual(t *testing.T, meta1, meta2 map[string][]*metadatapb.Meta) {
 	// The two responses should have equal # of entries.
 	testutil.Equals(t, len(meta1), len(meta2))
 

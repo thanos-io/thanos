@@ -83,89 +83,7 @@ func (es *endpointRef) Metadata(ctx context.Context, infoClient infopb.InfoClien
 			return &endpointMetadata{resp}, nil
 		}
 	}
-
-	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
-	if storeClient != nil {
-		metadata, err := es.getMetadataUsingStoreAPI(ctx, storeClient)
-		if err != nil {
-			return nil, errors.Wrapf(err, "fallback fetching info from %s", es.addr)
-		}
-		return metadata, nil
-	}
-
 	return nil, errors.New(noMetadataEndpointMessage)
-}
-
-func (es *endpointRef) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
-	resp, err := client.Info(ctx, &storepb.InfoRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	infoResp := fillExpectedAPIs(component.FromProto(resp.StoreType), resp.MinTime, resp.MaxTime)
-	infoResp.LabelSets = resp.LabelSets
-	infoResp.ComponentType = component.FromProto(resp.StoreType).String()
-
-	return &endpointMetadata{
-		&infoResp,
-	}, nil
-}
-
-func fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
-	switch componentType {
-	case component.Sidecar:
-		return infopb.InfoResponse{
-			Store: &infopb.StoreInfo{
-				MinTime: mintime,
-				MaxTime: maxTime,
-			},
-			Rules:          &infopb.RulesInfo{},
-			Targets:        &infopb.TargetsInfo{},
-			MetricMetadata: &infopb.MetricMetadataInfo{},
-			Exemplars:      &infopb.ExemplarsInfo{},
-		}
-	case component.Query:
-		{
-			return infopb.InfoResponse{
-				Store: &infopb.StoreInfo{
-					MinTime: mintime,
-					MaxTime: maxTime,
-				},
-				Rules:          &infopb.RulesInfo{},
-				Targets:        &infopb.TargetsInfo{},
-				MetricMetadata: &infopb.MetricMetadataInfo{},
-				Exemplars:      &infopb.ExemplarsInfo{},
-				Query:          &infopb.QueryAPIInfo{},
-			}
-		}
-	case component.Receive:
-		{
-			return infopb.InfoResponse{
-				Store: &infopb.StoreInfo{
-					MinTime: mintime,
-					MaxTime: maxTime,
-				},
-				Exemplars: &infopb.ExemplarsInfo{},
-			}
-		}
-	case component.Store:
-		return infopb.InfoResponse{
-			Store: &infopb.StoreInfo{
-				MinTime: mintime,
-				MaxTime: maxTime,
-			},
-		}
-	case component.Rule:
-		return infopb.InfoResponse{
-			Store: &infopb.StoreInfo{
-				MinTime: mintime,
-				MaxTime: maxTime,
-			},
-			Rules: &infopb.RulesInfo{},
-		}
-	default:
-		return infopb.InfoResponse{}
-	}
 }
 
 // stringError forces the error to be a string
@@ -199,7 +117,7 @@ type EndpointStatus struct {
 // TODO(hitanshu-mehta) Currently,only collecting metrics of storeEndpoints. Make this struct generic.
 type endpointSetNodeCollector struct {
 	mtx             sync.Mutex
-	storeNodes      map[component.Component]map[string]int
+	storeNodes      map[string]map[string]int
 	storePerExtLset map[string]int
 
 	logger          log.Logger
@@ -213,7 +131,7 @@ func newEndpointSetNodeCollector(logger log.Logger, labels ...string) *endpointS
 	}
 	return &endpointSetNodeCollector{
 		logger:     logger,
-		storeNodes: map[component.Component]map[string]int{},
+		storeNodes: map[string]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
@@ -236,8 +154,8 @@ func truncateExtLabels(s string, threshold int) string {
 	}
 	return s
 }
-func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
-	storeNodes := make(map[component.Component]map[string]int, len(nodes))
+func (c *endpointSetNodeCollector) Update(nodes map[string]map[string]int) {
+	storeNodes := make(map[string]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
 	for storeType, occurrencesPerExtLset := range nodes {
@@ -263,12 +181,8 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for storeType, occurrencesPerExtLset := range c.storeNodes {
+	for k, occurrencesPerExtLset := range c.storeNodes {
 		for externalLabels, occurrences := range occurrencesPerExtLset {
-			var storeTypeStr string
-			if storeType != nil {
-				storeTypeStr = storeType.String()
-			}
 			// Select only required labels.
 			lbls := []string{}
 			for _, lbl := range c.labels {
@@ -276,7 +190,7 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 				case string(ExternalLabels):
 					lbls = append(lbls, externalLabels)
 				case string(StoreType):
-					lbls = append(lbls, storeTypeStr)
+					lbls = append(lbls, k)
 				}
 			}
 			select {
@@ -454,12 +368,12 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 		// All producers that expose StoreAPI should have unique external labels. Check all which connect to our Querier.
 		if er.HasStoreAPI() && (er.ComponentType() == component.Sidecar || er.ComponentType() == component.Rule) &&
-			stats[component.Sidecar][extLset]+stats[component.Rule][extLset] > 0 {
+			stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset] > 0 {
 
 			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
-				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar][extLset]+stats[component.Rule][extLset]+1))
+				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset]+1))
 		}
-		stats[er.ComponentType()][extLset]++
+		stats[er.ComponentType().String()][extLset]++
 	}
 
 	e.endpointsMetric.Update(stats)
@@ -601,7 +515,7 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
 				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
-				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
+				LabelSets:       labelpb.LabelpbLabelSetsToPromLabels(er.metadata.LabelSets...),
 			})
 		}
 	}
@@ -796,7 +710,7 @@ func (er *endpointRef) labelSets() []labels.Labels {
 	}
 
 	labelSet := make([]labels.Labels, 0, len(er.metadata.LabelSets))
-	for _, ls := range labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...) {
+	for _, ls := range labelpb.LabelpbLabelSetsToPromLabels(er.metadata.LabelSets...) {
 		if ls.Len() == 0 {
 			continue
 		}
@@ -812,7 +726,7 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	return er.timeRange()
 }
 
-func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
+func (er *endpointRef) TSDBInfos() []*infopb.TSDBInfo {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
@@ -905,10 +819,10 @@ type endpointMetadata struct {
 	*infopb.InfoResponse
 }
 
-func newEndpointAPIStats() map[component.Component]map[string]int {
-	nodes := make(map[component.Component]map[string]int, len(storepb.StoreType_name))
-	for i := range storepb.StoreType_name {
-		nodes[component.FromProto(storepb.StoreType(i))] = map[string]int{}
+func newEndpointAPIStats() map[string]map[string]int {
+	nodes := make(map[string]map[string]int, len(component.All))
+	for _, comp := range component.All {
+		nodes[comp.String()] = map[string]int{}
 	}
 	return nodes
 }

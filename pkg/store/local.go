@@ -8,17 +8,16 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"math"
 	"sort"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -33,14 +32,15 @@ type LocalStore struct {
 	logger    log.Logger
 	extLabels labels.Labels
 
-	info *storepb.InfoResponse
-	c    io.Closer
+	c io.Closer
 
 	// TODO(bwplotka): This is very naive in-memory DB. We can support much larger files, by
 	// indexing labels, symbolizing strings and get chunk refs only without storing protobufs in memory.
 	// For small debug purposes, this is good enough.
 	series       []*storepb.Series
 	sortedChunks [][]int
+
+	storepb.UnimplementedStoreServer
 }
 
 // TODO(bwplotka): Add remote read so Prometheus users can use this. Potentially after streaming will be added
@@ -67,14 +67,6 @@ func NewLocalStoreFromJSONMmappableFile(
 		logger:    logger,
 		extLabels: extLabels,
 		c:         f,
-		info: &storepb.InfoResponse{
-			LabelSets: []labelpb.ZLabelSet{
-				{Labels: labelpb.ZLabelsFromPromLabels(extLabels)},
-			},
-			StoreType: component.ToProto(),
-			MinTime:   math.MaxInt64,
-			MaxTime:   math.MinInt64,
-		},
 	}
 
 	// Do quick pass for in-mem index.
@@ -89,9 +81,9 @@ func NewLocalStoreFromJSONMmappableFile(
 	}
 
 	skanner := NewNoCopyScanner(content, split)
-	resp := &storepb.SeriesResponse{}
+	resp := storepb.SeriesResponse{}
 	for skanner.Scan() {
-		if err := jsonpb.Unmarshal(bytes.NewReader(skanner.Bytes()), resp); err != nil {
+		if err := protojson.Unmarshal(skanner.Bytes(), &resp); err != nil {
 			return nil, errors.Wrapf(err, "unmarshal storepb.SeriesResponse frame for file %s", path)
 		}
 		series := resp.GetSeries()
@@ -101,13 +93,7 @@ func NewLocalStoreFromJSONMmappableFile(
 		}
 		chks := make([]int, 0, len(series.Chunks))
 		// Sort chunks in separate slice by MinTime for easier lookup. Find global max and min.
-		for ci, c := range series.Chunks {
-			if s.info.MinTime > c.MinTime {
-				s.info.MinTime = c.MinTime
-			}
-			if s.info.MaxTime < c.MaxTime {
-				s.info.MaxTime = c.MaxTime
-			}
+		for ci := range series.Chunks {
 			chks = append(chks, ci)
 		}
 
@@ -121,7 +107,7 @@ func NewLocalStoreFromJSONMmappableFile(
 	if err := skanner.Err(); err != nil {
 		return nil, errors.Wrapf(err, "scanning file %s", path)
 	}
-	level.Info(logger).Log("msg", "loading JSON file succeeded", "file", path, "info", s.info.String(), "series", len(s.series))
+	level.Info(logger).Log("msg", "loading JSON file succeeded", "file", path, "series", len(s.series))
 	return s, nil
 }
 
@@ -143,11 +129,6 @@ func ScanGRPCCurlProtoStreamMessages(data []byte, atEOF bool) (advance int, toke
 	return len(delim), nil, nil
 }
 
-// Info returns store information about the Prometheus instance.
-func (s *LocalStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	return s.info, nil
-}
-
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
@@ -164,7 +145,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	var chosen []int
 	for si, series := range s.series {
-		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
+		lbls := labelpb.LabelpbLabelsToPromLabels(series.Labels)
 		var noMatch bool
 		for _, m := range matchers {
 			extValue := lbls.Get(m.Name)
@@ -183,8 +164,8 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		chosen = chosen[:0]
 		resp := &storepb.Series{
 			// Copy labels as in-process clients like proxy tend to work on same memory for labels.
-			Labels: labelpb.DeepCopy(series.Labels),
-			Chunks: make([]storepb.AggrChunk, 0, len(s.sortedChunks[si])),
+			Labels: series.Labels,
+			Chunks: make([]*storepb.AggrChunk, 0, len(s.sortedChunks[si])),
 		}
 
 		for _, ci := range s.sortedChunks[si] {
@@ -233,7 +214,7 @@ func (s *LocalStore) LabelValues(_ context.Context, r *storepb.LabelValuesReques
 ) {
 	vals := map[string]struct{}{}
 	for _, series := range s.series {
-		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
+		lbls := labelpb.LabelpbLabelsToPromLabels(series.Labels)
 		val := lbls.Get(r.Label)
 		if val == "" {
 			continue

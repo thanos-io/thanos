@@ -46,6 +46,7 @@ type TSDBStore struct {
 
 	extLset labels.Labels
 	mtx     sync.RWMutex
+	storepb.UnimplementedStoreServer
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -93,36 +94,11 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-// Info returns store information about the Prometheus instance.
-func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	minTime, err := s.db.StartTime()
-	if err != nil {
-		return nil, errors.Wrap(err, "TSDB min Time")
-	}
-
-	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.getExtLset()),
-		StoreType: s.component.ToProto(),
-		MinTime:   minTime,
-		MaxTime:   math.MaxInt64,
-	}
-
-	// Until we deprecate the single labels in the reply, we just duplicate
-	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.ZLabelSet{}
-	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
-			Labels: res.Labels,
-		})
-	}
-	return res, nil
-}
-
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(s.getExtLset())
-	labelSets := []labelpb.ZLabelSet{}
+func (s *TSDBStore) LabelSet() []*labelpb.LabelSet {
+	labels := labelpb.PromLabelsToLabelpbLabels(s.getExtLset())
+	labelSets := []*labelpb.LabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{
+		labelSets = append(labelSets, &labelpb.LabelSet{
 			Labels: labels,
 		})
 	}
@@ -130,16 +106,16 @@ func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
 	return labelSets
 }
 
-func (p *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
+func (p *TSDBStore) TSDBInfos() []*infopb.TSDBInfo {
 	labels := p.LabelSet()
 	if len(labels) == 0 {
-		return []infopb.TSDBInfo{}
+		return []*infopb.TSDBInfo{}
 	}
 
 	mint, maxt := p.TimeRange()
-	return []infopb.TSDBInfo{
+	return []*infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
+			Labels: &labelpb.LabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
@@ -243,11 +219,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		series := set.At()
 
 		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(completeLabelset) {
+		if !shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: labelpb.PromLabelsToLabelpbLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -257,11 +233,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
+			bytesLeftForChunks -= lbl.SizeVT()
 		}
 		frameBytesLeft := bytesLeftForChunks
 
-		seriesChunks := []storepb.AggrChunk{}
+		seriesChunks := []*storepb.AggrChunk{}
 		chIter := series.Iterator(nil)
 		isNext := chIter.Next()
 		for isNext {
@@ -281,8 +257,8 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 					Hash: hashChunk(hasher, chunkBytes, enableChunkHashCalculation),
 				},
 			}
-			frameBytesLeft -= c.Size()
-			seriesChunks = append(seriesChunks, c)
+			frameBytesLeft -= c.SizeVT()
+			seriesChunks = append(seriesChunks, &c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
 			isNext = chIter.Next()
@@ -295,7 +271,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 			if isNext {
 				frameBytesLeft = bytesLeftForChunks
-				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+				seriesChunks = make([]*storepb.AggrChunk, 0, len(seriesChunks))
 			}
 		}
 		if err := chIter.Err(); err != nil {

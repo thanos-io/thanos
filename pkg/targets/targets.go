@@ -169,8 +169,8 @@ func dedupActiveTargets(activeTargets []*targetspb.ActiveTarget, replicaLabels m
 	return activeTargets[:i+1]
 }
 
-func removeReplicaLabels(labels []storepb.Label, replicaLabels map[string]struct{}) []storepb.Label {
-	newLabels := make([]storepb.Label, 0, len(labels))
+func removeReplicaLabels(labels []*storepb.Label, replicaLabels map[string]struct{}) []*storepb.Label {
+	newLabels := make([]*storepb.Label, 0, len(labels))
 	for _, l := range labels {
 		if _, ok := replicaLabels[l.Name]; !ok {
 			newLabels = append(newLabels, l)

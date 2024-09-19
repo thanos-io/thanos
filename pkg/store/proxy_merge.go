@@ -96,7 +96,7 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(atLbls)) == 0 {
+		if labels.Compare(labelpb.LabelpbLabelsToPromLabels(lbls), labelpb.LabelpbLabelsToPromLabels(atLbls)) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
@@ -126,7 +126,7 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 
 				if _, ok := chunkDedupMap[hash]; !ok {
 					chk := chk
-					chunkDedupMap[hash] = &chk
+					chunkDedupMap[hash] = chk
 					break
 				}
 			}
@@ -138,9 +138,9 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 		return series[0]
 	}
 
-	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
+	finalChunks := make([]*storepb.AggrChunk, 0, len(chunkDedupMap))
 	for _, chk := range chunkDedupMap {
-		finalChunks = append(finalChunks, *chk)
+		finalChunks = append(finalChunks, chk)
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
@@ -173,8 +173,8 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
-			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
+			iLbls := labelpb.LabelpbLabelsToPromLabels(a.GetSeries().Labels)
+			jLbls := labelpb.LabelpbLabelsToPromLabels(b.GetSeries().Labels)
 
 			return labels.Compare(iLbls, jLbls) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
@@ -380,9 +380,9 @@ func newLazyRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.Size()
+			bytesProcessed += resp.SizeVT()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -630,9 +630,9 @@ func newEagerRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.Size()
+			bytesProcessed += resp.SizeVT()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -685,7 +685,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		}
 
 		if len(labelsToRemove) > 0 {
-			ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+			ser.Labels = labelpb.PromLabelsToLabelpbLabels(rmLabels(labelpb.LabelpbLabelsToPromLabels(ser.Labels), labelsToRemove))
 		}
 	}
 
@@ -700,7 +700,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
+		return labels.Compare(labelpb.LabelpbLabelsToPromLabels(si.Labels), labelpb.LabelpbLabelsToPromLabels(sj.Labels)) < 0
 	})
 }
 
