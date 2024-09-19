@@ -8,7 +8,7 @@ author: Thibault Mangé (https://github.com/thibaultmg)
 
 ### Introduction
 
-In the [first part](./2023-11-20-life-of-a-sample-part-1) of this series, we followed the life of a sample from its inception in a Prometheus server to our Thanos Receivers. We will now explore how Thanos manages the data ingested by the Receivers and optimizes it in the object store for reduced cost and fast retrieval.
+In the first part of this series, we followed the life of a sample from its inception in a Prometheus server to our Thanos Receivers. We will now explore how Thanos manages the data ingested by the Receivers and optimizes it in the object store for reduced cost and fast retrieval.
 
 Let's delve into these topics and more in the second part of the series.
 
@@ -18,7 +18,7 @@ Let's delve into these topics and more in the second part of the series.
 
 A key feature of Thanos is its ability to leverage economical object storage solutions like AWS S3 for long-term data retention. This contrasts with Prometheus's typical approach of storing data locally for shorter periods.
 
-The Receive component is responsible for preparing data for object storage. Thanos adopts the TSDB (Time Series Database) data model, with some adaptations, for its object storage. This involves aggregating samples over time to construct TSDB Blocks. Please refer to the annexes of the [first part](./2023-11-20-life-of-a-sample-part-1) if this vocabulary is not clear to you.
+The Receive component is responsible for preparing data for object storage. Thanos adopts the TSDB (Time Series Database) data model, with some adaptations, for its object storage. This involves aggregating samples over time to construct TSDB Blocks. Please refer to the annexes of the first part if this vocabulary is not clear to you.
 
 These blocks are built by aggregating data over two-hour periods. Once a block is ready, it is sent to the object storage, which is configured using the `--objstore.config` flag. This configuration is uniform across all components requiring object storage access.
 
@@ -234,8 +234,8 @@ In this second part, we explored how Thanos manages data for efficient storage a
 
 Now that our samples are efficiently stored and prepared for queries, we can move on to the final part of this series, where we will explore how this distributed data is retrieved by query components like the Querier.
 
-See the full list of articles in this series (links will be updated as they are published):
+See the full list of articles in this series:
 
-* [Life of a sample in thanos, and how to configure it – Ingestion – Part I](./2023-11-20-life-of-a-sample-part-1)
-* [Life of a sample in thanos, and how to configure it – Data Management – Part II](./2023-11-20-life-of-a-sample-part-2)
+* Life of a sample in thanos, and how to configure it – Ingestion – Part I
+* Life of a sample in thanos, and how to configure it – Data Management – Part II
 * Life of a sample in thanos, and how to configure it – Querying – Part III
