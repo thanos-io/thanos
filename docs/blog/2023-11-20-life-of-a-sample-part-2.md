@@ -24,7 +24,7 @@ These blocks are built by aggregating data over two-hour periods. Once a block i
 
 On restarts, the Receive component ensures data preservation by immediately flushing existing data to object storage, even if it does not constitute a full two-hour block. These partial blocks are less efficient but are then optimized by the compactor, as we will see later.
 
-The Receive is also able to i[solate data](https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management) coming from different tenants. The tenant can be identified in the request by different means: a header (`--receive.tenant-header`), a label (`--receive.split-tenant-label-name`) or a certificate (`--receive.tenant-certificate-field`). Their data is ingested into different TSDBs instances (you might hear this referred to as the multiTSDB). The benefits are twofold:
+The Receive is also able to [isolate data](https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management) coming from different tenants. The tenant can be identified in the request by different means: a header (`--receive.tenant-header`), a label (`--receive.split-tenant-label-name`) or a certificate (`--receive.tenant-certificate-field`). Their data is ingested into different TSDBs instances (you might hear this referred to as the multiTSDB). The benefits are twofold:
 
 * It allows for parallelization of the block-building process, especially on the compactor side as we will see later.
 * It allows for smaller indexes. Indeed, labels tend to be similar for samples coming from the same source, leading to more effective compression.
@@ -225,7 +225,7 @@ After optimizing the store processing, you can distribute the query load using s
   regex: 0 # The shard number assigned to this Store Gateway
 ```
 
-While being very effective in distributing the load, one potential issue arises from the fact that series are grouped within a block based on their external labels, typically originating from the same data source. In such cases, if the load is predominantly from one source, sharding may be less effective than expected. This is especially true for blocks that have undergone horizontal compaction and cover extensive time ranges, potentially resulting in an uneven query load on a single Store Gateway instance.
+While being very effective in distributing the load, one potential issue arises from the fact that series are grouped within a block based on their external labels, typically originating from the same data source. In such cases, if the load is predominantly from one source, sharding may be less effective than expected. This is especially true for blocks that have undergone horizontal compaction and cover extensive time ranges, potentially resulting in an uneven query load on a single Store Gateway instance. If you are experiencing such issues, you can adopt more advanced sharding strategies using more complex relabel configurations, such as dedicating scaled-up Store Gateway instances for specific tenants or data sources.
 
 ### Conclusion
 
