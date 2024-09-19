@@ -156,9 +156,9 @@ Additionally, consider setting the `tsdb.too-far-in-future.time-window` flag to 
 
 In this first part, we have covered the initial steps of the sample lifecycle in Thanos, focusing on the ingestion process. We have explored the remote write protocol, the Receive component, and the critical configurations needed to ensure high availability and durability. Now, our sample is safely ingested and stored in the system. In the next part, we will continue following our sample's journey, delving into the data management and querying processes.
 
-See the full list of articles in this series (links will be updated as they are published):
+See the full list of articles in this series:
 
-* [Life of a sample in thanos, and how to configure it – Ingestion – Part I](2023-11-20-life-of-a-sample-part-1)
+* Life of a sample in thanos, and how to configure it – Ingestion – Part I
 * Life of a sample in thanos, and how to configure it – Data Management – Part II
 * Life of a sample in thanos, and how to configure it – Querying – Part III
 
