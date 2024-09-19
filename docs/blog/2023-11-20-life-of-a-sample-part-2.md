@@ -35,7 +35,7 @@ When a block is ready, it is uploaded to the object store with the block externa
 
 #### Exposing Local Data for Queries
 
-During the block-building phase, the data is not accessible to the Store Gateway as it has not been uploaded to the object store yet. To counter that, the Receive component also serves as a data store, making the local data available for query through the `Store API`. This is a common gRPC API used across all Thanos components for time series data access, set with the `--grpc-address` flag. The Receive will serve all data is has. The more data it serves, the more resources it will use for this duty in addition to ingesting client data. 
+During the block-building phase, the data is not accessible to the Store Gateway as it has not been uploaded to the object store yet. To counter that, the Receive component also serves as a data store, making the local data available for query through the `Store API`. This is a common gRPC API used across all Thanos components for time series data access, set with the `--grpc-address` flag. The Receive will serve all data is has. The more data it serves, the more resources it will use for this duty in addition to ingesting client data.
 
 <img src="img/life-of-a-sample/receive-store-api.png" alt="Data expansion" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
@@ -56,7 +56,7 @@ Key points to consider:
 The Receive component implements many strategies to ingest samples reliably. However, this can result in unoptimized data in object storage. This is due to:
 
 * Inefficient partial blocks sent to object storage on shutdowns.
-* Duplicated data when replication is set.  Several Receive instances will send the same data to object storage.
+* Duplicated data when replication is set. Several Receive instances will send the same data to object storage.
 * Incomplete blocks (invalid blocks) sent to object storage when the Receive fails in the middle of an upload.
 
 The following diagram illustrates the impact on data expansion in object storage when samples from a given target are ingested from a high-availability Prometheus setup (with 2 instances) and replication is set on the Receive (factor 3):
@@ -76,7 +76,7 @@ Compaction consists of merging blocks that have overlapping or adjacent time ran
 During this compaction, the Compactor will also deduplicate samples. This is called [**vertical compaction**](https://thanos.io/tip/components/compact.md/#vertical-compactions). The Compactor provides two deduplication modes:
 
 * `one-to-one`: This is the default mode. It will deduplicate samples that have the same timestamp and the same value but different replica label values. The replica label is configured by the `--deduplication.replica-label` flag. This flag can be repeated to account for several replication labels. Usually set to `replica`, make sure it is set up as external label on the Receivers with the flag `--label=replica=xxx`. The benefit of this mode is that it is straightforward and will remove replicated data from the Receive. However, it is not able to remove data replicated by high-availability Prometheus setups because these samples will rarely be scraped at exactly the same timestamps, as demonstrated by the diagram below.
-* `penalty`: This a more complex deduplication algorithm that is able to deduplicate data coming from high availability prometheus setups. It can be set with the `--deduplication.func` flag and requires also setting the `--deduplication.replica-label` flag that identifies the label that contains the replica label. Usually `prometheus_replica`. 
+* `penalty`: This a more complex deduplication algorithm that is able to deduplicate data coming from high availability prometheus setups. It can be set with the `--deduplication.func` flag and requires also setting the `--deduplication.replica-label` flag that identifies the label that contains the replica label. Usually `prometheus_replica`.
 
 Here is a diagram illustrating how Prometheus replicas generate samples with different timestamps that cannot be deduplicated with the `one-to-one` mode:
 
@@ -107,8 +107,8 @@ You can improve the performance of the Compactor by:
 
 * Increasing the number of concurrent compactions using the `--max-concurrent` flag. Bear in mind that you must scale storage, memory and CPU resources accordingly (linearly).
 * Sharding the data. In this mode, each Compactor will process a disjoint set of block streams. This is done by setting up the `--selector.relabel-config` flag on the external labels. For example:
-  
-```yaml 
+
+```yaml
 - action: hashmod
   source_labels:
     - tenant_id # An external label that identifies some block streams
@@ -120,7 +120,7 @@ You can improve the performance of the Compactor by:
   regex: 0 # The shard number assigned to this Compactor
 ```
 
-In this configuration, the `hashmod` action is used to distribute blocks across multiple Compactor instances based on the `tenant_id` label. The `modulus` should match the number of Compactor replicas you have. Each replica will then only process the blocks that match its shard number, as defined by the `regex` in the `keep` action. 
+In this configuration, the `hashmod` action is used to distribute blocks across multiple Compactor instances based on the `tenant_id` label. The `modulus` should match the number of Compactor replicas you have. Each replica will then only process the blocks that match its shard number, as defined by the `regex` in the `keep` action.
 
 #### Downsampling and Retention
 
@@ -128,7 +128,7 @@ The Compactor also optimizes data reads for long-range queries. If you are query
 
 To enable performant long range queries, the Compactor can downsample data using `--retention.resolution-*` flags. It supports two downsampling levels: 5 minutes and 1 hour. These are the resolutions of the downsampled series. They will typically come on top of the raw data, so that you can have both raw and downsampled data. This will enable you to spot abnormal patterns over long-range queries and then zoom into specific parts using the raw data. We will discuss how to configure the query to use the downsampled data in the next article.
 
-When the Compactor performs downsampling, it does more than simply reduce the number of data points by removing intermediate samples. While reducing the volume of data is a primary goal, especially to improve performance for long-range queries, the Compactor ensures that essential statistical properties of the original data are preserved. This is crucial for maintaining the accuracy and integrity of any aggregations or analyses performed on the downsampled data. In addition to the downsampled data, it stores the count, minimum, maximum, and sum of the downsampled window. Functions like sum(), min(), max(), and avg() can then be computed correctly over the downsampled data because the necessary statistical information is preserved. 
+When the Compactor performs downsampling, it does more than simply reduce the number of data points by removing intermediate samples. While reducing the volume of data is a primary goal, especially to improve performance for long-range queries, the Compactor ensures that essential statistical properties of the original data are preserved. This is crucial for maintaining the accuracy and integrity of any aggregations or analyses performed on the downsampled data. In addition to the downsampled data, it stores the count, minimum, maximum, and sum of the downsampled window. Functions like sum(), min(), max(), and avg() can then be computed correctly over the downsampled data because the necessary statistical information is preserved.
 
 This downsampled data is then stored in its own block, one per downsampling level for each corresponding raw block.
 
@@ -140,8 +140,7 @@ Key points to consider:
 
 #### The Compactor UI and the Block Streams
 
-The Compactor's functionality and the progress of its operations can be monitored through the 
-**Block Viewer UI**. This web-based interface is accessible if the Compactor is configured with the `--http-address` flag. Additional UI settings are controlled via `--web.*` and `--block-viewer.*` flags. The Compactor UI provides a visual representation of the compaction process, showing how blocks are grouped and compacted over time. Here is a glimpse of what the UI looks like:
+The Compactor's functionality and the progress of its operations can be monitored through the **Block Viewer UI**. This web-based interface is accessible if the Compactor is configured with the `--http-address` flag. Additional UI settings are controlled via `--web.*` and `--block-viewer.*` flags. The Compactor UI provides a visual representation of the compaction process, showing how blocks are grouped and compacted over time. Here is a glimpse of what the UI looks like:
 
 <img src="img/life-of-a-sample/compactor-ui.png" alt="Receive and Store data overlap" width="800"/>
 
@@ -155,7 +154,7 @@ As explained earlier with compaction levels, by default, the Compactor’s strat
 
 The Store Gateway acts as a facade for the object storage, making bucket data accessible via the Thanos Store API, a feature first introduced with the Receive component. The Store Gateway exposes the Store API with the `--grpc-address` flag.
 
-The Store Gateway requires access to the object storage bucket to retrieve data, which is configured with  the `--objstore.config` flag. You can use the `--max-time` flag to specify which blocks should be considered by the Store Gateway. For example, if your Receive instances are serving data up to 10 hours, you may configure `--max-time=-8h` so that it does not consider blocks more recent than 8 hours. This avoids returning the same data as the Receivers while ensuring some overlap between the two.
+The Store Gateway requires access to the object storage bucket to retrieve data, which is configured with the `--objstore.config` flag. You can use the `--max-time` flag to specify which blocks should be considered by the Store Gateway. For example, if your Receive instances are serving data up to 10 hours, you may configure `--max-time=-8h` so that it does not consider blocks more recent than 8 hours. This avoids returning the same data as the Receivers while ensuring some overlap between the two.
 
 To function optimally, the Store Gateway relies on caches. To understand their usefulness, let's first explore how the Store Gateway retrieves data from the blocks in the object storage.
 
@@ -195,7 +194,7 @@ The Store Gateway processes this request in several steps:
   * Retrieving the series section from the index for these series, which includes the chunk files, the time ranges and offset position in the file. Example:
     * Series 1: [Chunk 1: mint=t0, maxt=t1, fileRef=0001, offset=0], ...
   * Determining the relevant chunks based on their time range intersection with the query.
-* **Chunks retrieval**: The Store Gateway then fetches the appropriate chunks, either from the object storage directly or from a chunk cache. When retrieving from the object store, the Gateway leverages its API to read only the needed bytes (i.e., using S3 range requests), bypassing the need to download entire chunk files. 
+* **Chunks retrieval**: The Store Gateway then fetches the appropriate chunks, either from the object storage directly or from a chunk cache. When retrieving from the object store, the Gateway leverages its API to read only the needed bytes (i.e., using S3 range requests), bypassing the need to download entire chunk files.
 
 Then, the Gateway streams the selected chunks to the requesting Querier.
 
@@ -238,5 +237,5 @@ Now that our samples are efficiently stored and prepared for queries, we can mov
 See the full list of articles in this series (links will be updated as they are published):
 
 * [Life of a sample in thanos, and how to configure it – Ingestion – Part I](2023-11-20-life-of-a-sample-part-1.md)
-* [Life of a sample in thanos, and how to configure it – Data Management – Part II](2024-09-16-life-of-a-sample-part-2.md)
+* [Life of a sample in thanos, and how to configure it – Data Management – Part II](2023-11-20-life-of-a-sample-part-2)
 * Life of a sample in thanos, and how to configure it – Querying – Part III
