@@ -96,7 +96,7 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labels.Compare(labelpb.LabelpbLabelsToPromLabels(lbls), labelpb.LabelpbLabelsToPromLabels(atLbls)) == 0 {
+		if labelpb.CompareLabels(lbls, atLbls) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
