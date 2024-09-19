@@ -158,7 +158,7 @@ In this first part, we have covered the initial steps of the sample lifecycle in
 
 See the full list of articles in this series (links will be updated as they are published):
 
-* [Life of a sample in thanos, and how to configure it – Ingestion – Part I](.)
+* [Life of a sample in thanos, and how to configure it – Ingestion – Part I](2023-11-20-life-of-a-sample-part-1)
 * Life of a sample in thanos, and how to configure it – Data Management – Part II
 * Life of a sample in thanos, and how to configure it – Querying – Part III
 
