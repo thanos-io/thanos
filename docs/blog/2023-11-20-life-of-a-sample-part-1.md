@@ -32,7 +32,7 @@ Also, bear in mind that if adding Thanos for collecting your cluster’s metrics
 
 The following diagram illustrates the two scenarios:
 
-<img src="img/life-of-a-sample/close-integration.png" alt="Close integration vs external client" width="400"/>
+<img src="img/life-of-a-sample/close-integration.png" alt="Close integration vs external client" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 Comparing the two deployment modes, the Sidecar Mode is generally preferable due to its simpler configuration and fewer moving parts. However, if this isn't possible, opt for the **Receive Mode**. Bear in mind, this mode requires careful configuration to ensure high availability, scalability, and durability. It adds another layer of indirection and comes with the overhead of operating the additional component.
 
@@ -94,7 +94,7 @@ To achieve high availability, it is necessary to deploy multiple Receive replica
 
 To that effect, you guessed it, the Receive component uses a hashring! With the hashring, every Receive participant knows and agrees on who must ingest which sample. When clients send data, they connect to any Receive instance, which then routes the data to the correct instances based on the hashring. This is why the Receive component is also known as the **IngestorRouter**.
 
-<img src="img/life-of-a-sample/ingestor-router.png" alt="IngestorRouter" width="350"/>
+<img src="img/life-of-a-sample/ingestor-router.png" alt="IngestorRouter" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 Receive instances use a gossip protocol to maintain a consistent view of the hashring, requiring inter-instance communication via a configured HTTP server (`--http-address` flag).
 
@@ -126,7 +126,7 @@ A new deployment topology was [proposed](https://thanos.io/tip/proposals-accepte
 * **Scalability**: The routers and ingestors have different constraints and can be scaled independently. The router requires a performant network and CPU to route the samples, while the ingestor needs significant memory and storage. The router is stateless, while the ingestor is stateful. This separation of concerns also enables the setup of more complex topologies, such as chaining routers and having multiple hashrings. For example, you can have different hashrings attached to the routers, grouping distinct tenants with different service levels supported by isolated groups of ingestors.
 * **Reliability**: During hashring reconfigurations, especially with the hashmod algorithm, some nodes may become ready before others, leading to a partially operational hashring that results in many request failures because replicas cannot be forwarded. This triggers retries, increasing the load and causing instabilities. Relieving the ingestors from the routing responsibilities makes them more stable and less prone to overload. This is especially important as they are stateful components. Routers, on the other hand, are stateless and can be easily scaled up and down.
 
-<img src="img/life-of-a-sample/router-and-ingestor.png" alt="IngestorRouter" width="350"/>
+<img src="img/life-of-a-sample/router-and-ingestor.png" alt="IngestorRouter" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
 The Receive instance behaves in the following way:
 
