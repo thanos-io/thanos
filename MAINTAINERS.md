@@ -40,6 +40,7 @@ Full list of triage persons is displayed below:
 | Jimmie Han     | `@hanjm`         | [@hanjm](https://github.com/hanjm)                 | Tencent             |
 | Douglas Camata | `@douglascamata` | [@douglascamata](https://github.com/douglascamata) | Red Hat             |
 | Harry John     | `@harry671003`   | [@harry671003](https://github.com/harry671003)     | Amazon Web Services |
+| Pedro Tanaka   | `@pedro.tanaka`  | [@pedro-stanaka](https://github.com/pedro-stanaka) | Shopify             |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
