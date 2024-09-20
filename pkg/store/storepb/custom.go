@@ -214,12 +214,18 @@ Outer:
 	return true
 }
 
+type seriesWithLabels struct {
+	*Series
+
+	labels.Labels
+}
+
 // uniqueSeriesSet takes one series set and ensures each iteration contains single, full series.
 type uniqueSeriesSet struct {
 	SeriesSet
 	done bool
 
-	peek *Series
+	peek *seriesWithLabels
 
 	lset   labels.Labels
 	chunks []*AggrChunk
@@ -244,13 +250,17 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: labelpb.PromLabelsToLabelpbLabels(lset), Chunks: chks}
+			s.peek = &seriesWithLabels{Series: &Series{
+				Chunks: chks,
+			}, Labels: lset}
 			continue
 		}
 
-		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
-			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
-			s.peek = &Series{Labels: labelpb.PromLabelsToLabelpbLabels(lset), Chunks: chks}
+		if labels.Compare(lset, s.peek.Labels) != 0 {
+			s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
+			s.peek = &seriesWithLabels{Series: &Series{
+				Chunks: chks,
+			}, Labels: lset}
 			return true
 		}
 
@@ -263,7 +273,7 @@ func (s *uniqueSeriesSet) Next() bool {
 		return false
 	}
 
-	s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
+	s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
 	s.peek = nil
 	return true
 }
