@@ -94,6 +94,10 @@ func (c AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
 	return chunkenc.FromData(chunkenc.Encoding(x[0]), x[1:])
 }
 
+func (c *AggrChunk) Reset(stream []byte) {
+	(*c) = stream
+}
+
 // AggrType represents an aggregation type.
 type AggrType uint8
 

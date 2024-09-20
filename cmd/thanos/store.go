@@ -15,7 +15,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -45,6 +44,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -240,7 +240,8 @@ func registerStore(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(conf.reqLogConfig)
+		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(conf.reqLogConfig)
+
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -253,7 +254,7 @@ func registerStore(app *extkingpin.App) {
 			tracer,
 			httpLogOpts,
 			grpcLogOpts,
-			tagOpts,
+			logFilterMethods,
 			*conf,
 			getFlagsMap(cmd.Flags()),
 		)
@@ -268,7 +269,7 @@ func runStore(
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpclogging.Option,
-	tagOpts []tags.Option,
+	logFilterMethods []string,
 	conf storeConfig,
 	flagsMap map[string]string,
 ) error {
@@ -394,6 +395,13 @@ func runStore(
 
 	options := []store.BucketStoreOption{
 		store.WithLogger(logger),
+		store.WithRequestLoggerFunc(func(ctx context.Context, logger log.Logger) log.Logger {
+			reqID, ok := middleware.RequestIDFromContext(ctx)
+			if ok {
+				return log.With(logger, "request-id", reqID)
+			}
+			return logger
+		}),
 		store.WithRegistry(reg),
 		store.WithIndexCache(indexCache),
 		store.WithQueryGate(queriesGate),
@@ -514,7 +522,7 @@ func runStore(
 		}
 
 		storeServer := store.NewInstrumentedStoreServer(reg, bs)
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, conf.component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),

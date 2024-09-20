@@ -5,6 +5,7 @@ package queryrange
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	io "io"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/middleware"
@@ -333,6 +333,11 @@ func Test_evaluateAtModifier(t *testing.T) {
 			expected: "topk(5, rate(http_requests_total[1h] @ 1546300.800))",
 		},
 		{
+			// extended functions
+			in:       "topk(5, xrate(http_requests_total[1h] @ start()))",
+			expected: "topk(5, xrate(http_requests_total[1h] @ 1546300.800))",
+		},
+		{
 			in:       "topk(5, rate(http_requests_total[1h] @ 0))",
 			expected: "topk(5, rate(http_requests_total[1h] @ 0.000))",
 		},
@@ -390,7 +395,7 @@ func Test_evaluateAtModifier(t *testing.T) {
 				require.Equal(t, tt.expectedErrorCode, int(httpResp.Code))
 			} else {
 				require.NoError(t, err)
-				expectedExpr, err := parser.ParseExpr(tt.expected)
+				expectedExpr, err := extpromql.ParseExpr(tt.expected)
 				require.NoError(t, err)
 				require.Equal(t, expectedExpr.String(), out)
 			}

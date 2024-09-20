@@ -14,11 +14,11 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+	grpc_opentracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 
 	"github.com/thanos-io/thanos/pkg/losertree"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -373,7 +373,6 @@ func newLazyRespSet(
 			}
 
 			resp, err := cl.Recv()
-
 			if err != nil {
 				if err == io.EOF {
 					l.bufferedResponsesMtx.Lock()
@@ -386,10 +385,10 @@ func newLazyRespSet(
 				var rerr error
 				// If timer is already stopped
 				if t != nil && !t.Stop() {
-					if errors.Is(err, context.Canceled) {
-						// The per-Recv timeout has been reached.
-						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st)
+					if t.C != nil {
+						<-t.C // Drain the channel if it was already stopped.
 					}
+					rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st)
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", st)
 				}
@@ -466,16 +465,10 @@ func newAsyncRespSet(
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
-	storeAddr, isLocalStore := st.Addr()
-	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
-	if storeID == "" {
-		storeID = "Store Gateway"
-	}
-
+	storeID, storeAddr, isLocalStore := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
 	})
-
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
 		"store.id":       storeID,
 		"store.is_local": isLocalStore,
@@ -644,7 +637,6 @@ func newEagerRespSet(
 			}
 
 			resp, err := cl.Recv()
-
 			if err != nil {
 				if err == io.EOF {
 					return false
@@ -653,11 +645,10 @@ func newEagerRespSet(
 				var rerr error
 				// If timer is already stopped
 				if t != nil && !t.Stop() {
-					<-t.C // Drain the channel if it was already stopped.
-					if errors.Is(err, context.Canceled) {
-						// The per-Recv timeout has been reached.
-						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, storeName)
+					if t.C != nil {
+						<-t.C // Drain the channel if it was already stopped.
 					}
+					rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, storeName)
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", storeName)
 				}

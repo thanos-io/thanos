@@ -4,6 +4,7 @@
 package queryrange
 
 import (
+	"net/http"
 	"strconv"
 )
 
@@ -51,4 +52,22 @@ func QueryBytesFetchedHttpHeaderValue(response Response) []string {
 		}
 	}
 	return result
+}
+
+func getHeaderValue(hdr http.Header, key string) uint64 {
+	if val, ok := hdr[key]; ok {
+		if len(val) != 1 {
+			return 0
+		}
+		n, err := strconv.ParseUint(val[0], 10, 64)
+		if err != nil {
+			return 0
+		}
+		return n
+	}
+	return 0
+}
+
+func GetQueryBytesFetchedFromHeader(hdr http.Header) uint64 {
+	return getHeaderValue(hdr, QueryBytesFetchedHeaderName)
 }

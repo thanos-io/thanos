@@ -711,32 +711,26 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+func (h *Handler) gatherWriteStats(remoteWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
 	var stats tenantRequestStats = make(tenantRequestStats)
 
-	for _, write := range writes {
-		for er := range write {
-			if er.replica != 0 {
-				// TODO: this is a temporary solution to avoid duplicated counting
-				continue
+	for er := range remoteWrites {
+		for tenant, series := range remoteWrites[er] {
+			samples := 0
+
+			for _, ts := range series.timeSeries {
+				samples += len(ts.Samples)
 			}
-			for tenant, series := range write[er] {
-				samples := 0
 
-				for _, ts := range series.timeSeries {
-					samples += len(ts.Samples)
-				}
+			if st, ok := stats[tenant]; ok {
+				st.timeseries += len(series.timeSeries)
+				st.totalSamples += samples
 
-				if st, ok := stats[tenant]; ok {
-					st.timeseries += len(series.timeSeries)
-					st.totalSamples += samples
-
-					stats[tenant] = st
-				} else {
-					stats[tenant] = requestStats{
-						timeseries:   len(series.timeSeries),
-						totalSamples: samples,
-					}
+				stats[tenant] = st
+			} else {
+				stats[tenant] = requestStats{
+					timeseries:   len(series.timeSeries),
+					totalSamples: samples,
 				}
 			}
 		}
@@ -749,7 +743,6 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
-	var stats tenantRequestStats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -769,10 +762,11 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
-		return stats, err
+		return tenantRequestStats{}, err
 	}
 
-	stats = h.gatherWriteStats(localWrites, remoteWrites)
+	// Specific to Databricks setup, we only measure remote writes
+	stats := h.gatherWriteStats(remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
@@ -1353,7 +1347,7 @@ func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, as
 		dialOpts:                 dialOpts,
 		connections:              map[string]*peerWorker{},
 		m:                        sync.RWMutex{},
-		dialer:                   grpc.DialContext,
+		dialer:                   grpc.NewClient,
 		peerStates:               make(map[string]*retryState),
 		expBackoff:               backoff,
 		forwardDelay:             forwardDelay,
@@ -1407,7 +1401,7 @@ type peerGroup struct {
 	m sync.RWMutex
 
 	// dialer is used for testing.
-	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
+	dialer func(target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
 }
 
 func (p *peerGroup) closeAll() error {
@@ -1469,7 +1463,7 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	if ok {
 		return c, nil
 	}
-	conn, err := p.dialer(ctx, addr, p.dialOpts...)
+	conn, err := p.dialer(addr, p.dialOpts...)
 	if err != nil {
 		p.markPeerUnavailableUnlocked(addr)
 		dialError := errors.Wrap(err, "failed to dial peer")

@@ -226,7 +226,7 @@ func TestQueryHitCache(t *testing.T) {
 				"query": {"test_query"},
 			},
 			expectedResult:  true,
-			expectedMessage: "Retrieved query from cache, cached_query: test_query, cached_range_seconds: 100, query_range_seconds: 100",
+			expectedMessage: "Blocked a query from failed query cache, cached_query: test_query, cached_range_seconds: 100, query_range_seconds: 100",
 		},
 		{
 			name: "Cache miss",
@@ -258,7 +258,7 @@ func TestQueryHitCache(t *testing.T) {
 				"query": {" \n\ttes \tt \n   query \t\n  "},
 			},
 			expectedResult:  true,
-			expectedMessage: "Retrieved query from cache, cached_query:  tes t query , cached_range_seconds: 100, query_range_seconds: 100",
+			expectedMessage: "Blocked a query from failed query cache, cached_query:  tes t query , cached_range_seconds: 100, query_range_seconds: 100",
 		},
 
 		{

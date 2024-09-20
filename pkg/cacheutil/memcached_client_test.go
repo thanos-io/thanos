@@ -13,14 +13,14 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sony/gobreaker"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
-
-	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -726,7 +726,7 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 			config := defaultMemcachedClientConfig
 			config.Addresses = []string{"127.0.0.1:11211"}
 			config.SetAsyncCircuitBreaker.Enabled = true
-			config.SetAsyncCircuitBreaker.OpenDuration = 2 * time.Millisecond
+			config.SetAsyncCircuitBreaker.OpenDuration = 10 * time.Millisecond
 			config.SetAsyncCircuitBreaker.HalfOpenMaxRequests = 100
 			config.SetAsyncCircuitBreaker.MinRequests = testdata.minRequests
 			config.SetAsyncCircuitBreaker.ConsecutiveFailures = testdata.consecutiveFailures
@@ -750,7 +750,10 @@ func TestMemcachedClient_SetAsync_CircuitBreaker(t *testing.T) {
 				// Trigger the state transaction.
 				time.Sleep(time.Millisecond)
 				testutil.Ok(t, client.SetAsync(strconv.Itoa(testdata.setErrors), []byte("value"), time.Second))
-				testutil.Equals(t, gobreaker.StateOpen, cbimpl.State(), "state should be open")
+
+				require.Eventuallyf(t, func() bool {
+					return cbimpl.State() == gobreaker.StateOpen
+				}, 2*time.Second, time.Millisecond, "circuit breaker did not open")
 
 				time.Sleep(config.SetAsyncCircuitBreaker.OpenDuration)
 				for i := testdata.setErrors; i < testdata.setErrors+10; i++ {

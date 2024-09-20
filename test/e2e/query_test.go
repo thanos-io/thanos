@@ -24,6 +24,7 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
@@ -40,15 +41,13 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/remote"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/efficientgo/core/testutil"
-
+	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -1830,7 +1829,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 	ctx := context.Background()
 	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom, samples))
 
-	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	grpcConn, err := grpc.NewClient(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
 	queryClient := querypb.NewQueryClient(grpcConn)
 
@@ -1952,7 +1951,7 @@ func TestGrpcQueryRange(t *testing.T) {
 	ctx := context.Background()
 	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom, samples))
 
-	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	grpcConn, err := grpc.NewClient(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
 	queryClient := querypb.NewQueryClient(grpcConn)
 
@@ -2489,4 +2488,37 @@ func TestQuerySelectWithRelabel(t *testing.T) {
 			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{}, tc.result)
 		})
 	}
+}
+
+func TestDistributedEngineWithExtendedFunctions(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("dist-eng-xfunc"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
+
+	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).
+		WithProxyStrategy("lazy").
+		WithDisablePartialResponses(true).
+		WithEngine(v1.PromqlEngineThanos).
+		WithEnableXFunctions().
+		Init()
+	querier2 := e2ethanos.NewQuerierBuilder(e, "2", querier1.InternalEndpoint("grpc")).
+		WithProxyStrategy("lazy").
+		WithDisablePartialResponses(true).
+		WithEngine(v1.PromqlEngineThanos).
+		WithQueryMode("distributed").
+		WithEnableXFunctions().
+		Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+		return "sum(xrate(up[3m]))"
+	}, time.Now, promclient.QueryOptions{}, 1)
+	testutil.Equals(t, model.SampleValue(0), result[0].Value)
 }

@@ -34,7 +34,7 @@ type BytesLimiter interface {
 	// Reserve bytes out of the total amount of bytes enforced by the limiter.
 	// Returns an error if the limit has been exceeded. This function must be
 	// goroutine safe.
-	Reserve(num uint64) error
+	ReserveWithType(num uint64, dataType StoreDataType) error
 }
 
 // ChunksLimiterFactory is used to create a new ChunksLimiter. The factory is useful for
@@ -64,6 +64,10 @@ func NewLimiter(limit uint64, ctr prometheus.Counter) *Limiter {
 
 // Reserve implements ChunksLimiter.
 func (l *Limiter) Reserve(num uint64) error {
+	return l.ReserveWithType(num, 0)
+}
+
+func (l *Limiter) ReserveWithType(num uint64, _ StoreDataType) error {
 	if l == nil {
 		return nil
 	}

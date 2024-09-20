@@ -1842,7 +1842,7 @@ func TestStoreMatches(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			ok, reason := storeMatches(context.TODO(), c.s, true, c.mint, c.maxt, c.ms...)
+			ok, reason := storeMatches(context.TODO(), c.s, c.mint, c.maxt, c.ms...)
 			testutil.Equals(t, c.expectedMatch, ok)
 			testutil.Equals(t, c.expectedReason, reason)
 

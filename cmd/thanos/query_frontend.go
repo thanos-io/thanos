@@ -147,6 +147,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
+	cmd.Flag("query-frontend.log-queries-more-expensive-than", "Log queries that fetch more data than the specified bytes. "+
+		"Set to 0 to disable. Otherwise must be a positive value. Default is 1GB").Default("1073741824").Uint64Var(&cfg.CortexHandlerConfig.LogQueriesMoreExpensiveThan)
+
 	cmd.Flag("query-frontend.log-failed-queries", "Log failed queries due to any reason").Default("true").BoolVar(&cfg.CortexHandlerConfig.LogFailedQueries)
 
 	cmd.Flag("failed-query-cache-capacity", "Capacity of cache for failed queries. 0 means this feature is disabled.").
@@ -166,6 +169,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query-frontend.tenant-header flag value to be ignored.").Hidden().Default("").EnumVar(&cfg.TenantCertField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
 	cmd.Flag("query-frontend.vertical-shards", "Number of shards to use when distributing shardable PromQL queries. For more details, you can refer to the Vertical query sharding proposal: https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md").IntVar(&cfg.NumShards)
+
+	cmd.Flag("query-frontend.slow-query-logs-user-header", "Set the value of the field remote_user in the slow query logs to the value of the given HTTP header. Falls back to reading the user from the basic auth header.").PlaceHolder("<http-header-name>").Default("").StringVar(&cfg.CortexHandlerConfig.SlowQueryLogsUserHeader)
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
@@ -356,19 +361,19 @@ func runQueryFrontend(
 				if !cfg.webDisableCORS {
 					api.SetCORS(w)
 				}
-				tracing.HTTPMiddleware(
-					tracer,
-					name,
-					logger,
-					ins.NewHandler(
+				middleware.RequestID(
+					tracing.HTTPMiddleware(
+						tracer,
 						name,
-						gzhttp.GzipHandler(
-							middleware.RequestID(
+						logger,
+						ins.NewHandler(
+							name,
+							gzhttp.GzipHandler(
 								logMiddleware.HTTPMiddleware(name, f),
 							),
 						),
+						// Cortex frontend middlewares require orgID.
 					),
-					// Cortex frontend middlewares require orgID.
 				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
 			})
 			return hf

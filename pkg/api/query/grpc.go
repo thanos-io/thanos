@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -18,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type GRPCAPI struct {
@@ -92,13 +94,20 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		query.NoopSeriesStatsReporter,
 	)
 
-	qry, err := g.getQueryForEngine(ctx, request, queryable, maxResolution)
-	if err != nil {
+	var qry promql.Query
+	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
+		var err error
+		qry, err = g.getQueryForEngine(ctx, request, queryable, maxResolution)
+		return err
+	}); err != nil {
 		return err
 	}
 	defer qry.Close()
 
-	result := qry.Exec(ctx)
+	var result *promql.Result
+	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+		result = qry.Exec(ctx)
+	})
 	if result.Err != nil {
 		return status.Error(codes.Aborted, result.Err.Error())
 	}
@@ -129,7 +138,9 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 				return err
 			}
 		}
-		return nil
+	}
+	if err := server.Send(querypb.NewQueryStatsResponse(extractQueryStats(qry))); err != nil {
+		return err
 	}
 
 	return nil
@@ -203,13 +214,20 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		query.NoopSeriesStatsReporter,
 	)
 
-	qry, err := g.getRangeQueryForEngine(ctx, request, queryable)
-	if err != nil {
+	var qry promql.Query
+	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
+		var err error
+		qry, err = g.getRangeQueryForEngine(ctx, request, queryable)
+		return err
+	}); err != nil {
 		return err
 	}
 	defer qry.Close()
 
-	result := qry.Exec(ctx)
+	var result *promql.Result
+	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+		result = qry.Exec(ctx)
+	})
 	if result.Err != nil {
 		return status.Error(codes.Aborted, result.Err.Error())
 	}
@@ -245,15 +263,33 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				return err
 			}
 		}
-		return nil
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
 		}
-		return srv.Send(querypb.NewQueryRangeResponse(series))
+		if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+			return err
+		}
+	}
+	if err := srv.Send(querypb.NewQueryRangeStatsResponse(extractQueryStats(qry))); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func extractQueryStats(qry promql.Query) *querypb.QueryStats {
+	stats := &querypb.QueryStats{
+		SamplesTotal: 0,
+		PeakSamples:  0,
+	}
+	if explQry, ok := qry.(engine.ExplainableQuery); ok {
+		analyze := explQry.Analyze()
+		stats.SamplesTotal = analyze.TotalSamples()
+		stats.PeakSamples = analyze.PeakSamples()
+	}
+
+	return stats
 }
 
 func (g *GRPCAPI) getRangeQueryForEngine(

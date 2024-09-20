@@ -7,9 +7,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
@@ -18,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
 
@@ -38,22 +42,25 @@ func TestReaders(t *testing.T) {
 
 	// Create block index version 2.
 	id1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
-		{{Name: "a", Value: "1"}},
-		{{Name: "a", Value: "2"}},
-		{{Name: "a", Value: "3"}},
-		{{Name: "a", Value: "4"}},
-		{{Name: "a", Value: "5"}},
-		{{Name: "a", Value: "6"}},
-		{{Name: "a", Value: "7"}},
-		{{Name: "a", Value: "8"}},
-		{{Name: "a", Value: "9"}},
+		labels.FromStrings("a", "1"),
+		labels.FromStrings("a", "2"),
+		labels.FromStrings("a", "3"),
+		labels.FromStrings("a", "4"),
+		labels.FromStrings("a", "5"),
+		labels.FromStrings("a", "6"),
+		labels.FromStrings("a", "7"),
+		labels.FromStrings("a", "8"),
+		labels.FromStrings("a", "9"),
 		// Missing 10 on purpose.
-		{{Name: "a", Value: "11"}},
-		{{Name: "a", Value: "12"}},
-		{{Name: "a", Value: "13"}},
-		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "1"}},
-		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "2"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
+		labels.FromStrings("a", "11"),
+		labels.FromStrings("a", "12"),
+		labels.FromStrings("a", "13"),
+		labels.FromStrings("a", "1", "longer-string", "1"),
+		labels.FromStrings("a", "1", "longer-string", "2"),
+		labels.FromStrings("cluster", "a-eu-west-1"),
+		labels.FromStrings("cluster", "b-eu-west-1"),
+		labels.FromStrings("cluster", "c-eu-west-1"),
+	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
@@ -80,7 +87,7 @@ func TestReaders(t *testing.T) {
 	e2eutil.Copy(t, "./testdata/index_format_v1", filepath.Join(tmpDir, m.ULID.String()))
 
 	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String()), metadata.Thanos{
-		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Labels:     labels.FromStrings("ext1", "1").Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: 0},
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
@@ -108,15 +115,15 @@ func TestReaders(t *testing.T) {
 				if id == id1 {
 					testutil.Equals(t, 1, br.version)
 					testutil.Equals(t, 2, br.indexVersion)
-					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 70}, br.toc)
-					testutil.Equals(t, int64(710), br.indexLastPostingEnd)
+					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 114}, br.toc)
+					testutil.Equals(t, int64(905), br.indexLastPostingEnd)
 					testutil.Equals(t, 8, br.symbols.Size())
 					testutil.Equals(t, 0, len(br.postingsV1))
-					testutil.Equals(t, 2, len(br.nameSymbols))
+					testutil.Equals(t, 3, len(br.nameSymbols))
 					testutil.Equals(t, map[string]*postingValueOffsets{
 						"": {
 							offsets:       []postingOffset{{value: "", tableOff: 4}},
-							lastValOffset: 440,
+							lastValOffset: 576,
 						},
 						"a": {
 							offsets: []postingOffset{
@@ -126,14 +133,21 @@ func TestReaders(t *testing.T) {
 								{value: "7", tableOff: 75},
 								{value: "9", tableOff: 89},
 							},
-							lastValOffset: 640,
+							lastValOffset: 776,
+						},
+						"cluster": {
+							offsets: []postingOffset{
+								{value: "a-eu-west-1", tableOff: 96},
+								{value: "c-eu-west-1", tableOff: 142},
+							},
+							lastValOffset: 824,
 						},
 						"longer-string": {
 							offsets: []postingOffset{
-								{value: "1", tableOff: 96},
-								{value: "2", tableOff: 115},
+								{value: "1", tableOff: 165},
+								{value: "2", tableOff: 184},
 							},
-							lastValOffset: 706,
+							lastValOffset: 901,
 						},
 					}, br.postings)
 
@@ -172,6 +186,17 @@ func TestReaders(t *testing.T) {
 					testutil.Assert(t, rngs[0].End > rngs[0].Start)
 					testutil.Assert(t, rngs[2].End > rngs[2].Start)
 					testutil.Equals(t, NotFoundRange, rngs[1])
+
+					// 3 values exist and 3 values don't exist.
+					rngs, err = br.PostingsOffsets("cluster", "a-eu-west-1", "a-us-west-2", "b-eu-west-1", "b-us-east-1", "c-eu-west-1", "c-us-east-2")
+					testutil.Ok(t, err)
+					for i := 0; i < len(rngs); i++ {
+						if i%2 == 0 {
+							testutil.Assert(t, rngs[i].End > rngs[i].Start)
+						} else {
+							testutil.Equals(t, NotFoundRange, rngs[i])
+						}
+					}
 
 					// Regression tests for https://github.com/thanos-io/thanos/issues/2213.
 					// Most of not existing value was working despite bug, except in certain unlucky cases
@@ -356,7 +381,7 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 	e2eutil.Copy(t, "./testdata/index_format_v2", filepath.Join(tmpDir, m.ULID.String()))
 
 	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String()), metadata.Thanos{
-		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Labels:     labels.FromStrings("ext1", "1").Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: 0},
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
@@ -428,11 +453,11 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	// Generate series labels.
 	seriesLabels := make([]labels.Labels, 0, numSeries)
 	for i := 0; i < numSeries; i++ {
-		seriesLabels = append(seriesLabels, labels.Labels{{Name: "a", Value: strconv.Itoa(i)}})
+		seriesLabels = append(seriesLabels, labels.FromStrings("a", strconv.Itoa(i)))
 	}
 
 	// Create a block.
-	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
+	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
 	testutil.Ok(b, err)
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
@@ -520,4 +545,83 @@ func readSymbols(bs index.ByteSlice, version, off int) ([]string, map[uint32]str
 		cnt--
 	}
 	return symbolSlice, symbols, errors.Wrap(d.Err(), "read symbols")
+}
+
+// The idea of this test case is to make sure that reader.PostingsOffsets and
+// reader.PostingsOffset get the same index ranges for required label values.
+func TestReaderPostingsOffsets(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	possibleClusters := []string{"us-west-2", "us-east-1", "us-east-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-south-1"}
+	possiblePrefixes := []string{"a", "b", "c", "d", "1", "2", "3", "4"}
+	totalValues := []string{}
+	for i := 0; i < len(possibleClusters); i++ {
+		for j := 0; j < len(possiblePrefixes); j++ {
+			totalValues = append(totalValues, fmt.Sprintf("%s-%s", possiblePrefixes[j], possibleClusters[i]))
+		}
+	}
+
+	rnd := rand.New(rand.NewSource(time.Now().Unix()))
+	// Pick 5 label values to be used in the block.
+	clusterLbls := make([]labels.Labels, 0)
+	valueSet := map[int]struct{}{}
+	for i := 0; i < 5; {
+		idx := rnd.Intn(len(totalValues))
+		if _, ok := valueSet[idx]; ok {
+			continue
+		}
+		valueSet[idx] = struct{}{}
+		clusterLbls = append(clusterLbls, labels.FromStrings("cluster", totalValues[idx]))
+		i++
+	}
+
+	// Add additional labels.
+	lbls := append([]labels.Labels{
+		labels.FromStrings("job", "1"),
+		labels.FromStrings("job", "2"),
+		labels.FromStrings("job", "3"),
+		labels.FromStrings("job", "4"),
+		labels.FromStrings("job", "5"),
+		labels.FromStrings("job", "6"),
+		labels.FromStrings("job", "7"),
+		labels.FromStrings("job", "8"),
+		labels.FromStrings("job", "9")}, clusterLbls...)
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id.String()), metadata.NoneFunc))
+
+	fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
+	_, err = WriteBinary(ctx, bkt, id, fn)
+	testutil.Ok(t, err)
+
+	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
+	testutil.Ok(t, err)
+
+	defer func() { testutil.Ok(t, br.Close()) }()
+
+	for i := 0; i < 100; i++ {
+		vals := make([]string, 0, 15)
+		for j := 0; j < 15; j++ {
+			vals = append(vals, totalValues[rnd.Intn(len(totalValues))])
+		}
+		sort.Strings(vals)
+		rngs, err := br.PostingsOffsets("cluster", vals...)
+		require.NoError(t, err)
+		rngs2 := make([]index.Range, 0)
+		for _, val := range vals {
+			rng2, err2 := br.PostingsOffset("cluster", val)
+			if err2 == NotFoundRangeErr {
+				rngs2 = append(rngs2, NotFoundRange)
+			} else {
+				rngs2 = append(rngs2, rng2)
+			}
+		}
+		require.Equal(t, rngs2, rngs, "Got mismatched results from batched and non-batched API.\nInput cluster labels: %v.\nValues queried: %v", clusterLbls, vals)
+	}
 }

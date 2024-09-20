@@ -69,13 +69,13 @@ func MatchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
 		labelNameValues = make(map[string]map[string]struct{})
 	)
 	for _, labelSet := range labelSets {
-		for _, lbl := range labelSet {
-			if _, ok := labelNameValues[lbl.Name]; !ok {
-				labelNameValues[lbl.Name] = make(map[string]struct{})
+		labelSet.Range(func(l labels.Label) {
+			if _, ok := labelNameValues[l.Name]; !ok {
+				labelNameValues[l.Name] = make(map[string]struct{})
 			}
-			labelNameCounts[lbl.Name]++
-			labelNameValues[lbl.Name][lbl.Value] = struct{}{}
-		}
+			labelNameCounts[l.Name]++
+			labelNameValues[l.Name][l.Value] = struct{}{}
+		})
 	}
 
 	// If a label name is missing from a label set, force an empty value matcher for

@@ -5,6 +5,7 @@ package queryrange
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
 	"time"
 
@@ -97,7 +98,7 @@ func splitQuery(r Request, interval time.Duration) ([]Request, error) {
 // For example given the start of the query is 10.00, `http_requests_total[1h] @ start()` query will be replaced with `http_requests_total[1h] @ 10.00`
 // If the modifier is already a constant, it will be returned as is.
 func EvaluateAtModifierFunction(query string, start, end int64) (string, error) {
-	expr, err := parser.ParseExpr(query)
+	expr, err := extpromql.ParseExpr(query)
 	if err != nil {
 		return "", httpgrpc.Errorf(http.StatusBadRequest, `{"status": "error", "error": "%s"}`, err)
 	}

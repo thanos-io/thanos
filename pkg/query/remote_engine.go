@@ -22,10 +22,13 @@ import (
 
 	"github.com/thanos-io/promql-engine/api"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	grpc_tracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 )
 
 // Opts are the options for a PromQL query.
@@ -187,10 +190,11 @@ func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan
 		client: r.client,
 		opts:   r.opts,
 
-		plan:     plan,
-		start:    start,
-		end:      end,
-		interval: interval,
+		plan:       plan,
+		start:      start,
+		end:        end,
+		interval:   interval,
+		remoteAddr: r.client.GetAddress(),
 	}, nil
 }
 
@@ -200,10 +204,11 @@ func (r *remoteEngine) NewInstantQuery(_ context.Context, _ promql.QueryOpts, pl
 		client: r.client,
 		opts:   r.opts,
 
-		plan:     plan,
-		start:    ts,
-		end:      ts,
-		interval: 0,
+		plan:       plan,
+		start:      ts,
+		end:        ts,
+		interval:   0,
+		remoteAddr: r.client.GetAddress(),
 	}, nil
 }
 
@@ -212,20 +217,50 @@ type remoteQuery struct {
 	client Client
 	opts   Opts
 
-	plan     api.RemoteQuery
-	start    time.Time
-	end      time.Time
-	interval time.Duration
+	plan       api.RemoteQuery
+	start      time.Time
+	end        time.Time
+	interval   time.Duration
+	remoteAddr string
+
+	samplesStats *stats.QuerySamples
 
 	cancel context.CancelFunc
 }
 
 func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	start := time.Now()
+	defer func() {
+		keys := []any{
+			"msg", "Executed remote query",
+			"query", r.plan.String(),
+			"time", time.Since(start),
+		}
+		if r.samplesStats != nil {
+			keys = append(keys, "remote_peak_samples", r.samplesStats.PeakSamples)
+			keys = append(keys, "remote_total_samples", r.samplesStats.TotalSamples)
+		}
+		level.Debug(r.logger).Log(keys...)
+	}()
 
 	qctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	defer cancel()
+
+	var (
+		queryRange   = r.end.Sub(r.start)
+		requestID, _ = middleware.RequestIDFromContext(qctx)
+	)
+	qctx = grpc_tracing.ClientAddContextTags(qctx, opentracing.Tags{
+		"query.expr":             r.plan.String(),
+		"query.remote_address":   r.remoteAddr,
+		"query.start":            r.start.UTC().String(),
+		"query.end":              r.end.UTC().String(),
+		"query.interval_seconds": r.interval.Seconds(),
+		"query.range_seconds":    queryRange.Seconds(),
+		"query.range_human":      queryRange,
+		"request_id":             requestID,
+	})
 
 	var maxResolution int64
 	if r.opts.AutoDownsample {
@@ -235,6 +270,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	if err != nil {
 		level.Warn(r.logger).Log("msg", "Failed to encode query plan", "err", err)
 	}
+
+	r.samplesStats = stats.NewQuerySamples(false)
 
 	// Instant query.
 	if r.start == r.end {
@@ -259,6 +296,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			result   = make(promql.Vector, 0)
 			warnings annotations.Annotations
 			builder  = labels.NewScratchBuilder(8)
+			qryStats querypb.QueryStats
 		)
 		for {
 			msg, err := qry.Recv()
@@ -273,8 +311,15 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				warnings.Add(errors.New(warn))
 				continue
 			}
+			if s := msg.GetStats(); s != nil {
+				qryStats = *s
+				continue
+			}
 
 			ts := msg.GetTimeseries()
+			if ts == nil {
+				continue
+			}
 			builder.Reset()
 			for _, l := range ts.Labels {
 				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
@@ -288,6 +333,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
 		}
+		r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
+		r.samplesStats.TotalSamples = qryStats.SamplesTotal
 
 		return &promql.Result{
 			Value:    result,
@@ -318,6 +365,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		result   = make(promql.Matrix, 0)
 		warnings annotations.Annotations
 		builder  = labels.NewScratchBuilder(8)
+		qryStats querypb.QueryStats
 	)
 	for {
 		msg, err := qry.Recv()
@@ -330,6 +378,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 
 		if warn := msg.GetWarnings(); warn != "" {
 			warnings.Add(errors.New(warn))
+			continue
+		}
+		if s := msg.GetStats(); s != nil {
+			qryStats = *s
 			continue
 		}
 
@@ -360,7 +412,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 		result = append(result, series)
 	}
-	level.Debug(r.logger).Log("msg", "Executed query", "query", r.plan.String(), "time", time.Since(start))
+	r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
+	r.samplesStats.TotalSamples = qryStats.SamplesTotal
 
 	return &promql.Result{Value: result, Warnings: warnings}
 }
@@ -369,7 +422,11 @@ func (r *remoteQuery) Close() { r.Cancel() }
 
 func (r *remoteQuery) Statement() parser.Statement { return nil }
 
-func (r *remoteQuery) Stats() *stats.Statistics { return nil }
+func (r *remoteQuery) Stats() *stats.Statistics {
+	return &stats.Statistics{
+		Samples: r.samplesStats,
+	}
+}
 
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {

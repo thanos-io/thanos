@@ -19,6 +19,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/extpromql"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -58,7 +60,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
 	defer span.Finish()
 
-	expr, err := parser.ParseExpr(req.Query)
+	expr, err := extpromql.ParseExpr(req.Query)
 	if err != nil {
 		return err
 	}
@@ -85,28 +87,21 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	for _, st := range s.exemplars() {
 		queryParts = queryParts[:0]
 
-	Matchers:
-		for _, matchers := range selectors {
-			matcherSet := make(map[string]struct{})
-			for _, m := range matchers {
-				for _, ls := range st.LabelSets {
-					if lv := ls.Get(m.Name); lv != "" {
-						if !m.Matches(lv) {
-							continue Matchers
-						} else {
-							// If the current matcher matches one external label,
-							// we don't add it to the current metric selector
-							// as Prometheus' Exemplars API cannot handle external labels.
-							continue
-						}
-					}
-					matcherSet[m.String()] = struct{}{}
-				}
+		for _, matcherSet := range selectors {
+			extLbls := st.LabelSets
+			if !store.LabelSetsMatch(matcherSet, extLbls...) {
+				continue
 			}
 
 			labelMatchers = labelMatchers[:0]
-			for m := range matcherSet {
-				labelMatchers = append(labelMatchers, m)
+			for _, m := range matcherSet {
+				if containsLabelName(m.Name, extLbls) {
+					// If the current matcher matches one external label,
+					// we don't add it to the current metric selector
+					// as Prometheus' Exemplars API cannot handle external labels.
+					continue
+				}
+				labelMatchers = append(labelMatchers, m.String())
 			}
 
 			queryParts = append(queryParts, "{"+strings.Join(labelMatchers, ", ")+"}")
@@ -162,6 +157,15 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	return nil
+}
+
+func containsLabelName(name string, sets []labels.Labels) bool {
+	for _, ls := range sets {
+		if ls.Get(name) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (stream *exemplarsStream) receive(ctx context.Context) error {

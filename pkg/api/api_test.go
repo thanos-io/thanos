@@ -17,7 +17,6 @@
 package api
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,11 +27,47 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
+	promApiV1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/efficientgo/core/testutil"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 )
+
+func TestMarshallMatrixNull(t *testing.T) {
+	var m promql.Matrix
+	result := response{
+		Status: StatusSuccess,
+		Data: promApiV1.QueryData{
+			ResultType: parser.ValueTypeMatrix,
+			Result:     m, // null
+		},
+	}
+
+	b1, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Error marshaling response body: %s", err)
+	}
+
+	exp := response{
+		Status: StatusSuccess,
+		Data: promApiV1.QueryData{
+			ResultType: parser.ValueTypeMatrix,
+			Result:     promql.Matrix{},
+		},
+	}
+
+	b2, err := json.Marshal(exp)
+	if err != nil {
+		t.Fatalf("Error marshaling response body: %s", err)
+	}
+
+	if !reflect.DeepEqual(b1, b2) {
+		t.Fatalf("Expected response \n%v\n but got \n%v\n", string(b1), string(b2))
+	}
+}
 
 func TestRespondSuccess(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

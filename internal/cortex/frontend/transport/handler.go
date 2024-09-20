@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/internal/cortex/frontend/transport/utils"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -43,11 +44,13 @@ var (
 
 // HandlerConfig Config for a Handler.
 type HandlerConfig struct {
-	LogQueriesLongerThan     time.Duration `yaml:"log_queries_longer_than"`
-	MaxBodySize              int64         `yaml:"max_body_size"`
-	QueryStatsEnabled        bool          `yaml:"query_stats_enabled"`
-	LogFailedQueries         bool          `yaml:"log_failed_queries"`
-	FailedQueryCacheCapacity int           `yaml:"failed_query_cache_capacity"`
+	LogQueriesLongerThan        time.Duration `yaml:"log_queries_longer_than"`
+	MaxBodySize                 int64         `yaml:"max_body_size"`
+	QueryStatsEnabled           bool          `yaml:"query_stats_enabled"`
+	LogFailedQueries            bool          `yaml:"log_failed_queries"`
+	FailedQueryCacheCapacity    int           `yaml:"failed_query_cache_capacity"`
+	SlowQueryLogsUserHeader     string        `yaml:"slow_query_logs_user_header"`
+	LogQueriesMoreExpensiveThan uint64        `yaml:"log_queries_more_expensive_than"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -59,12 +62,13 @@ type Handler struct {
 	failedQueryCache *utils.FailedQueryCache
 
 	// Metrics.
-	querySeconds     *prometheus.CounterVec
-	querySeries      *prometheus.CounterVec
-	queryBytes       *prometheus.CounterVec
-	activeUsers      *util.ActiveUsersCleanupService
-	slowQueryCount   prometheus.Counter
-	failedQueryCount prometheus.Counter
+	querySeconds        *prometheus.CounterVec
+	querySeries         *prometheus.CounterVec
+	queryBytes          *prometheus.CounterVec
+	activeUsers         *util.ActiveUsersCleanupService
+	slowQueryCount      prometheus.Counter
+	failedQueryCount    prometheus.Counter
+	expensiveQueryCount prometheus.Counter
 }
 
 // NewHandler creates a new frontend handler.
@@ -117,6 +121,10 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 	h.failedQueryCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "cortex_failed_query_total",
 		Help: "Total number of failed queries detected.",
+	})
+	h.expensiveQueryCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "cortex_expensive_query_total",
+		Help: "Total number of expensive queries detected.",
 	})
 	return h
 }
@@ -203,12 +211,17 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Check whether we should parse the query string.
 	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
-	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
+	queryBytesFetched := queryrange.GetQueryBytesFetchedFromHeader(resp.Header)
+	shouldReportExpensiveQuery := f.cfg.LogQueriesMoreExpensiveThan != 0 && queryBytesFetched > f.cfg.LogQueriesMoreExpensiveThan
+	if shouldReportSlowQuery || shouldReportExpensiveQuery || f.cfg.QueryStatsEnabled {
 		queryString = f.parseRequestQueryString(r, buf)
 	}
 
 	if shouldReportSlowQuery {
-		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
+		f.reportSlowQuery(r, hs, queryString, queryBytesFetched, queryResponseTime)
+	}
+	if shouldReportExpensiveQuery {
+		f.reportExpensiveQuery(r, queryString, queryBytesFetched, queryResponseTime)
 	}
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
@@ -244,8 +257,37 @@ func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err
 	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
+func (f *Handler) reportExpensiveQuery(r *http.Request, queryString url.Values, queryBytesFetched uint64, queryResponseTime time.Duration) {
+	f.expensiveQueryCount.Inc()
+	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
+	grafanaDashboardUID := "-"
+	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
+		grafanaDashboardUID = dashboardUID
+	}
+	grafanaPanelID := "-"
+	if panelID := r.Header.Get("X-Panel-Id"); panelID != "" {
+		grafanaPanelID = panelID
+	}
+	remoteUser, _, _ := r.BasicAuth()
+
+	logMessage := append([]interface{}{
+		"msg", "expensive query",
+		"method", r.Method,
+		"host", r.Host,
+		"path", r.URL.Path,
+		"remote_user", remoteUser,
+		"remote_addr", r.RemoteAddr,
+		"query_megabytes_fetched", queryBytesFetched / (1024 * 1024),
+		"grafana_dashboard_uid", grafanaDashboardUID,
+		"grafana_panel_id", grafanaPanelID,
+		"query_response_time", queryResponseTime.String(),
+	}, formatQueryString(queryString)...)
+
+	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+}
+
 // reportSlowQuery reports slow queries.
-func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
+func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryBytesFetched uint64, queryResponseTime time.Duration) {
 	f.slowQueryCount.Inc()
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
@@ -261,7 +303,13 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		thanosTraceID = traceID
 	}
 
-	remoteUser, _, _ := r.BasicAuth()
+	var remoteUser string
+	// Prefer reading remote user from header. Fall back to the value of basic authentication.
+	if f.cfg.SlowQueryLogsUserHeader != "" {
+		remoteUser = r.Header.Get(f.cfg.SlowQueryLogsUserHeader)
+	} else {
+		remoteUser, _, _ = r.BasicAuth()
+	}
 
 	logMessage := append([]interface{}{
 		"msg", "slow query detected",
@@ -271,6 +319,7 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		"remote_user", remoteUser,
 		"remote_addr", r.RemoteAddr,
 		"time_taken", queryResponseTime.String(),
+		"query_megabytes_fetched", queryBytesFetched / (1024 * 1024),
 		"grafana_dashboard_uid", grafanaDashboardUID,
 		"grafana_panel_id", grafanaPanelID,
 		"trace_id", thanosTraceID,
