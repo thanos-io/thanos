@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -180,7 +181,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		sort.Ints(chosen)
 		for _, ci := range chosen {
-			resp.Chunks = append(resp.Chunks, series.Chunks[ci])
+			resp.Chunks = append(resp.Chunks, proto.Clone(series.Chunks[ci]).(*storepb.AggrChunk))
 		}
 
 		if err := srv.Send(storepb.NewSeriesResponse(resp)); err != nil {
