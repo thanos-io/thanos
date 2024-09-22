@@ -196,7 +196,7 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2eobs.Ob
 	})
 
 	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:   "quay.io/prometheuscommunity/avalanche:main",
+		Image:   "quay.io/prometheuscommunity/avalanche:v0.5.0",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	})), "http")
 }
