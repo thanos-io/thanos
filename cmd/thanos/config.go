@@ -21,7 +21,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/shipper"
-	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 type grpcConfig struct {
@@ -81,14 +80,12 @@ type prometheusConfig struct {
 	getConfigInterval time.Duration
 	getConfigTimeout  time.Duration
 	httpClient        *extflag.PathOrContent
-	tenantHeader      string
 }
 
 func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusConfig {
 	cmd.Flag("prometheus.url",
 		"URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URLVar(&pc.url)
-	cmd.Flag("prometheus.tenant-header", "HTTP header to determine tenant.").Default(tenancy.DefaultTenantHeader).StringVar(&pc.tenantHeader)
 	cmd.Flag("prometheus.ready_timeout",
 		"Maximum time to wait for the Prometheus instance to start up").
 		Default("10m").DurationVar(&pc.readyTimeout)

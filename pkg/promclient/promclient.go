@@ -40,7 +40,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
-	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -108,7 +107,6 @@ func NewWithTracingClient(logger log.Logger, httpClient *http.Client, userAgent 
 // the raw query is encoded in the body and the appropriate Content-Type is set.
 func (c *Client) req2xx(ctx context.Context, u *url.URL, method string, headers http.Header) (_ []byte, _ int, err error) {
 	var b io.Reader
-
 	if method == http.MethodPost {
 		rq := u.RawQuery
 		b = strings.NewReader(rq)
@@ -693,14 +691,11 @@ func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
 
-func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data interface{}, header string) error {
+func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data interface{}) error {
 	span, ctx := tracing.StartSpan(ctx, spanName)
 	defer span.Finish()
 
-	var customheader = http.Header{}
-	customheader.Set(header, tenancy.GetTenantFromProvidedHeader(ctx, header))
-
-	body, code, err := c.req2xx(ctx, u, http.MethodGet, customheader)
+	body, code, err := c.req2xx(ctx, u, http.MethodGet, nil)
 	if err != nil {
 		if code, exists := statusToCode[code]; exists && code != 0 {
 			return status.Error(code, err.Error())
@@ -739,7 +734,7 @@ func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string
 
 // SeriesInGRPC returns the labels from Prometheus series API. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*labels.Matcher, startTime, endTime int64, limit int, header string) ([]map[string]string, error) {
+func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*labels.Matcher, startTime, endTime int64, limit int) ([]map[string]string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/series")
 	q := u.Query()
@@ -747,21 +742,19 @@ func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*la
 	q.Add("match[]", storepb.PromMatchersToString(matchers...))
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	if limit > 0 {
-		q.Add("limit", strconv.Itoa(limit))
-	}
+	q.Add("limit", strconv.Itoa(limit))
 	u.RawQuery = q.Encode()
 
 	var m struct {
 		Data []map[string]string `json:"data"`
 	}
 
-	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_series HTTP[client]", &u, &m, header)
+	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_series HTTP[client]", &u, &m)
 }
 
 // LabelNamesInGRPC returns all known label names constrained by the given matchers. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers []*labels.Matcher, startTime, endTime int64, limit int, header string) ([]string, error) {
+func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers []*labels.Matcher, startTime, endTime int64, limit int) ([]string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/labels")
 	q := u.Query()
@@ -771,20 +764,18 @@ func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers [
 	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	if limit >= 0 {
-		q.Add("limit", strconv.Itoa(limit))
-	}
+	q.Add("limit", strconv.Itoa(limit))
 	u.RawQuery = q.Encode()
 
 	var m struct {
 		Data []string `json:"data"`
 	}
-	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_label_names HTTP[client]", &u, &m, header)
+	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_label_names HTTP[client]", &u, &m)
 }
 
 // LabelValuesInGRPC returns all known label values for a given label name. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label string, matchers []*labels.Matcher, startTime, endTime int64, limit int, header string) ([]string, error) {
+func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label string, matchers []*labels.Matcher, startTime, endTime int64, limit int) ([]string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/label/", label, "/values")
 	q := u.Query()
@@ -794,16 +785,13 @@ func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label str
 	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	if limit >= 0 {
-		q.Add("limit", strconv.Itoa(limit))
-	}
-
+	q.Add("limit", strconv.Itoa(limit))
 	u.RawQuery = q.Encode()
 
 	var m struct {
 		Data []string `json:"data"`
 	}
-	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_label_values HTTP[client]", &u, &m, header)
+	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_label_values HTTP[client]", &u, &m)
 }
 
 // RulesInGRPC returns the rules from Prometheus rules API. It uses gRPC errors.
@@ -822,7 +810,7 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 		Data *rulespb.RuleGroups `json:"data"`
 	}
 
-	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_rules HTTP[client]", &u, &m, ""); err != nil {
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_rules HTTP[client]", &u, &m); err != nil {
 		return nil, err
 	}
 
@@ -845,7 +833,7 @@ func (c *Client) AlertsInGRPC(ctx context.Context, base *url.URL) ([]*rulespb.Al
 		} `json:"data"`
 	}
 
-	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_alerts HTTP[client]", &u, &m, ""); err != nil {
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_alerts HTTP[client]", &u, &m); err != nil {
 		return nil, err
 	}
 
@@ -866,7 +854,7 @@ func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric
 		q.Add("metric", metric)
 	}
 	// We only set limit when it is >= 0.
-	if limit > 0 {
+	if limit >= 0 {
 		q.Add("limit", strconv.Itoa(limit))
 	}
 
@@ -875,7 +863,7 @@ func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric
 	var v struct {
 		Data map[string][]*metadatapb.Meta `json:"data"`
 	}
-	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_metric_metadata HTTP[client]", &u, &v, "")
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_metric_metadata HTTP[client]", &u, &v)
 }
 
 // ExemplarsInGRPC returns the exemplars from Prometheus exemplars API. It uses gRPC errors.
@@ -894,7 +882,7 @@ func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, query strin
 		Data []*exemplarspb.ExemplarData `json:"data"`
 	}
 
-	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_exemplars HTTP[client]", &u, &m, ""); err != nil {
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_exemplars HTTP[client]", &u, &m); err != nil {
 		return nil, err
 	}
 
@@ -914,5 +902,5 @@ func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets 
 	var v struct {
 		Data *targetspb.TargetDiscovery `json:"data"`
 	}
-	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v, "")
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
 }

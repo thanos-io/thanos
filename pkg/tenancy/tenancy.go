@@ -31,8 +31,6 @@ const (
 	MetricLabel = "tenant"
 )
 
-var CustomHeader = ""
-
 // Allowed fields in client certificates.
 const (
 	CertificateFieldOrganization       = "organization"
@@ -142,14 +140,6 @@ func GetTenantFromGRPCMetadata(ctx context.Context) (string, bool) {
 	return md.Get(DefaultTenantHeader)[0], true
 }
 
-func GetTenantFromProvidedHeader(ctx context.Context, header string) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok || len(md.Get(header)) == 0 {
-		return DefaultTenant
-	}
-	return md.Get(header)[0]
-}
-
 func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (string, error) {
 	labelMatcher := &labels.Matcher{
 		Name:  tenantLabel,
@@ -217,7 +207,7 @@ func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, de
 		return "", "", ctx, err
 	}
 	ctx = context.WithValue(ctx, TenantKey, tenant)
-	CustomHeader = tenantHeader
+
 	if enforceTenancy {
 		queryStr, err = EnforceQueryTenancy(tenantLabel, tenant, queryStr)
 		return queryStr, tenant, ctx, err
@@ -235,7 +225,7 @@ func RewriteLabelMatchers(ctx context.Context, r *http.Request, tenantHeader str
 		return nil, ctx, err
 	}
 	ctx = context.WithValue(ctx, TenantKey, tenant)
-	CustomHeader = tenantHeader
+
 	matcherSets, err := getLabelMatchers(formMatchers, tenant, enforceTenancy, tenantLabel)
 	if err != nil {
 		return nil, ctx, err

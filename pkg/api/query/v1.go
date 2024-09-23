@@ -1096,6 +1096,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	hints := &storage.LabelHints{
 		Limit: toHintLimit(limit),
 	}
+
 	var (
 		vals     []string
 		warnings annotations.Annotations
@@ -1280,6 +1281,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	hints := &storage.LabelHints{
 		Limit: toHintLimit(limit),
 	}
+
 	if len(matcherSets) > 0 {
 		var callWarnings annotations.Annotations
 		labelNamesSet := make(map[string]struct{})
