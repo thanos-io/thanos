@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 var sep = []byte{'\xff'}
@@ -36,27 +36,27 @@ func (s *ShardMatcher) Close() {
 	}
 }
 
-func (s *ShardMatcher) MatchesLabels(lbls []*labelpb.Label) bool {
+func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
 	// Match all series when query is not sharded
 	if s == nil || !s.isSharded {
 		return true
 	}
 
 	*s.buf = (*s.buf)[:0]
-	for _, lbl := range lbls {
-		if shardByLabel(s.shardingLabelset, lbl, s.by) {
-			*s.buf = append(*s.buf, lbl.Name...)
+	lbls.Range(func(l labels.Label) {
+		if shardByLabel(s.shardingLabelset, l, s.by) {
+			*s.buf = append(*s.buf, l.Name...)
 			*s.buf = append(*s.buf, sep[0])
-			*s.buf = append(*s.buf, lbl.Value...)
+			*s.buf = append(*s.buf, l.Value...)
 			*s.buf = append(*s.buf, sep[0])
 		}
-	}
+	})
 
 	hash := xxhash.Sum64(*s.buf)
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
 }
 
-func shardByLabel(labelSet map[string]struct{}, lbl *labelpb.Label, groupingBy bool) bool {
+func shardByLabel(labelSet map[string]struct{}, lbl labels.Label, groupingBy bool) bool {
 	_, shardHasLabel := labelSet[lbl.Name]
 	if groupingBy && shardHasLabel {
 		return true

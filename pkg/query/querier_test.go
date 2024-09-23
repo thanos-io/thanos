@@ -32,7 +32,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -1234,9 +1233,7 @@ func (s *testStoreServer) Series(r *storepb.SeriesRequest, srv storepb.Store_Ser
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	lset.Range(func(l labels.Label) {
-		s.Labels = append(s.Labels, &labelpb.Label{Name: l.Name, Value: l.Value})
-	})
+	s.Labels = lset
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()

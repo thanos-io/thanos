@@ -167,7 +167,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 			finalExtLset.Range(func(l labels.Label) {
 				b.Set(l.Name, l.Value)
 			})
-			lset := labelpb.PromLabelsToLabelpbLabels(b.Labels())
+			lset := b.Labels()
 			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
@@ -263,7 +263,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.PromLabelsToLabelpbLabels(lset),
+			Labels: lset,
 			Chunks: aggregatedChunks,
 		})); err != nil {
 			return err
@@ -323,7 +323,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			// external labels hence we need to do this:
 			// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/codec.go#L210.
 			completeLabelset := rmLabels(labelpb.ExtendSortedLabels(labelpb.LabelpbLabelsToPromLabels(series.Labels), extLset), extLsetToRemove)
-			if !shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
+			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}
 
@@ -352,7 +352,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.PromLabelsToLabelpbLabels(completeLabelset),
+				Labels: completeLabelset,
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {

@@ -239,7 +239,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []*storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "b", "b", "d", "region", "eu-west"),
 				},
 			},
 		},
@@ -265,10 +265,10 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []*storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "c", "b", "d", "job", "test", "region", "eu-west"),
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "d", "b", "d", "job", "test", "region", "eu-west"),
 				},
 			},
 		},
@@ -283,10 +283,10 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []*storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "c", "b", "d", "job", "test", "region", "eu-west"),
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "d", "b", "d", "job", "test", "region", "eu-west"),
 				},
 			},
 		},
@@ -301,7 +301,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []*storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("b", "d", "job", "test", "region", "eu-west"),
 				},
 			},
 		},
@@ -316,13 +316,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []*storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "c", "b", "d", "job", "test", "region", "eu-west"),
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("a", "d", "b", "d", "job", "test", "region", "eu-west"),
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromStrings("b", "d", "job", "test", "region", "eu-west"),
 				},
 			},
 		},

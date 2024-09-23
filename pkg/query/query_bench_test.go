@@ -19,7 +19,6 @@ import (
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/gate"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -70,7 +69,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		testutil.Ok(t, head.Close())
 		for i := 0; i < len(created); i++ {
 			if !dedup || j == 0 {
-				b := labels.NewBuilder(labelpb.LabelpbLabelsToPromLabels(created[i].Labels))
+				b := labels.NewBuilder(created[i].Labels)
 				if dedup {
 					b.Del("a_replica")
 				}

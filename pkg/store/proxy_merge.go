@@ -96,7 +96,7 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labelpb.CompareLabels(lbls, atLbls) == 0 {
+		if labels.Compare(lbls, atLbls) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
@@ -173,7 +173,7 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			return labelpb.CompareLabels(a.GetSeries().Labels, b.GetSeries().Labels) < 0
+			return labels.Compare(a.GetSeries().Labels, b.GetSeries().Labels) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
 			return true
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {
@@ -682,7 +682,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		}
 
 		if len(labelsToRemove) > 0 {
-			ser.Labels = labelpb.PromLabelsToLabelpbLabels(rmLabels(labelpb.LabelpbLabelsToPromLabels(ser.Labels), labelsToRemove))
+			ser.Labels = rmLabels(ser.Labels, labelsToRemove)
 		}
 	}
 
@@ -697,7 +697,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.LabelpbLabelsToPromLabels(si.Labels), labelpb.LabelpbLabelsToPromLabels(sj.Labels)) < 0
+		return labels.Compare(si.Labels, sj.Labels) < 0
 	})
 }
 

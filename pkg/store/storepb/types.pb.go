@@ -14,6 +14,7 @@ import (
 	sync "sync"
 
 	_ "github.com/planetscale/vtprotobuf/vtproto"
+	"github.com/prometheus/prometheus/model/labels"
 	labelpb "github.com/thanos-io/thanos/pkg/store/labelpb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -250,8 +251,10 @@ type Series struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Labels []*labelpb.Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
+	Labels labels.Labels
 	Chunks []*AggrChunk     `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks,omitempty"`
+
+	PromLblz labels.Labels
 }
 
 func (x *Series) Reset() {
@@ -286,11 +289,11 @@ func (*Series) Descriptor() ([]byte, []int) {
 	return file_store_storepb_types_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Series) GetLabels() []*labelpb.Label {
+func (x *Series) GetLabels() labels.Labels {
 	if x != nil {
 		return x.Labels
 	}
-	return nil
+	return labels.EmptyLabels()
 }
 
 func (x *Series) GetChunks() []*AggrChunk {

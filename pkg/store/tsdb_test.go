@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"sort"
 	"testing"
 
 	"github.com/cespare/xxhash"
@@ -563,27 +562,22 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]*labelpb.Label, 0, len(s.Labels)+extLabels.Len())
-			for _, l := range s.Labels {
-				lbls = append(lbls, &labelpb.Label{
-					Name:  l.Name,
-					Value: l.Value,
-				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].SizeVT()
-			}
-			extLabels.Range(func(l labels.Label) {
-				lbls = append(lbls, &labelpb.Label{
-					Name:  l.Name,
-					Value: l.Value,
-				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].SizeVT()
+
+			lbls := map[string]string{}
+
+			s.Labels.Range(func(l labels.Label) {
+				lbls[l.Name] = l.Value
+				bytesLeftForChunks -= labelpb.VTProtoSizeStringLabels(l)
 			})
-			sort.Slice(lbls, func(i, j int) bool {
-				return lbls[i].Name < lbls[j].Name
+
+			extLabels.Range(func(l labels.Label) {
+				lbls[l.Name] = l.Value
+				bytesLeftForChunks -= labelpb.VTProtoSizeStringLabels(l)
 			})
 
 			frameBytesLeft := bytesLeftForChunks
-			frame := &storepb.Series{Labels: lbls}
+
+			frame := &storepb.Series{Labels: labels.FromMap(lbls)}
 			for i, c := range s.Chunks {
 				frame.Chunks = append(frame.Chunks, c)
 				frameBytesLeft -= c.SizeVT()
@@ -597,7 +591,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 				}
 				expected = append(expected, frame)
 				frameBytesLeft = bytesLeftForChunks
-				frame = &storepb.Series{Labels: lbls}
+				frame = &storepb.Series{Labels: frame.Labels}
 			}
 			expected = append(expected, frame)
 		}

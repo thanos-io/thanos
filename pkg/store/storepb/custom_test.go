@@ -20,6 +20,28 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
+func TestGetLabelsSize(t *testing.T) {
+	s := &Series{
+		Labels: labels.FromStrings("a", "b"),
+		Chunks: []*AggrChunk{
+			{
+				MinTime: 1,
+				MaxTime: 2,
+				Raw:     &Chunk{Type: Chunk_XOR, Data: []byte{1, 2, 3}},
+			},
+		},
+	}
+
+	in, err := s.MarshalVT()
+	testutil.Ok(t, err)
+
+	sz, err := labelpb.GetLabelsBufferSize(in, 1)
+	testutil.Ok(t, err)
+
+	// 2 sizes, 2 values (a, b).
+	testutil.Equals(t, 4, sz)
+}
+
 type sample struct {
 	t int64
 	v float64
@@ -32,7 +54,7 @@ type listSeriesSet struct {
 
 func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) *Series {
 	s := &Series{
-		Labels: labelpb.PromLabelsToLabelpbLabels(lset),
+		Labels: lset,
 	}
 
 	for _, smpls := range smplChunks {

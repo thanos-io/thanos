@@ -1195,7 +1195,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	b.entries = b.entries[1:]
 
 	return storepb.NewSeriesResponse(&storepb.Series{
-		Labels: labelpb.PromLabelsToLabelpbLabels(next.lset),
+		Labels: next.lset,
 		Chunks: next.chks,
 	}), nil
 }
@@ -1285,7 +1285,7 @@ OUTER:
 			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
 		}
 
-		if !b.shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
+		if !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
 
@@ -1917,9 +1917,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					if ls.GetSeries() == nil {
 						continue
 					}
-					for _, l := range ls.GetSeries().Labels {
+					ls.GetSeries().Labels.Range(func(l labels.Label) {
 						labelNames[l.Name] = struct{}{}
-					}
+					})
 				}
 
 				result = make([]string, 0, len(labelNames))
@@ -2133,7 +2133,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 						continue
 					}
 
-					val := labelpb.LabelpbLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
+					val := ls.GetSeries().Labels.Get(req.Label)
 					if val != "" { // Should never be empty since we added labelName!="" matcher to the list of matchers.
 						values[val] = struct{}{}
 					}

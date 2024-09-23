@@ -124,6 +124,8 @@ require (
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
 )
 
+require github.com/VictoriaMetrics/easyproto v0.1.4
+
 require (
 	cloud.google.com/go/auth v0.5.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect

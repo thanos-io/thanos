@@ -22,6 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -134,13 +135,21 @@ type querier struct {
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
 
-	returnChunksMtx sync.Mutex
-	returnChunks    []*storepb.AggrChunk
+	returnMtx    sync.Mutex
+	returnChunks []*storepb.AggrChunk
+	returnLabels []labels.Labels
 }
 
 var returnChunksSlicePool = sync.Pool{
 	New: func() interface{} {
 		r := make([]*storepb.AggrChunk, 0)
+		return &r
+	},
+}
+
+var returnLabelsSlicePool = sync.Pool{
+	New: func() interface{} {
+		r := make([]labels.Labels, 0)
 		return &r
 	},
 }
@@ -177,6 +186,7 @@ func newQuerier(
 	}
 
 	returnChunks := returnChunksSlicePool.Get().(*[]*storepb.AggrChunk)
+	returnLabels := returnLabelsSlicePool.Get().(*[]labels.Labels)
 	return &querier{
 		logger:        logger,
 		selectGate:    selectGate,
@@ -194,6 +204,7 @@ func newQuerier(
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
 		returnChunks:            *returnChunks,
+		returnLabels:            *returnLabels,
 	}
 }
 
@@ -360,11 +371,12 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	if err := q.proxy.Series(&req, resp); err != nil {
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "proxy Series()")
 	}
-	q.returnChunksMtx.Lock()
+	q.returnMtx.Lock()
 	for i := range resp.seriesSet {
+		q.returnLabels = append(q.returnLabels, resp.seriesSet[i].Labels)
 		q.returnChunks = append(q.returnChunks, resp.seriesSet[i].Chunks...)
 	}
-	q.returnChunksMtx.Unlock()
+	q.returnMtx.Unlock()
 
 	warns := annotations.New().Merge(resp.warnings)
 
@@ -479,8 +491,8 @@ func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, mat
 }
 
 func (q *querier) Close() error {
-	q.returnChunksMtx.Lock()
-	defer q.returnChunksMtx.Unlock()
+	q.returnMtx.Lock()
+	defer q.returnMtx.Unlock()
 
 	for _, ch := range q.returnChunks {
 		ch.ReturnToVTPool()
@@ -488,5 +500,10 @@ func (q *querier) Close() error {
 	q.returnChunks = q.returnChunks[:0]
 	returnChunksSlicePool.Put(&q.returnChunks)
 
+	for i := range q.returnLabels {
+		labelpb.ReturnPromLabelsToPool(q.returnLabels[i])
+	}
+	q.returnLabels = q.returnLabels[:0]
+	returnLabelsSlicePool.Put(&q.returnLabels)
 	return nil
 }

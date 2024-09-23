@@ -457,7 +457,7 @@ func (x LabelMatcher_Type) PromString() string {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.LabelpbLabelsToPromLabels(m.Labels)
+	return m.Labels
 }
 
 // Deprecated.
@@ -505,7 +505,7 @@ func (c *SeriesStatsCounter) CountSeries(seriesLabels []*labelpb.Label) {
 }
 
 func (c *SeriesStatsCounter) Count(series *Series) {
-	c.CountSeries(series.Labels)
+	//c.CountSeries(series.Labels)
 	for _, chk := range series.Chunks {
 		if chk.Raw != nil {
 			c.Chunks++

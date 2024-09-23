@@ -219,11 +219,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		series := set.At()
 
 		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
+		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.PromLabelsToLabelpbLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: completeLabelset}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -232,9 +232,9 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		}
 
 		bytesLeftForChunks := s.maxBytesPerFrame
-		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.SizeVT()
-		}
+		//for _, lbl := range storeSeries.Labels {
+		//		bytesLeftForChunks -= lbl.SizeVT()
+		//	}
 		frameBytesLeft := bytesLeftForChunks
 
 		seriesChunks := []*storepb.AggrChunk{}
