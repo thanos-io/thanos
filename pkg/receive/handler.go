@@ -715,6 +715,9 @@ func (h *Handler) gatherWriteStats(remoteWrites map[endpointReplica]map[string]t
 	var stats tenantRequestStats = make(tenantRequestStats)
 
 	for er := range remoteWrites {
+		if er.replica != 0 {
+			continue // Skip replicated writes, only count once.
+		}
 		for tenant, series := range remoteWrites[er] {
 			samples := 0
 

@@ -1899,7 +1899,7 @@ func TestIngestorRestart(t *testing.T) {
 	stats, err := client.handleRequest(ctx, 0, "test", data)
 	require.NoError(t, err)
 	require.Equal(t, tenantRequestStats{
-		"test": requestStats{timeseries: 2, totalSamples: 2},
+		"test": requestStats{timeseries: 1, totalSamples: 1},
 	}, stats)
 
 	// close srv2 to simulate ingestor down
