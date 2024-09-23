@@ -41,6 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -61,6 +62,7 @@ type PrometheusStore struct {
 	framesRead prometheus.Histogram
 
 	storepb.UnimplementedStoreServer
+	tenantHeader string
 }
 
 // Label{Values,Names} call with matchers is supported for Prometheus versions >= 2.24.0.
@@ -81,6 +83,7 @@ func NewPrometheusStore(
 	externalLabelsFn func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
 	promVersion func() string,
+	tenantHeader string,
 ) (*PrometheusStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -105,6 +108,7 @@ func NewPrometheusStore(
 				Buckets: prometheus.ExponentialBuckets(10, 10, 5),
 			},
 		),
+		tenantHeader: tenantHeader,
 	}
 	return p, nil
 }
@@ -153,7 +157,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 
 	if r.SkipChunks {
 		finalExtLset := rmLabels(extLset.Copy(), extLsetToRemove)
-		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime, int(r.Limit))
+		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime, int(r.Limit), p.tenantHeader)
 		if err != nil {
 			return err
 		}
@@ -468,10 +472,11 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create request")
 	}
+	tenantName, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
-
+	preq.Header.Set(p.tenantHeader, tenantName)
 	preq.Header.Set("User-Agent", clientconfig.ThanosUserAgent)
 	presp, err = p.client.Do(preq.WithContext(ctx))
 	if err != nil {
@@ -551,12 +556,12 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 
 	var lbls []string
 	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
-		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
+		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit), p.tenantHeader)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sers, err := p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
+		sers, err := p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit), p.tenantHeader)
 		if err != nil {
 			return nil, err
 		}
@@ -622,7 +627,8 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		if len(matchers) == 0 {
 			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
 		}
-		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
+
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit), p.tenantHeader)
 		if err != nil {
 			return nil, err
 		}
@@ -633,12 +639,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	if len(matchers) == 0 || p.labelCallsSupportMatchers() {
-		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End, int(r.Limit))
+		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End, int(r.Limit), p.tenantHeader)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit), p.tenantHeader)
 		if err != nil {
 			return nil, err
 		}

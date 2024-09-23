@@ -263,6 +263,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
+	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.CustomHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
 	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.MinTime, originalRequest.MaxTime, matchers)
@@ -361,6 +362,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	}
 
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
+	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.CustomHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
 
 	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
@@ -375,6 +377,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		Limit:                   originalRequest.Limit,
 		Hints:                   originalRequest.Hints,
 	}
 
@@ -464,7 +467,8 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	}
 
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
-	level.Debug(reqLogger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
+	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.CustomHeader, tenant)
+	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
 
 	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
 	if len(stores) == 0 {

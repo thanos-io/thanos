@@ -197,4 +197,4 @@ However, in case you want to play and run Thanos components on a single node, we
 | Compact        | HTTP                    | 10912 |
 | Query Frontend | HTTP                    | 10913 |
 
-You can see example one-node setup [here](../scripts/quickstart.sh).
+You can see example one-node setup [here](../scripts/sidecar.sh).
