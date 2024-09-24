@@ -7,6 +7,7 @@ package storepb
 import (
 	fmt "fmt"
 	io "io"
+	sync "sync"
 
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	labelpb "github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -423,6 +424,55 @@ func (m *LabelMatcher) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+var vtprotoPool_Chunk = sync.Pool{
+	New: func() interface{} {
+		return &Chunk{}
+	},
+}
+
+func (m *Chunk) ResetVT() {
+	if m != nil {
+		f0 := m.Data[:0]
+		m.Reset()
+		m.Data = f0
+	}
+}
+func (m *Chunk) ReturnToVTPool() {
+	if m != nil {
+		m.ResetVT()
+		vtprotoPool_Chunk.Put(m)
+	}
+}
+func ChunkFromVTPool() *Chunk {
+	return vtprotoPool_Chunk.Get().(*Chunk)
+}
+
+var vtprotoPool_AggrChunk = sync.Pool{
+	New: func() interface{} {
+		return &AggrChunk{}
+	},
+}
+
+func (m *AggrChunk) ResetVT() {
+	if m != nil {
+		m.Raw.ReturnToVTPool()
+		m.Count.ReturnToVTPool()
+		m.Sum.ReturnToVTPool()
+		m.Min.ReturnToVTPool()
+		m.Max.ReturnToVTPool()
+		m.Counter.ReturnToVTPool()
+		m.Reset()
+	}
+}
+func (m *AggrChunk) ReturnToVTPool() {
+	if m != nil {
+		m.ResetVT()
+		vtprotoPool_AggrChunk.Put(m)
+	}
+}
+func AggrChunkFromVTPool() *AggrChunk {
+	return vtprotoPool_AggrChunk.Get().(*AggrChunk)
+}
 func (m *Chunk) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -865,7 +915,7 @@ func (m *AggrChunk) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Raw == nil {
-				m.Raw = &Chunk{}
+				m.Raw = ChunkFromVTPool()
 			}
 			if err := m.Raw.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -901,7 +951,7 @@ func (m *AggrChunk) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Count == nil {
-				m.Count = &Chunk{}
+				m.Count = ChunkFromVTPool()
 			}
 			if err := m.Count.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -937,7 +987,7 @@ func (m *AggrChunk) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Sum == nil {
-				m.Sum = &Chunk{}
+				m.Sum = ChunkFromVTPool()
 			}
 			if err := m.Sum.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -973,7 +1023,7 @@ func (m *AggrChunk) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Min == nil {
-				m.Min = &Chunk{}
+				m.Min = ChunkFromVTPool()
 			}
 			if err := m.Min.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1009,7 +1059,7 @@ func (m *AggrChunk) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Max == nil {
-				m.Max = &Chunk{}
+				m.Max = ChunkFromVTPool()
 			}
 			if err := m.Max.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1045,7 +1095,7 @@ func (m *AggrChunk) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Counter == nil {
-				m.Counter = &Chunk{}
+				m.Counter = ChunkFromVTPool()
 			}
 			if err := m.Counter.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err

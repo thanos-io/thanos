@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-kit/log"
@@ -107,6 +108,7 @@ type RuntimeInfo struct {
 	GOMAXPROCS     int       `json:"GOMAXPROCS"`
 	GOGC           string    `json:"GOGC"`
 	GODEBUG        string    `json:"GODEBUG"`
+	GOMEMLIMIT     int64     `json:"GOMEMLIMIT"`
 }
 
 // RuntimeInfoFn returns updated runtime information about Thanos.
@@ -195,6 +197,7 @@ func GetRuntimeInfoFunc(logger log.Logger) RuntimeInfoFn {
 			GOMAXPROCS:     runtime.GOMAXPROCS(0),
 			GOGC:           os.Getenv("GOGC"),
 			GODEBUG:        os.Getenv("GODEBUG"),
+			GOMEMLIMIT:     debug.SetMemoryLimit(-1),
 		}
 	}
 }
