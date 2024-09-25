@@ -36,6 +36,8 @@ type responseDeduplicator struct {
 
 	prev *storepb.SeriesResponse
 	ok   bool
+
+	chunkDedupMap map[uint64]*storepb.AggrChunk
 }
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
@@ -47,9 +49,10 @@ func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]
 		prev = h.At()
 	}
 	return &responseDeduplicator{
-		h:    h,
-		ok:   ok,
-		prev: prev,
+		h:             h,
+		ok:            ok,
+		prev:          prev,
+		chunkDedupMap: make(map[uint64]*storepb.AggrChunk),
 	}
 }
 
@@ -73,7 +76,7 @@ func (d *responseDeduplicator) Next() bool {
 			d.ok = d.h.Next()
 			if !d.ok {
 				if len(d.bufferedSameSeries) > 0 {
-					d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+					d.bufferedResp = append(d.bufferedResp, d.chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
 				}
 				return len(d.bufferedResp) > 0
 			}
@@ -101,15 +104,15 @@ func (d *responseDeduplicator) Next() bool {
 			continue
 		}
 
-		d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+		d.bufferedResp = append(d.bufferedResp, d.chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
 		d.prev = s
 
 		return true
 	}
 }
 
-func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
-	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
+func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
+	clear(d.chunkDedupMap)
 
 	for _, s := range series {
 		for _, chk := range s.GetSeries().Chunks {
@@ -124,9 +127,9 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 					hash = xxhash.Sum64(field.Data)
 				}
 
-				if _, ok := chunkDedupMap[hash]; !ok {
+				if _, ok := d.chunkDedupMap[hash]; !ok {
 					chk := chk
-					chunkDedupMap[hash] = chk
+					d.chunkDedupMap[hash] = chk
 					break
 				}
 			}
@@ -134,12 +137,19 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 	}
 
 	// If no chunks were requested.
-	if len(chunkDedupMap) == 0 {
+	if len(d.chunkDedupMap) == 0 {
 		return series[0]
 	}
 
-	finalChunks := make([]*storepb.AggrChunk, 0, len(chunkDedupMap))
-	for _, chk := range chunkDedupMap {
+	var longestChkSlice = series[0].GetSeries().Chunks
+	for _, s := range series {
+		if cap(s.GetSeries().Chunks) > cap(longestChkSlice) {
+			longestChkSlice = s.GetSeries().Chunks
+		}
+	}
+
+	finalChunks := longestChkSlice[:0]
+	for _, chk := range d.chunkDedupMap {
 		finalChunks = append(finalChunks, chk)
 	}
 
