@@ -64,6 +64,8 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
+
+	skipMatchExternalLabels bool
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -95,7 +97,13 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
+
+		skipMatchExternalLabels: false,
 	}
+}
+
+func (t *MultiTSDB) SkipMatchExternalLabels() {
+	t.skipMatchExternalLabels = true
 }
 
 type localClient struct {
@@ -731,7 +739,14 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+
+	tsdbForTenant := store.NewTSDBStore(logger, s, component.Receive, lset)
+	if t.skipMatchExternalLabels {
+		level.Info(logger).Log("msg", "Skip matching external labels for a tenant's TSDB", "tenant", tenantID)
+		tsdbForTenant.SkipMatchExternalLabels()
+	}
+
+	tenant.set(tsdbForTenant, s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

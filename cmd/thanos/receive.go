@@ -220,6 +220,10 @@ func runReceive(
 		conf.allowOutOfOrderUpload,
 		hashFunc,
 	)
+	if conf.skipMatchExternalLabels {
+		level.Info(logger).Log("msg", "Skip matching external labels for Series requests")
+		dbs.SkipMatchExternalLabels()
+	}
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,
 		TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
@@ -881,6 +885,8 @@ type receiveConfig struct {
 	numTopMetricsPerTenant       int
 	topMetricsMinimumCardinality uint64
 	topMetricsUpdateInterval     time.Duration
+
+	skipMatchExternalLabels bool
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1032,6 +1038,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("10000").Uint64Var(&rc.topMetricsMinimumCardinality)
 	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
+	cmd.Flag("tsdb.skip-match-external-labels", "If true, skip matching external labels for Series requests.").Default("false").BoolVar(&rc.skipMatchExternalLabels)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
