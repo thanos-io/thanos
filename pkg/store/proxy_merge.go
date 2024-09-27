@@ -96,7 +96,7 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labels.Compare(labelpb.LabelpbLabelsToPromLabels(lbls), labelpb.LabelpbLabelsToPromLabels(atLbls)) == 0 {
+		if labelpb.CompareLabels(lbls, atLbls) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
@@ -173,10 +173,7 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			iLbls := labelpb.LabelpbLabelsToPromLabels(a.GetSeries().Labels)
-			jLbls := labelpb.LabelpbLabelsToPromLabels(b.GetSeries().Labels)
-
-			return labels.Compare(iLbls, jLbls) < 0
+			return labelpb.CompareLabels(a.GetSeries().Labels, b.GetSeries().Labels) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
 			return true
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {

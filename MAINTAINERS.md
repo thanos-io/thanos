@@ -5,7 +5,7 @@
 | Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
 | Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
 | Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
-| Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)           | Fal                 |
+| Kemal Akkoyun         | kakkoyun@gmail.com        | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)           | Independent         |
 | Lucas Servén Marín    | lserven@gmail.com         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
 | Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
 | Ben Ye                | yb532204897@gmail.com     | `@yeya24`                | [@yeya24](https://github.com/yeya24)               | Amazon Web Services |
@@ -40,6 +40,7 @@ Full list of triage persons is displayed below:
 | Jimmie Han     | `@hanjm`         | [@hanjm](https://github.com/hanjm)                 | Tencent             |
 | Douglas Camata | `@douglascamata` | [@douglascamata](https://github.com/douglascamata) | Red Hat             |
 | Harry John     | `@harry671003`   | [@harry671003](https://github.com/harry671003)     | Amazon Web Services |
+| Pedro Tanaka   | `@pedro.tanaka`  | [@pedro-stanaka](https://github.com/pedro-stanaka) | Shopify             |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
