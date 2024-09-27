@@ -252,3 +252,6 @@ adopters:
 - name: Synology
   url: https://www.synology.com/
   logo: synology.png
+- name: XNET
+  url: https://xnet.company/
+  logo: XNET.png
