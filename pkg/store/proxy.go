@@ -71,6 +71,9 @@ type Client interface {
 	// Addr returns address of the store client. If second parameter is true, the client
 	// represents a local client (server-as-client) and has no remote address.
 	Addr() (addr string, isLocalClient bool)
+
+	// MatchesMetricName returns true if the metric name is allowed in the store.
+	MatchesMetricName(metricName string) bool
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -590,6 +593,16 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 	if !LabelSetsMatch(matchers, extLset...) {
 		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 	}
+
+	for _, m := range matchers {
+		if m.Type == labels.MatchEqual && m.Name == labels.MetricName {
+			if !s.MatchesMetricName(m.Value) {
+				return false, fmt.Sprintf("metric name %v does not match filter", m.Value)
+			}
+			break
+		}
+	}
+
 	return true, ""
 }
 

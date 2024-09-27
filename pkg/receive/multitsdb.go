@@ -70,6 +70,8 @@ type MultiTSDB struct {
 
 	exemplarClients           map[string]*exemplars.TSDB
 	exemplarClientsNeedUpdate bool
+
+	metricNameFilterEnabled bool
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -84,6 +86,7 @@ func NewMultiTSDB(
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
+	metricNameFilterEnabled bool,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
@@ -97,6 +100,7 @@ func NewMultiTSDB(
 		mtx:                       &sync.RWMutex{},
 		tenants:                   map[string]*tenant{},
 		labels:                    labels,
+		metricNameFilterEnabled:   metricNameFilterEnabled,
 		tsdbClientsNeedUpdate:     true,
 		exemplarClientsNeedUpdate: true,
 		tenantLabelName:           tenantLabelName,
@@ -177,6 +181,10 @@ func newLocalClient(store *store.TSDBStore) *localClient {
 	return &localClient{
 		store: store,
 	}
+}
+
+func (l *localClient) MatchesMetricName(metricName string) bool {
+	return l.store.MatchesMetricName(metricName)
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -302,6 +310,9 @@ func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *ship
 }
 
 func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB) {
+	if storeTSDB == nil && t.storeTSDB != nil {
+		t.storeTSDB.Close()
+	}
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
@@ -751,7 +762,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, t.metricNameFilterEnabled), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

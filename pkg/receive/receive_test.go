@@ -810,6 +810,7 @@ func initializeMultiTSDB(dir string) *MultiTSDB {
 		bucket,
 		false,
 		metadata.NoneFunc,
+		false,
 	)
 
 	return m
