@@ -45,6 +45,7 @@ type labelNameCallCase struct {
 	matchers []*storepb.LabelMatcher
 	start    int64
 	end      int64
+	limit    int64
 
 	expectedNames []string
 	expectErr     error
@@ -56,6 +57,7 @@ type labelValuesCallCase struct {
 	matchers []*storepb.LabelMatcher
 	start    int64
 	end      int64
+	limit    int64
 
 	expectedValues []string
 	expectErr      error
@@ -65,6 +67,7 @@ type seriesCallCase struct {
 	matchers   []*storepb.LabelMatcher
 	start      int64
 	end        int64
+	limit      int64
 	skipChunks bool
 
 	expectedLabels []labels.Labels
@@ -123,9 +126,11 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			},
 			labelNameCalls: []labelNameCallCase{
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), expectedNames: []string{"foo", "region"}},
+				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), limit: 1, expectedNames: []string{"foo"}},
 			},
 			labelValuesCalls: []labelValuesCallCase{
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "foo", expectedValues: []string{"foovalue1", "foovalue2"}},
+				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "foo", limit: 1, expectedValues: []string{"foovalue1"}},
 			},
 		},
 		{
@@ -167,6 +172,13 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"bar", "foo", "region"},
+					matchers:      []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+				},
+				{
+					start:         timestamp.FromTime(minTime),
+					end:           timestamp.FromTime(maxTime),
+					limit:         2,
+					expectedNames: []string{"bar", "foo"},
 					matchers:      []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
@@ -216,6 +228,14 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					end:            timestamp.FromTime(maxTime),
 					label:          "foo",
 					expectedValues: []string{"foovalue1", "foovalue2"},
+					matchers:       []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					limit:          1,
+					label:          "foo",
+					expectedValues: []string{"foovalue1"},
 					matchers:       []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
@@ -345,6 +365,18 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 						labels.FromStrings("n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
+					},
+				},
+				{
+					start: timestamp.FromTime(minTime),
+					end:   timestamp.FromTime(maxTime),
+					limit: 2,
+					matchers: []*storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: "missing", Value: ""},
+					},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
+						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
@@ -753,6 +785,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					resp, err := store.LabelNames(context.Background(), &storepb.LabelNamesRequest{
 						Start:                c.start,
 						End:                  c.end,
+						Limit:                c.limit,
 						Matchers:             c.matchers,
 						WithoutReplicaLabels: []string{"replica"},
 					})
@@ -774,6 +807,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					resp, err := store.LabelValues(context.Background(), &storepb.LabelValuesRequest{
 						Start:                c.start,
 						End:                  c.end,
+						Limit:                c.limit,
 						Label:                c.label,
 						Matchers:             c.matchers,
 						WithoutReplicaLabels: []string{"replica"},
@@ -797,6 +831,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					err := store.Series(&storepb.SeriesRequest{
 						MinTime:              c.start,
 						MaxTime:              c.end,
+						Limit:                c.limit,
 						Matchers:             c.matchers,
 						SkipChunks:           c.skipChunks,
 						WithoutReplicaLabels: []string{"replica"},
