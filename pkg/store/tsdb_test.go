@@ -39,7 +39,7 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
+	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"), false)
 
 	appender := db.Appender(context.Background())
 
@@ -79,7 +79,7 @@ func TestTSDBStore_Series(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
+	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"), false)
 
 	appender := db.Appender(context.Background())
 
@@ -251,7 +251,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 	})
 
 	extLabels := labels.FromStrings("ext", "1")
-	store := NewTSDBStore(logger, &mockedStartTimeDB{DBReadOnly: db, startTime: 0}, component.Receive, extLabels)
+	store := NewTSDBStore(logger, &mockedStartTimeDB{DBReadOnly: db, startTime: 0}, component.Receive, extLabels, false)
 
 	srv := storetestutil.NewSeriesServer(context.Background())
 	csrv := &delegatorServer{SeriesServer: srv}
@@ -414,7 +414,7 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 	})
 
 	extLabels := labels.FromStrings("ext", "1")
-	store := NewTSDBStore(logger, &mockedStartTimeDB{DBReadOnly: db, startTime: 0}, component.Receive, extLabels)
+	store := NewTSDBStore(logger, &mockedStartTimeDB{DBReadOnly: db, startTime: 0}, component.Receive, extLabels, false)
 
 	srv := storetestutil.NewSeriesServer(context.Background())
 	t.Run("call series and access results", func(t *testing.T) {
@@ -555,7 +555,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 
 	extLabels := labels.FromStrings("ext", "1")
-	store := NewTSDBStore(logger, &mockedStartTimeDB{DBReadOnly: db, startTime: 0}, component.Receive, extLabels)
+	store := NewTSDBStore(logger, &mockedStartTimeDB{DBReadOnly: db, startTime: 0}, component.Receive, extLabels, false)
 
 	var expected []*storepb.Series
 	for _, resp := range resps {

@@ -79,6 +79,9 @@ type Client interface {
 	// E.g. "pantheon-db" has replicas "pantheon-db-rep0", "pantheon-db-rep1".
 	//		"long-range-store" has only one replica, "long-range-store".
 	GroupKey() string
+
+	// MatchesMetricName returns true if the metric name is allowed in the store.
+	MatchesMetricName(metricName string) bool
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -711,6 +714,16 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 	if !LabelSetsMatch(matchers, extLset...) {
 		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 	}
+
+	for _, m := range matchers {
+		if m.Type == labels.MatchEqual && m.Name == labels.MetricName {
+			if !s.MatchesMetricName(m.Value) {
+				return false, fmt.Sprintf("metric name %v does not match filter", m.Value)
+			}
+			break
+		}
+	}
+
 	return true, ""
 }
 

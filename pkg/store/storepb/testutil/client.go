@@ -35,3 +35,4 @@ func (c TestClient) String() string                     { return c.Name }
 func (c TestClient) Addr() (string, bool)               { return c.Name, c.IsLocalStore }
 func (c TestClient) GroupKey() string                   { return c.GroupKeyStr }
 func (c TestClient) ReplicaKey() string                 { return c.ReplicaKeyStr }
+func (c TestClient) MatchesMetricName(_ string) bool    { return true }

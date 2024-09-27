@@ -53,7 +53,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
-const compressionNone = "none"
+const (
+	compressionNone   = "none"
+	metricNamesFilter = "metric-names-filter"
+)
 
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
@@ -135,6 +138,14 @@ func runReceive(
 	logger = log.With(logger, "component", "receive")
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
+
+	var metricNameFilterEnabled bool
+	for _, feature := range *conf.featureList {
+		if feature == metricNamesFilter {
+			metricNameFilterEnabled = true
+			level.Info(logger).Log("msg", "metric name filter feature enabled")
+		}
+	}
 
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
 	if err != nil {
@@ -219,6 +230,7 @@ func runReceive(
 		bkt,
 		conf.allowOutOfOrderUpload,
 		hashFunc,
+		metricNameFilterEnabled,
 	)
 	if conf.skipMatchExternalLabels {
 		level.Info(logger).Log("msg", "Skip matching external labels for Series requests")
@@ -888,6 +900,7 @@ type receiveConfig struct {
 	topMetricsUpdateInterval     time.Duration
 
 	skipMatchExternalLabels bool
+	featureList *[]string
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1034,12 +1047,13 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
 
 	cmd.Flag("receive.num-top-metrics-per-tenant", "The number of top metrics to track for each tenant.").
-		Default("100").IntVar(&rc.numTopMetricsPerTenant)
+		Default("30").IntVar(&rc.numTopMetricsPerTenant)
 	cmd.Flag("receive.top-metrics-minimum-cardinality", "The minimum cardinality for a metric to be considered top metric.").
 		Default("10000").Uint64Var(&rc.topMetricsMinimumCardinality)
 	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
 	cmd.Flag("tsdb.skip-match-external-labels", "If true, skip matching external labels for Series requests.").Default("false").BoolVar(&rc.skipMatchExternalLabels)
+	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

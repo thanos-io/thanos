@@ -57,6 +57,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			false,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -141,6 +142,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			false,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -184,6 +186,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			false,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -451,6 +454,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				test.bucket,
 				false,
 				metadata.NoneFunc,
+				false,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -524,6 +528,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		objstore.NewInMemBucket(),
 		false,
 		metadata.NoneFunc,
+		false,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -585,6 +590,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 				test.bucket,
 				false,
 				metadata.NoneFunc,
+				false,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -659,6 +665,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				nil,
 				false,
 				metadata.NoneFunc,
+				false,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -688,6 +695,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		false,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -729,6 +737,7 @@ func TestProxyLabelValues(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		false,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -819,6 +828,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		false,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
 

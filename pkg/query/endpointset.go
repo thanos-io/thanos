@@ -927,6 +927,10 @@ func (er *endpointRef) apisPresent() []string {
 	return apisPresent
 }
 
+func (er *endpointRef) MatchesMetricName(name string) bool {
+	return true
+}
+
 type endpointMetadata struct {
 	*infopb.InfoResponse
 }

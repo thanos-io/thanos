@@ -13,9 +13,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc"
@@ -23,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -46,9 +50,15 @@ type TSDBStore struct {
 	buffers          sync.Pool
 	maxBytesPerFrame int
 
-	extLset labels.Labels
-	mtx     sync.RWMutex
-	skipMatchExternalLabels bool
+	extLset          labels.Labels
+	mtx              sync.RWMutex
+	metricNameFilter filter.MetricNameFilter
+	close            func()
+	storepb.UnimplementedStoreServer
+}
+
+func (s *TSDBStore) Close() {
+	s.close()
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -65,21 +75,67 @@ type ReadWriteTSDBStore struct {
 
 // NewTSDBStore creates a new TSDBStore.
 // NOTE: Given lset has to be sorted.
-func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
+func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels, metricNameFilterEnabled bool) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	return &TSDBStore{
+
+	var (
+		metricNameFilter       filter.MetricNameFilter
+		startMetricNamesUpdate bool
+	)
+
+	metricNameFilter = filter.AllowAllMetricNameFilter{}
+	if metricNameFilterEnabled {
+		startMetricNamesUpdate = true
+		metricNameFilter = filter.NewCuckooFilterMetricNameFilter(1000000) // about 1MB on 64bit machines.
+	}
+
+	st := &TSDBStore{
 		logger:           logger,
 		db:               db,
 		component:        component,
 		extLset:          extLset,
+		metricNameFilter: metricNameFilter,
 		maxBytesPerFrame: RemoteReadFrameLimit,
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
 	}
+
+	if startMetricNamesUpdate {
+		t := time.NewTicker(15 * time.Second)
+		ctx, cancel := context.WithCancel(context.Background())
+		updateMetricNames := func() {
+			vals, err := st.LabelValues(context.Background(), &storepb.LabelValuesRequest{
+				Label: model.MetricNameLabel,
+				Start: 0,
+				End:   math.MaxInt64,
+			})
+			if err != nil {
+				level.Error(logger).Log("msg", "failed to update metric names", "err", err)
+				return
+			}
+
+			st.metricNameFilter.ResetAddMetricName(vals.Values...)
+		}
+		st.close = cancel
+		updateMetricNames()
+
+		go func() {
+			for {
+				select {
+				case <-t.C:
+					updateMetricNames()
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	return st
 }
 
 func (s *TSDBStore) SkipMatchExternalLabels() {
@@ -141,6 +197,10 @@ func (s *TSDBStore) TimeRange() (int64, int64) {
 	}
 
 	return minTime, math.MaxInt64
+}
+
+func (s *TSDBStore) MatchesMetricName(metricName string) bool {
+	return s.metricNameFilter.MatchesMetricName(metricName)
 }
 
 // CloseDelegator allows to delegate close (releasing resources used by request to the server).
