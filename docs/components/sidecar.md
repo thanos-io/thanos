@@ -45,6 +45,7 @@ prometheus \
 ```bash
 thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
+    --prometheus.tenant-header="THANOS-TENANT" \
     --prometheus.url   "http://localhost:9090" \
     --objstore.config-file  "bucket.yml"
 ```
@@ -170,6 +171,8 @@ Flags:
       --prometheus.ready_timeout=10m
                                  Maximum time to wait for the Prometheus
                                  instance to start up
+      --prometheus.tenant-header="THANOS-TENANT"
+                                 HTTP header to determine tenant.
       --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API.
                                  For better performance use local network.

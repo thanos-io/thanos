@@ -1401,17 +1401,17 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		minT := e2eutil.RandRange(rnd, startMs, endMs)
 		maxT := e2eutil.RandRange(rnd, minT+1, endMs)
 
-		res1, err := client.SeriesInGRPC(ctx, u1, matchers, minT, maxT, 0)
+		res1, err := client.SeriesInGRPC(ctx, u1, matchers, minT, maxT, 0, "")
 		testutil.Ok(t, err)
-		res2, err := client.SeriesInGRPC(ctx, u2, matchers, minT, maxT, 0)
+		res2, err := client.SeriesInGRPC(ctx, u2, matchers, minT, maxT, 0, "")
 		testutil.Ok(t, err)
 
 		// Try again with a different timestamp and let requests hit posting cache.
 		minT = e2eutil.RandRange(rnd, startMs, endMs)
 		maxT = e2eutil.RandRange(rnd, minT+1, endMs)
-		newRes1, err := client.SeriesInGRPC(ctx, u1, matchers, minT, maxT, 0)
+		newRes1, err := client.SeriesInGRPC(ctx, u1, matchers, minT, maxT, 0, "")
 		testutil.Ok(t, err)
-		newRes2, err := client.SeriesInGRPC(ctx, u2, matchers, minT, maxT, 0)
+		newRes2, err := client.SeriesInGRPC(ctx, u2, matchers, minT, maxT, 0, "")
 		testutil.Ok(t, err)
 
 		cases = append(cases, &testCase{

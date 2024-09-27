@@ -297,7 +297,7 @@ func runSidecar(
 	{
 		c := promclient.NewWithTracingClient(logger, httpClient, clientconfig.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version, conf.prometheus.tenantHeader)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}

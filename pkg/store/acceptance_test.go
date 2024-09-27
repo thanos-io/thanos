@@ -997,7 +997,7 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 		promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return extLset },
 			func() (int64, int64) { return timestamp.FromTime(minTime), timestamp.FromTime(maxTime) },
-			func() string { return version })
+			func() string { return version }, "")
 		testutil.Ok(tt, err)
 
 		// We build chunks only for SAMPLES method. Make sure we ask for SAMPLES only.

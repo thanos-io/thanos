@@ -152,6 +152,8 @@ build: check-git deps $(PROMU)
 	@$(PROMU) build --prefix $(PREFIX)
 
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
+GIT_REVISION := $(shell git rev-parse --short HEAD)
+IMAGE_TAG ?= $(subst /,-,$(GIT_BRANCH))-$(GIT_REVISION)
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
 ifeq ($(GIT_BRANCH), main)
@@ -197,7 +199,7 @@ docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
-	@docker build -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
+	@docker build -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) -t thanos:$(IMAGE_TAG) .
 	@rm ./thanos_tmp_for_docker
 else
 docker: docker-multi-stage
@@ -207,7 +209,7 @@ endif
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
 docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
+	@docker build -f Dockerfile.multi-stage -t "thanos" -t thanos:$(IMAGE_TAG) --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
 # docker-build builds docker images with multiple architectures.
 .PHONY: docker-build $(BUILD_DOCKER_ARCHS)
