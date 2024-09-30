@@ -5,6 +5,7 @@ package filter
 
 import (
 	"sync"
+	"unsafe"
 
 	cuckoo "github.com/seiflotfy/cuckoofilter"
 )
@@ -31,6 +32,6 @@ func (f *CuckooFilterMetricNameFilter) ResetAddMetricName(metricNames ...string)
 	defer f.mtx.Unlock()
 	f.filter.Reset()
 	for _, metricName := range metricNames {
-		f.filter.Insert([]byte(metricName))
+		f.filter.Insert(unsafe.Slice(unsafe.StringData(metricName), len(metricName)))
 	}
 }
