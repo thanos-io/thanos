@@ -201,6 +201,10 @@ func (l *localClient) MatchesMetricName(metricName string) bool {
 	return l.store.MatchesMetricName(metricName)
 }
 
+func (l *localClient) Matches(matchers []*labels.Matcher) bool {
+	return l.store.Matches(matchers)
+}
+
 func (l *localClient) LabelSets() []labels.Labels {
 	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
 }

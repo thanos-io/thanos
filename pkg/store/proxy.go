@@ -82,6 +82,8 @@ type Client interface {
 
 	// MatchesMetricName returns true if the metric name is allowed in the store.
 	MatchesMetricName(metricName string) bool
+	// Matches returns true if provided label matchers are allowed in the store.
+	Matches(matches []*labels.Matcher) bool
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -715,13 +717,8 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 	}
 
-	for _, m := range matchers {
-		if m.Type == labels.MatchEqual && m.Name == labels.MetricName {
-			if !s.MatchesMetricName(m.Value) {
-				return false, fmt.Sprintf("metric name %v does not match filter", m.Value)
-			}
-			break
-		}
+	if !s.Matches(matchers) {
+		return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
 	}
 
 	return true, ""

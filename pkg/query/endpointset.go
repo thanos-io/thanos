@@ -927,7 +927,7 @@ func (er *endpointRef) apisPresent() []string {
 	return apisPresent
 }
 
-func (er *endpointRef) MatchesMetricName(name string) bool {
+func (er *endpointRef) Matches(matchers []*labels.Matcher) bool {
 	return true
 }
 

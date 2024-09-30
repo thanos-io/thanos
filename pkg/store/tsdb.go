@@ -50,10 +50,10 @@ type TSDBStore struct {
 	buffers          sync.Pool
 	maxBytesPerFrame int
 
-	extLset          labels.Labels
-	mtx              sync.RWMutex
-	metricNameFilter filter.MetricNameFilter
-	close            func()
+	extLset     labels.Labels
+	storeFilter filter.StoreFilter
+	mtx         sync.RWMutex
+	close       func()
 	storepb.UnimplementedStoreServer
 }
 
@@ -81,14 +81,14 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 	}
 
 	var (
-		metricNameFilter       filter.MetricNameFilter
-		startMetricNamesUpdate bool
+		storeFilter       filter.StoreFilter
+		startFilterUpdate bool
 	)
 
-	metricNameFilter = filter.AllowAllMetricNameFilter{}
+	storeFilter = filter.AllowAllStoreFilter{}
 	if metricNameFilterEnabled {
-		startMetricNamesUpdate = true
-		metricNameFilter = filter.NewCuckooFilterMetricNameFilter(1000000) // about 1MB on 64bit machines.
+		startFilterUpdate = true
+		storeFilter = filter.NewCuckooMetricNameStoreFilter(1000000) // about 1MB on 64bit machines.
 	}
 
 	st := &TSDBStore{
@@ -96,7 +96,7 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		db:               db,
 		component:        component,
 		extLset:          extLset,
-		metricNameFilter: metricNameFilter,
+		storeFilter:      storeFilter,
 		maxBytesPerFrame: RemoteReadFrameLimit,
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -104,10 +104,10 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		}},
 	}
 
-	if startMetricNamesUpdate {
+	if startFilterUpdate {
 		t := time.NewTicker(15 * time.Second)
 		ctx, cancel := context.WithCancel(context.Background())
-		updateMetricNames := func() {
+		updateFilter := func() {
 			vals, err := st.LabelValues(context.Background(), &storepb.LabelValuesRequest{
 				Label: model.MetricNameLabel,
 				Start: 0,
@@ -118,16 +118,16 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 				return
 			}
 
-			st.metricNameFilter.ResetAddMetricName(vals.Values...)
+			st.storeFilter.ResetAndSet(vals.Values...)
 		}
 		st.close = cancel
-		updateMetricNames()
+		updateFilter()
 
 		go func() {
 			for {
 				select {
 				case <-t.C:
-					updateMetricNames()
+					updateFilter()
 				case <-ctx.Done():
 					return
 				}
@@ -199,8 +199,8 @@ func (s *TSDBStore) TimeRange() (int64, int64) {
 	return minTime, math.MaxInt64
 }
 
-func (s *TSDBStore) MatchesMetricName(metricName string) bool {
-	return s.metricNameFilter.MatchesMetricName(metricName)
+func (s *TSDBStore) Matches(matchers []*labels.Matcher) bool {
+	return s.storeFilter.Matches(matchers)
 }
 
 // CloseDelegator allows to delegate close (releasing resources used by request to the server).
