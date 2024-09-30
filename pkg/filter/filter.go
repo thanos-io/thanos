@@ -3,15 +3,20 @@
 
 package filter
 
-type MetricNameFilter interface {
-	MatchesMetricName(metricName string) bool
-	ResetAddMetricName(metricNames ...string)
+import "github.com/prometheus/prometheus/model/labels"
+
+type StoreFilter interface {
+	// Matches returns true if the filter matches the given matchers.
+	Matches(matchers []*labels.Matcher) bool
+
+	// ResetAndSet resets the filter and sets it to the given values.
+	ResetAndSet(values ...string)
 }
 
-type AllowAllMetricNameFilter struct{}
+type AllowAllStoreFilter struct{}
 
-func (f AllowAllMetricNameFilter) MatchesMetricName(metricName string) bool {
+func (f AllowAllStoreFilter) Matches(matchers []*labels.Matcher) bool {
 	return true
 }
 
-func (f AllowAllMetricNameFilter) ResetAddMetricName(metricNames ...string) {}
+func (f AllowAllStoreFilter) ResetAndSet(values ...string) {}

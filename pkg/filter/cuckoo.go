@@ -7,31 +7,39 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/prometheus/prometheus/model/labels"
 	cuckoo "github.com/seiflotfy/cuckoofilter"
 )
 
-type CuckooFilterMetricNameFilter struct {
+type CuckooMetricNameStoreFilter struct {
 	filter *cuckoo.Filter
 	mtx    sync.RWMutex
 }
 
-func NewCuckooFilterMetricNameFilter(capacity uint) *CuckooFilterMetricNameFilter {
-	return &CuckooFilterMetricNameFilter{
+func NewCuckooMetricNameStoreFilter(capacity uint) *CuckooMetricNameStoreFilter {
+	return &CuckooMetricNameStoreFilter{
 		filter: cuckoo.NewFilter(capacity),
 	}
 }
 
-func (f *CuckooFilterMetricNameFilter) MatchesMetricName(metricName string) bool {
+func (f *CuckooMetricNameStoreFilter) Matches(matchers []*labels.Matcher) bool {
 	f.mtx.RLock()
 	defer f.mtx.RUnlock()
-	return f.filter.Lookup([]byte(metricName))
+
+	for _, m := range matchers {
+		if m.Type == labels.MatchEqual && m.Name == labels.MetricName {
+			return f.filter.Lookup([]byte(m.Value))
+		}
+	}
+
+	return true
 }
 
-func (f *CuckooFilterMetricNameFilter) ResetAddMetricName(metricNames ...string) {
+func (f *CuckooMetricNameStoreFilter) ResetAndSet(values ...string) {
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
 	f.filter.Reset()
-	for _, metricName := range metricNames {
-		f.filter.Insert(unsafe.Slice(unsafe.StringData(metricName), len(metricName)))
+	for _, value := range values {
+		f.filter.Insert(unsafe.Slice(unsafe.StringData(value), len(value)))
 	}
 }
