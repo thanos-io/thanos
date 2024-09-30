@@ -6,6 +6,7 @@ package storetestutil
 import (
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -24,6 +25,7 @@ type TestClient struct {
 
 	GroupKeyStr   string
 	ReplicaKeyStr string
+	MetricNameFilter            filter.MetricNameFilter
 }
 
 func (c TestClient) LabelSets() []labels.Labels         { return c.ExtLset }
@@ -36,3 +38,6 @@ func (c TestClient) Addr() (string, bool)               { return c.Name, c.IsLoc
 func (c TestClient) GroupKey() string                   { return c.GroupKeyStr }
 func (c TestClient) ReplicaKey() string                 { return c.ReplicaKeyStr }
 func (c TestClient) MatchesMetricName(_ string) bool    { return true }
+func (c TestClient) MatchesMetricName(metricName string) bool {
+	return c.MetricNameFilter.MatchesMetricName(metricName)
+}
