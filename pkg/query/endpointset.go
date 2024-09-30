@@ -568,7 +568,7 @@ type endpointRef struct {
 	logger log.Logger
 }
 
-// newndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
+// newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(spec *GRPCEndpointSpec) (*endpointRef, error) {
 	var dialOpts []grpc.DialOption
