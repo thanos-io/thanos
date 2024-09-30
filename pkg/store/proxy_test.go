@@ -31,6 +31,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -1804,6 +1805,10 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 }
 
 func TestStoreMatches(t *testing.T) {
+	testMetricName := "test_metric"
+	testFilter := filter.NewCuckooFilterMetricNameFilter(10)
+	testFilter.ResetAddMetricName(testMetricName)
+
 	for _, c := range []struct {
 		s          Client
 		mint, maxt int64
@@ -1924,6 +1929,35 @@ func TestStoreMatches(t *testing.T) {
 			},
 			maxt:          1,
 			expectedMatch: true,
+		},
+		{
+			s: &storetestutil.TestClient{
+				ExtLset: []labels.Labels{
+					labels.FromStrings("a", "b"),
+				},
+				MetricNameFilter: testFilter,
+			},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, testMetricName),
+			},
+			maxt:          1,
+			expectedMatch: true,
+		},
+		{
+			s: &storetestutil.TestClient{
+				ExtLset: []labels.Labels{
+					labels.FromStrings("a", "b"),
+				},
+				MetricNameFilter: testFilter,
+			},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "some_other_metric"),
+			},
+			maxt:           1,
+			expectedMatch:  false,
+			expectedReason: "metric name some_other_metric does not match filter",
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -2255,6 +2289,27 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 
 func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := storetestutil.TestClient{Name: "testaddr"}
+	c.IsLocalStore = true
+
+	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
+	testutil.Assert(t, !ok)
+	testutil.Equals(t, "the store is not remote, cannot match __address__", reason)
+
+	// Change client to remote.
+	c.IsLocalStore = false
+
+	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
+	testutil.Assert(t, !ok)
+	testutil.Equals(t, "__address__ testaddr does not match debug store metadata matchers: [[__address__=\"wrong\"]]", reason)
+
+	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
+	testutil.Assert(t, ok)
+	testutil.Equals(t, "", reason)
+}
+
+func TestProxyStore_MatchesMetricName(t *testing.T) {
+	c := storetestutil.TestClient{Name: "matchesmetricname"}
+	c.MetricNameFilter = filter.AllowAllMetricNameFilter{}
 	c.IsLocalStore = true
 
 	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
