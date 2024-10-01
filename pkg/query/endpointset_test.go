@@ -720,8 +720,10 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 		lset := e.LabelSets()
 		testutil.Equals(t, 2, len(lset))
-		testutil.Equals(t, lset[0].Get("addr"), addr)
-		testutil.Equals(t, lset[1].Get("a"), "b")
+		testutil.Equals(t, "addr", lset[0][0].Name)
+		testutil.Equals(t, addr, lset[0][0].Value)
+		testutil.Equals(t, "a", lset[1][0].Name)
+		testutil.Equals(t, "b", lset[1][0].Value)
 		assertRegisteredAPIs(t, endpoints.exposedAPIs[addr], e)
 	}
 
@@ -753,8 +755,10 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	lset := st.LabelSets()
 	testutil.Equals(t, 2, len(lset))
-	testutil.Equals(t, lset[0].Get("addr"), addr)
-	testutil.Equals(t, lset[1].Get("a"), "b")
+	testutil.Equals(t, "addr", lset[0][0].Name)
+	testutil.Equals(t, addr, lset[0][0].Value)
+	testutil.Equals(t, "a", lset[1][0].Name)
+	testutil.Equals(t, "b", lset[1][0].Value)
 	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
 
 	// New big batch of endpoints.

@@ -136,13 +136,38 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 
 func TestQueryEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
-		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
-		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
-		labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
+		{
+			labels.Label{Name: "__name__", Value: "test_metric1"},
+			labels.Label{Name: "foo", Value: "bar"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric1"},
+			labels.Label{Name: "foo", Value: "boo"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric2"},
+			labels.Label{Name: "foo", Value: "boo"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "bar"},
+			labels.Label{Name: "replica", Value: "a"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica", Value: "a"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica", Value: "b"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica1", Value: "a"},
+		},
 	}
 
 	db, err := e2eutil.NewTSDB()
@@ -240,24 +265,76 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+							{
+								Name:  "replica",
+								Value: "a",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica",
+								Value: "a",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica",
+								Value: "b",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica1",
+								Value: "a",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 				},
 			},
@@ -275,19 +352,50 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica1",
+								Value: "a",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 				},
 			},
@@ -304,14 +412,32 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 					{
-						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo"),
-						T:      123000,
-						F:      2,
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+						},
+						T: 123000,
+						F: 2,
 					},
 				},
 			},
@@ -357,7 +483,7 @@ func TestQueryEndpoints(t *testing.T) {
 							}
 							return res
 						}(500, 1),
-						Metric: labels.EmptyLabels(),
+						Metric: nil,
 					},
 				},
 			},
@@ -379,7 +505,7 @@ func TestQueryEndpoints(t *testing.T) {
 							{F: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
 							{F: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
 						},
-						Metric: labels.EmptyLabels(),
+						Metric: nil,
 					},
 				},
 			},
@@ -642,7 +768,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 							}
 							return res
 						}(500, 1),
-						Metric: labels.EmptyLabels(),
+						Metric: nil,
 					},
 				},
 				QueryAnalysis: queryTelemetry{},
@@ -659,7 +785,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels())),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil)),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
@@ -668,7 +794,7 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 		nil,
 		func() []store.Client { return []store.Client{c} },
 		component.Query,
-		labels.EmptyLabels(),
+		nil,
 		0,
 		store.EagerRetrieval,
 	)
@@ -676,16 +802,41 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 
 func TestMetadataEndpoints(t *testing.T) {
 	var old = []labels.Labels{
-		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
-		labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-		labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+		{
+			labels.Label{Name: "__name__", Value: "test_metric1"},
+			labels.Label{Name: "foo", Value: "bar"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric1"},
+			labels.Label{Name: "foo", Value: "boo"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric2"},
+			labels.Label{Name: "foo", Value: "boo"},
+		},
 	}
 
 	var recent = []labels.Labels{
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
-		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
-		labels.FromStrings("__name__", "test_metric_replica2", "foo", "boo", "replica1", "a"),
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "bar"},
+			labels.Label{Name: "replica", Value: "a"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica", Value: "a"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica", Value: "b"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica2"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica1", Value: "a"},
+		},
 	}
 
 	dir := t.TempDir()

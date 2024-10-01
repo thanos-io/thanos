@@ -452,7 +452,7 @@ func TestRulesComparator(t *testing.T) {
 				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 					{Name: "a", Value: "1"},
 				}}}),
-			want: -4,
+			want: -1,
 		},
 		{
 			name: "label ordering",
@@ -481,7 +481,7 @@ func TestRulesComparator(t *testing.T) {
 					{Name: "a", Value: "1"},
 					{Name: "b", Value: "1"},
 				}}}),
-			want: -4,
+			want: -1,
 		},
 		{
 			name: "different durations",
