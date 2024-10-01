@@ -33,11 +33,26 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-const RemoteReadFrameLimit = 1048576
+const (
+	RemoteReadFrameLimit      = 1048576
+	cuckooStoreFilterCapacity = 1000000
+	storeFilterUpdateInterval = 15 * time.Second
+)
 
 type TSDBReader interface {
 	storage.ChunkQueryable
 	StartTime() (int64, error)
+}
+
+// TSDBStoreOption is a functional option for TSDBStore.
+type TSDBStoreOption func(s *TSDBStore)
+
+// WithCuckooMetricNameStoreFilter returns a TSDBStoreOption that enables the Cuckoo filter for metric names.
+func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.storeFilter = filter.NewCuckooMetricNameStoreFilter(cuckooStoreFilterCapacity)
+		s.startStoreFilterUpdate = true
+	}
 }
 
 // TSDBStore implements the store API against a local TSDB instance.
@@ -50,10 +65,11 @@ type TSDBStore struct {
 	buffers          sync.Pool
 	maxBytesPerFrame int
 
-	extLset     labels.Labels
-	storeFilter filter.StoreFilter
-	mtx         sync.RWMutex
-	close       func()
+	extLset                labels.Labels
+	startStoreFilterUpdate bool
+	storeFilter            filter.StoreFilter
+	mtx                    sync.RWMutex
+	close                  func()
 	storepb.UnimplementedStoreServer
 }
 
@@ -75,20 +91,15 @@ type ReadWriteTSDBStore struct {
 
 // NewTSDBStore creates a new TSDBStore.
 // NOTE: Given lset has to be sorted.
-func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels, metricNameFilterEnabled bool) *TSDBStore {
+func NewTSDBStore(
+	logger log.Logger,
+	db TSDBReader,
+	component component.StoreAPI,
+	extLset labels.Labels,
+	options ...TSDBStoreOption,
+) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
-	}
-
-	var (
-		storeFilter       filter.StoreFilter
-		startFilterUpdate bool
-	)
-
-	storeFilter = filter.AllowAllStoreFilter{}
-	if metricNameFilterEnabled {
-		startFilterUpdate = true
-		storeFilter = filter.NewCuckooMetricNameStoreFilter(1000000) // about 1MB on 64bit machines.
 	}
 
 	st := &TSDBStore{
@@ -96,8 +107,8 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		db:               db,
 		component:        component,
 		extLset:          extLset,
-		storeFilter:      storeFilter,
 		maxBytesPerFrame: RemoteReadFrameLimit,
+		storeFilter:      filter.AllowAllStoreFilter{},
 		close:            func() {},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -105,13 +116,16 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		}},
 	}
 
-	if startFilterUpdate {
-		t := time.NewTicker(15 * time.Second)
+	for _, option := range options {
+		option(st)
+	}
+
+	if st.startStoreFilterUpdate {
 		ctx, cancel := context.WithCancel(context.Background())
-		updateFilter := func() {
-			vals, err := st.LabelValues(context.Background(), &storepb.LabelValuesRequest{
+
+		updateFilter := func(ctx context.Context) {
+			vals, err := st.LabelValues(ctx, &storepb.LabelValuesRequest{
 				Label: model.MetricNameLabel,
-				Start: 0,
 				End:   math.MaxInt64,
 			})
 			if err != nil {
@@ -122,13 +136,15 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 			st.storeFilter.ResetAndSet(vals.Values...)
 		}
 		st.close = cancel
-		updateFilter()
+		updateFilter(ctx)
+
+		t := time.NewTicker(storeFilterUpdateInterval)
 
 		go func() {
 			for {
 				select {
 				case <-t.C:
-					updateFilter()
+					updateFilter(ctx)
 				case <-ctx.Done():
 					return
 				}

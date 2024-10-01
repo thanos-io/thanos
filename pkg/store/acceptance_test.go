@@ -1019,7 +1019,7 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
 		appendFn(db.Appender(context.Background()))
 
-		return NewTSDBStore(nil, db, component.Rule, extLset, false)
+		return NewTSDBStore(nil, db, component.Rule, extLset)
 	}
 
 	testStoreAPIsAcceptance(t, startStore)
@@ -1173,7 +1173,7 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
 			appendFn(db.Appender(context.Background()))
 
-			return NewTSDBStore(nil, db, component.Rule, extLset, false)
+			return NewTSDBStore(nil, db, component.Rule, extLset)
 
 		}
 

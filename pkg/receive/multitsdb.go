@@ -75,6 +75,16 @@ type MultiTSDB struct {
 	metricNameFilterEnabled bool
 }
 
+// MultiTSDBOption is a functional option for MultiTSDB.
+type MultiTSDBOption func(mt *MultiTSDB)
+
+// WithMetricNameFilterEnabled enables metric name filtering on TSDB clients.
+func WithMetricNameFilterEnabled() MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.metricNameFilterEnabled = true
+	}
+}
+
 // NewMultiTSDB creates new MultiTSDB.
 // NOTE: Passed labels must be sorted lexicographically (alphabetically).
 func NewMultiTSDB(
@@ -87,13 +97,13 @@ func NewMultiTSDB(
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
-	metricNameFilterEnabled bool,
+	options ...MultiTSDBOption,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
 
-	return &MultiTSDB{
+	mt := &MultiTSDB{
 		dataDir:                   dataDir,
 		logger:                    log.With(l, "component", "multi-tsdb"),
 		reg:                       reg,
@@ -101,7 +111,6 @@ func NewMultiTSDB(
 		mtx:                       &sync.RWMutex{},
 		tenants:                   map[string]*tenant{},
 		labels:                    labels,
-		metricNameFilterEnabled:   metricNameFilterEnabled,
 		tsdbClientsNeedUpdate:     true,
 		exemplarClientsNeedUpdate: true,
 		tenantLabelName:           tenantLabelName,
@@ -110,6 +119,12 @@ func NewMultiTSDB(
 		hashFunc:                  hashFunc,
         skipMatchExternalLabels:   false
 	}
+
+	for _, option := range options {
+		option(mt)
+	}
+
+	return mt
 }
 
 func (t *MultiTSDB) SkipMatchExternalLabels() {
@@ -780,7 +795,11 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, t.metricNameFilterEnabled), s, ship, exemplars.NewTSDB(s, lset))
+	options := []store.TSDBStoreOption{}
+	if t.metricNameFilterEnabled {
+		options = append(options, store.WithCuckooMetricNameStoreFilter())
+	}
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }
