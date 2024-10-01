@@ -39,14 +39,14 @@ func NewWarningMetadataResponse(warning error) *MetricMetadataResponse {
 	}
 }
 
-func FromMetadataMap(m map[string][]*Meta) *MetricMetadata {
+func FromMetadataMap(m map[string][]Meta) *MetricMetadata {
 	mt := make(map[string]*MetricMetadataEntry, len(m))
 	for k, v := range m {
 		metas := make([]*Meta, len(v))
 		for i, meta := range v {
 			meta := meta
 
-			metas[i] = meta
+			metas[i] = &meta
 		}
 
 		mt[k] = &MetricMetadataEntry{Metas: metas}

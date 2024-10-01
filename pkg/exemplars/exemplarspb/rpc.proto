@@ -7,7 +7,7 @@ package thanos;
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
 
-option go_package = "github.com/thanos-io/thanos/pkg/exemplars/exemplarspb";
+option go_package = "exemplarspb";
 
 /// Exemplars represents API that is responsible for gathering exemplars and their states.
 service Exemplars {

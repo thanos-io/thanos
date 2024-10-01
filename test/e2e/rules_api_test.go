@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -210,10 +211,8 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 			}
 		}
 
-		for i := range want {
-			if !want[i].EqualVT(res[i]) {
-				return errors.Errorf("unexpected result\nwant %v\ngot: %v", want[i], res[i])
-			}
+		if !reflect.DeepEqual(want, res) {
+			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
 		}
 
 		return nil

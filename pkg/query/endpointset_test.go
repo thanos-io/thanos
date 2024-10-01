@@ -87,8 +87,6 @@ type mockedEndpoint struct {
 	infoDelay time.Duration
 	info      infopb.InfoResponse
 	err       error
-
-	infopb.UnimplementedInfoServer
 }
 
 func (c *mockedEndpoint) setResponseError(err error) {

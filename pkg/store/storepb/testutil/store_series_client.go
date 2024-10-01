@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/protobuf/proto"
 )
 
 // StoreSeriesClient is test gRPC storeAPI series client.
@@ -43,7 +42,6 @@ func (c *StoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	}
 	s := c.RespSet[c.i]
 
-	s = proto.Clone(s).(*storepb.SeriesResponse)
 	c.i++
 
 	return s, nil

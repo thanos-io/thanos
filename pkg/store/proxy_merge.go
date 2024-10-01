@@ -154,7 +154,7 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
-		return finalChunks[i].Compare(finalChunks[j]) > 0
+		return finalChunks[i].Compare(*finalChunks[j]) > 0
 	})
 
 	return storepb.NewSeriesResponse(&storepb.Series{
@@ -390,7 +390,7 @@ func newLazyRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.SizeVT()
+			bytesProcessed += resp.Size()
 
 			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
 				return true
@@ -640,7 +640,7 @@ func newEagerRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.SizeVT()
+			bytesProcessed += resp.Size()
 
 			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
 				return true

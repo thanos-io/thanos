@@ -6,7 +6,7 @@ package thanos;
 
 import "store/storepb/types.proto";
 
-option go_package = "github.com/thanos-io/thanos/pkg/metadata/metadatapb";
+option go_package = "metadatapb";
 
 service Metadata {
   rpc MetricMetadata(MetricMetadataRequest) returns (stream MetricMetadataResponse);

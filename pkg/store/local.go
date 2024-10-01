@@ -12,12 +12,12 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -39,8 +39,6 @@ type LocalStore struct {
 	// For small debug purposes, this is good enough.
 	series       []*storepb.Series
 	sortedChunks [][]int
-
-	storepb.UnimplementedStoreServer
 }
 
 // TODO(bwplotka): Add remote read so Prometheus users can use this. Potentially after streaming will be added
@@ -81,9 +79,9 @@ func NewLocalStoreFromJSONMmappableFile(
 	}
 
 	skanner := NewNoCopyScanner(content, split)
-	resp := storepb.SeriesResponse{}
+	resp := &storepb.SeriesResponse{}
 	for skanner.Scan() {
-		if err := protojson.Unmarshal(skanner.Bytes(), &resp); err != nil {
+		if err := jsonpb.Unmarshal(bytes.NewReader(skanner.Bytes()), resp); err != nil {
 			return nil, errors.Wrapf(err, "unmarshal storepb.SeriesResponse frame for file %s", path)
 		}
 		series := resp.GetSeries()

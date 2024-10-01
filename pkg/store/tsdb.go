@@ -46,7 +46,6 @@ type TSDBStore struct {
 
 	extLset labels.Labels
 	mtx     sync.RWMutex
-	storepb.UnimplementedStoreServer
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -233,7 +232,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.SizeVT()
+			bytesLeftForChunks -= lbl.Size()
 		}
 		frameBytesLeft := bytesLeftForChunks
 
@@ -257,7 +256,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 					Hash: hashChunk(hasher, chunkBytes, enableChunkHashCalculation),
 				},
 			}
-			frameBytesLeft -= c.SizeVT()
+			frameBytesLeft -= c.Size()
 			seriesChunks = append(seriesChunks, &c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.

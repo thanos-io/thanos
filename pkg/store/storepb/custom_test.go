@@ -26,12 +26,12 @@ type sample struct {
 }
 
 type listSeriesSet struct {
-	series []*Series
+	series []Series
 	idx    int
 }
 
-func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) *Series {
-	s := &Series{
+func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
+	s := Series{
 		Labels: labelpb.PromLabelsToLabelpbLabels(lset),
 	}
 
@@ -56,7 +56,7 @@ func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) *Series
 }
 
 func newListSeriesSet(tb testing.TB, raw []rawSeries) *listSeriesSet {
-	var series []*Series
+	var series []Series
 	for _, s := range raw {
 		series = append(series, newSeries(tb, s.lset, s.chunks))
 	}

@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestMain(m *testing.M) {
@@ -204,9 +204,10 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 				got[i].LastEvaluation = nil
 
 				t.Run(got[i].Name+" "+path.Base(got[i].File), func(t *testing.T) {
-					testutil.Equals(t, true, expectedForType[i].EqualVT(got[i]))
+					testutil.Equals(t, expectedForType[i], got[i])
 				})
 			}
+			testutil.Equals(t, expectedForType, got)
 		})
 	}
 }

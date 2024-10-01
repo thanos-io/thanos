@@ -63,7 +63,7 @@ func SamplesFromPromqlSeries(series promql.Series) ([]*Sample, []*Histogram) {
 // provided proto message. The caller has to make sure that the proto message
 // represents an integer histogram and not a float histogram.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L626-L645
-func HistogramProtoToHistogram(hp *Histogram) *histogram.Histogram {
+func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 	if hp.IsFloatHistogram() {
 		panic("HistogramProtoToHistogram called with a float histogram")
 	}
@@ -83,7 +83,7 @@ func HistogramProtoToHistogram(hp *Histogram) *histogram.Histogram {
 
 // FloatHistogramToHistogramProto converts a float histogram to a protobuf type.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L647-L667
-func FloatHistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogram {
+func FloatHistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	if !hp.IsFloatHistogram() {
 		panic("FloatHistogramProtoToFloatHistogram called with an integer histogram")
 	}
@@ -105,7 +105,7 @@ func FloatHistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogra
 // provided proto message to a Float Histogram. The caller has to make sure that
 // the proto message represents an float histogram and not a integer histogram.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L669-L688
-func HistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogram {
+func HistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	if hp.IsFloatHistogram() {
 		panic("HistogramProtoToFloatHistogram called with a float histogram")
 	}

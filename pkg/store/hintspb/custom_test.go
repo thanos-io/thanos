@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
-	"google.golang.org/protobuf/types/known/durationpb"
+	protobuf "github.com/gogo/protobuf/types"
 )
 
 func TestQueryStatsMerge(t *testing.T) {
@@ -32,8 +32,8 @@ func TestQueryStatsMerge(t *testing.T) {
 		ChunksFetchedSizeSum:   1,
 		ChunksTouched:          1,
 		ChunksTouchedSizeSum:   1,
-		GetAllDuration:         &durationpb.Duration{Seconds: 1, Nanos: 1},
-		MergeDuration:          &durationpb.Duration{Seconds: 1, Nanos: 1},
+		GetAllDuration:         &protobuf.Duration{Seconds: 1, Nanos: 1},
+		MergeDuration:          &protobuf.Duration{Seconds: 1, Nanos: 1},
 	}
 	o := &QueryStats{
 		BlocksQueried:          1,
@@ -56,8 +56,8 @@ func TestQueryStatsMerge(t *testing.T) {
 		ChunksFetchedSizeSum:   1,
 		ChunksTouched:          1,
 		ChunksTouchedSizeSum:   1,
-		GetAllDuration:         &durationpb.Duration{Seconds: 1, Nanos: 1},
-		MergeDuration:          &durationpb.Duration{Seconds: 1, Nanos: 1},
+		GetAllDuration:         &protobuf.Duration{Seconds: 1, Nanos: 1},
+		MergeDuration:          &protobuf.Duration{Seconds: 1, Nanos: 1},
 	}
 
 	s.Merge(o)
@@ -84,8 +84,8 @@ func TestQueryStatsMerge(t *testing.T) {
 		ChunksFetchedSizeSum:   2,
 		ChunksTouched:          2,
 		ChunksTouchedSizeSum:   2,
-		GetAllDuration:         &durationpb.Duration{Seconds: 2, Nanos: 2},
-		MergeDuration:          &durationpb.Duration{Seconds: 2, Nanos: 2},
+		GetAllDuration:         &protobuf.Duration{Seconds: 2, Nanos: 2},
+		MergeDuration:          &protobuf.Duration{Seconds: 2, Nanos: 2},
 	}
 	testutil.Equals(t, e, s)
 }

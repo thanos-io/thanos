@@ -11,7 +11,6 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -104,7 +103,7 @@ func LabelpbLabelsToPromLabels(lbls []*Label) labels.Labels {
 	return labels.FromStrings(lblSlice...)
 }
 
-func (l *Label) Equal(other *Label) bool {
+func (l *Label) Equal(other Label) bool {
 	return l.Name == other.Name && l.Value == other.Value
 }
 
@@ -182,12 +181,11 @@ func (z LabelSets) Less(i, j int) bool {
 }
 
 func (m *Label) UnmarshalJSON(entry []byte) error {
-	f := proto.Clone(m).(*Label)
+	f := Label(*m)
 	if err := json.Unmarshal(entry, &f); err != nil {
 		return errors.Wrapf(err, "labels: label field unmarshal: %v", string(entry))
 	}
-	m.Name = f.Name
-	m.Value = f.Value
+	*m = Label(f)
 	return nil
 }
 

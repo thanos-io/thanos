@@ -56,12 +56,18 @@ func ModelMetricToCortexMetric(m model.Metric) []*LabelPair {
 	return labels
 }
 
+type byLabel []LabelAdapter
+
+func (s byLabel) Len() int           { return len(s) }
+func (s byLabel) Less(i, j int) bool { return strings.Compare(s[i].Name, s[j].Name) < 0 }
+func (s byLabel) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 // isTesting is only set from tests to get special behaviour to verify that custom sample encode and decode is used,
 // both when using jsonitor or standard json package.
 var isTesting = false
 
 // MarshalJSON implements json.Marshaler.
-func (s *Sample) MarshalJSON() ([]byte, error) {
+func (s Sample) MarshalJSON() ([]byte, error) {
 	if isTesting && math.IsNaN(s.Value) {
 		return nil, fmt.Errorf("test sample")
 	}

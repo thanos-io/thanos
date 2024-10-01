@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -44,7 +44,7 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
-func NewHintsSeriesResponse(hints *anypb.Any) *SeriesResponse {
+func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
@@ -189,7 +189,7 @@ Outer:
 				break Outer
 			}
 
-			cmp := chksA[a].Compare(chksB[b])
+			cmp := chksA[a].Compare(*chksB[b])
 			if cmp > 0 {
 				s.chunks = append(s.chunks, chksA[a])
 				break
@@ -270,7 +270,7 @@ func (s *uniqueSeriesSet) Next() bool {
 
 // Compare returns positive 1 if chunk is smaller -1 if larger than b by min time, then max time.
 // It returns 0 if chunks are exactly the same.
-func (m *AggrChunk) Compare(b *AggrChunk) int {
+func (m AggrChunk) Compare(b AggrChunk) int {
 	if m.MinTime < b.MinTime {
 		return 1
 	}

@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/proto"
 	"github.com/jpillora/backoff"
 	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
@@ -37,7 +38,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
@@ -129,8 +129,6 @@ type Handler struct {
 	writeTimeseriesTotal *prometheus.HistogramVec
 
 	Limiter *Limiter
-
-	storepb.UnimplementedWriteableStoreServer
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {

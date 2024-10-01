@@ -23,6 +23,7 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -39,9 +40,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/thanos-io/objstore"
 
@@ -431,8 +429,6 @@ type BucketStore struct {
 	indexHeaderLazyDownloadStrategy indexheader.LazyDownloadIndexHeaderFunc
 
 	requestLoggerFunc RequestLoggerFunc
-
-	storepb.UnimplementedStoreServer
 }
 
 func (s *BucketStore) validate() error {
@@ -1509,7 +1505,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
-		if err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{}); err != nil {
+		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
 		queryStatsEnabled = reqHints.EnableQueryStats
@@ -1737,12 +1733,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	}
 
 	if s.enableSeriesResponseHints {
-		var anyHints *anypb.Any
+		var anyHints *types.Any
 
 		if queryStatsEnabled {
 			resHints.QueryStats = stats.toHints()
 		}
-		if anyHints, err = anypb.New(resHints); err != nil {
+		if anyHints, err = types.MarshalAny(resHints); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 			return
 		}
@@ -1761,7 +1757,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 func chunksSize(chks []*storepb.AggrChunk) (size int) {
 	for _, chk := range chks {
-		size += chk.SizeVT() // This gets the encoded proto size.
+		size += chk.Size() // This gets the encoded proto size.
 	}
 	return size
 }
@@ -1780,7 +1776,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelNamesRequestHints{}
-		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
+		err := types.UnmarshalAny(req.Hints, reqHints)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
@@ -1949,7 +1945,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(code, err.Error())
 	}
 
-	anyHints, err := anypb.New(resHints)
+	anyHints, err := types.MarshalAny(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
@@ -2001,7 +1997,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelValuesRequestHints{}
-		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
+		err := types.UnmarshalAny(req.Hints, reqHints)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
@@ -2166,7 +2162,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(code, err.Error())
 	}
 
-	anyHints, err := anypb.New(resHints)
+	anyHints, err := types.MarshalAny(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}
@@ -3863,11 +3859,11 @@ func (s *queryStats) toHints() *hintspb.QueryStats {
 		MergedSeriesCount:      int64(s.mergedSeriesCount),
 		MergedChunksCount:      int64(s.mergedChunksCount),
 		DataDownloadedSizeSum:  int64(s.DataDownloadedSizeSum),
-		GetAllDuration: &durationpb.Duration{
+		GetAllDuration: &types.Duration{
 			Seconds: int64(s.GetAllDuration / time.Second),
 			Nanos:   int32(s.GetAllDuration % time.Second),
 		},
-		MergeDuration: &durationpb.Duration{
+		MergeDuration: &types.Duration{
 			Seconds: int64(s.MergeDuration / time.Second),
 			Nanos:   int32(s.MergeDuration % time.Second),
 		},

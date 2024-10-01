@@ -808,7 +808,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					}
 					testutil.Ok(t, err)
 
-					testutil.Assert(t, slices.IsSortedFunc(srv.SeriesSet, func(x, y *storepb.Series) int {
+					testutil.Assert(t, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) int {
 						return labels.Compare(x.PromLabels(), y.PromLabels())
 					}), "Unsorted Series response returned")
 

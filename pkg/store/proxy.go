@@ -86,8 +86,6 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
-
-	storepb.UnimplementedStoreServer
 }
 
 type proxyStoreMetrics struct {
@@ -173,11 +171,11 @@ func (s *ProxyStore) LabelSet() []*labelpb.LabelSet {
 		return []*labelpb.LabelSet{}
 	}
 
-	mergedLabelSets := make(map[uint64]*labelpb.LabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]labelpb.LabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(mergedLabelSet)}
 		}
 	}
 
@@ -185,7 +183,7 @@ func (s *ProxyStore) LabelSet() []*labelpb.LabelSet {
 	for _, v := range mergedLabelSets {
 		v := v
 
-		labelSets = append(labelSets, v)
+		labelSets = append(labelSets, &v)
 	}
 
 	// We always want to enforce announcing the subset of data that

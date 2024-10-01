@@ -206,7 +206,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 
 	for _, tcase := range []struct {
 		req         *storepb.SeriesRequest
-		expected    []*storepb.Series
+		expected    []storepb.Series
 		expectedErr error
 	}{
 		{
@@ -237,7 +237,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: baseT,
 				MaxTime: baseT + 300,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
 					Labels: []*labelpb.Label{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
 				},
@@ -263,7 +263,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: baseT,
 				MaxTime: baseT + 300,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
 					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
@@ -281,7 +281,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: baseT,
 				MaxTime: baseT + 300,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
 					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
@@ -299,7 +299,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: baseT + 400,
 				MaxTime: baseT + 400,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
 					Labels: []*labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
@@ -314,7 +314,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: func() int64 { minTime, _ := promStore.timestamps(); return minTime }(),
 				MaxTime: func() int64 { _, maxTime := promStore.timestamps(); return maxTime }(),
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
 					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
@@ -337,10 +337,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			}
 			testutil.Ok(t, err)
 			testutil.Equals(t, []string(nil), srv.Warnings)
-			testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
-			for i := range tcase.expected {
-				testutil.Equals(t, true, tcase.expected[i].EqualVT(srv.SeriesSet[i]))
-			}
+			testutil.Equals(t, tcase.expected, srv.SeriesSet)
 		})
 	}
 }

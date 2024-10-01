@@ -182,9 +182,9 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			)
 
 			if hp.IsFloatHistogram() {
-				fh = prompb.FloatHistogramProtoToFloatHistogram(hp)
+				fh = prompb.FloatHistogramProtoToFloatHistogram(*hp)
 			} else {
-				h = prompb.HistogramProtoToHistogram(hp)
+				h = prompb.HistogramProtoToHistogram(*hp)
 			}
 
 			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, fh)

@@ -63,7 +63,7 @@ ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
-PROTOC_VERSION    ?= 3.20.0
+PROTOC_VERSION    ?= 3.20.1
 GIT               ?= $(shell which git)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
@@ -292,8 +292,8 @@ go-format: $(GOIMPORTS)
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
-proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST) $(PROTOC_GO_INJECT_TAG) $(PROTOC_GEN_GO_VTPROTO) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_VTPROTO)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" PROTOC_GO_INJECT_TAG_BIN="$(PROTOC_GO_INJECT_TAG)" PROTOC_GEN_GO_VTPROTO_BIN="$(PROTOC_GEN_GO_VTPROTO)" PROTOC_GEN_GO_BIN="$(PROTOC_GEN_GO)" PROTOC_GEN_GO_GRPC_BIN="$(PROTOC_GEN_GO_GRPC)" scripts/genproto.sh
+proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST) $(PROTOC_GO_INJECT_TAG)
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" PROTOC_GO_INJECT_TAG_BIN="$(PROTOC_GO_INJECT_TAG)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
@@ -397,9 +397,6 @@ go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
 github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
-github.com/prometheus/prometheus/prompb=github.com/thanos-io/thanos/pkg/store/storepb/prompb,\
-github.com/gogo/protobuf=google.golang.org/protobuf,\
-github.com/gogo/protobuf/proto=google.golang.org/protobuf/proto,\
 github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/testutil,\
 github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\

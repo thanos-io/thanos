@@ -26,8 +26,8 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
-	uproto "google.golang.org/protobuf/proto"
-
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
@@ -45,7 +45,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
@@ -718,8 +717,7 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 	slices.SortFunc(infos, func(a, b *infopb.TSDBInfo) int {
 		return strings.Compare(a.Labels.String(), b.Labels.String())
 	})
-
-	expected := []*infopb.TSDBInfo{
+	testutil.Equals(t, infos, []*infopb.TSDBInfo{
 		{
 			Labels:  &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "a", Value: "b"}}},
 			MinTime: 0,
@@ -735,12 +733,7 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 			MinTime: 0,
 			MaxTime: 2000,
 		},
-	}
-	testutil.Equals(t, len(infos), len(expected))
-
-	for i := range expected {
-		testutil.Equals(t, true, expected[i].EqualVT(infos[i]))
-	}
+	})
 }
 
 type recorder struct {
@@ -1904,7 +1897,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 					},
 				},
 			},
-			HintsCompareFunc: func(t testutil.TB, expected, actual *hintspb.SeriesResponseHints) {
+			HintsCompareFunc: func(t testutil.TB, expected, actual hintspb.SeriesResponseHints) {
 				testutil.Equals(t, expected.QueriedBlocks, actual.QueriedBlocks)
 				testutil.Equals(t, expected.QueryStats.BlocksQueried, actual.QueryStats.BlocksQueried)
 				testutil.Equals(t, expected.QueryStats.PostingsTouched, actual.QueryStats.PostingsTouched)
@@ -2276,8 +2269,8 @@ func uploadSeriesToBucket(t *testing.T, bkt *filesystem.Bucket, replica string, 
 	return h
 }
 
-func mustMarshalAny(pb uproto.Message) *anypb.Any {
-	out, err := anypb.New(pb)
+func mustMarshalAny(pb proto.Message) *types.Any {
+	out, err := types.MarshalAny(pb)
 	if err != nil {
 		panic(err)
 	}
@@ -2421,11 +2414,11 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 
 		labelNamesReq      *storepb.LabelNamesRequest
 		expectedNames      []string
-		expectedNamesHints *hintspb.LabelNamesResponseHints
+		expectedNamesHints hintspb.LabelNamesResponseHints
 
 		labelValuesReq      *storepb.LabelValuesRequest
 		expectedValues      []string
-		expectedValuesHints *hintspb.LabelValuesResponseHints
+		expectedValuesHints hintspb.LabelValuesResponseHints
 	}
 
 	testCases := []labelNamesValuesCase{
@@ -2437,7 +2430,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				End:   1,
 			},
 			expectedNames: labelNamesFromSeriesSet(seriesSet1),
-			expectedNamesHints: &hintspb.LabelNamesResponseHints{
+			expectedNamesHints: hintspb.LabelNamesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2449,7 +2442,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				End:   1,
 			},
 			expectedValues: []string{"1"},
-			expectedValuesHints: &hintspb.LabelValuesResponseHints{
+			expectedValuesHints: hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2465,7 +2458,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			expectedNames: labelNamesFromSeriesSet(
 				append(append([]*storepb.Series{}, seriesSet1...), seriesSet2...),
 			),
-			expectedNamesHints: &hintspb.LabelNamesResponseHints{
+			expectedNamesHints: hintspb.LabelNamesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 					{Id: block2.String()},
@@ -2478,7 +2471,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				End:   3,
 			},
 			expectedValues: []string{"1"},
-			expectedValuesHints: &hintspb.LabelValuesResponseHints{
+			expectedValuesHints: hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 					{Id: block2.String()},
@@ -2497,7 +2490,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				}),
 			},
 			expectedNames: labelNamesFromSeriesSet(seriesSet1),
-			expectedNamesHints: &hintspb.LabelNamesResponseHints{
+			expectedNamesHints: hintspb.LabelNamesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2514,7 +2507,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				}),
 			},
 			expectedValues: []string{"1"},
-			expectedValuesHints: &hintspb.LabelValuesResponseHints{
+			expectedValuesHints: hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2529,24 +2522,24 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			testutil.Equals(t, tc.expectedNames, namesResp.Names)
 
 			var namesHints hintspb.LabelNamesResponseHints
-			testutil.Ok(t, anypb.UnmarshalTo(namesResp.Hints, &namesHints, uproto.UnmarshalOptions{}))
+			testutil.Ok(t, types.UnmarshalAny(namesResp.Hints, &namesHints))
 			// The order is not determinate, so we are sorting them.
 			sort.Slice(namesHints.QueriedBlocks, func(i, j int) bool {
 				return namesHints.QueriedBlocks[i].Id < namesHints.QueriedBlocks[j].Id
 			})
-			testutil.Equals(t, true, tc.expectedNamesHints.EqualVT(&namesHints))
+			testutil.Equals(t, tc.expectedNamesHints, namesHints)
 
 			valuesResp, err := store.LabelValues(context.Background(), tc.labelValuesReq)
 			testutil.Ok(t, err)
 			testutil.Equals(t, tc.expectedValues, valuesResp.Values)
 
 			var valuesHints hintspb.LabelValuesResponseHints
-			testutil.Ok(t, anypb.UnmarshalTo(valuesResp.Hints, &valuesHints, uproto.UnmarshalOptions{}))
+			testutil.Ok(t, types.UnmarshalAny(valuesResp.Hints, &valuesHints))
 			// The order is not determinate, so we are sorting them.
 			sort.Slice(valuesHints.QueriedBlocks, func(i, j int) bool {
 				return valuesHints.QueriedBlocks[i].Id < valuesHints.QueriedBlocks[j].Id
 			})
-			testutil.Equals(t, true, tc.expectedValuesHints.EqualVT(&valuesHints))
+			testutil.Equals(t, tc.expectedValuesHints, valuesHints)
 		})
 	}
 }
@@ -3639,7 +3632,7 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		},
 	}, srv))
 
-	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y *storepb.Series) int {
+	testutil.Equals(t, true, slices.IsSortedFunc(srv.SeriesSet, func(x, y storepb.Series) int {
 		return labels.Compare(x.PromLabels(), y.PromLabels())
 	}))
 	testutil.Equals(t, 2, len(srv.SeriesSet))

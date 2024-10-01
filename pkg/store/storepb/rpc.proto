@@ -8,7 +8,7 @@ import "store/storepb/types.proto";
 import "store/storepb/prompb/types.proto";
 import "google/protobuf/any.proto";
 
-option go_package = "github.com/thanos-io/thanos/pkg/store/storepb";
+option go_package = "storepb";
 
 /// Store represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
 service Store {

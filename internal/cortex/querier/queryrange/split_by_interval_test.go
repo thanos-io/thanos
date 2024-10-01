@@ -263,11 +263,7 @@ func TestSplitQuery(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			days, err := splitQuery(tc.input, tc.interval)
 			require.NoError(t, err)
-
-			for i, r := range tc.expected {
-				require.Equal(t, true, r.(*PrometheusRequest).EqualVT(days[i].(*PrometheusRequest)))
-			}
-			require.Equal(t, len(tc.expected), len(days))
+			require.Equal(t, tc.expected, days)
 		})
 	}
 }

@@ -30,7 +30,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/gate"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -1234,8 +1233,6 @@ func (s *testStoreServer) Series(r *storepb.SeriesRequest, srv storepb.Store_Ser
 		resps = s.respsWithoutReplicaLabels
 	}
 	for _, resp := range resps {
-		resp = proto.Clone(resp).(*storepb.SeriesResponse)
-
 		err := srv.Send(resp)
 		if err != nil {
 			return err

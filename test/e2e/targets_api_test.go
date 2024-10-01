@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -127,7 +128,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		sort.Slice(res.ActiveTargets, func(i, j int) bool { return res.ActiveTargets[i].Compare(res.ActiveTargets[j]) < 0 })
 		sort.Slice(res.DroppedTargets, func(i, j int) bool { return res.DroppedTargets[i].Compare(res.DroppedTargets[j]) < 0 })
 
-		if !want.EqualVT(res) {
+		if !reflect.DeepEqual(want, res) {
 			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
 		}
 

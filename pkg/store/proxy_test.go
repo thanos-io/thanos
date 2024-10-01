@@ -17,6 +17,8 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
@@ -24,8 +26,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -1772,7 +1772,7 @@ type rawSeries struct {
 	chunks [][]sample
 }
 
-func seriesEquals(t *testing.T, expected []rawSeries, got []*storepb.Series) {
+func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n want: %v \n  got: %v", expected, got)
 
 	ret := make([]rawSeries, len(got))
@@ -1942,9 +1942,9 @@ type storeSeriesServer struct {
 
 	ctx context.Context
 
-	SeriesSet []*storepb.Series
+	SeriesSet []storepb.Series
 	Warnings  []string
-	HintsSet  []*anypb.Any
+	HintsSet  []*types.Any
 
 	Size int64
 }
@@ -1954,7 +1954,7 @@ func newStoreSeriesServer(ctx context.Context) *storeSeriesServer {
 }
 
 func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.SizeVT())
+	s.Size += int64(r.Size())
 
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())
@@ -1962,7 +1962,7 @@ func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
 	}
 
 	if r.GetSeries() != nil {
-		s.SeriesSet = append(s.SeriesSet, r.GetSeries())
+		s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
 		return nil
 	}
 
@@ -2109,7 +2109,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 
 	var allResps []*storepb.SeriesResponse
 	var expected []*storepb.Series
-	lastLabels := &storepb.Series{}
+	lastLabels := storepb.Series{}
 	for _, c := range clients {
 		m := c.(*storetestutil.TestClient).StoreClient.(*mockedStoreAPI)
 
@@ -2125,8 +2125,8 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, sr.Chunks...)
 				continue
 			}
-			lastLabels = &x
-			expected = append(expected, sr)
+			lastLabels = x
+			expected = append(expected, r.GetSeries())
 		}
 
 	}

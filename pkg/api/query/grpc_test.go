@@ -185,7 +185,7 @@ type queryServer struct {
 	querypb.Query_QueryServer
 
 	ctx       context.Context
-	responses []*querypb.QueryResponse
+	responses []querypb.QueryResponse
 }
 
 func newQueryServer(ctx context.Context) *queryServer {
@@ -193,7 +193,7 @@ func newQueryServer(ctx context.Context) *queryServer {
 }
 
 func (q *queryServer) Send(r *querypb.QueryResponse) error {
-	q.responses = append(q.responses, r)
+	q.responses = append(q.responses, *r)
 	return nil
 }
 
@@ -205,7 +205,7 @@ type queryRangeServer struct {
 	querypb.Query_QueryRangeServer
 
 	ctx       context.Context
-	responses []*querypb.QueryRangeResponse
+	responses []querypb.QueryRangeResponse
 }
 
 func newQueryRangeServer(ctx context.Context) *queryRangeServer {
@@ -213,7 +213,7 @@ func newQueryRangeServer(ctx context.Context) *queryRangeServer {
 }
 
 func (q *queryRangeServer) Send(r *querypb.QueryRangeResponse) error {
-	q.responses = append(q.responses, r)
+	q.responses = append(q.responses, *r)
 	return nil
 }
 

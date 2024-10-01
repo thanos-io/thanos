@@ -7,8 +7,6 @@ package queryfrontend;
 
 import "store/labelpb/types.proto";
 
-option go_package = "github.com/thanos-io/thanos/pkg/queryfrontend";
-
 message ThanosLabelsResponse {
   // @gotags: json:"status"
   string Status = 1;
