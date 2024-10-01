@@ -183,7 +183,10 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			return labelpb.CompareLabels(a.GetSeries().Labels, b.GetSeries().Labels) < 0
+			iLbls := labelpb.LabelpbLabelsToPromLabels(a.GetSeries().Labels)
+			jLbls := labelpb.LabelpbLabelsToPromLabels(b.GetSeries().Labels)
+
+			return labels.Compare(iLbls, jLbls) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
 			return true
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {
