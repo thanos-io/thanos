@@ -104,14 +104,14 @@ func TestQuerier_Proxy(t *testing.T) {
 
 // selectStore allows wrapping another storeEndpoints with additional time and matcher selection.
 type selectStore struct {
-	matchers []*storepb.LabelMatcher
+	matchers []storepb.LabelMatcher
 
 	storepb.StoreServer
 	mint, maxt int64
 }
 
 // selectedStore wraps given store with selectStore.
-func selectedStore(wrapped storepb.StoreServer, matchers []*storepb.LabelMatcher, mint, maxt int64) *selectStore {
+func selectedStore(wrapped storepb.StoreServer, matchers []storepb.LabelMatcher, mint, maxt int64) *selectStore {
 	return &selectStore{
 		StoreServer: wrapped,
 		matchers:    matchers,
@@ -128,7 +128,7 @@ func (s *selectStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesS
 		r.MaxTime = s.maxt
 	}
 
-	matchers := make([]*storepb.LabelMatcher, 0, len(r.Matchers))
+	matchers := make([]storepb.LabelMatcher, 0, len(r.Matchers))
 	matchers = append(matchers, r.Matchers...)
 
 	req := *r

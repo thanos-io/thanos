@@ -36,7 +36,7 @@ func (s *ShardMatcher) Close() {
 	}
 }
 
-func (s *ShardMatcher) MatchesLabels(lbls []*labelpb.Label) bool {
+func (s *ShardMatcher) MatchesLabels(lbls []labelpb.Label) bool {
 	// Match all series when query is not sharded
 	if s == nil || !s.isSharded {
 		return true
@@ -56,7 +56,7 @@ func (s *ShardMatcher) MatchesLabels(lbls []*labelpb.Label) bool {
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
 }
 
-func shardByLabel(labelSet map[string]struct{}, lbl *labelpb.Label, groupingBy bool) bool {
+func shardByLabel(labelSet map[string]struct{}, lbl labelpb.Label, groupingBy bool) bool {
 	_, shardHasLabel := labelSet[lbl.Name]
 	if groupingBy && shardHasLabel {
 		return true

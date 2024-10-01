@@ -70,7 +70,7 @@ func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemp
 
 	for _, e := range exemplars {
 		exd := exemplarspb.ExemplarData{
-			SeriesLabels: &labelpb.LabelSet{
+			SeriesLabels: labelpb.LabelSet{
 				Labels: labelpb.PromLabelsToLabelpbLabels(labelpb.ExtendSortedLabels(e.SeriesLabels, t.getExtLabels())),
 			},
 			Exemplars: exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),

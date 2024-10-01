@@ -20,14 +20,20 @@ package prometheus_copy;
 option go_package = "prompb";
 
 import "store/storepb/prompb/types.proto";
+import "gogoproto/gogo.proto";
 
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message WriteRequest {
-  repeated TimeSeries timeseries = 1;
+  repeated TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   // Cortex uses this field to determine the source of the write request.
   // We reserve it to avoid any compatibility issues.
   reserved  2;
-  repeated MetricMetadata metadata = 3;
+  repeated MetricMetadata metadata = 3 [(gogoproto.nullable) = false];
 }
 
 // ReadRequest represents a remote read request.

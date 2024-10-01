@@ -37,7 +37,7 @@ type responseDeduplicator struct {
 	prev *storepb.SeriesResponse
 	ok   bool
 
-	chunkDedupMap map[uint64]*storepb.AggrChunk
+	chunkDedupMap map[uint64]storepb.AggrChunk
 }
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
@@ -52,7 +52,7 @@ func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]
 		h:             h,
 		ok:            ok,
 		prev:          prev,
-		chunkDedupMap: make(map[uint64]*storepb.AggrChunk),
+		chunkDedupMap: make(map[uint64]storepb.AggrChunk),
 	}
 }
 
@@ -154,7 +154,7 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
-		return finalChunks[i].Compare(*finalChunks[j]) > 0
+		return finalChunks[i].Compare(finalChunks[j]) > 0
 	})
 
 	return storepb.NewSeriesResponse(&storepb.Series{

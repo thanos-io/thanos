@@ -796,7 +796,7 @@ func runQuery(
 
 		infoSrv := info.NewInfoServer(
 			component.Query.String(),
-			info.WithLabelSetFunc(func() []*labelpb.LabelSet { return proxyStore.LabelSet() }),
+			info.WithLabelSetFunc(func() []labelpb.LabelSet { return proxyStore.LabelSet() }),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					mint, maxt := proxyStore.TimeRange()

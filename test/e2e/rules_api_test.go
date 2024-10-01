@@ -104,7 +104,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -120,7 +120,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthGood),
@@ -135,7 +135,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthGood),
@@ -151,7 +151,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WithLimit",
 					State: rulespb.AlertState_INACTIVE,
 					Query: `promhttp_metric_handler_requests_total`,
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthBad),
@@ -184,7 +184,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 		}
 
 		for ig, g := range res {
-			res[ig].LastEvaluation = nil
+			res[ig].LastEvaluation = time.Time{}
 			res[ig].EvaluationDurationSeconds = 0
 			res[ig].Interval = 0
 			res[ig].PartialResponseStrategy = 0

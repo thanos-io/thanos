@@ -8,9 +8,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-func NewTSDBInfo(mint, maxt int64, lbls []*labelpb.Label) *TSDBInfo {
-	return &TSDBInfo{
-		Labels: &labelpb.LabelSet{
+func NewTSDBInfo(mint, maxt int64, lbls []labelpb.Label) TSDBInfo {
+	return TSDBInfo{
+		Labels: labelpb.LabelSet{
 			Labels: lbls,
 		},
 		MinTime: mint,
@@ -18,7 +18,7 @@ func NewTSDBInfo(mint, maxt int64, lbls []*labelpb.Label) *TSDBInfo {
 	}
 }
 
-type TSDBInfos []*TSDBInfo
+type TSDBInfos []TSDBInfo
 
 func (infos TSDBInfos) MaxT() int64 {
 	var maxt int64 = math.MinInt64

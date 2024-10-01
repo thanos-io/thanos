@@ -272,7 +272,7 @@ func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
 
 	for _, g := range data.Data.Groups {
 		testutil.Assert(t, g.EvaluationDurationSeconds > 0, "expected it to take more than zero seconds to evaluate")
-		testutil.Assert(t, !rulespb.TimestampToTime(g.LastEvaluation).IsZero(), "expected the rule group to be evaluated at least once")
+		testutil.Assert(t, !g.LastEvaluation.IsZero(), "expected the rule group to be evaluated at least once")
 	}
 }
 
@@ -831,7 +831,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 			if alerts[0].State == rulespb.AlertState_FIRING {
 				// The second ruler alert's active at time is the same as the previous one,
 				// which means the alert state is restored successfully.
-				if rulespb.TimestampToTime(alertActiveAt).Unix() == rulespb.TimestampToTime(alerts[0].ActiveAt).Unix() {
+				if alertActiveAt.Unix() == alerts[0].ActiveAt.Unix() {
 					return nil
 				} else {
 					return fmt.Errorf("alert active time is not restored")

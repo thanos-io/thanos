@@ -55,7 +55,7 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 	req := &storepb.SeriesRequest{
 		MinTime: 1,
 		MaxTime: 3,
-		Matchers: []*storepb.LabelMatcher{
+		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
 	}
@@ -101,7 +101,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 			},
@@ -117,7 +117,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 2,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 			},
@@ -133,7 +133,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 4,
 				MaxTime: 6,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 			},
@@ -144,7 +144,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 				},
 			},
@@ -155,7 +155,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 				},
 			},
@@ -166,7 +166,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 				SkipChunks: true,
@@ -259,7 +259,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: math.MaxInt64,
-			Matchers: []*storepb.LabelMatcher{
+			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 			},
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
@@ -421,7 +421,7 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: math.MaxInt64,
-			Matchers: []*storepb.LabelMatcher{
+			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 			},
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
@@ -563,16 +563,16 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]*labelpb.Label, 0, len(s.Labels)+extLabels.Len())
+			lbls := make([]labelpb.Label, 0, len(s.Labels)+extLabels.Len())
 			for _, l := range s.Labels {
-				lbls = append(lbls, &labelpb.Label{
+				lbls = append(lbls, labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
 			}
 			extLabels.Range(func(l labels.Label) {
-				lbls = append(lbls, &labelpb.Label{
+				lbls = append(lbls, labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
 				})
@@ -609,7 +609,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: math.MaxInt64,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,

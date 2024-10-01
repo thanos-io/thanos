@@ -167,7 +167,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, &storepb.AggrChunk{
+			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
 				Raw: &storepb.Chunk{

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/prometheus/common/model"
@@ -131,14 +132,14 @@ func TestResponseWithStats(t *testing.T) {
 			body: `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"foo":"bar"},"values":[[1536673680,"137"],[1536673780,"137"]]}],"stats":{"samples":{"totalQueryableSamples":10,"totalQueryableSamplesPerStep":[[1536673680,5],[1536673780,5]]}},"analysis":null}}`,
 			expected: &PrometheusResponse{
 				Status: "success",
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: model.ValMatrix.String(),
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{
-								{Name: []byte("foo"), Value: []byte("bar")},
+							Labels: []cortexpb.LabelAdapter{
+								{Name: "foo", Value: "bar"},
 							},
-							Samples: []*cortexpb.Sample{
+							Samples: []cortexpb.Sample{
 								{Value: 137, TimestampMs: 1536673680000},
 								{Value: 137, TimestampMs: 1536673780000},
 							},
@@ -160,20 +161,18 @@ func TestResponseWithStats(t *testing.T) {
 			body: `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"foo":"bar"},"values":[[1536673680,"137"],[1536673780,"137"]]}],"stats":{"samples":{"totalQueryableSamples":10,"totalQueryableSamplesPerStep":[[1536673680,5],[1536673780,5]]}},"analysis":{"name":"[noArgFunction]","executionTime":"1s","children":null}}}`,
 			expected: &PrometheusResponse{
 				Status: "success",
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					Analysis: &Analysis{
-						Name: "[noArgFunction]",
-						ExecutionTime: &Duration{
-							Seconds: 1,
-						},
+						Name:          "[noArgFunction]",
+						ExecutionTime: Duration(1 * time.Second),
 					},
 					ResultType: model.ValMatrix.String(),
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{
-								{Name: []byte("foo"), Value: []byte("bar")},
+							Labels: []cortexpb.LabelAdapter{
+								{Name: "foo", Value: "bar"},
 							},
-							Samples: []*cortexpb.Sample{
+							Samples: []cortexpb.Sample{
 								{Value: 137, TimestampMs: 1536673680000},
 								{Value: 137, TimestampMs: 1536673780000},
 							},
@@ -228,10 +227,10 @@ func TestMergeAPIResponses(t *testing.T) {
 			input: []Response{},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   (*Analysis)(nil),
-					Result:     []*SampleStream{},
+					Result:     []SampleStream{},
 				},
 			},
 		},
@@ -240,18 +239,18 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "A single empty response shouldn't panic.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result:     []*SampleStream{},
+						Result:     []SampleStream{},
 					},
 				},
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result:     []*SampleStream{},
+					Result:     []SampleStream{},
 				},
 			},
 		},
@@ -260,24 +259,24 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "Multiple empty responses shouldn't panic.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result:     []*SampleStream{},
+						Result:     []SampleStream{},
 					},
 				},
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result:     []*SampleStream{},
+						Result:     []SampleStream{},
 					},
 				},
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result:     []*SampleStream{},
+					Result:     []SampleStream{},
 				},
 			},
 		},
@@ -286,18 +285,16 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "Basic merging of two responses.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
 						Analysis: &Analysis{
-							Name: "foo",
-							ExecutionTime: &Duration{
-								Seconds: 1,
-							},
+							Name:          "foo",
+							ExecutionTime: Duration(1 * time.Second),
 						},
-						Result: []*SampleStream{
+						Result: []SampleStream{
 							{
-								Labels: []*cortexpb.LabelPair{},
-								Samples: []*cortexpb.Sample{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
 									{Value: 0, TimestampMs: 0},
 									{Value: 1, TimestampMs: 1},
 								},
@@ -306,18 +303,16 @@ func TestMergeAPIResponses(t *testing.T) {
 					},
 				},
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
 						Analysis: &Analysis{
-							Name: "foo",
-							ExecutionTime: &Duration{
-								Seconds: 1,
-							},
+							Name:          "foo",
+							ExecutionTime: Duration(1 * time.Second),
 						},
-						Result: []*SampleStream{
+						Result: []SampleStream{
 							{
-								Labels: []*cortexpb.LabelPair{},
-								Samples: []*cortexpb.Sample{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
 									{Value: 2, TimestampMs: 2},
 									{Value: 3, TimestampMs: 3},
 								},
@@ -328,18 +323,16 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis: &Analysis{
-						Name: "foo",
-						ExecutionTime: &Duration{
-							Seconds: 2,
-						},
+						Name:          "foo",
+						ExecutionTime: Duration(2 * time.Second),
 					},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{},
+							Samples: []cortexpb.Sample{
 								{Value: 0, TimestampMs: 0},
 								{Value: 1, TimestampMs: 1},
 								{Value: 2, TimestampMs: 2},
@@ -355,21 +348,17 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "Basic merging of two responses with nested analysis trees.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
 						Analysis: &Analysis{
-							Name: "foo",
-							Children: []*Analysis{{Name: "bar", ExecutionTime: &Duration{
-								Seconds: 1,
-							}}},
-							ExecutionTime: &Duration{
-								Seconds: 1,
-							},
+							Name:          "foo",
+							Children:      []*Analysis{{Name: "bar", ExecutionTime: Duration(1 * time.Second)}},
+							ExecutionTime: Duration(1 * time.Second),
 						},
-						Result: []*SampleStream{
+						Result: []SampleStream{
 							{
-								Labels: []*cortexpb.LabelPair{},
-								Samples: []*cortexpb.Sample{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
 									{Value: 0, TimestampMs: 0},
 									{Value: 1, TimestampMs: 1},
 								},
@@ -378,21 +367,17 @@ func TestMergeAPIResponses(t *testing.T) {
 					},
 				},
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
 						Analysis: &Analysis{
-							Name: "foo",
-							Children: []*Analysis{{Name: "bar", ExecutionTime: &Duration{
-								Seconds: 1,
-							}}},
-							ExecutionTime: &Duration{
-								Seconds: 1,
-							},
+							Name:          "foo",
+							Children:      []*Analysis{{Name: "bar", ExecutionTime: Duration(1 * time.Second)}},
+							ExecutionTime: Duration(1 * time.Second),
 						},
-						Result: []*SampleStream{
+						Result: []SampleStream{
 							{
-								Labels: []*cortexpb.LabelPair{},
-								Samples: []*cortexpb.Sample{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
 									{Value: 2, TimestampMs: 2},
 									{Value: 3, TimestampMs: 3},
 								},
@@ -403,21 +388,17 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis: &Analysis{
-						Name: "foo",
-						Children: []*Analysis{{Name: "bar", ExecutionTime: &Duration{
-							Seconds: 2,
-						}}},
-						ExecutionTime: &Duration{
-							Seconds: 2,
-						},
+						Name:          "foo",
+						Children:      []*Analysis{{Name: "bar", ExecutionTime: Duration(2 * time.Second)}},
+						ExecutionTime: Duration(2 * time.Second),
 					},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{},
+							Samples: []cortexpb.Sample{
 								{Value: 0, TimestampMs: 0},
 								{Value: 1, TimestampMs: 1},
 								{Value: 2, TimestampMs: 2},
@@ -437,13 +418,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 0, TimestampMs: 0},
 								{Value: 1, TimestampMs: 1000},
 								{Value: 2, TimestampMs: 2000},
@@ -463,13 +444,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 1, TimestampMs: 1000},
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
@@ -487,13 +468,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					Analysis:   &Analysis{},
 					ResultType: matrix,
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 1, TimestampMs: 1000},
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
@@ -513,13 +494,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
 								{Value: 4, TimestampMs: 4000},
@@ -534,19 +515,19 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "[stats] A single empty response shouldn't panic.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result:     []*SampleStream{},
+						Result:     []SampleStream{},
 						Stats:      &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}},
 					},
 				},
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result:     []*SampleStream{},
+					Result:     []SampleStream{},
 					Stats:      &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}},
 				},
 			},
@@ -556,26 +537,26 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "[stats] Multiple empty responses shouldn't panic.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result:     []*SampleStream{},
+						Result:     []SampleStream{},
 						Stats:      &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}},
 					},
 				},
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result:     []*SampleStream{},
+						Result:     []SampleStream{},
 						Stats:      &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}},
 					},
 				},
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					Analysis:   &Analysis{},
 					ResultType: matrix,
-					Result:     []*SampleStream{},
+					Result:     []SampleStream{},
 					Stats:      &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}},
 				},
 			},
@@ -585,12 +566,12 @@ func TestMergeAPIResponses(t *testing.T) {
 			name: "[stats] Basic merging of two responses.",
 			input: []Response{
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						ResultType: matrix,
-						Result: []*SampleStream{
+						Result: []SampleStream{
 							{
-								Labels: []*cortexpb.LabelPair{},
-								Samples: []*cortexpb.Sample{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
 									{Value: 0, TimestampMs: 0},
 									{Value: 1, TimestampMs: 1},
 								},
@@ -606,13 +587,13 @@ func TestMergeAPIResponses(t *testing.T) {
 					},
 				},
 				&PrometheusResponse{
-					Data: &PrometheusData{
+					Data: PrometheusData{
 						Analysis:   &Analysis{},
 						ResultType: matrix,
-						Result: []*SampleStream{
+						Result: []SampleStream{
 							{
-								Labels: []*cortexpb.LabelPair{},
-								Samples: []*cortexpb.Sample{
+								Labels: []cortexpb.LabelAdapter{},
+								Samples: []cortexpb.Sample{
 									{Value: 2, TimestampMs: 2},
 									{Value: 3, TimestampMs: 3},
 								},
@@ -630,13 +611,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					Analysis:   &Analysis{},
 					ResultType: matrix,
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{},
+							Samples: []cortexpb.Sample{
 								{Value: 0, TimestampMs: 0},
 								{Value: 1, TimestampMs: 1},
 								{Value: 2, TimestampMs: 2},
@@ -664,13 +645,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 1, TimestampMs: 1000},
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
@@ -697,13 +678,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 1, TimestampMs: 1000},
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
@@ -737,13 +718,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 1, TimestampMs: 1000},
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
@@ -773,13 +754,13 @@ func TestMergeAPIResponses(t *testing.T) {
 			},
 			expected: &PrometheusResponse{
 				Status: StatusSuccess,
-				Data: &PrometheusData{
+				Data: PrometheusData{
 					ResultType: matrix,
 					Analysis:   &Analysis{},
-					Result: []*SampleStream{
+					Result: []SampleStream{
 						{
-							Labels: []*cortexpb.LabelPair{{Name: []byte("a"), Value: []byte("b")}, {Name: []byte("c"), Value: []byte("d")}},
-							Samples: []*cortexpb.Sample{
+							Labels: []cortexpb.LabelAdapter{{Name: "a", Value: "b"}, {Name: "c", Value: "d"}},
+							Samples: []cortexpb.Sample{
 								{Value: 2, TimestampMs: 2000},
 								{Value: 3, TimestampMs: 3000},
 								{Value: 4, TimestampMs: 4000},

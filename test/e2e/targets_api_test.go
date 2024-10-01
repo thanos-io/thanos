@@ -64,7 +64,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "__address__", Value: "localhost:9090"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -73,7 +73,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
 				}},
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "instance", Value: "localhost:9090"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
@@ -85,7 +85,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -120,7 +120,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		}
 
 		for it := range res.ActiveTargets {
-			res.ActiveTargets[it].LastScrape = nil
+			res.ActiveTargets[it].LastScrape = time.Time{}
 			res.ActiveTargets[it].LastScrapeDuration = 0
 			res.ActiveTargets[it].GlobalUrl = ""
 		}

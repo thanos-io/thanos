@@ -323,11 +323,11 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			seriesStats.CountSeries(series.Labels)
-			thanosChks := make([]*storepb.AggrChunk, len(series.Chunks))
+			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 
 			for i, chk := range series.Chunks {
 				chkHash := hashChunk(hasher, chk.Data, calculateChecksums)
-				thanosChks[i] = &storepb.AggrChunk{
+				thanosChks[i] = storepb.AggrChunk{
 					MaxTime: chk.MaxTimeMs,
 					MinTime: chk.MinTimeMs,
 					Raw: &storepb.Chunk{
@@ -418,7 +418,7 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	return &data, nil
 }
 
-func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []*storepb.AggrChunk, err error) {
+func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []storepb.AggrChunk, err error) {
 	samples := series.Samples
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
@@ -435,7 +435,7 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 		}
 
 		chkHash := hashChunk(hasher, cb, calculateChecksums)
-		chks = append(chks, &storepb.AggrChunk{
+		chks = append(chks, storepb.AggrChunk{
 			MinTime: samples[0].Timestamp,
 			MaxTime: samples[chunkSize-1].Timestamp,
 			Raw:     &storepb.Chunk{Type: enc, Data: cb, Hash: chkHash},
@@ -487,7 +487,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(ms []*storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
 	tms, err := storepb.MatchersToPromMatchers(ms...)
 	if err != nil {
 		return false, nil, err
@@ -519,7 +519,7 @@ func matchesExternalLabels(ms []*storepb.LabelMatcher, externalLabels labels.Lab
 
 // encodeChunk translates the sample pairs into a chunk.
 // TODO(kakkoyun): Linter - result 0 (github.com/thanos-io/thanos/pkg/store/storepb.Chunk_Encoding) is always 0.
-func (p *PrometheusStore) encodeChunk(ss []*prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
+func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
 	c := chunkenc.NewXORChunk()
 
 	a, err := c.Appender()
@@ -654,12 +654,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }
 
-func (p *PrometheusStore) LabelSet() []*labelpb.LabelSet {
+func (p *PrometheusStore) LabelSet() []labelpb.LabelSet {
 	labels := labelpb.PromLabelsToLabelpbLabels(p.externalLabelsFn())
 
-	labelset := []*labelpb.LabelSet{}
+	labelset := []labelpb.LabelSet{}
 	if len(labels) > 0 {
-		labelset = append(labelset, &labelpb.LabelSet{
+		labelset = append(labelset, labelpb.LabelSet{
 			Labels: labels,
 		})
 	}
@@ -667,16 +667,16 @@ func (p *PrometheusStore) LabelSet() []*labelpb.LabelSet {
 	return labelset
 }
 
-func (p *PrometheusStore) TSDBInfos() []*infopb.TSDBInfo {
+func (p *PrometheusStore) TSDBInfos() []infopb.TSDBInfo {
 	labels := p.LabelSet()
 	if len(labels) == 0 {
-		return []*infopb.TSDBInfo{}
+		return []infopb.TSDBInfo{}
 	}
 
 	mint, maxt := p.Timestamps()
-	return []*infopb.TSDBInfo{
+	return []infopb.TSDBInfo{
 		{
-			Labels: &labelpb.LabelSet{
+			Labels: labelpb.LabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,

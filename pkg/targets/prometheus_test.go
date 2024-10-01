@@ -73,7 +73,7 @@ scrape_configs:
 	expected := &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "__address__", Value: p.Addr()},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -82,7 +82,7 @@ scrape_configs:
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
 				}},
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "instance", Value: p.Addr()},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
@@ -91,13 +91,13 @@ scrape_configs:
 				ScrapeUrl:          fmt.Sprintf("http://%s/metrics", p.Addr()),
 				GlobalUrl:          "",
 				Health:             targetspb.TargetHealth_UP,
-				LastScrape:         nil,
+				LastScrape:         time.Time{},
 				LastScrapeDuration: 0,
 			},
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -148,7 +148,7 @@ scrape_configs:
 
 			for i := range targets.ActiveTargets {
 				targets.ActiveTargets[i].LastScrapeDuration = 0
-				targets.ActiveTargets[i].LastScrape = nil
+				targets.ActiveTargets[i].LastScrape = time.Time{}
 				targets.ActiveTargets[i].LastError = ""
 				targets.ActiveTargets[i].GlobalUrl = ""
 			}

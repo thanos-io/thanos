@@ -63,13 +63,13 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 			StoreTSDBInfos: nil,
 		},
 		&storetestutil.TestClient{
-			StoreTSDBInfos: []*infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 10, []*labelpb.Label{{Name: "lbl", Value: "val1"}}),
+			StoreTSDBInfos: []infopb.TSDBInfo{
+				infopb.NewTSDBInfo(0, 10, []labelpb.Label{{Name: "lbl", Value: "val1"}}),
 			},
 		},
 		&storetestutil.TestClient{
-			StoreTSDBInfos: []*infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 20, []*labelpb.Label{{Name: "lbl", Value: "val2"}}),
+			StoreTSDBInfos: []infopb.TSDBInfo{
+				infopb.NewTSDBInfo(0, 20, []labelpb.Label{{Name: "lbl", Value: "val2"}}),
 			},
 		},
 	}
@@ -78,9 +78,9 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 		component.Query, labels.EmptyLabels(), 0*time.Second, EagerRetrieval,
 	)
 
-	expected := []*infopb.TSDBInfo{
-		infopb.NewTSDBInfo(0, 10, []*labelpb.Label{{Name: "lbl", Value: "val1"}}),
-		infopb.NewTSDBInfo(0, 20, []*labelpb.Label{{Name: "lbl", Value: "val2"}}),
+	expected := []infopb.TSDBInfo{
+		infopb.NewTSDBInfo(0, 10, []labelpb.Label{{Name: "lbl", Value: "val1"}}),
+		infopb.NewTSDBInfo(0, 20, []labelpb.Label{{Name: "lbl", Value: "val2"}}),
 	}
 	testutil.Equals(t, expected, q.TSDBInfos())
 }
@@ -106,7 +106,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedWarningsLen: 0, // No store matched for this query.
 		},
@@ -126,7 +126,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  301,
 				MaxTime:  400,
-				Matchers: []*storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedWarningsLen: 0, // No store matched for this query.
 		},
@@ -147,7 +147,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "2", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "2", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedWarningsLen: 0, // No store matched for this query.
 		},
@@ -168,7 +168,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -193,7 +193,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -219,7 +219,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 		},
 		{
@@ -238,7 +238,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "a", Value: "b", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "a", Value: "b", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -304,7 +304,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -349,7 +349,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -391,7 +391,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -435,7 +435,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -470,7 +470,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -506,7 +506,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -530,7 +530,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			storeDebugMatchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}},
 
@@ -559,7 +559,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			storeDebugMatchers:  [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "foo")}},
 			expectedWarningsLen: 0, // No stores match.
@@ -583,7 +583,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				ShardInfo: &storepb.ShardInfo{
 					ShardIndex:  0,
 					TotalShards: 2,
@@ -629,7 +629,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 300,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Name: "zone", Value: ".+", Type: storepb.LabelMatcher_RE},
 				},
 			},
@@ -695,7 +695,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 300,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Name: "zone", Value: ".+", Type: storepb.LabelMatcher_RE},
 				},
 			},
@@ -746,7 +746,7 @@ func TestProxyStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:    1,
 				MaxTime:    300,
-				Matchers:   []*storepb.LabelMatcher{{Name: "a", Value: "[1-4]", Type: storepb.LabelMatcher_RE}},
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: "[1-4]", Type: storepb.LabelMatcher_RE}},
 				SkipChunks: true,
 				Limit:      2,
 			},
@@ -872,7 +872,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -908,7 +908,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -944,7 +944,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -983,7 +983,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -1022,7 +1022,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -1058,7 +1058,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -1098,7 +1098,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -1161,7 +1161,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -1208,7 +1208,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -1242,7 +1242,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:                 1,
 				MaxTime:                 300,
-				Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
@@ -1287,7 +1287,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
-				Matchers: []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			expectedSeries: []rawSeries{
 				{
@@ -1377,7 +1377,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 	req := &storepb.SeriesRequest{
 		MinTime:                 1,
 		MaxTime:                 300,
-		Matchers:                []*storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+		Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 		PartialResponseDisabled: false,
 		Aggregates: []storepb.Aggr{
 			storepb.Aggr_COUNTER,
@@ -1439,7 +1439,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 		&storepb.SeriesRequest{
 			MinTime:                 1,
 			MaxTime:                 300,
-			Matchers:                []*storepb.LabelMatcher{{Name: "any", Value: ".*", Type: storepb.LabelMatcher_RE}},
+			Matchers:                []storepb.LabelMatcher{{Name: "any", Value: ".*", Type: storepb.LabelMatcher_RE}},
 			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		}, s,
 	))
@@ -2036,7 +2036,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		}
 
-		s.Chunks = append(s.Chunks, &ch)
+		s.Chunks = append(s.Chunks, ch)
 	}
 	return storepb.NewSeriesResponse(&s)
 }
@@ -2144,7 +2144,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: maxTime,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
@@ -2177,7 +2177,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: maxTime,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
@@ -2242,7 +2242,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 	t.Run("failing send", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// We mimic failing series server, but practically context cancel will do the same.
-		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []*storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
+		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
 			ctx: ctx,
 			send: func(*storepb.SeriesResponse) error {
 				cancel()
@@ -2304,7 +2304,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
 							Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
-							Chunks: []*storepb.AggrChunk{
+							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
 										Type: storepb.Chunk_XOR,
@@ -2330,7 +2330,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
 							Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
-							Chunks: []*storepb.AggrChunk{
+							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
 										Type: storepb.Chunk_XOR,
@@ -2345,7 +2345,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
 							Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
-							Chunks: []*storepb.AggrChunk{
+							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
 										Type: storepb.Chunk_XOR,

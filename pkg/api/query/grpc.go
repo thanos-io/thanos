@@ -121,7 +121,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
-			Samples: []*prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
+			Samples: []prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
 		}
 		if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
 			return err
@@ -265,7 +265,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		}
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
-			Samples: []*prompb.Sample{{Value: value.V, Timestamp: value.T}},
+			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
 		}
 		if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
 			return err

@@ -20,7 +20,7 @@ import (
 
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
-		Labels: []*labelpb.Label{
+		Labels: []labelpb.Label{
 			{
 				Name:  "foo",
 				Value: "bar",
@@ -161,7 +161,7 @@ func TestHashringGet(t *testing.T) {
 
 func TestKetamaHashringGet(t *testing.T) {
 	baseTS := &prompb.TimeSeries{
-		Labels: []*labelpb.Label{
+		Labels: []labelpb.Label{
 			{
 				Name:  "pod",
 				Value: "nginx",
@@ -218,7 +218,7 @@ func TestKetamaHashringGet(t *testing.T) {
 			name:      "base case with different timeseries",
 			endpoints: []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
 			ts: &prompb.TimeSeries{
-				Labels: []*labelpb.Label{
+				Labels: []labelpb.Label{
 					{
 						Name:  "pod",
 						Value: "thanos",
@@ -382,7 +382,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 	tenant := "default-tenant"
 	ts := &prompb.TimeSeries{
 		Labels:  labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
-		Samples: []*prompb.Sample{{Value: 1, Timestamp: 0}},
+		Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
 	}
 
 	for _, tt := range []struct {
@@ -555,7 +555,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 			for i := 0; i < int(tt.numSeries); i++ {
 				ts := &prompb.TimeSeries{
 					Labels:  labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
-					Samples: []*prompb.Sample{{Value: 1, Timestamp: 0}},
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
 				}
 				for j := 0; j < int(tt.replicas); j++ {
 					r, err := hashRing.GetN(tenant, ts, uint64(j))
@@ -597,7 +597,7 @@ func makeSeries() []prompb.TimeSeries {
 	series := make([]prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
 		series[i] = prompb.TimeSeries{
-			Labels: []*labelpb.Label{
+			Labels: []labelpb.Label{
 				{
 					Name:  "pod",
 					Value: fmt.Sprintf("nginx-%d", i),

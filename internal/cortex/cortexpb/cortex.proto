@@ -7,14 +7,19 @@ package cortexpb;
 
 option go_package = "cortexpb";
 
+import "gogoproto/gogo.proto";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 message WriteRequest {
-  repeated TimeSeries timeseries = 1;
+  repeated TimeSeries timeseries = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "PreallocTimeseries"];
   enum SourceEnum {
     API = 0;
     RULE = 1;
   }
   SourceEnum Source = 2;
-  repeated MetricMetadata metadata = 3;
+  repeated MetricMetadata metadata = 3 [(gogoproto.nullable) = true];
 
   bool skip_label_name_validation = 1000; //set intentionally high to keep WriteRequest compatible with upstream Prometheus
 }
@@ -22,10 +27,10 @@ message WriteRequest {
 message WriteResponse {}
 
 message TimeSeries {
-  repeated LabelPair labels = 1;
+  repeated LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "LabelAdapter"];
   // Sorted by time, oldest sample first.
-  repeated Sample samples = 2;
-  repeated Exemplar exemplars = 3;
+  repeated Sample samples = 2 [(gogoproto.nullable) = false];
+  repeated Exemplar exemplars = 3 [(gogoproto.nullable) = false];
 }
 
 message LabelPair {
@@ -57,12 +62,12 @@ message MetricMetadata {
 }
 
 message Metric {
-  repeated LabelPair labels = 1;
+  repeated LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "LabelAdapter"];
 }
 
 message Exemplar {
   // Exemplar labels, different than series labels
-  repeated LabelPair labels = 1;
+  repeated LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "LabelAdapter"];
   double value = 2;
   int64 timestamp_ms = 3;
 }
