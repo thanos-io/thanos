@@ -7,10 +7,9 @@ package thanos;
 option go_package = "github.com/thanos-io/thanos/pkg/store/storepb";
 
 import "store/labelpb/types.proto";
-import "github.com/planetscale/vtprotobuf/vtproto/ext.proto";
+
 
 message Chunk {
-  option (vtproto.mempool) = true;
   enum Encoding {
     XOR = 0;
     HISTOGRAM = 1;
@@ -27,7 +26,6 @@ message Series {
 }
 
 message AggrChunk {
-  option (vtproto.mempool) = true;
   int64 min_time = 1;
   int64 max_time = 2;
 

@@ -39,7 +39,7 @@ for dir in ${DIRS}; do
     --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} -I=${VTPROTOBUF_INCLUDE_PATH} \
     --go_opt=Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb \
     --go_opt=Mrules/rulespb/rpc.proto=github.com/thanos-io/thanos/pkg/rules/rulespb \
-    --go-vtproto_out=. --go-vtproto_opt=features=marshal+unmarshal+size+equal+pool,paths=source_relative \
+    --go-vtproto_out=. --go-vtproto_opt=features=marshal+unmarshal+size+equal,paths=source_relative \
     --go_opt=Mstore/storepb/prompb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb/prompb \
     --go_opt=Mmetadata/metadatapb/rpc.proto=github.com/thanos-io/thanos/pkg/metadata/metadatapb \
     ${LIST}
