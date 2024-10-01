@@ -139,10 +139,10 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
-	var metricNameFilterEnabled bool
+	multiTSDBOptions := []receive.MultiTSDBOption{}
 	for _, feature := range *conf.featureList {
 		if feature == metricNamesFilter {
-			metricNameFilterEnabled = true
+			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
 			level.Info(logger).Log("msg", "metric name filter feature enabled")
 		}
 	}
@@ -226,7 +226,7 @@ func runReceive(
 		bkt,
 		conf.allowOutOfOrderUpload,
 		hashFunc,
-		metricNameFilterEnabled,
+		multiTSDBOptions...,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,

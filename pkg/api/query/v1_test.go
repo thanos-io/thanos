@@ -785,7 +785,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil)),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels())),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 

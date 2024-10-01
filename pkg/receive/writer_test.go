@@ -344,7 +344,6 @@ func TestWriter(t *testing.T) {
 				nil,
 				false,
 				metadata.NoneFunc,
-				false,
 			)
 			t.Cleanup(func() { testutil.Ok(t, m.Close()) })
 
@@ -437,7 +436,6 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		nil,
 		false,
 		metadata.NoneFunc,
-		false,
 	)
 	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
 
