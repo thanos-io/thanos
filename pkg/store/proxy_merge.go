@@ -26,8 +26,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+type seriesStream interface {
+	Next() bool
+	At() *storepb.SeriesResponse
+}
+
 type responseDeduplicator struct {
-	h *losertree.Tree[*storepb.SeriesResponse, respSet]
+	h seriesStream
 
 	bufferedSameSeries []*storepb.SeriesResponse
 
@@ -42,7 +47,7 @@ type responseDeduplicator struct {
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
 // It also deduplicates identical chunks identified by the same checksum from each series message.
-func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]) *responseDeduplicator {
+func NewResponseDeduplicator(h seriesStream) *responseDeduplicator {
 	ok := h.Next()
 	var prev *storepb.SeriesResponse
 	if ok {
