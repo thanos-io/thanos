@@ -98,6 +98,7 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		extLset:          extLset,
 		storeFilter:      storeFilter,
 		maxBytesPerFrame: RemoteReadFrameLimit,
+		close:            func() {},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
 			return &b
