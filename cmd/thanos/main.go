@@ -25,6 +25,7 @@ import (
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/common/version"
 	"go.uber.org/automaxprocs/maxprocs"
+	_ "google.golang.org/grpc/encoding/proto"
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
@@ -34,11 +35,9 @@ import (
 	// use the original golang/protobuf package we can continue serializing
 	// messages from our dependencies, particularly from OTEL. Original version
 	// from Vitess.
-	"google.golang.org/grpc/encoding"
-	"google.golang.org/grpc/mem"
+	"google.golang.org/protobuf/proto"
 
-	// Guarantee that the built-in proto is called registered before this one
-	// so that it can be replaced.
+	"google.golang.org/grpc/encoding"
 	_ "google.golang.org/grpc/encoding/proto"
 )
 
@@ -49,56 +48,41 @@ const Name = "proto"
 // but also handles non-vtproto messages that are needed
 // for stuff like OpenTelemetry. Otherwise, such errors appear:
 // error while marshaling: failed to marshal, message is *v1.ExportTraceServiceRequest (missing vtprotobuf helpers).
-type vtprotoCodec struct {
-	fallback encoding.CodecV2
-}
+type vtprotoCodec struct{}
 
 type vtprotoMessage interface {
 	MarshalVT() ([]byte, error)
 	UnmarshalVT([]byte) error
-	MarshalToSizedBufferVT(data []byte) (int, error)
-	SizeVT() int
 }
 
-func (c *vtprotoCodec) Marshal(v any) (mem.BufferSlice, error) {
-	if m, ok := v.(vtprotoMessage); ok {
-		size := m.SizeVT()
-		if mem.IsBelowBufferPoolingThreshold(size) {
-			buf := make([]byte, size)
-			if _, err := m.MarshalToSizedBufferVT(buf); err != nil {
-				return nil, err
-			}
-			return mem.BufferSlice{mem.SliceBuffer(buf)}, nil
-		}
-		pool := mem.DefaultBufferPool()
-		buf := pool.Get(size)
-		if _, err := m.MarshalToSizedBufferVT((*buf)[:size]); err != nil {
-			pool.Put(buf)
-			return nil, err
-		}
-		return mem.BufferSlice{mem.NewBuffer(buf, pool)}, nil
+func (vtprotoCodec) Marshal(v any) ([]byte, error) {
+	switch v := v.(type) {
+	case vtprotoMessage:
+		return v.MarshalVT()
+	case proto.Message:
+		return proto.Marshal(v)
+	default:
+		return nil, fmt.Errorf("failed to marshal, message is %T, must satisfy the vtprotoMessage interface or want proto.Message", v)
 	}
-
-	return c.fallback.Marshal(v)
 }
 
-func (c *vtprotoCodec) Unmarshal(data mem.BufferSlice, v any) error {
-	if m, ok := v.(vtprotoMessage); ok {
-		buf := data.MaterializeToBuffer(mem.DefaultBufferPool())
-		defer buf.Free()
-		return m.UnmarshalVT(buf.ReadOnlyData())
+func (vtprotoCodec) Unmarshal(data []byte, v any) error {
+	switch v := v.(type) {
+	case vtprotoMessage:
+		return v.UnmarshalVT(data)
+	case proto.Message:
+		return proto.Unmarshal(data, v)
+	default:
+		return fmt.Errorf("failed to unmarshal, message is %T, must satisfy the vtprotoMessage interface or want proto.Message", v)
 	}
-
-	return c.fallback.Unmarshal(data, v)
 }
+
 func (vtprotoCodec) Name() string {
 	return Name
 }
 
 func init() {
-	encoding.RegisterCodecV2(&vtprotoCodec{
-		fallback: encoding.GetCodecV2("proto"),
-	})
+	encoding.RegisterCodec(vtprotoCodec{})
 }
 
 func main() {
