@@ -331,6 +331,7 @@ func runReceive(
 
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
+			store.WithoutDedup(),
 		}
 
 		proxy := store.NewProxyStore(
