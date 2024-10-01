@@ -86,6 +86,7 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
+	enableDedup       bool
 }
 
 type proxyStoreMetrics struct {
@@ -126,6 +127,13 @@ func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
 	}
 }
 
+// WithoutDedup disabled chunk deduplication when streaming series.
+func WithoutDedup() ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.enableDedup = false
+	}
+}
+
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
 func NewProxyStore(
@@ -156,6 +164,7 @@ func NewProxyStore(
 		metrics:           metrics,
 		retrievalStrategy: retrievalStrategy,
 		tsdbSelector:      DefaultSelector,
+		enableDedup:       true,
 	}
 
 	for _, option := range options {
@@ -307,7 +316,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
-	respHeap := NewResponseDeduplicator(NewProxyResponseLoserTree(storeResponses...))
+	var respHeap seriesStream = NewProxyResponseLoserTree(storeResponses...)
+	if s.enableDedup {
+		respHeap = NewResponseDeduplicator(respHeap)
+	}
 
 	i := 0
 	for respHeap.Next() {
