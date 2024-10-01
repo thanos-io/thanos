@@ -2117,13 +2117,16 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		for _, r := range m.RespSeries {
 			allResps = append(allResps, r)
 
-			x := storepb.Series{Labels: r.GetSeries().Labels}
+			sr := r.GetSeries()
+			sr = proto.Clone(sr).(*storepb.Series)
+
+			x := storepb.Series{Labels: sr.Labels}
 			if x.String() == lastLabels.String() {
-				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, r.GetSeries().Chunks...)
+				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, sr.Chunks...)
 				continue
 			}
 			lastLabels = &x
-			expected = append(expected, r.GetSeries())
+			expected = append(expected, sr)
 		}
 
 	}

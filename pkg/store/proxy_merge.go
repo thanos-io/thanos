@@ -34,8 +34,9 @@ type responseDeduplicator struct {
 	bufferedResp []*storepb.SeriesResponse
 	buffRespI    int
 
-	prev             *storepb.SeriesResponse
-	ok               bool
+	prev *storepb.SeriesResponse
+	ok   bool
+
 	quorumChunkDedup bool
 }
 
@@ -48,9 +49,9 @@ func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]
 		prev = h.At()
 	}
 	return &responseDeduplicator{
-		h:    h,
-		ok:   ok,
-		prev: prev,
+		h:             h,
+		ok:            ok,
+		prev:          prev,
 	}
 }
 
@@ -74,7 +75,7 @@ func (d *responseDeduplicator) Next() bool {
 			d.ok = d.h.Next()
 			if !d.ok {
 				if len(d.bufferedSameSeries) > 0 {
-					d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries, d.quorumChunkDedup))
+					d.bufferedResp = append(d.bufferedResp, d.chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
 				}
 				return len(d.bufferedResp) > 0
 			}
@@ -102,14 +103,14 @@ func (d *responseDeduplicator) Next() bool {
 			continue
 		}
 
-		d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries, d.quorumChunkDedup))
+		d.bufferedResp = append(d.bufferedResp, d.chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
 		d.prev = s
 
 		return true
 	}
 }
 
-func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse, quorum bool) *storepb.SeriesResponse {
+func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
 	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
 	chunckCountMap := map[uint64]int{}
 
@@ -145,7 +146,7 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse, quorum b
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
 	for hash, chk := range chunkDedupMap {
-		if quorum {
+		if d.quorumChunkDedup {
 			// NB: this is specific to Databricks' setup where each time series is written to at least 2 out of 3 replicas.
 			// Each chunk should have 3 replicas in most cases, and 2 replicas in the worst acceptable cases.
 			// Quorum-based deduplication is used to pick the majority value among 3 replicas.
