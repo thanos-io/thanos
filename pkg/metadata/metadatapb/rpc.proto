@@ -5,8 +5,20 @@ syntax = "proto3";
 package thanos;
 
 import "store/storepb/types.proto";
+import "gogoproto/gogo.proto";
 
-option go_package = "github.com/thanos-io/thanos/pkg/metadata/metadatapb";
+option go_package = "metadatapb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 service Metadata {
   rpc MetricMetadata(MetricMetadataRequest) returns (stream MetricMetadataResponse);
@@ -30,18 +42,15 @@ message MetricMetadataResponse {
 }
 
 message MetricMetadata {
-  map<string, MetricMetadataEntry> metadata = 1;
+  map<string, MetricMetadataEntry> metadata = 1 [(gogoproto.nullable) = false];
 }
 
 message MetricMetadataEntry {
-  repeated Meta metas = 2 ;
+  repeated Meta metas = 2  [(gogoproto.nullable) = false];
 }
 
 message Meta {
-  // @gotags: json:"type"
-  string type = 1;
-  // @gotags: json:"help"
-  string help = 2;
-  // @gotags: json:"unit"
-  string unit = 3;
+  string type = 1 [(gogoproto.jsontag) = "type"];
+  string help = 2 [(gogoproto.jsontag) = "help"];
+  string unit = 3 [(gogoproto.jsontag) = "unit"];
 }

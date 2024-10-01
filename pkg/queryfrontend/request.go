@@ -50,37 +50,13 @@ type ThanosQueryRangeRequest struct {
 	MaxSourceResolution int64
 	ReplicaLabels       []string
 	StoreMatchers       [][]*labels.Matcher
-	CachingOptions      *queryrange.CachingOptions
+	CachingOptions      queryrange.CachingOptions
 	Headers             []*RequestHeader
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
 	LookbackDelta       int64
 	Analyze             bool
 	Engine              string
-}
-
-func (tqrr *ThanosQueryRangeRequest) Clone() *ThanosQueryRangeRequest {
-	return &ThanosQueryRangeRequest{
-		Path:                tqrr.Path,
-		Start:               tqrr.Start,
-		End:                 tqrr.End,
-		Step:                tqrr.Step,
-		Timeout:             tqrr.Timeout,
-		Query:               tqrr.Query,
-		Dedup:               tqrr.Dedup,
-		PartialResponse:     tqrr.PartialResponse,
-		AutoDownsampling:    tqrr.AutoDownsampling,
-		MaxSourceResolution: tqrr.MaxSourceResolution,
-		ReplicaLabels:       tqrr.ReplicaLabels,
-		StoreMatchers:       tqrr.StoreMatchers,
-		CachingOptions:      tqrr.CachingOptions,
-		Headers:             tqrr.Headers,
-		Stats:               tqrr.Stats,
-		ShardInfo:           tqrr.ShardInfo,
-		LookbackDelta:       tqrr.LookbackDelta,
-		Analyze:             tqrr.Analyze,
-		Engine:              tqrr.Engine,
-	}
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -101,7 +77,7 @@ func (r *ThanosQueryRangeRequest) GetStep() int64 { return r.Step }
 // GetQuery returns the query of the request.
 func (r *ThanosQueryRangeRequest) GetQuery() string { return r.Query }
 
-func (r *ThanosQueryRangeRequest) GetCachingOptions() *queryrange.CachingOptions {
+func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions {
 	return r.CachingOptions
 }
 
@@ -202,8 +178,8 @@ func (r *ThanosQueryInstantRequest) GetStep() int64 { return 0 }
 // GetQuery returns the query of the request.
 func (r *ThanosQueryInstantRequest) GetQuery() string { return r.Query }
 
-func (r *ThanosQueryInstantRequest) GetCachingOptions() *queryrange.CachingOptions {
-	return &queryrange.CachingOptions{}
+func (r *ThanosQueryInstantRequest) GetCachingOptions() queryrange.CachingOptions {
+	return queryrange.CachingOptions{}
 }
 
 func (r *ThanosQueryInstantRequest) GetStats() string { return r.Stats }
@@ -267,23 +243,9 @@ type ThanosLabelsRequest struct {
 	Matchers        [][]*labels.Matcher
 	StoreMatchers   [][]*labels.Matcher
 	PartialResponse bool
-	CachingOptions  *queryrange.CachingOptions
+	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
 	Stats           string
-}
-
-func (tlr *ThanosLabelsRequest) Clone() *ThanosLabelsRequest {
-	return &ThanosLabelsRequest{
-		Start:           tlr.Start,
-		End:             tlr.End,
-		Label:           tlr.Label,
-		Matchers:        tlr.Matchers,
-		StoreMatchers:   tlr.StoreMatchers,
-		PartialResponse: tlr.PartialResponse,
-		CachingOptions:  tlr.CachingOptions,
-		Headers:         tlr.Headers,
-		Stats:           tlr.Stats,
-	}
 }
 
 // GetStoreMatchers returns store matches.
@@ -302,9 +264,7 @@ func (r *ThanosLabelsRequest) GetStep() int64 { return 1 }
 // GetQuery returns the query of the request.
 func (r *ThanosLabelsRequest) GetQuery() string { return "" }
 
-func (r *ThanosLabelsRequest) GetCachingOptions() *queryrange.CachingOptions {
-	return r.CachingOptions
-}
+func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 func (r *ThanosLabelsRequest) GetStats() string { return r.Stats }
 
@@ -365,25 +325,9 @@ type ThanosSeriesRequest struct {
 	ReplicaLabels   []string
 	Matchers        [][]*labels.Matcher
 	StoreMatchers   [][]*labels.Matcher
-	CachingOptions  *queryrange.CachingOptions
+	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
 	Stats           string
-}
-
-func (tsr *ThanosSeriesRequest) Clone() *ThanosSeriesRequest {
-	return &ThanosSeriesRequest{
-		Path:            tsr.Path,
-		Start:           tsr.Start,
-		End:             tsr.End,
-		Dedup:           tsr.Dedup,
-		PartialResponse: tsr.PartialResponse,
-		ReplicaLabels:   tsr.ReplicaLabels,
-		Matchers:        tsr.Matchers,
-		StoreMatchers:   tsr.StoreMatchers,
-		CachingOptions:  tsr.CachingOptions,
-		Headers:         tsr.Headers,
-		Stats:           tsr.Stats,
-	}
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -405,9 +349,7 @@ func (r *ThanosSeriesRequest) GetStep() int64 { return 1 }
 // GetQuery returns the query of the request.
 func (r *ThanosSeriesRequest) GetQuery() string { return "" }
 
-func (r *ThanosSeriesRequest) GetCachingOptions() *queryrange.CachingOptions {
-	return r.CachingOptions
-}
+func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 func (r *ThanosSeriesRequest) GetStats() string { return r.Stats }
 

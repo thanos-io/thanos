@@ -37,7 +37,7 @@ type responseDeduplicator struct {
 	prev *storepb.SeriesResponse
 	ok   bool
 
-	chunkDedupMap map[uint64]*storepb.AggrChunk
+	chunkDedupMap map[uint64]storepb.AggrChunk
 }
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
@@ -52,7 +52,7 @@ func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]
 		h:             h,
 		ok:            ok,
 		prev:          prev,
-		chunkDedupMap: make(map[uint64]*storepb.AggrChunk),
+		chunkDedupMap: make(map[uint64]storepb.AggrChunk),
 	}
 }
 
@@ -99,7 +99,7 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labelpb.CompareLabels(lbls, atLbls) == 0 {
+		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(atLbls)) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
@@ -141,14 +141,7 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 		return series[0]
 	}
 
-	var longestChkSlice = series[0].GetSeries().Chunks
-	for _, s := range series {
-		if cap(s.GetSeries().Chunks) > cap(longestChkSlice) {
-			longestChkSlice = s.GetSeries().Chunks
-		}
-	}
-
-	finalChunks := longestChkSlice[:0]
+	finalChunks := make([]storepb.AggrChunk, 0, len(d.chunkDedupMap))
 	for _, chk := range d.chunkDedupMap {
 		finalChunks = append(finalChunks, chk)
 	}
@@ -183,7 +176,10 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			return labelpb.CompareLabels(a.GetSeries().Labels, b.GetSeries().Labels) < 0
+			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
+			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
+
+			return labels.Compare(iLbls, jLbls) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
 			return true
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {
@@ -387,9 +383,9 @@ func newLazyRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.SizeVT()
+			bytesProcessed += resp.Size()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -637,9 +633,9 @@ func newEagerRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.SizeVT()
+			bytesProcessed += resp.Size()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -692,7 +688,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		}
 
 		if len(labelsToRemove) > 0 {
-			ser.Labels = labelpb.PromLabelsToLabelpbLabels(rmLabels(labelpb.LabelpbLabelsToPromLabels(ser.Labels), labelsToRemove))
+			ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
 		}
 	}
 
@@ -707,7 +703,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.LabelpbLabelsToPromLabels(si.Labels), labelpb.LabelpbLabelsToPromLabels(sj.Labels)) < 0
+		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
 	})
 }
 

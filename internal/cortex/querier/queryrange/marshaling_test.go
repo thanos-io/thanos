@@ -60,25 +60,25 @@ func BenchmarkPrometheusCodec_EncodeResponse(b *testing.B) {
 }
 
 func mockPrometheusResponse(numSeries, numSamplesPerSeries int) *PrometheusResponse {
-	stream := make([]*SampleStream, numSeries)
+	stream := make([]SampleStream, numSeries)
 	for s := 0; s < numSeries; s++ {
 		// Generate random samples.
-		samples := make([]*cortexpb.Sample, numSamplesPerSeries)
+		samples := make([]cortexpb.Sample, numSamplesPerSeries)
 		for i := 0; i < numSamplesPerSeries; i++ {
-			samples[i] = &cortexpb.Sample{
+			samples[i] = cortexpb.Sample{
 				Value:       rand.Float64(),
 				TimestampMs: int64(i),
 			}
 		}
 
 		// Generate random labels.
-		lbls := make([]*cortexpb.LabelPair, 10)
+		lbls := make([]cortexpb.LabelAdapter, 10)
 		for i := range lbls {
-			lbls[i].Name = []byte("a_medium_size_label_name")
-			lbls[i].Value = []byte("a_medium_size_label_value_that_is_used_to_benchmark_marshalling")
+			lbls[i].Name = "a_medium_size_label_name"
+			lbls[i].Value = "a_medium_size_label_value_that_is_used_to_benchmark_marshalling"
 		}
 
-		stream[s] = &SampleStream{
+		stream[s] = SampleStream{
 			Labels:  lbls,
 			Samples: samples,
 		}
@@ -86,7 +86,7 @@ func mockPrometheusResponse(numSeries, numSamplesPerSeries int) *PrometheusRespo
 
 	return &PrometheusResponse{
 		Status: "success",
-		Data: &PrometheusData{
+		Data: PrometheusData{
 			ResultType: "vector",
 			Result:     stream,
 		},

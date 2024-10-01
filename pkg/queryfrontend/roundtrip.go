@@ -371,9 +371,5 @@ func shouldCache(r queryrange.Request) bool {
 		}
 	}
 
-	if r.GetCachingOptions() == nil {
-		return true
-	}
-
 	return !r.GetCachingOptions().Disabled
 }

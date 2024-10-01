@@ -25,8 +25,6 @@ type testStoreServer struct {
 	labelValuesLastReq *LabelValuesRequest
 
 	err error
-
-	UnimplementedStoreServer
 }
 
 func (t *testStoreServer) Series(r *SeriesRequest, server Store_SeriesServer) error {
@@ -60,17 +58,17 @@ func TestServerAsClient(t *testing.T) {
 				s := &testStoreServer{
 					series: []*SeriesResponse{
 						NewSeriesResponse(&Series{
-							Labels: []*labelpb.Label{{Name: "a", Value: "b"}},
-							Chunks: []*AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
+							Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}},
+							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
 						NewSeriesResponse(&Series{
-							Labels: []*labelpb.Label{{Name: "a", Value: "b1"}},
-							Chunks: []*AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
+							Labels: []labelpb.ZLabel{{Name: "a", Value: "b1"}},
+							Chunks: []AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
 						NewWarnSeriesResponse(errors.New("yolo")),
 						NewSeriesResponse(&Series{
-							Labels: []*labelpb.Label{{Name: "a", Value: "b3"}},
-							Chunks: []*AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
+							Labels: []labelpb.ZLabel{{Name: "a", Value: "b3"}},
+							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
 						}),
 					}}
 				t.Run("ok", func(t *testing.T) {
@@ -78,7 +76,7 @@ func TestServerAsClient(t *testing.T) {
 						r := &SeriesRequest{
 							MinTime:                 -214,
 							MaxTime:                 213,
-							Matchers:                []*LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
+							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
 						client, err := ServerAsClient(s).Series(ctx, r)
@@ -103,7 +101,7 @@ func TestServerAsClient(t *testing.T) {
 						r := &SeriesRequest{
 							MinTime:                 -214,
 							MaxTime:                 213,
-							Matchers:                []*LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
+							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
 						client, err := ServerAsClient(s).Series(ctx, r)
@@ -131,7 +129,7 @@ func TestServerAsClient(t *testing.T) {
 						r := &SeriesRequest{
 							MinTime:                 -214,
 							MaxTime:                 213,
-							Matchers:                []*LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
+							Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
 							PartialResponseStrategy: PartialResponseStrategy_ABORT,
 						}
 						client, err := ServerAsClient(s).Series(ctx, r)

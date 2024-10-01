@@ -117,12 +117,12 @@ type seriesClientMapper struct {
 	initiated bool
 
 	store *store.TSDBStore
-	req   *storepb.SeriesRequest
+	req   storepb.SeriesRequest
 }
 
 func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
 	if !m.initiated {
-		series, err := m.store.SeriesLocal(m.ctx, m.req)
+		series, err := m.store.SeriesLocal(m.ctx, &m.req)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +162,7 @@ func (m *seriesClientMapper) SendMsg(_ interface{}) error {
 }
 
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &seriesClientMapper{ctx: ctx, store: l.store, req: in}, nil
+	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
 }
 
 func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
@@ -180,21 +180,21 @@ func newLocalClient(store *store.TSDBStore) *localClient {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.LabelpbLabelSetsToPromLabels(l.store.LabelSet()...)
+	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
 	return l.store.TimeRange()
 }
 
-func (l *localClient) TSDBInfos() []*infopb.TSDBInfo {
+func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 	labelsets := l.store.LabelSet()
 	if len(labelsets) == 0 {
-		return []*infopb.TSDBInfo{}
+		return []infopb.TSDBInfo{}
 	}
 
 	mint, maxt := l.store.TimeRange()
-	return []*infopb.TSDBInfo{
+	return []infopb.TSDBInfo{
 		{
 			Labels:  labelsets[0],
 			MinTime: mint,

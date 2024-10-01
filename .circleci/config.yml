@@ -10,7 +10,6 @@ executors:
     docker:
       - image: cimg/go:1.22-node
   golang-test:
-    resource_class: 'large'
     docker:
       - image: cimg/go:1.22-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1

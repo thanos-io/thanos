@@ -23,8 +23,6 @@ import (
 type Proxy struct {
 	logger  log.Logger
 	targets func() []targetspb.TargetsClient
-
-	targetspb.UnimplementedTargetsServer
 }
 
 func RegisterTargetsServer(targetsSrv targetspb.TargetsServer) func(*grpc.Server) {
