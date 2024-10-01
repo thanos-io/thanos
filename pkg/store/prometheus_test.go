@@ -89,7 +89,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
-		testutil.Equals(t, []labelpb.Label{
+		testutil.Equals(t, []labelpb.ZLabel{
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
 		}, srv.SeriesSet[0].Labels)
@@ -122,7 +122,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
-		testutil.Equals(t, []labelpb.Label{
+		testutil.Equals(t, []labelpb.ZLabel{
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
 		}, srv.SeriesSet[0].Labels)
@@ -239,7 +239,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
@@ -265,10 +265,10 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
@@ -283,10 +283,10 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
@@ -301,7 +301,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
@@ -316,13 +316,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
@@ -385,7 +385,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	}, srv))
 	testutil.Equals(t, 1, len(srv.SeriesSet))
 
-	testutil.Equals(t, []labelpb.Label{
+	testutil.Equals(t, []labelpb.ZLabel{
 		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
 	}, srv.SeriesSet[0].Labels)

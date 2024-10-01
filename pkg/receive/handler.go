@@ -526,6 +526,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
+	// from the whole request. Ensure that we always copy those when we want to
+	// store them for longer time.
 	var wreq prompb.WriteRequest
 	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -827,7 +830,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		var tenant = tenantHTTP
 
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.LabelpbLabelsToPromLabels(ts.Labels)
+			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
 
 			tenantLabel := lbls.Get(h.splitTenantLabelName)
 			if tenantLabel != "" {
@@ -836,7 +839,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 				newLabels := labels.NewBuilder(lbls)
 				newLabels.Del(h.splitTenantLabelName)
 
-				ts.Labels = labelpb.PromLabelsToLabelpbLabels(
+				ts.Labels = labelpb.ZLabelsFromPromLabels(
 					newLabels.Labels(),
 				)
 			}
@@ -919,7 +922,7 @@ func (h *Handler) sendLocalWrite(
 	for _, ts := range trackedSeries.timeSeries {
 		var tenant = tenantHTTP
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.LabelpbLabelsToPromLabels(ts.Labels)
+			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
 			if tnt := lbls.Get(h.splitTenantLabelName); tnt != "" {
 				tenant = tnt
 			}
@@ -1047,11 +1050,11 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.LabelpbLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
 		if !keep {
 			continue
 		}
-		ts.Labels = labelpb.PromLabelsToLabelpbLabels(lbls)
+		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries

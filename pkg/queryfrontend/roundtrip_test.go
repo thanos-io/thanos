@@ -950,7 +950,7 @@ func seriesResults(fail bool) (*int, http.Handler) {
 	var lock sync.Mutex
 	q := ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
+		Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
 	}
 
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

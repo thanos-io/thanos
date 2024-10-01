@@ -131,7 +131,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 		}
 
 		// Compare series labels.
-		seriesLabels := labelpb.LabelpbLabelSetsToPromLabels(data[0].SeriesLabels)
+		seriesLabels := labelpb.ZLabelSetsToPromLabelSets(data[0].SeriesLabels)
 		for _, lbls := range seriesLabels {
 			for k, v := range requiredSeriesLabels {
 				if lbls.Get(k) != v {
@@ -142,7 +142,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 
 		// Make sure the exemplar contains the correct traceID label.
 		for _, exemplar := range data[0].Exemplars {
-			for _, lbls := range labelpb.LabelpbLabelSetsToPromLabels(exemplar.Labels) {
+			for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
 				if !lbls.Has(traceIDLabel) {
 					return errors.Errorf("unexpected labels in exemplar, expected %v, got: %v", traceIDLabel, exemplar.Labels)
 				}

@@ -130,7 +130,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		for _, sample := range vector {
 			floats, histograms := prompb.SamplesFromPromqlSamples(sample)
 			series := &prompb.TimeSeries{
-				Labels:     labelpb.PromLabelsToLabelpbLabels(sample.Metric),
+				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
 				Samples:    floats,
 				Histograms: histograms,
 			}
@@ -243,7 +243,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		for _, series := range value {
 			floats, histograms := prompb.SamplesFromPromqlSeries(series)
 			series := &prompb.TimeSeries{
-				Labels:     labelpb.PromLabelsToLabelpbLabels(series.Metric),
+				Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
 				Samples:    floats,
 				Histograms: histograms,
 			}
@@ -255,7 +255,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		for _, sample := range value {
 			floats, histograms := prompb.SamplesFromPromqlSamples(sample)
 			series := &prompb.TimeSeries{
-				Labels:     labelpb.PromLabelsToLabelpbLabels(sample.Metric),
+				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
 				Samples:    floats,
 				Histograms: histograms,
 			}

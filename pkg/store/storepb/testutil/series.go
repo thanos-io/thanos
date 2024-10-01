@@ -151,7 +151,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
 		lset := labelpb.ExtendSortedLabels(builder.Labels(), extLabels)
-		expected = append(expected, &storepb.Series{Labels: labelpb.PromLabelsToLabelpbLabels(lset)})
+		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(lset)})
 
 		if skipChunks {
 			continue
@@ -378,7 +378,9 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 						}
 					} else {
 						testutil.Equals(t, true, len(c.ExpectedSeries) == len(srv.SeriesSet))
-						testutil.Equals(t, c.ExpectedSeries[i], srv.SeriesSet[i])
+						for i := range c.ExpectedSeries {
+							testutil.Equals(t, c.ExpectedSeries[i], srv.SeriesSet[i])
+						}
 					}
 
 					var actualHints []hintspb.SeriesResponseHints

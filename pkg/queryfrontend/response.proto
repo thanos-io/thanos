@@ -30,7 +30,7 @@ message ThanosLabelsResponse {
 
 message ThanosSeriesResponse {
   string Status = 1 [(gogoproto.jsontag) = "status"];
-  repeated thanos.LabelSet Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data"];
+  repeated thanos.ZLabelSet Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data"];
   string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
   string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
   repeated ResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];

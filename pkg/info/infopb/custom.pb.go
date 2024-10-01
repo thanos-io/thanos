@@ -8,9 +8,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-func NewTSDBInfo(mint, maxt int64, lbls []labelpb.Label) TSDBInfo {
+func NewTSDBInfo(mint, maxt int64, lbls []labelpb.ZLabel) TSDBInfo {
 	return TSDBInfo{
-		Labels: labelpb.LabelSet{
+		Labels: labelpb.ZLabelSet{
 			Labels: lbls,
 		},
 		MinTime: mint,
@@ -33,7 +33,7 @@ func (infos TSDBInfos) MaxT() int64 {
 func (infos TSDBInfos) LabelSets() []labels.Labels {
 	lsets := make([]labels.Labels, 0, len(infos))
 	for _, info := range infos {
-		lsets = append(lsets, labelpb.LabelpbLabelsToPromLabels(info.Labels.Labels))
+		lsets = append(lsets, labelpb.ZLabelsToPromLabels(info.Labels.Labels))
 
 	}
 	return lsets

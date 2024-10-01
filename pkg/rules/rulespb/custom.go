@@ -84,10 +84,10 @@ func (r *Rule) GetLabels() labels.Labels {
 }
 
 func (r *Rule) SetLabels(ls labels.Labels) {
-	var result labelpb.LabelSet
+	var result labelpb.ZLabelSet
 
 	if !ls.IsEmpty() {
-		result = labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
 	}
 
 	switch {

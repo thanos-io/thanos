@@ -864,7 +864,7 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 
 		firstSeries := srv.SeriesSet[0]
 
-		testutil.Equals(t, []labelpb.Label{
+		testutil.Equals(t, []labelpb.ZLabel{
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
 		}, firstSeries.Labels)

@@ -27,3 +27,7 @@ message Label {
 message LabelSet {
     repeated Label labels = 1 [(gogoproto.nullable) = false];
 }
+
+message ZLabelSet {
+    repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ZLabel"];
+}

@@ -30,7 +30,7 @@ import (
 
 func TestWriter(t *testing.T) {
 	now := model.Now()
-	lbls := []labelpb.Label{{Name: "__name__", Value: "test"}}
+	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
@@ -46,7 +46,7 @@ func TestWriter(t *testing.T) {
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 						{
-							Labels:  []labelpb.Label{{Name: "__name__", Value: ""}},
+							Labels:  []labelpb.ZLabel{{Name: "__name__", Value: ""}},
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
@@ -59,7 +59,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
@@ -68,7 +68,7 @@ func TestWriter(t *testing.T) {
 			expectedErr: nil,
 			expectedIngested: []prompb.TimeSeries{
 				{
-					Labels:  append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+					Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 				},
 			},
@@ -78,7 +78,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "1"}, labelpb.Label{Name: "Z", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "Z", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
@@ -91,7 +91,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}, labelpb.Label{Name: "z", Value: "1"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}, labelpb.ZLabel{Name: "z", Value: "1"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
@@ -104,15 +104,15 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.Label{Name: "A", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "A", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 						{
-							Labels:  append(lbls, labelpb.Label{Name: "c", Value: "1"}, labelpb.Label{Name: "d", Value: "2"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 						{
-							Labels:  append(lbls, labelpb.Label{Name: "E", Value: "1"}, labelpb.Label{Name: "f", Value: "2"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "E", Value: "1"}, labelpb.ZLabel{Name: "f", Value: "2"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
@@ -121,7 +121,7 @@ func TestWriter(t *testing.T) {
 			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 2 series"),
 			expectedIngested: []prompb.TimeSeries{
 				{
-					Labels:  append(lbls, labelpb.Label{Name: "c", Value: "1"}, labelpb.Label{Name: "d", Value: "2"}),
+					Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
 					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 				},
 			},
@@ -170,12 +170,12 @@ func TestWriter(t *testing.T) {
 						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						Exemplars: []prompb.Exemplar{
 							{
-								Labels:    []labelpb.Label{{Name: "traceID", Value: "123"}},
+								Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "123"}},
 								Value:     111,
 								Timestamp: 11,
 							},
 							{
-								Labels:    []labelpb.Label{{Name: "traceID", Value: "234"}},
+								Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "234"}},
 								Value:     112,
 								Timestamp: 12,
 							},
@@ -196,7 +196,7 @@ func TestWriter(t *testing.T) {
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 							Exemplars: []prompb.Exemplar{
 								{
-									Labels:    []labelpb.Label{{Name: "traceID", Value: "123"}},
+									Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "123"}},
 									Value:     111,
 									Timestamp: 11,
 								},
@@ -210,7 +210,7 @@ func TestWriter(t *testing.T) {
 							Labels: lbls,
 							Exemplars: []prompb.Exemplar{
 								{
-									Labels:    []labelpb.Label{{Name: "traceID", Value: "1234"}},
+									Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "1234"}},
 									Value:     111,
 									Timestamp: 10,
 								},
@@ -232,7 +232,7 @@ func TestWriter(t *testing.T) {
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 							Exemplars: []prompb.Exemplar{
 								{
-									Labels:    []labelpb.Label{{Name: strings.Repeat("a", exemplar.ExemplarMaxLabelSetLength), Value: "1"}},
+									Labels:    []labelpb.ZLabel{{Name: strings.Repeat("a", exemplar.ExemplarMaxLabelSetLength), Value: "1"}},
 									Value:     111,
 									Timestamp: 11,
 								},
@@ -249,7 +249,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
 								prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 							},
@@ -260,7 +260,7 @@ func TestWriter(t *testing.T) {
 			expectedErr: nil,
 			expectedIngested: []prompb.TimeSeries{
 				{
-					Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 					Histograms: []prompb.Histogram{
 						prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 					},
@@ -272,7 +272,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
 								prompb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
 							},
@@ -283,7 +283,7 @@ func TestWriter(t *testing.T) {
 			expectedErr: nil,
 			expectedIngested: []prompb.TimeSeries{
 				{
-					Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 					Histograms: []prompb.Histogram{
 						prompb.FloatHistogramToHistogramProto(10, tsdbutil.GenerateTestFloatHistogram(1)),
 					},
@@ -295,7 +295,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
 								prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 							},
@@ -305,7 +305,7 @@ func TestWriter(t *testing.T) {
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+							Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 							Histograms: []prompb.Histogram{
 								prompb.HistogramToHistogramProto(9, tsdbutil.GenerateTestHistogram(0)),
 							},
@@ -316,7 +316,7 @@ func TestWriter(t *testing.T) {
 			expectedErr: errors.Wrapf(storage.ErrOutOfOrderSample, "add 1 samples"),
 			expectedIngested: []prompb.TimeSeries{
 				{
-					Labels: append(lbls, labelpb.Label{Name: "a", Value: "1"}, labelpb.Label{Name: "b", Value: "2"}),
+					Labels: append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
 					Histograms: []prompb.Histogram{
 						prompb.HistogramToHistogramProto(10, tsdbutil.GenerateTestHistogram(0)),
 					},
@@ -382,7 +382,7 @@ func TestWriter(t *testing.T) {
 			gr := a.(storage.GetRef)
 
 			for _, ts := range testData.expectedIngested {
-				l := labelpb.LabelpbLabelsToPromLabels(ts.Labels)
+				l := labelpb.ZLabelsToPromLabels(ts.Labels)
 				ref, _ := gr.GetRef(l, l.Hash())
 				testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
 			}
@@ -490,10 +490,10 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 // reflected in the benchmark, but should still capture the performance of receive writer.
 func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bool) []prompb.TimeSeries {
 	// Generate some labels first.
-	l := make([]labelpb.Label, 0, numLabels)
-	l = append(l, labelpb.Label{Name: "__name__", Value: "test"})
+	l := make([]labelpb.ZLabel, 0, numLabels)
+	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
 	for i := 0; i < numLabels; i++ {
-		l = append(l, labelpb.Label{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
+		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
 	}
 
 	ts := make([]prompb.TimeSeries, numSeries)

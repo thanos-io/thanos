@@ -64,7 +64,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
+				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:9090"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -73,7 +73,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
 				}},
-				Labels: labelpb.LabelSet{Labels: []labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "instance", Value: "localhost:9090"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
@@ -85,7 +85,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: labelpb.LabelSet{Labels: []labelpb.Label{
+				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},

@@ -82,7 +82,7 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 			Data:   lbls,
 		}, nil
 	case *ThanosSeriesResponse:
-		seriesData := make(labelpb.LabelSets, 0)
+		seriesData := make(labelpb.ZLabelSets, 0)
 
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {

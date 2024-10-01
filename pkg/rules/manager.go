@@ -65,8 +65,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Query:                     rule.Query().String(),
 					DurationSeconds:           rule.HoldDuration().Seconds(),
 					KeepFiringForSeconds:      rule.KeepFiringFor().Seconds(),
-					Labels:                    labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(rule.Labels())},
-					Annotations:               labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(rule.Annotations())},
+					Labels:                    labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Labels())},
+					Annotations:               labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Annotations())},
 					Alerts:                    ActiveAlertsToProto(g.PartialResponseStrategy, rule),
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
@@ -79,7 +79,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 				Result: &rulespb.Rule_Recording{Recording: &rulespb.RecordingRule{
 					Name:                      rule.Name(),
 					Query:                     rule.Query().String(),
-					Labels:                    labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(rule.Labels())},
+					Labels:                    labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Labels())},
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
@@ -102,8 +102,8 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 		activeAt := ruleAlert.ActiveAt.UTC()
 		ret[i] = &rulespb.AlertInstance{
 			PartialResponseStrategy: s,
-			Labels:                  labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ruleAlert.Labels)},
-			Annotations:             labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(ruleAlert.Annotations)},
+			Labels:                  labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Labels)},
+			Annotations:             labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
 			ActiveAt:                &activeAt,
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),

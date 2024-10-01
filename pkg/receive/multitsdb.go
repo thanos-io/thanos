@@ -180,7 +180,7 @@ func newLocalClient(store *store.TSDBStore) *localClient {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.LabelpbLabelSetsToPromLabels(l.store.LabelSet()...)
+	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {

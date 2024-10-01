@@ -64,12 +64,12 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 		},
 		&storetestutil.TestClient{
 			StoreTSDBInfos: []infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 10, []labelpb.Label{{Name: "lbl", Value: "val1"}}),
+				infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
 			},
 		},
 		&storetestutil.TestClient{
 			StoreTSDBInfos: []infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 20, []labelpb.Label{{Name: "lbl", Value: "val2"}}),
+				infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
 			},
 		},
 	}
@@ -79,8 +79,8 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 	)
 
 	expected := []infopb.TSDBInfo{
-		infopb.NewTSDBInfo(0, 10, []labelpb.Label{{Name: "lbl", Value: "val1"}}),
-		infopb.NewTSDBInfo(0, 20, []labelpb.Label{{Name: "lbl", Value: "val2"}}),
+		infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
+		infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
 	}
 	testutil.Equals(t, expected, q.TSDBInfos())
 }
@@ -1778,7 +1778,7 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	ret := make([]rawSeries, len(got))
 	for i, s := range got {
 		r := rawSeries{
-			lset: labelpb.LabelpbLabelsToPromLabels(s.Labels),
+			lset: labelpb.ZLabelsToPromLabels(s.Labels),
 		}
 		for _, chk := range s.Chunks {
 			var samples []sample
@@ -2019,7 +2019,7 @@ func (s *mockedStoreAPI) LabelValues(_ context.Context, req *storepb.LabelValues
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	s.Labels = append(s.Labels, labelpb.PromLabelsToLabelpbLabels(lset)...)
+	s.Labels = append(s.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()
@@ -2303,7 +2303,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				{
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
-							Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
 							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
@@ -2329,7 +2329,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				{
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
-							Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
 							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
@@ -2344,7 +2344,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				{
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
-							Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings("foo", "bar")),
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
 							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{

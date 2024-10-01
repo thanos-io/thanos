@@ -719,17 +719,17 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 	})
 	testutil.Equals(t, infos, []infopb.TSDBInfo{
 		{
-			Labels:  labelpb.LabelSet{Labels: []labelpb.Label{{Name: "a", Value: "b"}}},
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}},
 			MinTime: 0,
 			MaxTime: 2000,
 		},
 		{
-			Labels:  labelpb.LabelSet{Labels: []labelpb.Label{{Name: "a", Value: "b"}}},
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}},
 			MinTime: 3000,
 			MaxTime: 5000,
 		},
 		{
-			Labels:  labelpb.LabelSet{Labels: []labelpb.Label{{Name: "a", Value: "c"}}},
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}}},
 			MinTime: 0,
 			MaxTime: 2000,
 		},
@@ -806,32 +806,32 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 		name              string
 		relabel           string
 		expectedIDs       []ulid.ULID
-		expectedAdvLabels []labelpb.LabelSet
+		expectedAdvLabels []labelpb.ZLabelSet
 	}{
 		{
 			name:        "no sharding",
 			expectedIDs: all,
-			expectedAdvLabels: []labelpb.LabelSet{
+			expectedAdvLabels: []labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r2"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -846,15 +846,15 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - cluster
             `,
 			expectedIDs: []ulid.ULID{all[2]},
-			expectedAdvLabels: []labelpb.LabelSet{
+			expectedAdvLabels: []labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -869,21 +869,21 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - cluster
             `,
 			expectedIDs: []ulid.ULID{all[0], all[1], all[3]},
-			expectedAdvLabels: []labelpb.LabelSet{
+			expectedAdvLabels: []labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r2"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -902,15 +902,15 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs: []ulid.ULID{all[0], all[1]},
-			expectedAdvLabels: []labelpb.LabelSet{
+			expectedAdvLabels: []labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.Label{
+					Labels: []labelpb.ZLabel{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -929,7 +929,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs:       []ulid.ULID{},
-			expectedAdvLabels: []labelpb.LabelSet{},
+			expectedAdvLabels: []labelpb.ZLabelSet{},
 		},
 	} {
 		t.Run(sc.name, func(t *testing.T) {
@@ -2225,7 +2225,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 
 			var response []labels.Labels
 			for _, respSeries := range srv.SeriesSet {
-				promLabels := labelpb.LabelpbLabelsToPromLabels(respSeries.Labels)
+				promLabels := labelpb.ZLabelsToPromLabels(respSeries.Labels)
 				response = append(response, promLabels)
 			}
 

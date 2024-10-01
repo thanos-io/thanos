@@ -14,7 +14,7 @@ import (
 )
 
 func TestShardInfo_MatchesSeries(t *testing.T) {
-	series := labelpb.PromLabelsToLabelpbLabels(labels.FromStrings(
+	series := labelpb.ZLabelsFromPromLabels(labels.FromStrings(
 		"pod", "nginx",
 		"node", "node-1",
 		"container", "nginx",
@@ -23,7 +23,7 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 	tests := []struct {
 		name      string
 		shardInfo *ShardInfo
-		series    []labelpb.Label
+		series    []labelpb.ZLabel
 		matches   bool
 	}{
 		{
@@ -118,7 +118,7 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			matcher := test.shardInfo.Matcher(&buffers)
 			defer matcher.Close()
-			isMatch := matcher.MatchesLabels(test.series)
+			isMatch := matcher.MatchesZLabels(test.series)
 			if isMatch != test.matches {
 				t.Fatalf("invalid result, got %t, want %t", isMatch, test.matches)
 			}

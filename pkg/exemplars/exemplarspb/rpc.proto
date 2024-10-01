@@ -43,12 +43,12 @@ message ExemplarsResponse {
 }
 
 message ExemplarData {
-    LabelSet seriesLabels = 1 [(gogoproto.jsontag) = "seriesLabels", (gogoproto.nullable) = false];
+    ZLabelSet seriesLabels = 1 [(gogoproto.jsontag) = "seriesLabels", (gogoproto.nullable) = false];
     repeated Exemplar exemplars = 2 [(gogoproto.jsontag) = "exemplars"];
 }
 
 message Exemplar {
-    LabelSet labels = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
+    ZLabelSet labels = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
     double value = 2 [(gogoproto.jsontag) = "value"];
     int64 ts = 3 [(gogoproto.jsontag) = "timestamp"];
 }

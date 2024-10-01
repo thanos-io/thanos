@@ -165,21 +165,21 @@ func NewProxyStore(
 	return s
 }
 
-func (s *ProxyStore) LabelSet() []labelpb.LabelSet {
+func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 	stores := s.stores()
 	if len(stores) == 0 {
-		return []labelpb.LabelSet{}
+		return []labelpb.ZLabelSet{}
 	}
 
-	mergedLabelSets := make(map[uint64]labelpb.LabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
-	labelSets := make([]labelpb.LabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
 		labelSets = append(labelSets, v)
 	}
@@ -188,9 +188,9 @@ func (s *ProxyStore) LabelSet() []labelpb.LabelSet {
 	// selector-labels represents. If no label-sets are announced by the
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
-	selectorLabels := labelpb.PromLabelsToLabelpbLabels(s.selectorLabels)
+	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
 	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, labelpb.LabelSet{Labels: selectorLabels})
+		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
 	}
 
 	return labelSets

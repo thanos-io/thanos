@@ -563,16 +563,16 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]labelpb.Label, 0, len(s.Labels)+extLabels.Len())
+			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+extLabels.Len())
 			for _, l := range s.Labels {
-				lbls = append(lbls, labelpb.Label{
+				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
 					Value: l.Value,
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
 			}
 			extLabels.Range(func(l labels.Label) {
-				lbls = append(lbls, labelpb.Label{
+				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
 					Value: l.Value,
 				})
