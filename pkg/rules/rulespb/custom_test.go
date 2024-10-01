@@ -5,6 +5,7 @@ package rulespb
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -18,9 +19,8 @@ import (
 )
 
 func TestJSONUnmarshalMarshal(t *testing.T) {
-	ntime := time.Now()
-	now := TimeToTimestamp(ntime)
-	twoHoursAgo := TimeToTimestamp(ntime.Add(2 * time.Hour))
+	now := time.Now()
+	twoHoursAgo := now.Add(2 * time.Hour)
 
 	for _, tcase := range []struct {
 		name  string
@@ -44,7 +44,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name:                    "group1",
 						File:                    "file1.yml",
 						Interval:                2442,
-						LastEvaluation:          TimestampToTime(now),
+						LastEvaluation:          now,
 						EvaluationTime:          2.1,
 						PartialResponseStrategy: "ABORT",
 					},
@@ -95,7 +95,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						},
 						File:                    "file1.yml",
 						Interval:                2442,
-						LastEvaluation:          TimestampToTime(now),
+						LastEvaluation:          now,
 						EvaluationTime:          2.1,
 						PartialResponseStrategy: "ABORT",
 					},
@@ -117,7 +117,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						},
 						File:                    "file1.yml",
 						Interval:                2442,
-						LastEvaluation:          TimestampToTime(now),
+						LastEvaluation:          now,
 						EvaluationTime:          2.1,
 						PartialResponseStrategy: "ABORT",
 					},
@@ -140,7 +140,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						},
 						File:                    "file1.yml",
 						Interval:                2442,
-						LastEvaluation:          TimestampToTime(now),
+						LastEvaluation:          now,
 						EvaluationTime:          2.1,
 						PartialResponseStrategy: "ABORT",
 					},
@@ -156,7 +156,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name:                    "group1",
 						File:                    "file1.yml",
 						Interval:                2442,
-						LastEvaluation:          TimestampToTime(now),
+						LastEvaluation:          now,
 						EvaluationTime:          2.1,
 						PartialResponseStrategy: "asdfsdfsdfsd",
 					},
@@ -200,14 +200,14 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 							NewAlertingRule(&Alert{
 								Name:  "alert1",
 								Query: "up == 0",
-								Labels: &labelpb.LabelSet{
-									Labels: []*labelpb.Label{
+								Labels: labelpb.ZLabelSet{
+									Labels: []labelpb.ZLabel{
 										{Name: "a2", Value: "b2"},
 										{Name: "c2", Value: "d2"},
 									},
 								},
-								Annotations: &labelpb.LabelSet{
-									Labels: []*labelpb.Label{
+								Annotations: labelpb.ZLabelSet{
+									Labels: []labelpb.ZLabel{
 										{Name: "ann1", Value: "ann44"},
 										{Name: "ann2", Value: "ann33"},
 									},
@@ -248,7 +248,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								),
 								LastError:      "2",
 								Health:         "health",
-								LastEvaluation: TimestampToTime(now).Add(-2 * time.Minute),
+								LastEvaluation: now.Add(-2 * time.Minute),
 								EvaluationTime: 2.6,
 							},
 							testpromcompatibility.AlertingRule{
@@ -269,7 +269,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 										Labels:                  labels.FromStrings("instance1", "1"),
 										Annotations:             labels.FromStrings("annotation1", "2"),
 										State:                   "inactive",
-										ActiveAt:                time.Time{},
+										ActiveAt:                nil,
 										Value:                   "1",
 										PartialResponseStrategy: "WARN",
 									},
@@ -277,7 +277,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 										Labels:                  labels.EmptyLabels(),
 										Annotations:             labels.EmptyLabels(),
 										State:                   "firing",
-										ActiveAt:                TimestampToTime(twoHoursAgo),
+										ActiveAt:                &twoHoursAgo,
 										Value:                   "2143",
 										PartialResponseStrategy: "ABORT",
 									},
@@ -285,13 +285,13 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								LastError:      "1",
 								Duration:       60,
 								State:          "pending",
-								LastEvaluation: TimestampToTime(now).Add(-1 * time.Minute),
+								LastEvaluation: now.Add(-1 * time.Minute),
 								EvaluationTime: 1.1,
 							},
 						},
 						File:                    "file1.yml",
 						Interval:                2442,
-						LastEvaluation:          TimestampToTime(now),
+						LastEvaluation:          now,
 						EvaluationTime:          2.1,
 						PartialResponseStrategy: "ABORT",
 					},
@@ -299,7 +299,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name:                    "group2",
 						File:                    "file2.yml",
 						Interval:                242342442,
-						LastEvaluation:          TimestampToTime(now).Add(40 * time.Hour),
+						LastEvaluation:          now.Add(40 * time.Hour),
 						EvaluationTime:          21244.1,
 						PartialResponseStrategy: "ABORT",
 					},
@@ -313,41 +313,41 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 							NewRecordingRule(&RecordingRule{
 								Query: "up",
 								Name:  "recording1",
-								Labels: &labelpb.LabelSet{
-									Labels: []*labelpb.Label{
+								Labels: labelpb.ZLabelSet{
+									Labels: []labelpb.ZLabel{
 										{Name: "a", Value: "b"},
 										{Name: "c", Value: "d"},
 									},
 								},
 								LastError:                 "2",
 								Health:                    "health",
-								LastEvaluation:            TimeToTimestamp(TimestampToTime(now).Add(-2 * time.Minute)),
+								LastEvaluation:            now.Add(-2 * time.Minute),
 								EvaluationDurationSeconds: 2.6,
 							}),
 							NewAlertingRule(&Alert{
 								Name:  "alert1",
 								Query: "up == 0",
-								Labels: &labelpb.LabelSet{
-									Labels: []*labelpb.Label{
+								Labels: labelpb.ZLabelSet{
+									Labels: []labelpb.ZLabel{
 										{Name: "a2", Value: "b2"},
 										{Name: "c2", Value: "d2"},
 									},
 								},
-								Annotations: &labelpb.LabelSet{
-									Labels: []*labelpb.Label{
+								Annotations: labelpb.ZLabelSet{
+									Labels: []labelpb.ZLabel{
 										{Name: "ann1", Value: "ann44"},
 										{Name: "ann2", Value: "ann33"},
 									},
 								},
 								Alerts: []*AlertInstance{
 									{
-										Labels: &labelpb.LabelSet{
-											Labels: []*labelpb.Label{
+										Labels: labelpb.ZLabelSet{
+											Labels: []labelpb.ZLabel{
 												{Name: "instance1", Value: "1"},
 											},
 										},
-										Annotations: &labelpb.LabelSet{
-											Labels: []*labelpb.Label{
+										Annotations: labelpb.ZLabelSet{
+											Labels: []labelpb.ZLabel{
 												{Name: "annotation1", Value: "2"},
 											},
 										},
@@ -358,7 +358,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 									},
 									{
 										State:                   AlertState_FIRING,
-										ActiveAt:                twoHoursAgo,
+										ActiveAt:                &twoHoursAgo,
 										Value:                   "2143",
 										PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 									},
@@ -367,7 +367,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								State:                     AlertState_PENDING,
 								LastError:                 "1",
 								Health:                    "health2",
-								LastEvaluation:            TimeToTimestamp(TimestampToTime(now).Add(-1 * time.Minute)),
+								LastEvaluation:            now.Add(-1 * time.Minute),
 								EvaluationDurationSeconds: 1.1,
 							}),
 						},
@@ -381,7 +381,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name:                      "group2",
 						File:                      "file2.yml",
 						Interval:                  242342442,
-						LastEvaluation:            TimeToTimestamp(TimestampToTime(now).Add(40 * time.Hour)),
+						LastEvaluation:            now.Add(40 * time.Hour),
 						EvaluationDurationSeconds: 21244.1,
 						PartialResponseStrategy:   storepb.PartialResponseStrategy_ABORT,
 						Rules:                     []*Rule{},
@@ -402,6 +402,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				return
 			}
 			testutil.Ok(t, err)
+			fmt.Println(proto.String())
+			testutil.Equals(t, tcase.expectedProto.String(), proto.String())
 
 			jsonProto, err := json.Marshal(proto)
 			testutil.Ok(t, err)
@@ -449,21 +451,21 @@ func TestRulesComparator(t *testing.T) {
 			r1:   NewAlertingRule(&Alert{Name: "a"}),
 			r2: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 				}}}),
-			want: -4,
+			want: -1,
 		},
 		{
 			name: "label ordering",
 			r1: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 				}}}),
 			r2: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "2"},
 				}}}),
 			want: -1,
@@ -472,29 +474,29 @@ func TestRulesComparator(t *testing.T) {
 			name: "multiple label ordering",
 			r1: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 				}}}),
 			r2: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 					{Name: "b", Value: "1"},
 				}}}),
-			want: -4,
+			want: -1,
 		},
 		{
 			name: "different durations",
 			r1: NewAlertingRule(&Alert{
 				Name:            "a",
 				DurationSeconds: 0.0,
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 				}}}),
 			r2: NewAlertingRule(&Alert{
 				Name:            "a",
 				DurationSeconds: 1.0,
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 				}}}),
 			want: -1,

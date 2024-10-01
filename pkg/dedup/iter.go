@@ -55,7 +55,7 @@ type overlapSplitSet struct {
 
 	currLabels labels.Labels
 	currI      int
-	replicas   [][]*storepb.AggrChunk
+	replicas   [][]storepb.AggrChunk
 }
 
 func (o *overlapSplitSet) Next() bool {
@@ -77,7 +77,7 @@ func (o *overlapSplitSet) Next() bool {
 		return false
 	}
 
-	var chunks []*storepb.AggrChunk
+	var chunks []storepb.AggrChunk
 	o.currLabels, chunks = o.set.At()
 	if len(chunks) == 0 {
 		return true
@@ -94,12 +94,12 @@ chunksLoop:
 				continue chunksLoop
 			}
 		}
-		o.replicas = append(o.replicas, []*storepb.AggrChunk{chunks[i]}) // Not found, add to a new "fake" series.
+		o.replicas = append(o.replicas, []storepb.AggrChunk{chunks[i]}) // Not found, add to a new "fake" series.
 	}
 	return true
 }
 
-func (o *overlapSplitSet) At() (labels.Labels, []*storepb.AggrChunk) {
+func (o *overlapSplitSet) At() (labels.Labels, []storepb.AggrChunk) {
 	return o.currLabels, o.replicas[o.currI]
 }
 

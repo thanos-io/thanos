@@ -612,7 +612,7 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
 				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
-				LabelSets:       labelpb.LabelpbLabelSetsToPromLabels(er.metadata.LabelSets...),
+				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
 			})
 		}
 	}
@@ -822,7 +822,7 @@ func (er *endpointRef) labelSets() []labels.Labels {
 	}
 
 	labelSet := make([]labels.Labels, 0, len(er.metadata.LabelSets))
-	for _, ls := range labelpb.LabelpbLabelSetsToPromLabels(er.metadata.LabelSets...) {
+	for _, ls := range labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...) {
 		if ls.Len() == 0 {
 			continue
 		}
@@ -838,7 +838,7 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	return er.timeRange()
 }
 
-func (er *endpointRef) TSDBInfos() []*infopb.TSDBInfo {
+func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 

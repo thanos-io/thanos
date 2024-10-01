@@ -70,11 +70,11 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		testutil.Ok(t, head.Close())
 		for i := 0; i < len(created); i++ {
 			if !dedup || j == 0 {
-				b := labels.NewBuilder(labelpb.LabelpbLabelsToPromLabels(created[i].Labels))
+				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
-					b.Del("a_replica")
+					lset = lset[1:]
 				}
-				expectedSeries = append(expectedSeries, b.Labels())
+				expectedSeries = append(expectedSeries, lset)
 			}
 
 			resps = append(resps, storepb.NewSeriesResponse(created[i]))

@@ -304,7 +304,6 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
-  chunk_size_bytes: 0
 prefix: ""
 ```
 

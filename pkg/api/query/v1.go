@@ -1623,7 +1623,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 		defer span.Finish()
 
 		var (
-			t        map[string][]*metadatapb.Meta
+			t        map[string][]metadatapb.Meta
 			warnings annotations.Annotations
 			err      error
 		)

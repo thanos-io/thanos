@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -44,7 +44,7 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
-func NewHintsSeriesResponse(hints *anypb.Any) *SeriesResponse {
+func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
@@ -64,9 +64,9 @@ func GRPCCodeFromWarn(warn string) codes.Code {
 
 type emptySeriesSet struct{}
 
-func (emptySeriesSet) Next() bool                        { return false }
-func (emptySeriesSet) At() (labels.Labels, []*AggrChunk) { return labels.EmptyLabels(), nil }
-func (emptySeriesSet) Err() error                        { return nil }
+func (emptySeriesSet) Next() bool                       { return false }
+func (emptySeriesSet) At() (labels.Labels, []AggrChunk) { return labels.EmptyLabels(), nil }
+func (emptySeriesSet) Err() error                       { return nil }
 
 // EmptySeriesSet returns a new series set that contains no series.
 func EmptySeriesSet() SeriesSet {
@@ -105,7 +105,7 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 // The set is sorted by the label sets. Chunks may be overlapping or expected of order.
 type SeriesSet interface {
 	Next() bool
-	At() (labels.Labels, []*AggrChunk)
+	At() (labels.Labels, []AggrChunk)
 	Err() error
 }
 
@@ -114,7 +114,7 @@ type mergedSeriesSet struct {
 	a, b SeriesSet
 
 	lset         labels.Labels
-	chunks       []*AggrChunk
+	chunks       []AggrChunk
 	adone, bdone bool
 }
 
@@ -128,7 +128,7 @@ func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	return s
 }
 
-func (s *mergedSeriesSet) At() (labels.Labels, []*AggrChunk) {
+func (s *mergedSeriesSet) At() (labels.Labels, []AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -177,7 +177,7 @@ func (s *mergedSeriesSet) Next() bool {
 
 	// Slice reuse is not generally safe with nested merge iterators.
 	// We err on the safe side an create a new slice.
-	s.chunks = make([]*AggrChunk, 0, len(chksA)+len(chksB))
+	s.chunks = make([]AggrChunk, 0, len(chksA)+len(chksB))
 
 	b := 0
 Outer:
@@ -214,28 +214,22 @@ Outer:
 	return true
 }
 
-type seriesWithLabels struct {
-	*Series
-
-	labels.Labels
-}
-
 // uniqueSeriesSet takes one series set and ensures each iteration contains single, full series.
 type uniqueSeriesSet struct {
 	SeriesSet
 	done bool
 
-	peek *seriesWithLabels
+	peek *Series
 
 	lset   labels.Labels
-	chunks []*AggrChunk
+	chunks []AggrChunk
 }
 
 func newUniqueSeriesSet(wrapped SeriesSet) *uniqueSeriesSet {
 	return &uniqueSeriesSet{SeriesSet: wrapped}
 }
 
-func (s *uniqueSeriesSet) At() (labels.Labels, []*AggrChunk) {
+func (s *uniqueSeriesSet) At() (labels.Labels, []AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -250,17 +244,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &seriesWithLabels{Series: &Series{
-				Chunks: chks,
-			}, Labels: lset}
+			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
 			continue
 		}
 
-		if labels.Compare(lset, s.peek.Labels) != 0 {
-			s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
-			s.peek = &seriesWithLabels{Series: &Series{
-				Chunks: chks,
-			}, Labels: lset}
+		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
+			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
+			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -273,14 +263,14 @@ func (s *uniqueSeriesSet) Next() bool {
 		return false
 	}
 
-	s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
+	s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
 	s.peek = nil
 	return true
 }
 
 // Compare returns positive 1 if chunk is smaller -1 if larger than b by min time, then max time.
 // It returns 0 if chunks are exactly the same.
-func (m *AggrChunk) Compare(b *AggrChunk) int {
+func (m AggrChunk) Compare(b AggrChunk) int {
 	if m.MinTime < b.MinTime {
 		return 1
 	}
@@ -362,8 +352,8 @@ func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 
 // PromMatchersToMatchers returns proto matchers from Prometheus matchers.
 // NOTE: It allocates memory.
-func PromMatchersToMatchers(ms ...*labels.Matcher) ([]*LabelMatcher, error) {
-	res := make([]*LabelMatcher, 0, len(ms))
+func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
+	res := make([]LabelMatcher, 0, len(ms))
 	for _, m := range ms {
 		var t LabelMatcher_Type
 
@@ -379,14 +369,14 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]*LabelMatcher, error) {
 		default:
 			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
 		}
-		res = append(res, &LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
+		res = append(res, LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
 	}
 	return res, nil
 }
 
 // MatchersToPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
-func MatchersToPromMatchers(ms ...*LabelMatcher) ([]*labels.Matcher, error) {
+func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
 		var t labels.MatchType
@@ -414,7 +404,7 @@ func MatchersToPromMatchers(ms ...*LabelMatcher) ([]*labels.Matcher, error) {
 
 // MatchersToString converts label matchers to string format.
 // String should be parsable as a valid PromQL query metric selector.
-func MatchersToString(ms ...*LabelMatcher) string {
+func MatchersToString(ms ...LabelMatcher) string {
 	var res string
 	for i, m := range ms {
 		res += m.PromString()
@@ -457,27 +447,27 @@ func (x LabelMatcher_Type) PromString() string {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.LabelpbLabelsToPromLabels(m.Labels)
+	return labelpb.ZLabelsToPromLabels(m.Labels)
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-type Label = labelpb.Label
+type Label = labelpb.ZLabel
 
 // Deprecated.
 // TODO(bwplotka): Remove this in next PR. Done to reduce diff only.
-type LabelSet = labelpb.LabelSet
+type LabelSet = labelpb.ZLabelSet
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func CompareLabels(a, b []*Label) int {
-	return labels.Compare(labelpb.LabelpbLabelsToPromLabels(a), labelpb.LabelpbLabelsToPromLabels(b))
+func CompareLabels(a, b []Label) int {
+	return labels.Compare(labelpb.ZLabelsToPromLabels(a), labelpb.ZLabelsToPromLabels(b))
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func LabelsToPromLabelsUnsafe(lset []*Label) labels.Labels {
-	return labelpb.LabelpbLabelsToPromLabels(lset)
+func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
+	return labelpb.ZLabelsToPromLabels(lset)
 }
 
 // XORNumSamples return number of samples. Returns 0 if it's not XOR chunk.
@@ -503,7 +493,7 @@ type SeriesStatsCounter struct {
 	ChunkSt []ChunkStats
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []*labelpb.Label) {
+func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash

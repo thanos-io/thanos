@@ -244,8 +244,6 @@ func newQuerierWithOpts(
 	} else if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN
 	}
-
-	returnChunks := returnChunksSlicePool.Get().(*[]*storepb.AggrChunk)
 	return &querier{
 		logger:        logger,
 		selectGate:    selectGate,
@@ -430,12 +428,6 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	if err := q.proxy.Series(&req, resp); err != nil {
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "proxy Series()")
 	}
-	q.returnChunksMtx.Lock()
-	for i := range resp.seriesSet {
-		q.returnChunks = append(q.returnChunks, resp.seriesSet[i].Chunks...)
-	}
-	q.returnChunksMtx.Unlock()
-
 	warns := annotations.New().Merge(resp.warnings)
 
 	if !q.isDedupEnabled() {
@@ -551,15 +543,4 @@ func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, mat
 	return resp.Names, warns, nil
 }
 
-func (q *querier) Close() error {
-	q.returnChunksMtx.Lock()
-	defer q.returnChunksMtx.Unlock()
-
-	for _, ch := range q.returnChunks {
-		ch.ReturnToVTPool()
-	}
-	q.returnChunks = q.returnChunks[:0]
-	returnChunksSlicePool.Put(&q.returnChunks)
-
-	return nil
-}
+func (q *querier) Close() error { return nil }
