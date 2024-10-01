@@ -3,25 +3,9 @@
 
 package metadatapb
 
-func (m *Meta) Equal(o *Meta) bool {
-	if m == nil && o == nil {
-		return true
-	}
-	if m == nil || o == nil {
-		return false
-	}
-	if m.Type != o.Type {
-		return false
-	}
-	if m.Help != o.Help {
-		return false
-	}
-	if m.Unit != o.Unit {
-		return false
-	}
-
-	return true
-}
+import (
+	"unsafe"
+)
 
 func NewMetricMetadataResponse(metadata *MetricMetadata) *MetricMetadataResponse {
 	return &MetricMetadataResponse{
@@ -39,17 +23,6 @@ func NewWarningMetadataResponse(warning error) *MetricMetadataResponse {
 	}
 }
 
-func FromMetadataMap(m map[string][]*Meta) *MetricMetadata {
-	mt := make(map[string]*MetricMetadataEntry, len(m))
-	for k, v := range m {
-		metas := make([]*Meta, len(v))
-		for i, meta := range v {
-			meta := meta
-
-			metas[i] = meta
-		}
-
-		mt[k] = &MetricMetadataEntry{Metas: metas}
-	}
-	return &MetricMetadata{Metadata: mt}
+func FromMetadataMap(m map[string][]Meta) *MetricMetadata {
+	return &MetricMetadata{Metadata: *(*map[string]MetricMetadataEntry)(unsafe.Pointer(&m))}
 }

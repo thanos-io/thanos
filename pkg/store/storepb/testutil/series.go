@@ -18,6 +18,7 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -28,8 +29,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wlog"
 	"go.uber.org/atomic"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -152,7 +151,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
 		lset := labelpb.ExtendSortedLabels(builder.Labels(), extLabels)
-		expected = append(expected, &storepb.Series{Labels: labelpb.PromLabelsToLabelpbLabels(lset)})
+		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(lset)})
 
 		if skipChunks {
 			continue
@@ -168,7 +167,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, &storepb.AggrChunk{
+			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
 				Raw: &storepb.Chunk{
@@ -269,7 +268,7 @@ type SeriesServer struct {
 
 	SeriesSet []*storepb.Series
 	Warnings  []string
-	HintsSet  []*anypb.Any
+	HintsSet  []*types.Any
 
 	Size int64
 }
@@ -279,7 +278,7 @@ func NewSeriesServer(ctx context.Context) *SeriesServer {
 }
 
 func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.SizeVT())
+	s.Size += int64(r.Size())
 
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())
@@ -339,7 +338,7 @@ type SeriesCase struct {
 	ExpectedSeries   []*storepb.Series
 	ExpectedWarnings []string
 	ExpectedHints    []hintspb.SeriesResponseHints
-	HintsCompareFunc func(t testutil.TB, expected, actual *hintspb.SeriesResponseHints)
+	HintsCompareFunc func(t testutil.TB, expected, actual hintspb.SeriesResponseHints)
 }
 
 // TestServerSeries runs tests against given cases.
@@ -365,7 +364,7 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					// Huge responses can produce unreadable diffs - make it more human readable.
 					if len(c.ExpectedSeries) > 4 {
 						for j := range c.ExpectedSeries {
-							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
+							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels)
 
 							// Check chunks when it is not a skip chunk query
 							if !c.Req.SkipChunks {
@@ -378,21 +377,24 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 							}
 						}
 					} else {
-						testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)
+						testutil.Equals(t, true, len(c.ExpectedSeries) == len(srv.SeriesSet))
+						for i := range c.ExpectedSeries {
+							testutil.Equals(t, c.ExpectedSeries[i], srv.SeriesSet[i])
+						}
 					}
 
-					var actualHints []*hintspb.SeriesResponseHints
+					var actualHints []hintspb.SeriesResponseHints
 					for _, anyHints := range srv.HintsSet {
-						hints := &hintspb.SeriesResponseHints{}
-						testutil.Ok(t, anypb.UnmarshalTo(anyHints, hints, proto.UnmarshalOptions{}))
+						hints := hintspb.SeriesResponseHints{}
+						testutil.Ok(t, types.UnmarshalAny(anyHints, &hints))
 						actualHints = append(actualHints, hints)
 					}
 					testutil.Equals(t, len(c.ExpectedHints), len(actualHints))
 					for i, hint := range actualHints {
 						if c.HintsCompareFunc == nil {
-							testutil.Equals(t, true, c.ExpectedHints[i].EqualVT(hint))
+							testutil.Equals(t, c.ExpectedHints[i], hint)
 						} else {
-							c.HintsCompareFunc(t, &c.ExpectedHints[i], hint)
+							c.HintsCompareFunc(t, c.ExpectedHints[i], hint)
 						}
 					}
 				}

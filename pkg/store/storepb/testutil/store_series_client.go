@@ -41,6 +41,7 @@ func (c *StoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 		return nil, io.EOF
 	}
 	s := c.RespSet[c.i]
+
 	c.i++
 
 	return s, nil

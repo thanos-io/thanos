@@ -16,8 +16,6 @@ import (
 // MultiTSDB implements exemplarspb.ExemplarsServer that allows to fetch exemplars a MultiTSDB instance.
 type MultiTSDB struct {
 	tsdbExemplarsServers func() map[string]*TSDB
-
-	exemplarspb.UnimplementedExemplarsServer
 }
 
 // NewMultiTSDB creates new exemplars.MultiTSDB.

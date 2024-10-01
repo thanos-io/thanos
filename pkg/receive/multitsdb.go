@@ -64,6 +64,12 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
+
+	tsdbClients           []store.Client
+	tsdbClientsNeedUpdate bool
+
+	exemplarClients           map[string]*exemplars.TSDB
+	exemplarClientsNeedUpdate bool
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -84,17 +90,19 @@ func NewMultiTSDB(
 	}
 
 	return &MultiTSDB{
-		dataDir:               dataDir,
-		logger:                log.With(l, "component", "multi-tsdb"),
-		reg:                   reg,
-		tsdbOpts:              tsdbOpts,
-		mtx:                   &sync.RWMutex{},
-		tenants:               map[string]*tenant{},
-		labels:                labels,
-		tenantLabelName:       tenantLabelName,
-		bucket:                bucket,
-		allowOutOfOrderUpload: allowOutOfOrderUpload,
-		hashFunc:              hashFunc,
+		dataDir:                   dataDir,
+		logger:                    log.With(l, "component", "multi-tsdb"),
+		reg:                       reg,
+		tsdbOpts:                  tsdbOpts,
+		mtx:                       &sync.RWMutex{},
+		tenants:                   map[string]*tenant{},
+		labels:                    labels,
+		tsdbClientsNeedUpdate:     true,
+		exemplarClientsNeedUpdate: true,
+		tenantLabelName:           tenantLabelName,
+		bucket:                    bucket,
+		allowOutOfOrderUpload:     allowOutOfOrderUpload,
+		hashFunc:                  hashFunc,
 	}
 }
 
@@ -109,12 +117,12 @@ type seriesClientMapper struct {
 	initiated bool
 
 	store *store.TSDBStore
-	req   *storepb.SeriesRequest
+	req   storepb.SeriesRequest
 }
 
 func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
 	if !m.initiated {
-		series, err := m.store.SeriesLocal(m.ctx, m.req)
+		series, err := m.store.SeriesLocal(m.ctx, &m.req)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +162,7 @@ func (m *seriesClientMapper) SendMsg(_ interface{}) error {
 }
 
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &seriesClientMapper{ctx: ctx, store: l.store, req: in}, nil
+	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
 }
 
 func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
@@ -172,21 +180,21 @@ func newLocalClient(store *store.TSDBStore) *localClient {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.LabelpbLabelSetsToPromLabels(l.store.LabelSet()...)
+	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
 	return l.store.TimeRange()
 }
 
-func (l *localClient) TSDBInfos() []*infopb.TSDBInfo {
+func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 	labelsets := l.store.LabelSet()
 	if len(labelsets) == 0 {
-		return []*infopb.TSDBInfo{}
+		return []infopb.TSDBInfo{}
 	}
 
 	mint, maxt := l.store.TimeRange()
-	return []*infopb.TSDBInfo{
+	return []infopb.TSDBInfo{
 		{
 			Labels:  labelsets[0],
 			MinTime: mint,
@@ -434,6 +442,8 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 
 		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
 		delete(t.tenants, tenantID)
+		t.tsdbClientsNeedUpdate = true
+		t.exemplarClientsNeedUpdate = true
 	}
 
 	return merr.Err()
@@ -595,7 +605,17 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 
 func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 	t.mtx.RLock()
-	defer t.mtx.RUnlock()
+	if !t.tsdbClientsNeedUpdate {
+		t.mtx.RUnlock()
+		return t.tsdbClients
+	}
+
+	t.mtx.RUnlock()
+	t.mtx.Lock()
+	if !t.tsdbClientsNeedUpdate {
+		return t.tsdbClients
+	}
+	defer t.mtx.Unlock()
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
@@ -605,12 +625,25 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 		}
 	}
 
-	return res
+	t.tsdbClientsNeedUpdate = false
+	t.tsdbClients = res
+
+	return t.tsdbClients
 }
 
 func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	t.mtx.RLock()
-	defer t.mtx.RUnlock()
+	if !t.exemplarClientsNeedUpdate {
+		t.mtx.RUnlock()
+		return t.exemplarClients
+	}
+	t.mtx.RUnlock()
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	if !t.exemplarClientsNeedUpdate {
+		return t.exemplarClients
+	}
 
 	res := make(map[string]*exemplars.TSDB, len(t.tenants))
 	for k, tenant := range t.tenants {
@@ -619,7 +652,10 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 			res[k] = e
 		}
 	}
-	return res
+
+	t.exemplarClientsNeedUpdate = false
+	t.exemplarClients = res
+	return t.exemplarClients
 }
 
 func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats {
@@ -695,6 +731,8 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if err != nil {
 		t.mtx.Lock()
 		delete(t.tenants, tenantID)
+		t.tsdbClientsNeedUpdate = true
+		t.exemplarClientsNeedUpdate = true
 		t.mtx.Unlock()
 		return err
 	}
@@ -743,6 +781,8 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 
 	tenant = newTenant()
 	t.tenants[tenantID] = tenant
+	t.tsdbClientsNeedUpdate = true
+	t.exemplarClientsNeedUpdate = true
 	t.mtx.Unlock()
 
 	logger := log.With(t.logger, "tenant", tenantID)

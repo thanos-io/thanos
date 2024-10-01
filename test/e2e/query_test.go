@@ -30,21 +30,20 @@ import (
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/go-kit/log"
+	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/proto"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -53,6 +52,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -1500,7 +1500,7 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 }
 
 // Performs a remote write at the receiver external endpoint.
-func remoteWrite(ctx context.Context, timeseries []*prompb.TimeSeries, addr string) error {
+func remoteWrite(ctx context.Context, timeseries []prompb.TimeSeries, addr string) error {
 	// Create write request
 	data, err := proto.Marshal(&prompb.WriteRequest{Timeseries: timeseries})
 	if err != nil {
@@ -1564,18 +1564,18 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2eobs.Observa
 func synthesizeSamples(ctx context.Context, prometheus *e2eobs.Observable, samples []model.Sample) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
-	samplespb := make([]*prompb.TimeSeries, 0, len(samples))
+	samplespb := make([]prompb.TimeSeries, 0, len(samples))
 	for _, sample := range samples {
-		labelspb := make([]*labelpb.Label, 0, len(sample.Metric))
+		labelspb := make([]prompb.Label, 0, len(sample.Metric))
 		for labelKey, labelValue := range sample.Metric {
-			labelspb = append(labelspb, &labelpb.Label{
+			labelspb = append(labelspb, prompb.Label{
 				Name:  string(labelKey),
 				Value: string(labelValue),
 			})
 		}
-		samplespb = append(samplespb, &prompb.TimeSeries{
+		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
-			Samples: []*prompb.Sample{
+			Samples: []prompb.Sample{
 				{
 					Value:     float64(sample.Value),
 					Timestamp: sample.Timestamp.Time().Unix() * 1000,
@@ -1594,19 +1594,19 @@ func synthesizeSamples(ctx context.Context, prometheus *e2eobs.Observable, sampl
 func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2eobs.Observable, series []seriesWithLabels) error {
 	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
-	samplespb := make([]*prompb.TimeSeries, 0, len(series))
+	samplespb := make([]prompb.TimeSeries, 0, len(series))
 	r := rand.New(rand.NewSource(int64(len(series))))
 	for _, serie := range series {
-		labelspb := make([]*labelpb.Label, 0, len(serie.intLabels))
+		labelspb := make([]prompb.Label, 0, len(serie.intLabels))
 		for labelKey, labelValue := range serie.intLabels.Map() {
-			labelspb = append(labelspb, &labelpb.Label{
+			labelspb = append(labelspb, prompb.Label{
 				Name:  labelKey,
 				Value: labelValue,
 			})
 		}
-		samplespb = append(samplespb, &prompb.TimeSeries{
+		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
-			Samples: []*prompb.Sample{
+			Samples: []prompb.Sample{
 				{
 					Value:     r.Float64(),
 					Timestamp: time.Now().Unix() * 1000,
@@ -1637,13 +1637,12 @@ func storeWriteRequest(ctx context.Context, rawRemoteWriteURL string, req *promp
 	}
 
 	var buf []byte
-
-	pBuf, err := proto.Marshal(req)
-	if err != nil {
+	pBuf := proto.NewBuffer(nil)
+	if err := pBuf.Marshal(req); err != nil {
 		return err
 	}
 
-	compressed := snappy.Encode(buf, pBuf)
+	compressed := snappy.Encode(buf, pBuf.Bytes())
 	return client.Store(ctx, compressed, 0)
 }
 
@@ -1713,7 +1712,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 			}
 
 			var warnings string
-			var series []*prompb.TimeSeries
+			var series []*prompb_copy.TimeSeries
 			for {
 				msg, err := result.Recv()
 				if err == io.EOF {
@@ -1823,7 +1822,7 @@ func TestGrpcQueryRange(t *testing.T) {
 		}
 
 		var warnings string
-		var series []*prompb.TimeSeries
+		var series []*prompb_copy.TimeSeries
 		for {
 			msg, err := result.Recv()
 			if err == io.EOF {

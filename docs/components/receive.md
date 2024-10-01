@@ -94,7 +94,6 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
-  chunk_size_bytes: 0
 prefix: ""
 ```
 
@@ -312,8 +311,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '997,1007p' pkg/receive/handler.go"
-// writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
+```go mdox-exec="sed -n '999,1008p' pkg/receive/handler.go"
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
 	// would need to succeed all the time. Another way to think about it is when migrating

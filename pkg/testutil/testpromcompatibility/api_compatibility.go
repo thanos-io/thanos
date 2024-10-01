@@ -49,7 +49,7 @@ type Alert struct {
 	Labels      labels.Labels `json:"labels"`
 	Annotations labels.Labels `json:"annotations"`
 	State       string        `json:"state"`
-	ActiveAt    time.Time     `json:"activeAt,omitempty"`
+	ActiveAt    *time.Time    `json:"activeAt,omitempty"`
 	Value       string        `json:"value"`
 
 	PartialResponseStrategy string `json:"partialResponseStrategy"`
