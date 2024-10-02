@@ -70,6 +70,18 @@ type MultiTSDB struct {
 
 	exemplarClients           map[string]*exemplars.TSDB
 	exemplarClientsNeedUpdate bool
+
+	metricNameFilterEnabled bool
+}
+
+// MultiTSDBOption is a functional option for MultiTSDB.
+type MultiTSDBOption func(mt *MultiTSDB)
+
+// WithMetricNameFilterEnabled enables metric name filtering on TSDB clients.
+func WithMetricNameFilterEnabled() MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.metricNameFilterEnabled = true
+	}
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -84,12 +96,13 @@ func NewMultiTSDB(
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
+	options ...MultiTSDBOption,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
 
-	return &MultiTSDB{
+	mt := &MultiTSDB{
 		dataDir:                   dataDir,
 		logger:                    log.With(l, "component", "multi-tsdb"),
 		reg:                       reg,
@@ -104,6 +117,12 @@ func NewMultiTSDB(
 		allowOutOfOrderUpload:     allowOutOfOrderUpload,
 		hashFunc:                  hashFunc,
 	}
+
+	for _, option := range options {
+		option(mt)
+	}
+
+	return mt
 }
 
 type localClient struct {
@@ -177,6 +196,10 @@ func newLocalClient(store *store.TSDBStore) *localClient {
 	return &localClient{
 		store: store,
 	}
+}
+
+func (l *localClient) Matches(matchers []*labels.Matcher) bool {
+	return l.store.Matches(matchers)
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -302,6 +325,9 @@ func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *ship
 }
 
 func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB) {
+	if storeTSDB == nil && t.storeTSDB != nil {
+		t.storeTSDB.Close()
+	}
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
@@ -751,7 +777,11 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+	options := []store.TSDBStoreOption{}
+	if t.metricNameFilterEnabled {
+		options = append(options, store.WithCuckooMetricNameStoreFilter())
+	}
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

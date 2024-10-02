@@ -71,6 +71,9 @@ type Client interface {
 	// Addr returns address of the store client. If second parameter is true, the client
 	// represents a local client (server-as-client) and has no remote address.
 	Addr() (addr string, isLocalClient bool)
+
+	// Matches returns true if provided label matchers are allowed in the store.
+	Matches(matches []*labels.Matcher) bool
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -602,6 +605,11 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 	if !LabelSetsMatch(matchers, extLset...) {
 		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 	}
+
+	if !s.Matches(matchers) {
+		return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
+	}
+
 	return true, ""
 }
 

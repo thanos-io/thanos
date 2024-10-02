@@ -815,6 +815,10 @@ func (er *endpointRef) apisPresent() []string {
 	return apisPresent
 }
 
+func (er *endpointRef) Matches(matchers []*labels.Matcher) bool {
+	return true
+}
+
 type endpointMetadata struct {
 	*infopb.InfoResponse
 }

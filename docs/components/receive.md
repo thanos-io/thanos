@@ -339,6 +339,9 @@ Flags:
                                  detected maximum container or system memory.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --enable-feature= ...      Comma separated experimental feature names
+                                 to enable. The current list of features is
+                                 metric-names-filter.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

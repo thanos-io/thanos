@@ -1925,6 +1925,30 @@ func TestStoreMatches(t *testing.T) {
 			maxt:          1,
 			expectedMatch: true,
 		},
+		{
+			s: &storetestutil.TestClient{ExtLset: []labels.Labels{labels.FromStrings("a", "b")}},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "test_metric_name"),
+			},
+			maxt:          1,
+			expectedMatch: true,
+		},
+		{
+			s: &storetestutil.TestClient{
+				ExtLset: []labels.Labels{
+					labels.FromStrings("a", "b"),
+				},
+				StoreFilterNotMatches: true,
+			},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "test_metric_name"),
+			},
+			maxt:           1,
+			expectedMatch:  false,
+			expectedReason: "store does not match filter for matchers: [a=\"b\" __name__=\"test_metric_name\"]",
+		},
 	} {
 		t.Run("", func(t *testing.T) {
 			ok, reason := storeMatches(context.TODO(), c.s, c.mint, c.maxt, c.ms...)
