@@ -45,7 +45,7 @@ func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
 
 	*s.buf = (*s.buf)[:0]
 	for _, lbl := range zLabels {
-		if shardByLabel(s.shardingLabelset, lbl, s.by) {
+		if shardByLabel(s.shardingLabelset, lbl.Name, s.by) {
 			*s.buf = append(*s.buf, lbl.Name...)
 			*s.buf = append(*s.buf, sep[0])
 			*s.buf = append(*s.buf, lbl.Value...)
@@ -57,12 +57,32 @@ func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
 }
 
-func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
-	return s.MatchesZLabels(labelpb.ZLabelsFromPromLabels(lbls))
+type LabelsIter interface {
+	Range(func(labels.Label))
 }
 
-func shardByLabel(labelSet map[string]struct{}, zlabel labelpb.ZLabel, groupingBy bool) bool {
-	_, shardHasLabel := labelSet[zlabel.Name]
+func (s *ShardMatcher) MatchesLabels(lbls LabelsIter) bool {
+	// Match all series when query is not sharded
+	if s == nil || !s.isSharded {
+		return true
+	}
+
+	*s.buf = (*s.buf)[:0]
+	lbls.Range(func(lbl labels.Label) {
+		if shardByLabel(s.shardingLabelset, lbl.Name, s.by) {
+			*s.buf = append(*s.buf, lbl.Name...)
+			*s.buf = append(*s.buf, sep[0])
+			*s.buf = append(*s.buf, lbl.Value...)
+			*s.buf = append(*s.buf, sep[0])
+		}
+	})
+
+	hash := xxhash.Sum64(*s.buf)
+	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
+}
+
+func shardByLabel(labelSet map[string]struct{}, labelName string, groupingBy bool) bool {
+	_, shardHasLabel := labelSet[labelName]
 	if groupingBy && shardHasLabel {
 		return true
 	}

@@ -75,29 +75,17 @@ func TestTSDBStore_Series(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
-	appender := db.Appender(context.Background())
-
-	for i := 1; i <= 3; i++ {
-		_, err = appender.Append(0, labels.FromStrings("a", "1"), int64(i), float64(i))
-		testutil.Ok(t, err)
-	}
-	err = appender.Commit()
-	testutil.Ok(t, err)
-
 	for _, tc := range []struct {
-		title          string
+		name           string
+		externalLabels labels.Labels
+		series         []labels.Labels
 		req            *storepb.SeriesRequest
 		expectedSeries []rawSeries
 		expectedError  string
 	}{
 		{
-			title: "total match series",
+			name:   "total match series",
+			series: []labels.Labels{labels.FromStrings("a", "1")},
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
@@ -113,7 +101,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 		},
 		{
-			title: "partially match time range series",
+			name:   "partially match time range series",
+			series: []labels.Labels{labels.FromStrings("a", "1")},
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 2,
@@ -129,7 +118,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 		},
 		{
-			title: "don't match time range series",
+			name:   "dont't match time range series",
+			series: []labels.Labels{labels.FromStrings("a", "1")},
 			req: &storepb.SeriesRequest{
 				MinTime: 4,
 				MaxTime: 6,
@@ -140,7 +130,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			expectedSeries: []rawSeries{},
 		},
 		{
-			title: "only match external label",
+			name:   "only match external label",
+			series: []labels.Labels{labels.FromStrings("a", "1")},
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
@@ -151,7 +142,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			expectedError: "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)",
 		},
 		{
-			title: "don't match labels",
+			name:   "dont't match labels",
+			series: []labels.Labels{labels.FromStrings("a", "1")},
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
@@ -162,7 +154,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			expectedSeries: []rawSeries{},
 		},
 		{
-			title: "no chunk",
+			name:   "no chunk",
+			series: []labels.Labels{labels.FromStrings("a", "1")},
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
@@ -177,20 +170,122 @@ func TestTSDBStore_Series(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "sharding with ext label at beginning of labelset",
+			series: []labels.Labels{
+				labels.FromStrings("y", "1", "z", "1"),
+			},
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "y", Value: ".+"},
+				},
+				SkipChunks: true,
+				ShardInfo: &storepb.ShardInfo{
+					ShardIndex:  0,
+					TotalShards: 2,
+				},
+				WithoutReplicaLabels: []string{"ext1"},
+			},
+			expectedSeries: []rawSeries{
+				{lset: labels.FromStrings("region", "eu-west", "y", "1", "z", "1")},
+			},
+		},
+		{
+			name: "sharding with ext label in middle of labelset",
+			series: []labels.Labels{
+				labels.FromStrings("a", "2", "z", "1"),
+			},
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
+				},
+				SkipChunks: true,
+				ShardInfo: &storepb.ShardInfo{
+					ShardIndex:  1,
+					TotalShards: 2,
+				},
+				WithoutReplicaLabels: []string{"ext1"},
+			},
+			expectedSeries: []rawSeries{
+				{lset: labels.FromStrings("a", "2", "region", "eu-west", "z", "1")},
+			},
+		},
+		{
+			name: "sharding with ext label at end of labelset",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "1"),
+			},
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
+				},
+				SkipChunks: true,
+				ShardInfo: &storepb.ShardInfo{
+					ShardIndex:  0,
+					TotalShards: 2,
+				},
+				WithoutReplicaLabels: []string{"ext1"},
+			},
+			expectedSeries: []rawSeries{
+				{lset: labels.FromStrings("a", "1", "b", "1", "region", "eu-west")},
+			},
+		},
+		{
+			name: "label present both as internal and external, external label preserved",
+			series: []labels.Labels{
+				labels.FromStrings("a", "2", "z", "1", "region", "eu-west-internal"),
+			},
+			externalLabels: labels.FromStrings("a", "ext"),
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "z", Value: ".+"},
+				},
+				SkipChunks: true,
+			},
+			expectedSeries: []rawSeries{
+				{lset: labels.FromStrings("a", "ext", "region", "eu-west", "z", "1")},
+			},
+		},
 	} {
-		if ok := t.Run(tc.title, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := e2eutil.NewTSDB()
+			defer func() { testutil.Ok(t, db.Close()) }()
+			testutil.Ok(t, err)
+
+			extLset := labelpb.ExtendSortedLabels(labels.FromStrings("region", "eu-west"), tc.externalLabels)
+			tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
+
+			appender := db.Appender(context.Background())
+
+			for _, s := range tc.series {
+				for i := 1; i <= 3; i++ {
+					_, err = appender.Append(0, s, int64(i), float64(i))
+					testutil.Ok(t, err)
+				}
+			}
+			err = appender.Commit()
+			testutil.Ok(t, err)
+
 			srv := newStoreSeriesServer(ctx)
-			err := tsdbStore.Series(tc.req, srv)
+			err = tsdbStore.Series(tc.req, srv)
 			if len(tc.expectedError) > 0 {
 				testutil.NotOk(t, err)
 				testutil.Equals(t, tc.expectedError, err.Error())
-			} else {
-				testutil.Ok(t, err)
-				seriesEquals(t, tc.expectedSeries, srv.SeriesSet)
+				return
 			}
-		}); !ok {
-			return
-		}
+
+			testutil.Ok(t, err)
+			seriesEquals(t, tc.expectedSeries, srv.SeriesSet)
+			assertSeriesMatchShard(t, srv.SeriesSet, tc.req.ShardInfo)
+		})
 	}
 }
 
