@@ -8,6 +8,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
+
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -50,6 +52,8 @@ func (t *testStoreServer) LabelValues(_ context.Context, r *LabelValuesRequest) 
 }
 
 func TestServerAsClient(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+
 	ctx := context.Background()
 	t.Run("Series", func(t *testing.T) {
 		s := &testStoreServer{

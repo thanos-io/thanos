@@ -38,7 +38,6 @@ type inProcessClient struct {
 	ctx  context.Context
 	next func() (*SeriesResponse, error, bool)
 	stop func()
-	sync chan struct{}
 }
 
 func newInProcessClient(ctx context.Context, next func() (*SeriesResponse, error, bool), stop func()) *inProcessClient {
@@ -51,18 +50,22 @@ func newInProcessClient(ctx context.Context, next func() (*SeriesResponse, error
 
 func (c *inProcessClient) Recv() (*SeriesResponse, error) {
 	resp, err, ok := c.next()
+	if err != nil {
+		c.stop()
+		return nil, err
+	}
 	if !ok {
 		return nil, io.EOF
 	}
 	return resp, err
 }
 
-func (s *inProcessClient) Context() context.Context {
-	return s.ctx
+func (c *inProcessClient) Context() context.Context {
+	return c.ctx
 }
 
-func (s *inProcessClient) CloseSend() error {
-	s.stop()
+func (c *inProcessClient) CloseSend() error {
+	c.stop()
 	return nil
 }
 
@@ -74,7 +77,6 @@ func ServerAsClient(srv StoreServer) StoreClient {
 // NOTE: Passing CallOptions does not work - it would be needed to be implemented in grpc itself (before, after are private).
 type serverAsClient struct {
 	srv StoreServer
-	ctx context.Context
 }
 
 func (s serverAsClient) LabelNames(ctx context.Context, in *LabelNamesRequest, _ ...grpc.CallOption) (*LabelNamesResponse, error) {
