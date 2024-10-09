@@ -597,9 +597,9 @@ func storeMatches(ctx context.Context, debugLogging bool, s Client, mint, maxt i
 
 	storeMinTime, storeMaxTime := s.TimeRange()
 	if mint > storeMaxTime || maxt < storeMinTime {
-		s := "does not have data within this time period"
+		const s string = "does not have data within this time period"
 		if debugLogging {
-			s = fmt.Sprintf("%s: [%v,%v]. Store time ranges: [%v,%v]", s, mint, maxt, storeMinTime, storeMaxTime)
+			return false, fmt.Sprintf("%s: [%v,%v]. Store time ranges: [%v,%v]", s, mint, maxt, storeMinTime, storeMaxTime)
 		}
 		return false, s
 	}
@@ -610,9 +610,9 @@ func storeMatches(ctx context.Context, debugLogging bool, s Client, mint, maxt i
 
 	extLset := s.LabelSets()
 	if !LabelSetsMatch(matchers, extLset...) {
-		s := "external labels does not match request label matchers"
+		const s string = "external labels does not match request label matchers"
 		if debugLogging {
-			s = fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
+			return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
 		}
 		return false, s
 	}
@@ -635,9 +635,9 @@ func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][
 		match = match || LabelSetsMatch(sm, labels.FromStrings("__address__", addr))
 	}
 	if !match {
-		s := "__address__ does not match debug store metadata matchers"
+		const s string = "__address__ does not match debug store metadata matchers"
 		if debugLogging {
-			s = fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
+			return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
 		}
 		return false, s
 	}
