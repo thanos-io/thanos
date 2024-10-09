@@ -5,6 +5,7 @@ package v1
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	engineFactory := &QueryEngineFactory{
 		thanosEngine: &engineStub{},
 	}
-	api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+	api := NewGRPCAPI(time.Now, dedup.AlgorithmPenalty, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
 
 	expr, err := extpromql.ParseExpr("metric")
 	testutil.Ok(t, err)
@@ -99,7 +100,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 		engineFactory := &QueryEngineFactory{
 			prometheusEngine: test.engine,
 		}
-		api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
+		api := NewGRPCAPI(time.Now, dedup.AlgorithmPenalty, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
 		t.Run("range_query", func(t *testing.T) {
 			rangeRequest := &querypb.QueryRangeRequest{
 				Query:            "metric",
