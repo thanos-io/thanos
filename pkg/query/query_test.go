@@ -5,6 +5,7 @@ package query
 
 import (
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"os"
 	"path/filepath"
 	"sync"
@@ -81,6 +82,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				})
 			}
 			return q(true,
+				dedup.AlgorithmPenalty,
 				nil,
 				nil,
 				0,
