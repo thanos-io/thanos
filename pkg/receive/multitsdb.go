@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,8 +20,6 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
-	gmetadata "google.golang.org/grpc/metadata"
-
 	"google.golang.org/grpc"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -127,61 +124,19 @@ func NewMultiTSDB(
 
 type localClient struct {
 	store *store.TSDBStore
+
+	client storepb.StoreClient
 }
 
-type seriesClientMapper struct {
-	ctx    context.Context
-	series []*storepb.Series
-
-	initiated bool
-
-	store *store.TSDBStore
-	req   storepb.SeriesRequest
-}
-
-func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
-	if !m.initiated {
-		series, err := m.store.SeriesLocal(m.ctx, &m.req)
-		if err != nil {
-			return nil, err
-		}
-		m.series = series
-		m.initiated = true
+func newLocalClient(store *store.TSDBStore) *localClient {
+	return &localClient{
+		store:  store,
+		client: storepb.ServerAsClient(store),
 	}
-	if len(m.series) == 0 {
-		return nil, io.EOF
-	}
-	s := m.series[0]
-	m.series = m.series[1:]
-	return storepb.NewSeriesResponse(s), nil
-}
-
-func (m *seriesClientMapper) Header() (gmetadata.MD, error) {
-	return nil, nil
-}
-
-func (m *seriesClientMapper) Trailer() gmetadata.MD {
-	return nil
-}
-
-func (m *seriesClientMapper) CloseSend() error {
-	return nil
-}
-
-func (m *seriesClientMapper) Context() context.Context {
-	return m.ctx
-}
-
-func (m *seriesClientMapper) RecvMsg(_ interface{}) error {
-	return nil
-}
-
-func (m *seriesClientMapper) SendMsg(_ interface{}) error {
-	return nil
 }
 
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
+	return l.client.Series(ctx, in, opts...)
 }
 
 func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
@@ -190,12 +145,6 @@ func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequ
 
 func (l *localClient) LabelValues(ctx context.Context, in *storepb.LabelValuesRequest, opts ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
 	return l.store.LabelValues(ctx, in)
-}
-
-func newLocalClient(store *store.TSDBStore) *localClient {
-	return &localClient{
-		store: store,
-	}
 }
 
 func (l *localClient) Matches(matchers []*labels.Matcher) bool {

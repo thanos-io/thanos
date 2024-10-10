@@ -782,7 +782,7 @@ func (er *endpointRef) Addr() (string, bool) {
 }
 
 func (er *endpointRef) Close() {
-	runutil.CloseWithLogOnErr(er.logger, er.cc, fmt.Sprintf("endpoint %v connection closed", er.addr))
+	runutil.CloseWithLogOnErr(er.logger, er.cc, "endpoint %v connection closed", er.addr)
 }
 
 func (er *endpointRef) apisPresent() []string {

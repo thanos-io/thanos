@@ -47,11 +47,11 @@ $(GOJSONTOYAML): $(BINGO_DIR)/gojsontoyaml.mod
 	@echo "(re)installing $(GOBIN)/gojsontoyaml-v0.1.0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=gojsontoyaml.mod -o=$(GOBIN)/gojsontoyaml-v0.1.0 "github.com/brancz/gojsontoyaml"
 
-GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.59.1
+GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.61.0
 $(GOLANGCI_LINT): $(BINGO_DIR)/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/golangci-lint-v1.59.1"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.59.1 "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	@echo "(re)installing $(GOBIN)/golangci-lint-v1.61.0"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.61.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
 
 GOTESPLIT := $(GOBIN)/gotesplit-v0.2.1
 $(GOTESPLIT): $(BINGO_DIR)/gotesplit.mod
