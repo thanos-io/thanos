@@ -69,9 +69,9 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 	case model.ValMatrix.String():
 		res = &queryrange.PrometheusInstantQueryResponse{
 			Status: queryrange.StatusSuccess,
-			Data: &queryrange.PrometheusInstantQueryData{
+			Data: queryrange.PrometheusInstantQueryData{
 				ResultType: model.ValMatrix.String(),
-				Result: &queryrange.PrometheusInstantQueryResult{
+				Result: queryrange.PrometheusInstantQueryResult{
 					Result: &queryrange.PrometheusInstantQueryResult_Matrix{
 						Matrix: matrixMerge(promResponses),
 					},
@@ -87,9 +87,9 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 		}
 		res = &queryrange.PrometheusInstantQueryResponse{
 			Status: queryrange.StatusSuccess,
-			Data: &queryrange.PrometheusInstantQueryData{
+			Data: queryrange.PrometheusInstantQueryData{
 				ResultType: model.ValVector.String(),
-				Result: &queryrange.PrometheusInstantQueryResult{
+				Result: queryrange.PrometheusInstantQueryResult{
 					Result: &queryrange.PrometheusInstantQueryResult_Vector{
 						Vector: v,
 					},
@@ -305,7 +305,7 @@ func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQu
 			if s == nil {
 				continue
 			}
-			metric := cortexpb.LabelPairToModelMetric(sample.Labels).String()
+			metric := cortexpb.FromLabelAdaptersToLabels(sample.Labels).String()
 			if existingSample, ok := output[metric]; !ok {
 				output[metric] = s
 				metrics = append(metrics, metric) // Preserve the order of metric.
@@ -432,7 +432,7 @@ func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 			continue
 		}
 		for _, stream := range resp.Data.Result.GetMatrix().SampleStreams {
-			metric := cortexpb.LabelPairToModelMetric(stream.Labels).String()
+			metric := cortexpb.FromLabelAdaptersToLabels(stream.Labels).String()
 			existing, ok := output[metric]
 			if !ok {
 				existing = &queryrange.SampleStream{

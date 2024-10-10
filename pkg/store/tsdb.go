@@ -11,9 +11,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc"
@@ -21,17 +24,33 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-const RemoteReadFrameLimit = 1048576
+const (
+	RemoteReadFrameLimit      = 1048576
+	cuckooStoreFilterCapacity = 1000000
+	storeFilterUpdateInterval = 15 * time.Second
+)
 
 type TSDBReader interface {
 	storage.ChunkQueryable
 	StartTime() (int64, error)
+}
+
+// TSDBStoreOption is a functional option for TSDBStore.
+type TSDBStoreOption func(s *TSDBStore)
+
+// WithCuckooMetricNameStoreFilter returns a TSDBStoreOption that enables the Cuckoo filter for metric names.
+func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.storeFilter = filter.NewCuckooMetricNameStoreFilter(cuckooStoreFilterCapacity)
+		s.startStoreFilterUpdate = true
+	}
 }
 
 // TSDBStore implements the store API against a local TSDB instance.
@@ -44,9 +63,16 @@ type TSDBStore struct {
 	buffers          sync.Pool
 	maxBytesPerFrame int
 
-	extLset labels.Labels
-	mtx     sync.RWMutex
+	extLset                labels.Labels
+	startStoreFilterUpdate bool
+	storeFilter            filter.StoreFilter
+	mtx                    sync.RWMutex
+	close                  func()
 	storepb.UnimplementedStoreServer
+}
+
+func (s *TSDBStore) Close() {
+	s.close()
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -63,21 +89,68 @@ type ReadWriteTSDBStore struct {
 
 // NewTSDBStore creates a new TSDBStore.
 // NOTE: Given lset has to be sorted.
-func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
+func NewTSDBStore(
+	logger log.Logger,
+	db TSDBReader,
+	component component.StoreAPI,
+	extLset labels.Labels,
+	options ...TSDBStoreOption,
+) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	return &TSDBStore{
+
+	st := &TSDBStore{
 		logger:           logger,
 		db:               db,
 		component:        component,
 		extLset:          extLset,
 		maxBytesPerFrame: RemoteReadFrameLimit,
+		storeFilter:      filter.AllowAllStoreFilter{},
+		close:            func() {},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
 	}
+
+	for _, option := range options {
+		option(st)
+	}
+
+	if st.startStoreFilterUpdate {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		updateFilter := func(ctx context.Context) {
+			vals, err := st.LabelValues(ctx, &storepb.LabelValuesRequest{
+				Label: model.MetricNameLabel,
+				End:   math.MaxInt64,
+			})
+			if err != nil {
+				level.Error(logger).Log("msg", "failed to update metric names", "err", err)
+				return
+			}
+
+			st.storeFilter.ResetAndSet(vals.Values...)
+		}
+		st.close = cancel
+		updateFilter(ctx)
+
+		t := time.NewTicker(storeFilterUpdateInterval)
+
+		go func() {
+			for {
+				select {
+				case <-t.C:
+					updateFilter(ctx)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	return st
 }
 
 func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
@@ -94,28 +167,26 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-func (s *TSDBStore) LabelSet() []*labelpb.LabelSet {
-	labels := labelpb.PromLabelsToLabelpbLabels(s.getExtLset())
-	labelSets := []*labelpb.LabelSet{}
+func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
+	labels := labelpb.ZLabelSetsFromPromLabels(s.getExtLset())
+	labelSets := []labelpb.ZLabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, &labelpb.LabelSet{
-			Labels: labels,
-		})
+		labelSets = append(labelSets, labels...)
 	}
 
 	return labelSets
 }
 
-func (p *TSDBStore) TSDBInfos() []*infopb.TSDBInfo {
+func (p *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
 	labels := p.LabelSet()
 	if len(labels) == 0 {
-		return []*infopb.TSDBInfo{}
+		return []infopb.TSDBInfo{}
 	}
 
 	mint, maxt := p.TimeRange()
-	return []*infopb.TSDBInfo{
+	return []infopb.TSDBInfo{
 		{
-			Labels: &labelpb.LabelSet{
+			Labels: labelpb.ZLabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
@@ -134,6 +205,10 @@ func (s *TSDBStore) TimeRange() (int64, int64) {
 	}
 
 	return minTime, math.MaxInt64
+}
+
+func (s *TSDBStore) Matches(matchers []*labels.Matcher) bool {
+	return s.storeFilter.Matches(matchers)
 }
 
 // CloseDelegator allows to delegate close (releasing resources used by request to the server).
@@ -219,11 +294,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		series := set.At()
 
 		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
+		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.PromLabelsToLabelpbLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -233,11 +308,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.SizeVT()
+			bytesLeftForChunks -= lbl.Size()
 		}
 		frameBytesLeft := bytesLeftForChunks
 
-		seriesChunks := []*storepb.AggrChunk{}
+		seriesChunks := []storepb.AggrChunk{}
 		chIter := series.Iterator(nil)
 		isNext := chIter.Next()
 		for isNext {
@@ -257,8 +332,8 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 					Hash: hashChunk(hasher, chunkBytes, enableChunkHashCalculation),
 				},
 			}
-			frameBytesLeft -= c.SizeVT()
-			seriesChunks = append(seriesChunks, &c)
+			frameBytesLeft -= c.Size()
+			seriesChunks = append(seriesChunks, c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
 			isNext = chIter.Next()
@@ -271,7 +346,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 			if isNext {
 				frameBytesLeft = bytesLeftForChunks
-				seriesChunks = make([]*storepb.AggrChunk, 0, len(seriesChunks))
+				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
 			}
 		}
 		if err := chIter.Err(); err != nil {

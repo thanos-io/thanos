@@ -26,8 +26,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+type seriesStream interface {
+	Next() bool
+	At() *storepb.SeriesResponse
+}
+
 type responseDeduplicator struct {
-	h *losertree.Tree[*storepb.SeriesResponse, respSet]
+	h seriesStream
 
 	bufferedSameSeries []*storepb.SeriesResponse
 
@@ -36,20 +41,23 @@ type responseDeduplicator struct {
 
 	prev *storepb.SeriesResponse
 	ok   bool
+
+	chunkDedupMap map[uint64]storepb.AggrChunk
 }
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
 // It also deduplicates identical chunks identified by the same checksum from each series message.
-func NewResponseDeduplicator(h *losertree.Tree[*storepb.SeriesResponse, respSet]) *responseDeduplicator {
+func NewResponseDeduplicator(h seriesStream) *responseDeduplicator {
 	ok := h.Next()
 	var prev *storepb.SeriesResponse
 	if ok {
 		prev = h.At()
 	}
 	return &responseDeduplicator{
-		h:    h,
-		ok:   ok,
-		prev: prev,
+		h:             h,
+		ok:            ok,
+		prev:          prev,
+		chunkDedupMap: make(map[uint64]storepb.AggrChunk),
 	}
 }
 
@@ -73,7 +81,7 @@ func (d *responseDeduplicator) Next() bool {
 			d.ok = d.h.Next()
 			if !d.ok {
 				if len(d.bufferedSameSeries) > 0 {
-					d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+					d.bufferedResp = append(d.bufferedResp, d.chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
 				}
 				return len(d.bufferedResp) > 0
 			}
@@ -96,20 +104,20 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labelpb.CompareLabels(lbls, atLbls) == 0 {
+		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(atLbls)) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
 
-		d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+		d.bufferedResp = append(d.bufferedResp, d.chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
 		d.prev = s
 
 		return true
 	}
 }
 
-func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
-	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
+func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
+	clear(d.chunkDedupMap)
 
 	for _, s := range series {
 		for _, chk := range s.GetSeries().Chunks {
@@ -124,9 +132,9 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 					hash = xxhash.Sum64(field.Data)
 				}
 
-				if _, ok := chunkDedupMap[hash]; !ok {
+				if _, ok := d.chunkDedupMap[hash]; !ok {
 					chk := chk
-					chunkDedupMap[hash] = chk
+					d.chunkDedupMap[hash] = chk
 					break
 				}
 			}
@@ -134,12 +142,12 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 	}
 
 	// If no chunks were requested.
-	if len(chunkDedupMap) == 0 {
+	if len(d.chunkDedupMap) == 0 {
 		return series[0]
 	}
 
-	finalChunks := make([]*storepb.AggrChunk, 0, len(chunkDedupMap))
-	for _, chk := range chunkDedupMap {
+	finalChunks := make([]storepb.AggrChunk, 0, len(d.chunkDedupMap))
+	for _, chk := range d.chunkDedupMap {
 		finalChunks = append(finalChunks, chk)
 	}
 
@@ -173,7 +181,10 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			return labelpb.CompareLabels(a.GetSeries().Labels, b.GetSeries().Labels) < 0
+			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
+			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
+
+			return labels.Compare(iLbls, jLbls) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
 			return true
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {
@@ -377,9 +388,9 @@ func newLazyRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.SizeVT()
+			bytesProcessed += resp.Size()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -627,9 +638,9 @@ func newEagerRespSet(
 			}
 
 			numResponses++
-			bytesProcessed += resp.SizeVT()
+			bytesProcessed += resp.Size()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -682,7 +693,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		}
 
 		if len(labelsToRemove) > 0 {
-			ser.Labels = labelpb.PromLabelsToLabelpbLabels(rmLabels(labelpb.LabelpbLabelsToPromLabels(ser.Labels), labelsToRemove))
+			ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
 		}
 	}
 
@@ -697,7 +708,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.LabelpbLabelsToPromLabels(si.Labels), labelpb.LabelpbLabelsToPromLabels(sj.Labels)) < 0
+		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
 	})
 }
 
