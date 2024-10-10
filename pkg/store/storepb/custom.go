@@ -329,7 +329,10 @@ func (m *Chunk) Compare(b *Chunk) int {
 func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 	fieldStr, err := strconv.Unquote(string(entry))
 	if err != nil {
-		return errors.Wrapf(err, fmt.Sprintf("failed to unqote %v, in order to unmarshal as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
+		return errors.Wrapf(
+			err,
+			"failed to unqote %v, in order to unmarshal as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ","),
+		)
 	}
 
 	if fieldStr == "" {
@@ -340,7 +343,11 @@ func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 
 	strategy, ok := PartialResponseStrategy_value[strings.ToUpper(fieldStr)]
 	if !ok {
-		return errors.Errorf(fmt.Sprintf("failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
+		return errors.Errorf(
+			"failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s",
+			string(entry),
+			strings.Join(PartialResponseStrategyValues, ","),
+		)
 	}
 	*x = PartialResponseStrategy(strategy)
 	return nil
