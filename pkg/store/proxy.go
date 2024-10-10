@@ -676,26 +676,32 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 	)
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(ctx, st, minTime, maxTime, matchers...); !ok {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
+		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
+			}
 			continue
 		}
 		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			}
 			continue
 		}
 		storeLabelSets = append(storeLabelSets, extraMatchers...)
 
 		stores = append(stores, st)
-		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+		if s.debugLogging {
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+		}
 	}
 
 	return stores, storeLabelSets, storeDebugMsgs
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
-func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
+func storeMatches(ctx context.Context, debugLogging bool, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
 	var storeDebugMatcher [][]*labels.Matcher
 	if ctxVal := ctx.Value(StoreMatcherKey); ctxVal != nil {
 		if value, ok := ctxVal.([][]*labels.Matcher); ok {
@@ -705,16 +711,24 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 
 	storeMinTime, storeMaxTime := s.TimeRange()
 	if mint > storeMaxTime || maxt < storeMinTime {
-		return false, fmt.Sprintf("does not have data within this time period: [%v,%v]. Store time ranges: [%v,%v]", mint, maxt, storeMinTime, storeMaxTime)
+		const s string = "does not have data within this time period"
+		if debugLogging {
+			return false, fmt.Sprintf("%s: [%v,%v]. Store time ranges: [%v,%v]", s, mint, maxt, storeMinTime, storeMaxTime)
+		}
+		return false, s
 	}
 
-	if ok, reason := storeMatchDebugMetadata(s, storeDebugMatcher); !ok {
+	if ok, reason := storeMatchDebugMetadata(s, debugLogging, storeDebugMatcher); !ok {
 		return false, reason
 	}
 
 	extLset := s.LabelSets()
 	if !LabelSetsMatch(matchers, extLset...) {
-		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
+		const s string = "external labels does not match request label matchers"
+		if debugLogging {
+			return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
+		}
+		return false, s
 	}
 
 	if !s.Matches(matchers) {
@@ -725,7 +739,7 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 }
 
 // storeMatchDebugMetadata return true if the store's address match the storeDebugMatchers.
-func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (ok bool, reason string) {
+func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][]*labels.Matcher) (ok bool, reason string) {
 	if len(storeDebugMatchers) == 0 {
 		return true, ""
 	}
@@ -740,7 +754,11 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 		match = match || LabelSetsMatch(sm, labels.FromStrings("__address__", addr))
 	}
 	if !match {
-		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
+		const s string = "__address__ does not match debug store metadata matchers"
+		if debugLogging {
+			return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
+		}
+		return false, s
 	}
 	return true, ""
 }
