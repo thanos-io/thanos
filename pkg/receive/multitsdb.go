@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -206,6 +207,10 @@ type tenant struct {
 
 	// For tests.
 	blocksToDeleteFn func(db *tsdb.DB) tsdb.BlocksToDeleteFunc
+
+	stopCompactionLoop func()
+
+	logger log.Logger
 }
 
 func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
@@ -231,10 +236,11 @@ func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
 	return deletable
 }
 
-func newTenant() *tenant {
+func newTenant(logger log.Logger) *tenant {
 	return &tenant{
 		readyS: &ReadyStorage{},
 		mtx:    &sync.RWMutex{},
+		logger: logger,
 	}
 }
 
@@ -264,6 +270,64 @@ func (t *tenant) shipper() *shipper.Shipper {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.ship
+}
+
+func exponential(d, minD, maxD time.Duration) time.Duration {
+	d *= 2
+	if d < minD {
+		d = minD
+	}
+	if d > maxD {
+		d = maxD
+	}
+	return d
+}
+
+func (t *tenant) startCompactionLoop() {
+	wg := &sync.WaitGroup{}
+
+	wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	t.stopCompactionLoop = func() {
+		cancel()
+		wg.Wait()
+	}
+
+	initialWait := time.Duration(rand.IntN(61) * int(time.Second))
+
+	backoff := time.Duration(0)
+
+	go func() {
+		defer wg.Done()
+
+		select {
+		case <-time.After(initialWait):
+		case <-ctx.Done():
+			return
+		}
+
+		for {
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Minute):
+				if err := t.tsdb.Compact(ctx); err != nil {
+					level.Error(t.logger).Log("msg", "compaction failed", "err", err)
+					backoff = exponential(backoff, 1*time.Second, 1*time.Minute)
+				} else {
+					backoff = 0
+				}
+			}
+		}
+	}()
 }
 
 func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
@@ -363,6 +427,8 @@ func (t *MultiTSDB) Close() error {
 			level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id)
 			continue
 		}
+
+		tenant.stopCompactionLoop()
 		level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id)
 		merr.Add(db.Close())
 	}
@@ -506,6 +572,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	if err := os.RemoveAll(tdb.Dir()); err != nil {
 		return false, err
 	}
+
+	tenantInstance.stopCompactionLoop()
 
 	tenantInstance.mtx.Lock()
 	tenantInstance.readyS.set(nil)
@@ -711,6 +779,10 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		t.mtx.Unlock()
 		return err
 	}
+
+	s.DisableCompactions()
+	tenant.startCompactionLoop()
+
 	var ship *shipper.Shipper
 	if t.bucket != nil {
 		ship = shipper.New(
@@ -758,7 +830,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		return tenant, nil
 	}
 
-	tenant = newTenant()
+	tenant = newTenant(log.WithSuffix(t.logger, "tenant", tenantID))
 	t.tenants[tenantID] = tenant
 	t.tsdbClientsNeedUpdate = true
 	t.exemplarClientsNeedUpdate = true
