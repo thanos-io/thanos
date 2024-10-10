@@ -1992,6 +1992,14 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
+	var hasMetricNameMatcher = false
+	for _, m := range reqSeriesMatchers {
+		if m.Name == labels.MetricName {
+			hasMetricNameMatcher = true
+			break
+		}
+	}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	var reqBlockMatchers []*labels.Matcher
@@ -2015,6 +2023,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
+	var stats = &queryStats{}
 
 	for _, b := range s.blocks {
 		b := b
@@ -2033,7 +2042,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 		// If we have series matchers and the Label is not an external one, add <labelName> != "" matcher
 		// to only select series that have given label name.
-		if len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
+		// We don't need such matcher if matchers already contain __name__ matcher.
+		if !hasMetricNameMatcher && len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
 			m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
 			if err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -2101,7 +2111,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 					tenant,
 				)
-				defer blockClient.Close()
+				defer func() {
+					mtx.Lock()
+					stats = blockClient.MergeStats(stats)
+					mtx.Unlock()
+					blockClient.Close()
+				}()
 
 				if err := blockClient.ExpandPostings(
 					sortedReqSeriesMatchersNoExtLabels,
@@ -2153,6 +2168,15 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}
 
 	s.mtx.RUnlock()
+
+	defer func() {
+		if s.debugLogging {
+			level.Debug(logger).Log("msg", "stats query processed",
+				"request", req,
+				"tenant", tenant,
+				"stats", fmt.Sprintf("%+v", stats), "err", err)
+		}
+	}()
 
 	if err := g.Wait(); err != nil {
 		code := codes.Internal
