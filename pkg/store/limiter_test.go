@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -96,8 +97,19 @@ func TestRateLimitedServer(t *testing.T) {
 			defer cancel()
 
 			store := NewLimitedStoreServer(newStoreServerStub(test.series), prometheus.NewRegistry(), test.limits)
-			seriesServer := storepb.NewInProcessStream(ctx, 10)
-			err := store.Series(&storepb.SeriesRequest{}, seriesServer)
+			client := storepb.ServerAsClient(store)
+			seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{})
+			testutil.Ok(t, err)
+			for {
+				_, err = seriesClient.Recv()
+				if err == io.EOF {
+					err = nil
+					break
+				}
+				if err != nil {
+					break
+				}
+			}
 			if test.err == "" {
 				testutil.Ok(t, err)
 			} else {
