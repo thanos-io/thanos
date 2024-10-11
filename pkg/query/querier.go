@@ -23,7 +23,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -260,12 +259,6 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 	for i, m := range ms {
 		matchers[i] = m.String()
 	}
-	tenant := ctx.Value(tenancy.TenantKey)
-	// The context gets canceled as soon as query evaluation is completed by the engine.
-	// We want to prevent this from happening for the async store API calls we make while preserving tracing context.
-	// TODO(bwplotka): Does the above still is true? It feels weird to leave unfinished calls behind query API.
-	ctx = tracing.CopyTraceContext(context.Background(), ctx)
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)
 	span, ctx := tracing.StartSpan(ctx, "querier_select", opentracing.Tags{
 		"minTime":  hints.Start,

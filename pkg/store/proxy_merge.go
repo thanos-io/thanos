@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/promql-engine/execution/model"
 	grpc_opentracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 
 	"github.com/thanos-io/thanos/pkg/losertree"
@@ -300,9 +301,11 @@ func (l *lazyRespSet) At() *storepb.SeriesResponse {
 }
 
 func newLazyRespSet(
+	ctx context.Context,
 	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
+	storeAddr string,
 	storeLabelSets []labels.Labels,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
@@ -342,6 +345,24 @@ func newLazyRespSet(
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
 			l.span.Finish()
+		}()
+
+		start := time.Now()
+		defer func() {
+			metadataStore := model.GetMetadataStorage(ctx)
+			if metadataStore == nil {
+				return
+			}
+			metadataStore.SetMetadata(
+				storeAddr,
+				map[string]any{
+					"duration_seconds":  time.Since(start).Seconds(),
+					"processed_series":  seriesStats.Series,
+					"processed_chunks":  seriesStats.Chunks,
+					"processed_samples": seriesStats.Samples,
+					"processed_bytes":   bytesProcessed,
+				},
+			)
 		}()
 
 		numResponses := 0
@@ -493,9 +514,11 @@ func newAsyncRespSet(
 	switch retrievalStrategy {
 	case LazyRetrieval:
 		return newLazyRespSet(
+			ctx,
 			span,
 			frameTimeout,
 			st.String(),
+			storeAddr,
 			st.LabelSets(),
 			closeSeries,
 			cl,
@@ -505,9 +528,11 @@ func newAsyncRespSet(
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
+			ctx,
 			span,
 			frameTimeout,
 			st.String(),
+			storeAddr,
 			st.LabelSets(),
 			closeSeries,
 			cl,
@@ -556,9 +581,11 @@ type eagerRespSet struct {
 }
 
 func newEagerRespSet(
+	ctx context.Context,
 	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
+	storeAddr string,
 	storeLabelSets []labels.Labels,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
@@ -589,8 +616,27 @@ func newEagerRespSet(
 
 	// Start a goroutine and immediately buffer everything.
 	go func(l *eagerRespSet) {
+		start := time.Now()
+
 		seriesStats := &storepb.SeriesStatsCounter{}
 		bytesProcessed := 0
+
+		defer func() {
+			metadataStore := model.GetMetadataStorage(ctx)
+			if metadataStore == nil {
+				return
+			}
+			metadataStore.SetMetadata(
+				storeAddr,
+				map[string]any{
+					"duration_seconds":  time.Since(start).Seconds(),
+					"processed_series":  seriesStats.Series,
+					"processed_chunks":  seriesStats.Chunks,
+					"processed_samples": seriesStats.Samples,
+					"processed_bytes":   bytesProcessed,
+				},
+			)
+		}()
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
