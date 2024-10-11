@@ -272,9 +272,10 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	}
 
 	hints := &storage.SelectHints{
-		Start: r.MinTime,
-		End:   r.MaxTime,
-		Limit: int(r.Limit),
+		Start:           r.MinTime,
+		End:             r.MaxTime,
+		Limit:           int(r.Limit),
+		DisableTrimming: true,
 	}
 	set := q.Select(srv.Context(), true, hints, matchers...)
 
