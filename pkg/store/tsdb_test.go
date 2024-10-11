@@ -124,7 +124,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			expectedSeries: []rawSeries{
 				{
 					lset:   labels.FromStrings("a", "1", "region", "eu-west"),
-					chunks: [][]sample{{{1, 1}, {2, 2}}},
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
 		},
