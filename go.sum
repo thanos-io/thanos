@@ -2167,8 +2167,8 @@ github.com/prometheus/procfs v0.8.0/go.mod h1:z7EfXMXOkbkqb9IINtpCn86r/to3BnA0ua
 github.com/prometheus/procfs v0.9.0/go.mod h1:+pB4zwohETzFnmlpe6yd2lSc+0/46IYZRB/chUwxUZY=
 github.com/prometheus/procfs v0.15.1 h1:YagwOFzUgYfKKHX6Dr+sHT7km/hxC76UB0learggepc=
 github.com/prometheus/procfs v0.15.1/go.mod h1:fB45yRUv8NstnjriLhBQLuOUt+WW4BsoGhij/e3PBqk=
-github.com/prometheus/prometheus v0.54.2-0.20240920164404-6f0d6038b7f9 h1:Uad9KpJf6hvv2JPb64pDPYUAzssaD+GRJHJMMGMEEaM=
-github.com/prometheus/prometheus v0.54.2-0.20240920164404-6f0d6038b7f9/go.mod h1:n3/PY5be8xgYe+DUCjKdK0eSmDSQBQ6ZOoIUGmO9vEY=
+github.com/prometheus/prometheus v0.300.0-beta.0 h1:ZuhGPTYK7SalfSrq1KAvb2jZvPQJsYhNTFxfie9+SPA=
+github.com/prometheus/prometheus v0.300.0-beta.0/go.mod h1:n3/PY5be8xgYe+DUCjKdK0eSmDSQBQ6ZOoIUGmO9vEY=
 github.com/redis/rueidis v1.0.45-alpha.1 h1:69Bu1l7gVC/qDYuGGwMwGg2rjOjSyxESol/Zila62gY=
 github.com/redis/rueidis v1.0.45-alpha.1/go.mod h1:q7BfhDaPt7xxwy2nv2RqQO12/mmHflDjebpcNwWFjms=
 github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
