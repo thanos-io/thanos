@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -328,6 +329,12 @@ func runReceive(
 
 			srv.Shutdown(err)
 		})
+	}
+
+	level.Debug(logger).Log("msg", "setting up downscale HTTP server")
+	{
+		http.HandleFunc("/downscale", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+		http.ListenAndServe(":8080", nil)
 	}
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
