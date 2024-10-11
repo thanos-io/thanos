@@ -1142,7 +1142,9 @@ func TestReceiveExtractsTenant(t *testing.T) {
 			}
 
 			compressed := snappy.Encode(buf, pBuf.Bytes())
-			return client.Store(context.Background(), compressed, 0)
+
+			_, err = client.Store(context.Background(), compressed, 0)
+			return err
 		}))
 
 		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "http-tenant")), e2emon.WaitMissingMetrics()))

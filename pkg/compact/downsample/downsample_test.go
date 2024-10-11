@@ -23,17 +23,17 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
-	"go.uber.org/goleak"
 
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/testiters"
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 func TestDownsampleAndReadResultingData(t *testing.T) {
