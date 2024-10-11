@@ -19,7 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7658](https://github.com/thanos-io/thanos/pull/7658) Store: Fix panic because too small buffer in pool.
 - [#7643](https://github.com/thanos-io/thanos/pull/7643) Receive: fix thanos_receive_write_{timeseries,samples} stats
 - [#7644](https://github.com/thanos-io/thanos/pull/7644) fix(ui): add null check to find overlapping blocks logic
-- [#7814](https://github.com/thanos-io/thanos/pull/7814) Store: label_values: fetch less postings.
+- [#7814](https://github.com/thanos-io/thanos/pull/7814) Store: label_values: if matchers contain __name__=="something", do not add <labelName> != "" to fetch less postings.
 - [#7679](https://github.com/thanos-io/thanos/pull/7679) Query: respect store.limit.* flags when evaluating queries
 
 ### Added
