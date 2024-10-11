@@ -70,13 +70,13 @@ require (
 	go.elastic.co/apm v1.15.0
 	go.elastic.co/apm/module/apmot v1.15.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0 // indirect
-	go.opentelemetry.io/otel v1.29.0
+	go.opentelemetry.io/otel v1.30.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.29.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.29.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.29.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.29.0
-	go.opentelemetry.io/otel/sdk v1.29.0
-	go.opentelemetry.io/otel/trace v1.29.0
+	go.opentelemetry.io/otel/sdk v1.30.0
+	go.opentelemetry.io/otel/trace v1.30.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/goleak v1.3.0
@@ -107,7 +107,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
-	go.opentelemetry.io/contrib/samplers/jaegerremote v0.23.0
+	go.opentelemetry.io/contrib/samplers/jaegerremote v0.24.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.16.0
 )
 
@@ -157,7 +157,7 @@ require (
 	go.opentelemetry.io/contrib/propagators/ot v1.29.0 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240827150818-7e3bb234dfed // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	k8s.io/apimachinery v0.31.1 // indirect
 	k8s.io/client-go v0.31.0 // indirect
@@ -264,7 +264,7 @@ require (
 	go.opentelemetry.io/contrib/propagators/aws v1.29.0 // indirect
 	go.opentelemetry.io/contrib/propagators/b3 v1.29.0 // indirect
 	go.opentelemetry.io/contrib/propagators/jaeger v1.29.0 // indirect
-	go.opentelemetry.io/otel/metric v1.29.0 // indirect
+	go.opentelemetry.io/otel/metric v1.30.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/mod v0.21.0 // indirect
