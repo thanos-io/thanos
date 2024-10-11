@@ -1992,10 +1992,10 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
-	var hasMetricNameMatcher = false
+	var hasMetricNameEqMatcher = false
 	for _, m := range reqSeriesMatchers {
-		if m.Name == labels.MetricName {
-			hasMetricNameMatcher = true
+		if m.Name == labels.MetricName && m.Type == labels.MatchEqual {
+			hasMetricNameEqMatcher = true
 			break
 		}
 	}
@@ -2042,8 +2042,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 		// If we have series matchers and the Label is not an external one, add <labelName> != "" matcher
 		// to only select series that have given label name.
-		// We don't need such matcher if matchers already contain __name__ matcher.
-		if !hasMetricNameMatcher && len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
+		// We don't need such matcher if matchers already contain __name__=="something" matcher.
+		if !hasMetricNameEqMatcher && len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
 			m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
 			if err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
