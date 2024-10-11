@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -295,7 +296,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	seriesStats := &storepb.SeriesStatsCounter{}
 
 	// TODO(bwplotka): Put read limit as a flag.
-	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
+	stream := remote.NewChunkedReader(bodySizer, config.DefaultChunkedReadLimit, *data)
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 	for {

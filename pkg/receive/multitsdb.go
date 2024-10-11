@@ -713,6 +713,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
 	opts.BlocksToDelete = tenant.blocksToDelete
+	opts.EnableDelayedCompaction = true
 	tenant.blocksToDeleteFn = tsdb.DefaultBlocksToDelete
 
 	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL
