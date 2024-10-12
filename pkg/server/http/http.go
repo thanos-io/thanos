@@ -89,7 +89,6 @@ func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, t *int64) {
 			}{Timestamp: *t})
 		} else {
 			*t = time.Now().Unix()
-			w.WriteHeader(http.StatusForbidden)
 		}
 	}))
 }
