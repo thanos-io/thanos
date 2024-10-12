@@ -319,6 +319,7 @@ func runReceive(
 			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
 			httpserver.WithTLSConfig(*conf.httpTLSConfig),
 		)
+		var lastDownscalePrepareTimestamp *int64 = nil
 		httpserver.RegisterDownscale(srv, dbs.GetTenants())
 		g.Add(func() error {
 			statusProber.Healthy()

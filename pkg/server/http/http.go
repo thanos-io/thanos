@@ -6,11 +6,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/pprof"
-	"strconv"
-	"time"
-
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -20,6 +15,10 @@ import (
 	toolkit_web "github.com/prometheus/exporter-toolkit/web"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"net/http"
+	"net/http/pprof"
+	"strconv"
+	"time"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -71,21 +70,25 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	}
 }
 
-func RegisterDownscale[K comparable, V any](s *Server, m map[K]V) {
+func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, t *int64) {
 	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Tenant-Count", strconv.Itoa(len(m)))
-		if r.Method == http.MethodPost {
-			if len(m) == 0 {
-				w.WriteHeader(http.StatusOK)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(struct {
-					Timestamp int64 `json:"timestamp"`
-				}{Timestamp: time.Now().Unix()})
-			} else {
-				w.WriteHeader(http.StatusForbidden)
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodDelete {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if len(m) == 0 {
+			level.Info(s.logger).Log("msg", "no tenants, good to downscale")
+			if t == nil {
+				*t = time.Now().Unix()
 			}
+			json.NewEncoder(w).Encode(struct {
+				Timestamp int64 `json:"timestamp"`
+			}{Timestamp: *t})
 		} else {
-			w.WriteHeader(http.StatusOK)
+			*t = time.Now().Unix()
+			w.WriteHeader(http.StatusForbidden)
 		}
 	}))
 }
