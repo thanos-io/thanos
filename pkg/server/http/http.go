@@ -5,9 +5,10 @@ package http
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
@@ -71,8 +72,19 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 
 func RegisterDownscale[K comparable, V any](s *Server, m map[K]V) {
 	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, len(m))
+		if r.Method == http.MethodPost {
+			if len(m) == 0 {
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(struct {
+					Timestamp int64 `json:"timestamp"`
+				}{Timestamp: time.Now().Unix()})
+			} else {
+				w.WriteHeader(http.StatusForbidden)
+			}
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 	}))
 }
 
