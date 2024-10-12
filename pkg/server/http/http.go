@@ -77,19 +77,14 @@ func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, t *int64) {
 		if r.Method == http.MethodDelete {
 			return
 		}
-		if t == nil {
+		w.Header().Set("Content-Type", "application/json")
+		if t == nil || len(m) > 0 {
 			now := time.Now().Unix()
 			t = &now
 		}
-		w.Header().Set("Content-Type", "application/json")
-		if len(m) == 0 {
-			level.Info(s.logger).Log("msg", "no tenants, good to downscale")
-			json.NewEncoder(w).Encode(struct {
-				Timestamp int64 `json:"timestamp"`
-			}{Timestamp: *t})
-		} else {
-			*t = time.Now().Unix()
-		}
+		json.NewEncoder(w).Encode(struct {
+			Timestamp int64 `json:"timestamp"`
+		}{Timestamp: *t})
 	}))
 }
 
