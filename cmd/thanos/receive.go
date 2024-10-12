@@ -320,7 +320,7 @@ func runReceive(
 			httpserver.WithTLSConfig(*conf.httpTLSConfig),
 		)
 		var lastDownscalePrepareTimestamp *int64 = nil
-		httpserver.RegisterDownscale(srv, dbs.GetTenants())
+		httpserver.RegisterDownscale(srv, dbs.GetTenants(), lastDownscalePrepareTimestamp)
 		g.Add(func() error {
 			statusProber.Healthy()
 			return srv.ListenAndServe()
