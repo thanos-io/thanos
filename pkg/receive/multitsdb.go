@@ -122,6 +122,10 @@ func NewMultiTSDB(
 	return mt
 }
 
+func (t *MultiTSDB) GetTenants() map[string]*tenant {
+	return t.tenants
+}
+
 type localClient struct {
 	store *store.TSDBStore
 

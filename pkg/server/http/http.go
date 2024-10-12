@@ -5,6 +5,7 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 
@@ -66,6 +67,13 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 		srv:    &http.Server{Addr: options.listen, Handler: h},
 		opts:   options,
 	}
+}
+
+func RegisterDownscale[K comparable, V any](s *Server, m map[K]V) {
+	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, len(m))
+	}))
 }
 
 // ListenAndServe listens on the TCP network address and handles requests on incoming connections.
