@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -70,13 +71,17 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	}
 }
 
-func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, t *int64) {
+// RegisterDownscale registers HTTP handler compatible with Grafana rollout operator.
+// See https://github.com/databricks/rollout-operator?tab=readme-ov-file#delayed-scaledown.
+func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, mtx *sync.RWMutex, t *int64) {
 	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Tenant-Count", strconv.Itoa(len(m)))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodDelete {
 			return
 		}
+		mtx.RLock()
+		defer mtx.RUnlock()
 		w.Header().Set("Content-Type", "application/json")
 		if t == nil || len(m) > 0 {
 			now := time.Now().Unix()

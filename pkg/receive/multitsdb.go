@@ -126,6 +126,10 @@ func (t *MultiTSDB) GetTenants() map[string]*tenant {
 	return t.tenants
 }
 
+func (t *MultiTSDB) GetMutex() *sync.RWMutex {
+	return t.mtx
+}
+
 type localClient struct {
 	store *store.TSDBStore
 
