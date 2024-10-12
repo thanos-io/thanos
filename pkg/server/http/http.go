@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/pprof"
+	"strconv"
 	"time"
 
 	"github.com/felixge/fgprof"
@@ -72,6 +73,7 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 
 func RegisterDownscale[K comparable, V any](s *Server, m map[K]V) {
 	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Tenant-Count", strconv.Itoa(len(m)))
 		if r.Method == http.MethodPost {
 			if len(m) == 0 {
 				w.WriteHeader(http.StatusOK)
