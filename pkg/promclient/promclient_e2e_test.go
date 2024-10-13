@@ -6,6 +6,7 @@ package promclient
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path"
@@ -80,6 +81,20 @@ func TestConfiguredFlags_e2e(t *testing.T) {
 		testutil.Equals(t, int64(2*time.Hour), int64(flags.TSDBMinTime))
 		testutil.Equals(t, int64(4.8*float64(time.Hour)), int64(flags.TSDBMaxTime))
 		testutil.Equals(t, int64(2*24*time.Hour), int64(flags.TSDBRetention))
+	})
+}
+
+func TestLowestTimestamp_e2e(t *testing.T) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
+
+		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+		testutil.Ok(t, err)
+
+		ts, err := NewDefaultClient().LowestTimestamp(context.Background(), u)
+		testutil.Ok(t, err)
+
+		testutil.Equals(t, math.MinInt64, int(ts))
 	})
 }
 
