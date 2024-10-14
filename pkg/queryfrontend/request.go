@@ -27,6 +27,12 @@ type ShardedRequest interface {
 	WithShardInfo(info *storepb.ShardInfo) queryrange.Request
 }
 
+// SplitRequest interface represents a query request that can be split horizontally.
+type SplitRequest interface {
+	GetSplitInterval() time.Duration
+	WithSplitInterval(interval time.Duration) queryrange.Request
+}
+
 type RequestHeader struct {
 	Name   string
 	Values []string
@@ -57,6 +63,7 @@ type ThanosQueryRangeRequest struct {
 	LookbackDelta       int64
 	Analyze             bool
 	Engine              string
+	SplitInterval       time.Duration
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -83,6 +90,8 @@ func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions 
 
 func (r *ThanosQueryRangeRequest) GetStats() string { return r.Stats }
 
+func (r *ThanosQueryRangeRequest) GetSplitInterval() time.Duration { return r.SplitInterval }
+
 func (r *ThanosQueryRangeRequest) WithStats(stats string) queryrange.Request {
 	q := *r
 	q.Stats = stats
@@ -108,6 +117,13 @@ func (r *ThanosQueryRangeRequest) WithQuery(query string) queryrange.Request {
 func (r *ThanosQueryRangeRequest) WithShardInfo(info *storepb.ShardInfo) queryrange.Request {
 	q := *r
 	q.ShardInfo = info
+	return &q
+}
+
+// WithSplitInterval clones the current request with a different split interval.
+func (r *ThanosQueryRangeRequest) WithSplitInterval(interval time.Duration) queryrange.Request {
+	q := *r
+	q.SplitInterval = interval
 	return &q
 }
 
@@ -246,6 +262,7 @@ type ThanosLabelsRequest struct {
 	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
 	Stats           string
+	SplitInterval   time.Duration
 }
 
 // GetStoreMatchers returns store matches.
@@ -268,6 +285,8 @@ func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { re
 
 func (r *ThanosLabelsRequest) GetStats() string { return r.Stats }
 
+func (r *ThanosLabelsRequest) GetSplitInterval() time.Duration { return r.SplitInterval }
+
 func (r *ThanosLabelsRequest) WithStats(stats string) queryrange.Request {
 	q := *r
 	q.Stats = stats
@@ -285,6 +304,13 @@ func (r *ThanosLabelsRequest) WithStartEnd(start, end int64) queryrange.Request 
 // WithQuery clone the current request with a different query.
 func (r *ThanosLabelsRequest) WithQuery(_ string) queryrange.Request {
 	q := *r
+	return &q
+}
+
+// WithSplitInterval clones the current request with a different split interval.
+func (r *ThanosLabelsRequest) WithSplitInterval(interval time.Duration) queryrange.Request {
+	q := *r
+	q.SplitInterval = interval
 	return &q
 }
 
@@ -328,6 +354,7 @@ type ThanosSeriesRequest struct {
 	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
 	Stats           string
+	SplitInterval   time.Duration
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -353,6 +380,8 @@ func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { re
 
 func (r *ThanosSeriesRequest) GetStats() string { return r.Stats }
 
+func (r *ThanosSeriesRequest) GetSplitInterval() time.Duration { return r.SplitInterval }
+
 func (r *ThanosSeriesRequest) WithStats(stats string) queryrange.Request {
 	q := *r
 	q.Stats = stats
@@ -370,6 +399,13 @@ func (r *ThanosSeriesRequest) WithStartEnd(start, end int64) queryrange.Request 
 // WithQuery clone the current request with a different query.
 func (r *ThanosSeriesRequest) WithQuery(_ string) queryrange.Request {
 	q := *r
+	return &q
+}
+
+// WithSplitInterval clones the current request with a different split interval.
+func (r *ThanosSeriesRequest) WithSplitInterval(interval time.Duration) queryrange.Request {
+	q := *r
+	q.SplitInterval = interval
 	return &q
 }
 
