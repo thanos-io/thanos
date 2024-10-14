@@ -15,8 +15,7 @@ import (
 )
 
 func TestGenerateCacheKey(t *testing.T) {
-	intervalFn := func(r queryrange.Request) time.Duration { return hour }
-	splitter := newThanosCacheKeyGenerator(intervalFn)
+	splitter := newThanosCacheKeyGenerator()
 
 	for _, tc := range []struct {
 		name     string
@@ -30,25 +29,27 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expected: "fe::up:60000:0",
+			expected: "request_type_not_supported",
 		},
 		{
 			name: "non downsampling resolution specified",
 			req: &ThanosQueryRangeRequest{
-				Query: "up",
-				Start: 0,
-				Step:  60 * seconds,
+				Query:         "up",
+				Start:         0,
+				Step:          60 * seconds,
+				SplitInterval: time.Hour,
 			},
-			expected: "fe::up:60000:0:2:-:0:",
+			expected: "fe::up:60000:3600000:0:2:-:0:",
 		},
 		{
 			name: "10s step",
 			req: &ThanosQueryRangeRequest{
-				Query: "up",
-				Start: 0,
-				Step:  10 * seconds,
+				Query:         "up",
+				Start:         0,
+				Step:          10 * seconds,
+				SplitInterval: time.Hour,
 			},
-			expected: "fe::up:10000:0:2:-:0:",
+			expected: "fe::up:10000:3600000:0:2:-:0:",
 		},
 		{
 			name: "1m downsampling resolution",
@@ -57,8 +58,9 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start:               0,
 				Step:                10 * seconds,
 				MaxSourceResolution: 60 * seconds,
+				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:0:2:-:0:",
+			expected: "fe::up:10000:3600000:0:2:-:0:",
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
@@ -67,8 +69,9 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start:               0,
 				Step:                10 * seconds,
 				MaxSourceResolution: 300 * seconds,
+				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:0:1:-:0:",
+			expected: "fe::up:10000:3600000:0:1:-:0:",
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
@@ -77,8 +80,9 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start:               0,
 				Step:                10 * seconds,
 				MaxSourceResolution: hour,
+				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:0:0:-:0:",
+			expected: "fe::up:10000:3600000:0:0:-:0:",
 		},
 		{
 			name: "1h downsampling resolution with lookback delta",
@@ -88,23 +92,26 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: hour,
 				LookbackDelta:       1000,
+				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:0:0:-:1000:",
+			expected: "fe::up:10000:3600000:0:0:-:1000:",
 		},
 		{
 			name: "label names, no matcher",
 			req: &ThanosLabelsRequest{
-				Start: 0,
+				Start:         0,
+				SplitInterval: time.Hour,
 			},
-			expected: "fe:::[]:0",
+			expected: "fe:::[]:3600000:0",
 		},
 		{
 			name: "label names, single matcher",
 			req: &ThanosLabelsRequest{
-				Start:    0,
-				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+				Start:         0,
+				Matchers:      [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+				SplitInterval: time.Hour,
 			},
-			expected: `fe:::[[foo="bar"]]:0`,
+			expected: `fe:::[[foo="bar"]]:3600000:0`,
 		},
 		{
 			name: "label names, multiple matchers",
@@ -114,25 +121,28 @@ func TestGenerateCacheKey(t *testing.T) {
 					{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
 				},
+				SplitInterval: time.Hour,
 			},
-			expected: `fe:::[[foo="bar"] [baz="qux"]]:0`,
+			expected: `fe:::[[foo="bar"] [baz="qux"]]:3600000:0`,
 		},
 		{
 			name: "label values, no matcher",
 			req: &ThanosLabelsRequest{
-				Start: 0,
-				Label: "up",
+				Start:         0,
+				Label:         "up",
+				SplitInterval: time.Hour,
 			},
-			expected: "fe::up:[]:0",
+			expected: "fe::up:[]:3600000:0",
 		},
 		{
 			name: "label values, single matcher",
 			req: &ThanosLabelsRequest{
-				Start:    0,
-				Label:    "up",
-				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+				Start:         0,
+				Label:         "up",
+				Matchers:      [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+				SplitInterval: time.Hour,
 			},
-			expected: `fe::up:[[foo="bar"]]:0`,
+			expected: `fe::up:[[foo="bar"]]:3600000:0`,
 		},
 		{
 			name: "label values, multiple matchers",
@@ -143,8 +153,9 @@ func TestGenerateCacheKey(t *testing.T) {
 					{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
 				},
+				SplitInterval: time.Hour,
 			},
-			expected: `fe::up:[[foo="bar"] [baz="qux"]]:0`,
+			expected: `fe::up:[[foo="bar"] [baz="qux"]]:3600000:0`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
