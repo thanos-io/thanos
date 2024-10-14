@@ -6,6 +6,9 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	"math"
 	"math/rand"
@@ -19,7 +22,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -2213,69 +2215,58 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 
-	clients := []Client{
-		&storetestutil.TestClient{
-			StoreClient: &mockedStoreAPI{
-				RespSeries: []*storepb.SeriesResponse{
-					// Ensure more than 10 (internal respCh channel).
-					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-				},
-			},
-			MinTime: math.MinInt64,
-			MaxTime: math.MaxInt64,
-		},
-		&storetestutil.TestClient{
-			StoreClient: &mockedStoreAPI{
-				RespSeries: []*storepb.SeriesResponse{
-					storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-				},
-			},
-			MinTime: math.MinInt64,
-			MaxTime: math.MaxInt64,
-		},
-		&storetestutil.TestClient{
-			StoreClient: storepb.ServerAsClient(&storeServerStub{
-				delay: 50 * time.Millisecond,
-				responses: []*storepb.SeriesResponse{
-					storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-				},
-			}),
-			MinTime: math.MinInt64,
-			MaxTime: math.MaxInt64,
-		},
-	}
-
 	logger := log.NewNopLogger()
-	p := &ProxyStore{
-		logger:            logger,
-		stores:            func() []Client { return clients },
-		metrics:           newProxyStoreMetrics(nil),
-		responseTimeout:   50 * time.Millisecond,
-		retrievalStrategy: EagerRetrieval,
-		tsdbSelector:      DefaultSelector,
-	}
 
 	t.Run("failing send", func(t *testing.T) {
+		clients := []Client{
+			&storetestutil.TestClient{
+				StoreClient: &mockedStoreAPI{
+					RespSeries: []*storepb.SeriesResponse{
+						// Ensure more than 10 (internal respCh channel).
+						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+					},
+				},
+				MinTime: math.MinInt64,
+				MaxTime: math.MaxInt64,
+			},
+			&storetestutil.TestClient{
+				StoreClient: &mockedStoreAPI{
+					RespSeries: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+					},
+				},
+				MinTime: math.MinInt64,
+				MaxTime: math.MaxInt64,
+			},
+		}
+
+		p := &ProxyStore{
+			logger:            logger,
+			stores:            func() []Client { return clients },
+			metrics:           newProxyStoreMetrics(nil),
+			responseTimeout:   50 * time.Millisecond,
+			retrievalStrategy: EagerRetrieval,
+			tsdbSelector:      DefaultSelector,
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		// We mimic failing series server, but practically context cancel will do the same.
 		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
@@ -2287,14 +2278,45 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		}))
 		testutil.NotOk(t, ctx.Err())
 	})
+
 	t.Run("client timeout", func(t *testing.T) {
-		ctx := context.Background()
-		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
-			ctx: ctx,
-			send: func(*storepb.SeriesResponse) error {
-				return nil
+		clients := []Client{
+			&storetestutil.TestClient{
+				StoreClient: storepb.ServerAsClient(&storeServerStub{
+					delay: 50 * time.Millisecond,
+					responses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+					},
+				}),
+				MinTime: math.MinInt64,
+				MaxTime: math.MaxInt64,
 			},
-		}))
+		}
+
+		for _, respStrategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+			t.Run(fmt.Sprintf("strategy=%v", respStrategy), func(t *testing.T) {
+				p := &ProxyStore{
+					logger:            logger,
+					stores:            func() []Client { return clients },
+					metrics:           newProxyStoreMetrics(nil),
+					responseTimeout:   50 * time.Millisecond,
+					retrievalStrategy: respStrategy,
+					tsdbSelector:      DefaultSelector,
+				}
+
+				ctx := context.Background()
+				err := p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
+					ctx: ctx,
+					send: func(*storepb.SeriesResponse) error {
+						return nil
+					},
+				})
+
+				testutil.Assert(t, strings.Contains(err.Error(), context.Canceled.Error()))
+			})
+		}
 	})
 }
 

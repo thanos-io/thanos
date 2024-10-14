@@ -219,6 +219,7 @@ func (l *lazyRespSet) StoreLabels() map[string]struct{} {
 type lazyRespSet struct {
 	// Generic parameters.
 	span           opentracing.Span
+	cl             storepb.Store_SeriesClient
 	closeSeries    context.CancelFunc
 	storeName      string
 	storeLabelSets []labels.Labels
@@ -318,6 +319,7 @@ func newLazyRespSet(
 		frameTimeout:         frameTimeout,
 		storeName:            storeName,
 		storeLabelSets:       storeLabelSets,
+		cl:                   cl,
 		closeSeries:          closeSeries,
 		span:                 span,
 		dataOrFinishEvent:    dataAvailable,
@@ -492,13 +494,6 @@ func newAsyncRespSet(
 		}
 	}
 
-	closeSeries := func() {
-		cancel()
-		err := cl.CloseSend()
-		if err != nil {
-			level.Warn(logger).Log("msg", "detected close error", "err", err.Error())
-		}
-	}
 	switch retrievalStrategy {
 	case LazyRetrieval:
 		return newLazyRespSet(
@@ -506,7 +501,7 @@ func newAsyncRespSet(
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
-			closeSeries,
+			cancel,
 			cl,
 			shardMatcher,
 			applySharding,
@@ -518,7 +513,7 @@ func newAsyncRespSet(
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
-			closeSeries,
+			cancel,
 			cl,
 			shardMatcher,
 			applySharding,
@@ -539,6 +534,7 @@ func (l *lazyRespSet) Close() {
 	l.dataOrFinishEvent.Signal()
 
 	l.shardMatcher.Close()
+	_ = l.cl.CloseSend()
 }
 
 // eagerRespSet is a SeriesSet that blocks until all data is retrieved from
@@ -548,6 +544,7 @@ type eagerRespSet struct {
 	// Generic parameters.
 	span opentracing.Span
 
+	cl           storepb.Store_SeriesClient
 	closeSeries  context.CancelFunc
 	frameTimeout time.Duration
 
@@ -578,6 +575,7 @@ func newEagerRespSet(
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
+		cl:                cl,
 		closeSeries:       closeSeries,
 		frameTimeout:      frameTimeout,
 		bufferedResponses: []*storepb.SeriesResponse{},
@@ -726,6 +724,7 @@ func (l *eagerRespSet) Close() {
 		l.closeSeries()
 	}
 	l.shardMatcher.Close()
+	_ = l.cl.CloseSend()
 }
 
 func (l *eagerRespSet) At() *storepb.SeriesResponse {
