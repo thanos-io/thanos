@@ -3354,6 +3354,11 @@ func (r *bucketIndexReader) Close() error {
 	return nil
 }
 
+func (b *blockSeriesClient) CloseSend() error {
+	b.Close()
+	return nil
+}
+
 // LookupLabelsSymbols allows populates label set strings from symbolized label set.
 func (r *bucketIndexReader) LookupLabelsSymbols(ctx context.Context, symbolized []symbolizedLabel, b *labels.Builder) error {
 	b.Reset(labels.EmptyLabels())
