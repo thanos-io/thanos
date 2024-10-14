@@ -824,6 +824,9 @@ type StoreClient interface {
 	///
 	/// There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
 	/// This heavily optimizes the resource usage on Querier / Federated Queries.
+	///
+	/// Chunks can span a range larger than the requested min and max time and it is up to the query engine to discard samples
+	/// which fall outside of the query range.
 	Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (Store_SeriesClient, error)
 	/// LabelNames returns all label names constrained by the given matchers.
 	LabelNames(ctx context.Context, in *LabelNamesRequest, opts ...grpc.CallOption) (*LabelNamesResponse, error)
@@ -900,6 +903,9 @@ type StoreServer interface {
 	///
 	/// There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
 	/// This heavily optimizes the resource usage on Querier / Federated Queries.
+	///
+	/// Chunks can span a range larger than the requested min and max time and it is up to the query engine to discard samples
+	/// which fall outside of the query range.
 	Series(*SeriesRequest, Store_SeriesServer) error
 	/// LabelNames returns all label names constrained by the given matchers.
 	LabelNames(context.Context, *LabelNamesRequest) (*LabelNamesResponse, error)
