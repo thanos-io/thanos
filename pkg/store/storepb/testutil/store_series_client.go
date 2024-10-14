@@ -50,3 +50,4 @@ func (c *StoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 func (c *StoreSeriesClient) Context() context.Context {
 	return c.Ctx
 }
+func (c *StoreSeriesClient) CloseSend() error { return nil }

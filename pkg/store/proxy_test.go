@@ -2251,6 +2251,18 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 			MinTime: math.MinInt64,
 			MaxTime: math.MaxInt64,
 		},
+		&storetestutil.TestClient{
+			StoreClient: storepb.ServerAsClient(&storeServerStub{
+				delay: 50 * time.Millisecond,
+				responses: []*storepb.SeriesResponse{
+					storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+					storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+					storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				},
+			}),
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+		},
 	}
 
 	logger := log.NewNopLogger()
@@ -2258,7 +2270,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		logger:            logger,
 		stores:            func() []Client { return clients },
 		metrics:           newProxyStoreMetrics(nil),
-		responseTimeout:   0,
+		responseTimeout:   50 * time.Millisecond,
 		retrievalStrategy: EagerRetrieval,
 		tsdbSelector:      DefaultSelector,
 	}
@@ -2275,6 +2287,32 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		}))
 		testutil.NotOk(t, ctx.Err())
 	})
+	t.Run("client timeout", func(t *testing.T) {
+		ctx := context.Background()
+		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
+			ctx: ctx,
+			send: func(*storepb.SeriesResponse) error {
+				return nil
+			},
+		}))
+	})
+}
+
+type storeServerStub struct {
+	storepb.StoreServer
+
+	delay     time.Duration
+	responses []*storepb.SeriesResponse
+}
+
+func (m *storeServerStub) Series(_ *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
+	for _, r := range m.responses {
+		<-time.After(m.delay)
+		if err := server.Send(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestProxyStore_storeMatchMetadata(t *testing.T) {

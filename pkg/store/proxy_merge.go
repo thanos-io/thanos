@@ -446,8 +446,10 @@ func newAsyncRespSet(
 	emptyStreamResponses prometheus.Counter,
 ) (respSet, error) {
 
-	var span opentracing.Span
-	var closeSeries context.CancelFunc
+	var (
+		span   opentracing.Span
+		cancel context.CancelFunc
+	)
 
 	storeID, storeAddr, isLocalStore := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
@@ -459,7 +461,7 @@ func newAsyncRespSet(
 		"store.addr":     storeAddr,
 	})
 
-	seriesCtx, closeSeries = context.WithCancel(seriesCtx)
+	seriesCtx, cancel = context.WithCancel(seriesCtx)
 
 	shardMatcher := shardInfo.Matcher(buffers)
 
@@ -474,7 +476,7 @@ func newAsyncRespSet(
 
 		span.SetTag("err", err.Error())
 		span.Finish()
-		closeSeries()
+		cancel()
 		return nil, err
 	}
 
@@ -490,6 +492,13 @@ func newAsyncRespSet(
 		}
 	}
 
+	closeSeries := func() {
+		cancel()
+		err := cl.CloseSend()
+		if err != nil {
+			level.Warn(logger).Log("msg", "detected close error", "err", err.Error())
+		}
+	}
 	switch retrievalStrategy {
 	case LazyRetrieval:
 		return newLazyRespSet(
