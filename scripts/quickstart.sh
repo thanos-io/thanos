@@ -7,6 +7,8 @@ trap 'kill 0' SIGTERM
 
 MINIO_ENABLED=${MINIO_ENABLED:-""}
 MINIO_EXECUTABLE=${MINIO_EXECUTABLE:-"minio"}
+ALERTMANAGER_ENABLED=${ALERTMANAGER_ENABLED:-""}
+ALERTMANAGER_EXECUTABLE=${ALERTMANAGER_EXECUTABLE:-"alertmanager"}
 MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
 PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"prometheus"}
 THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"thanos"}
@@ -71,13 +73,44 @@ fi
 # Setup alert / rules config file.
 cat >data/rules.yml <<-EOF
 	groups:
-	  - name: example
-	    rules:
-	    - record: job:go_threads:sum
-	      expr: sum(go_threads) by (job)
+  - name: example
+    rules:
+    - record: job:go_threads:sum
+      expr: sum(go_threads) by (job)
+  - name: test
+    rules:
+    - alert: TestAlert
+      expr: job:go_threads:sum > 1
+      for: 1m
+      labels:
+        severity: test
 EOF
 
 STORES=""
+
+if [ -n "${ALERTMANAGER_ENABLED}" ]; then
+  if [ ! $(command -v "$ALERTMANAGER_EXECUTABLE") ]; then
+    echo "Cannot find or execute Alertmanager binary $ALERTMANAGER_EXECUTABLE, you can override it by setting the ALERTMANAGER_EXECUTABLE env variable"
+    exit 1
+  fi
+
+cat >data/alertmanager.yml <<-EOF
+  global:
+    resolve_timeout: 5m
+  route:
+    group_by: ['job']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 12h
+    receiver: 'null'
+  receivers:
+    - name: 'null'
+EOF
+
+  ${ALERTMANAGER_EXECUTABLE} \
+    --config.file=data/alertmanager.yml \
+    --storage.path=data/alertmanager &
+fi
 
 # Start three Prometheus servers monitoring themselves.
 for i in $(seq 0 2); do
@@ -280,12 +313,12 @@ ${THANOS_EXECUTABLE} rule \
   --eval-interval "30s" \
   --rule-file "data/rules.yml" \
   --alert.query-url "http://0.0.0.0:9090" \
+  --alertmanagers.url "http://0.0.0.0:9093" \
   --query "http://0.0.0.0:10904" \
   --query "http://0.0.0.0:10914" \
   --http-address="0.0.0.0:19999" \
   --grpc-address="0.0.0.0:19998" \
   --label 'rule="true"' \
-  "${REMOTE_WRITE_FLAGS}" \
   ${OBJSTORECFG} &
 
 STORES="${STORES} --store 127.0.0.1:19998"
