@@ -12,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	toolkit_web "github.com/prometheus/exporter-toolkit/web"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"net/http"
