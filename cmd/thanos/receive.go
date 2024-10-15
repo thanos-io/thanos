@@ -334,9 +334,14 @@ func runReceive(
 			if lastDownscalePrepareTimestamp == 0 || n > 0 {
 				lastDownscalePrepareTimestamp = time.Now().Unix()
 			}
-			json.NewEncoder(w).Encode(struct {
+			err := json.NewEncoder(w).Encode(struct {
 				Timestamp int64 `json:"timestamp"`
-			}{Timestamp: lastDownscalePrepareTimestamp})
+			}{
+				Timestamp: lastDownscalePrepareTimestamp,
+			})
+			if err != nil {
+				level.Error(logger).Log("msg", "error writing downscale response", "err", err)
+			}
 		}))
 		g.Add(func() error {
 			statusProber.Healthy()
