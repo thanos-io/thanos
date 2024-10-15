@@ -122,12 +122,10 @@ func NewMultiTSDB(
 	return mt
 }
 
-func (t *MultiTSDB) GetTenants() map[string]*tenant {
-	return t.tenants
-}
-
-func (t *MultiTSDB) GetMutex() *sync.RWMutex {
-	return t.mtx
+func (t *MultiTSDB) GetTenantsLen() int {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return len(t.tenants)
 }
 
 type localClient struct {

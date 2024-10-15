@@ -5,8 +5,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -319,8 +322,22 @@ func runReceive(
 			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
 			httpserver.WithTLSConfig(*conf.httpTLSConfig),
 		)
-		var lastDownscalePrepareTimestamp *int64 = nil
-		httpserver.RegisterDownscale(srv, dbs.GetTenants(), dbs.GetMutex(), lastDownscalePrepareTimestamp)
+		var lastDownscalePrepareTimestamp int64 = 0
+		srv.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n := dbs.GetTenantsLen()
+			w.Header().Set("Tenant-Count", strconv.Itoa(n))
+			w.WriteHeader(http.StatusOK)
+			if r.Method == http.MethodDelete {
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if lastDownscalePrepareTimestamp == 0 || n > 0 {
+				lastDownscalePrepareTimestamp = time.Now().Unix()
+			}
+			json.NewEncoder(w).Encode(struct {
+				Timestamp int64 `json:"timestamp"`
+			}{Timestamp: lastDownscalePrepareTimestamp})
+		}))
 		g.Add(func() error {
 			statusProber.Healthy()
 			return srv.ListenAndServe()

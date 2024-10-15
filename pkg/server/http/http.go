@@ -5,7 +5,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -17,12 +16,6 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"net/http"
 	"net/http/pprof"
-	"strconv"
-	"sync"
-	"time"
-
-	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/prober"
 )
 
 // A Server defines parameters for serve HTTP requests, a wrapper around http.Server.
@@ -69,29 +62,6 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 		srv:    &http.Server{Addr: options.listen, Handler: h},
 		opts:   options,
 	}
-}
-
-// RegisterDownscale registers HTTP handler compatible with Grafana rollout operator.
-// See https://github.com/databricks/rollout-operator?tab=readme-ov-file#delayed-scaledown.
-func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, mtx *sync.RWMutex, t *int64) {
-	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mtx.RLock()
-		n := len(m)
-		mtx.RUnlock()
-		w.Header().Set("Tenant-Count", strconv.Itoa(n))
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodDelete {
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if t == nil || n > 0 {
-			now := time.Now().Unix()
-			t = &now
-		}
-		json.NewEncoder(w).Encode(struct {
-			Timestamp int64 `json:"timestamp"`
-		}{Timestamp: *t})
-	}))
 }
 
 // ListenAndServe listens on the TCP network address and handles requests on incoming connections.
