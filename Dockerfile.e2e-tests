@@ -8,7 +8,7 @@ COPY . $GOPATH/src/github.com/thanos-io/thanos
 RUN CGO_ENABLED=1 go build -o $GOBIN/thanos -race ./cmd/thanos
 # -----------------------------------------------------------------------------
 
-FROM golang:1.23
+FROM golang:1.23.2-alpine3.20
 LABEL maintainer="The Thanos Authors"
 
 COPY --from=builder $GOBIN/thanos /bin/thanos
