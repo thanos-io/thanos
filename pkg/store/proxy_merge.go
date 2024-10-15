@@ -238,6 +238,7 @@ func (l *lazyRespSet) StoreLabels() map[string]struct{} {
 type lazyRespSet struct {
 	// Generic parameters.
 	span           opentracing.Span
+	cl             storepb.Store_SeriesClient
 	closeSeries    context.CancelFunc
 	storeName      string
 	storeLabelSets []labels.Labels
@@ -337,6 +338,7 @@ func newLazyRespSet(
 		frameTimeout:         frameTimeout,
 		storeName:            storeName,
 		storeLabelSets:       storeLabelSets,
+		cl:                   cl,
 		closeSeries:          closeSeries,
 		span:                 span,
 		dataOrFinishEvent:    dataAvailable,
@@ -468,8 +470,10 @@ func newAsyncRespSet(
 	emptyStreamResponses prometheus.Counter,
 ) (respSet, error) {
 
-	var span opentracing.Span
-	var closeSeries context.CancelFunc
+	var (
+		span   opentracing.Span
+		cancel context.CancelFunc
+	)
 
 	storeID, storeAddr, isLocalStore := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
@@ -481,7 +485,7 @@ func newAsyncRespSet(
 		"store.addr":     storeAddr,
 	})
 
-	seriesCtx, closeSeries = context.WithCancel(seriesCtx)
+	seriesCtx, cancel = context.WithCancel(seriesCtx)
 
 	shardMatcher := shardInfo.Matcher(buffers)
 
@@ -496,7 +500,7 @@ func newAsyncRespSet(
 
 		span.SetTag("err", err.Error())
 		span.Finish()
-		closeSeries()
+		cancel()
 		return nil, err
 	}
 
@@ -520,7 +524,7 @@ func newAsyncRespSet(
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
-			closeSeries,
+			cancel,
 			cl,
 			shardMatcher,
 			applySharding,
@@ -533,7 +537,7 @@ func newAsyncRespSet(
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
-			closeSeries,
+			cancel,
 			cl,
 			shardMatcher,
 			applySharding,
@@ -554,6 +558,7 @@ func (l *lazyRespSet) Close() {
 	l.dataOrFinishEvent.Signal()
 
 	l.shardMatcher.Close()
+	_ = l.cl.CloseSend()
 }
 
 // eagerRespSet is a SeriesSet that blocks until all data is retrieved from
@@ -563,6 +568,7 @@ type eagerRespSet struct {
 	// Generic parameters.
 	span opentracing.Span
 
+	cl           storepb.Store_SeriesClient
 	closeSeries  context.CancelFunc
 	frameTimeout time.Duration
 
@@ -593,6 +599,7 @@ func newEagerRespSet(
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
+		cl:                cl,
 		closeSeries:       closeSeries,
 		frameTimeout:      frameTimeout,
 		bufferedResponses: []*storepb.SeriesResponse{},
@@ -744,6 +751,7 @@ func (l *eagerRespSet) Close() {
 		l.closeSeries()
 	}
 	l.shardMatcher.Close()
+	_ = l.cl.CloseSend()
 }
 
 func (l *eagerRespSet) At() *storepb.SeriesResponse {
