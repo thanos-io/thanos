@@ -103,35 +103,6 @@ func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_writ
 			result.SetError(writecapnp.WriteError_internal)
 		}
 	}
+
 	return nil
 }
-
-type BufferedListener struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	conns chan net.Conn
-}
-
-func (b BufferedListener) Accept() (net.Conn, error) {
-	select {
-	case <-b.ctx.Done():
-		return nil, b.ctx.Err()
-	case c := <-b.conns:
-		return c, nil
-	}
-}
-
-func (b BufferedListener) Close() error {
-	b.cancel()
-	return nil
-}
-
-func (b BufferedListener) Addr() net.Addr {
-	return addr{}
-}
-
-type addr struct{}
-
-func (addr) Network() string { return "bufconn" }
-func (addr) String() string  { return "bufconn" }
