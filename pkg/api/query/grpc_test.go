@@ -5,7 +5,6 @@ package v1
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/dedup"
 	"testing"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store"
