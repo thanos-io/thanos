@@ -477,7 +477,7 @@ func runReceive(
 		if err != nil {
 			return err
 		}
-		server := receive.NewCapNProtoServer(listener, handler)
+		server := receive.NewCapNProtoServer(listener, handler, logger)
 		g.Add(func() error {
 			return server.ListenAndServe()
 		}, func(err error) {
