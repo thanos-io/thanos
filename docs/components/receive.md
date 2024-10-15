@@ -28,11 +28,10 @@ This algorithm uses a `hashmod` function over all labels to decide which receive
 
 ### Replication protocols
 
-By default, Receivers will replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can often be resource intensive and cause a lot of GC pressure.
-It is possible to use [Cap'N Proto](https://capnproto.org/) as the replication encoding and RPC framework. 
+By default, Receivers will replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can often be resource intensive and cause a lot of GC pressure. It is possible to use [Cap'N Proto](https://capnproto.org/) as the replication encoding and RPC framework.
 
-In order to enable this mode, you can enable the `receive.capnproto-replication` flag on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in 
-the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+
 ```json
 [
     {
@@ -331,7 +330,8 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '999,1008p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1012,1022p' pkg/receive/handler.go"
+// writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
 	// would need to succeed all the time. Another way to think about it is when migrating
@@ -411,6 +411,8 @@ Flags:
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --receive.capnproto-address="0.0.0.0:19391"
+                                 Address for the Cap'n Proto server.
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
@@ -457,6 +459,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.replication-protocol=protobuf
+                                 The protocol to use for replicating
+                                 remote-write requests. One of protobuf,
+                                 capnproto
       --receive.split-tenant-label-name=""
                                  Label name through which the request will
                                  be split into multiple tenants. This takes

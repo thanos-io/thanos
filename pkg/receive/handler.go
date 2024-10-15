@@ -71,6 +71,13 @@ const (
 	labelError   = "error"
 )
 
+type ReplicationProtocol string
+
+const (
+	ProtobufReplication  ReplicationProtocol = "protobuf"
+	CapNProtoReplication ReplicationProtocol = "capnproto"
+)
+
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
@@ -108,7 +115,7 @@ type Options struct {
 	TSDBStats               TSDBStats
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
-	UseCapNProtoReplication bool
+	ReplicationProtocol     ReplicationProtocol
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -173,7 +180,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				},
 			),
 			workers,
-			o.UseCapNProtoReplication,
+			o.ReplicationProtocol,
 			o.DialOpts...),
 		receiverMode: o.ReceiverMode,
 		Limiter:      o.Limiter,
@@ -1353,7 +1360,7 @@ func newPeerGroup(
 	backoff backoff.Backoff,
 	forwardDelay prometheus.Histogram,
 	asyncForwardWorkersCount uint,
-	useCapNProtoReplication bool,
+	replicationProtocol ReplicationProtocol,
 	dialOpts ...grpc.DialOption,
 ) *peerGroup {
 	return &peerGroup{
@@ -1366,7 +1373,7 @@ func newPeerGroup(
 		expBackoff:               backoff,
 		forwardDelay:             forwardDelay,
 		asyncForwardWorkersCount: asyncForwardWorkersCount,
-		useCapNProtoReplication:  useCapNProtoReplication,
+		replicationProtocol:      replicationProtocol,
 	}
 }
 
@@ -1412,7 +1419,7 @@ type peerGroup struct {
 	expBackoff               backoff.Backoff
 	forwardDelay             prometheus.Histogram
 	asyncForwardWorkersCount uint
-	useCapNProtoReplication  bool
+	replicationProtocol      ReplicationProtocol
 
 	m sync.RWMutex
 
@@ -1469,9 +1476,11 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 	}
 
 	var client peerClient
-	if p.useCapNProtoReplication {
+	switch p.replicationProtocol {
+	case CapNProtoReplication:
 		client = writecapnp.NewRemoteWriteClient(writecapnp.NewTCPDialer(endpoint.CapNProtoAddress), p.logger)
-	} else {
+
+	case ProtobufReplication:
 		conn, err := p.dialer(endpoint.Address, p.dialOpts...)
 		if err != nil {
 			p.markPeerUnavailableUnlocked(endpoint)
@@ -1479,6 +1488,8 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 			return nil, errors.Wrap(dialError, errUnavailable.Error())
 		}
 		client = newProtobufPeer(conn)
+	default:
+		return nil, errors.Errorf("unknown replication protocol %v", p.replicationProtocol)
 	}
 
 	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount)

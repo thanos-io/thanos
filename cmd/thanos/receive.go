@@ -273,7 +273,7 @@ func runReceive(
 		Limiter:              limiter,
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
-		UseCapNProtoReplication: conf.useCapNProtoReplication,
+		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -840,18 +840,18 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	refreshInterval         *model.Duration
-	endpoint                string
-	tenantHeader            string
-	tenantField             string
-	tenantLabelName         string
-	defaultTenantID         string
-	replicaHeader           string
-	replicationFactor       uint64
-	forwardTimeout          *model.Duration
-	maxBackoff              *model.Duration
-	compression             string
-	useCapNProtoReplication bool
+	refreshInterval     *model.Duration
+	endpoint            string
+	tenantHeader        string
+	tenantField         string
+	tenantLabelName     string
+	defaultTenantID     string
+	replicaHeader       string
+	replicationFactor   uint64
+	forwardTimeout      *model.Duration
+	maxBackoff          *model.Duration
+	compression         string
+	replicationProtocol string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -954,7 +954,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
-	cmd.Flag("receive.capnproto-replication", "Use Cap'n Proto for replication requests.").Default("false").BoolVar(&rc.useCapNProtoReplication)
+	replicationProtocols := []string{string(receive.ProtobufReplication), string(receive.CapNProtoReplication)}
+	cmd.Flag("receive.replication-protocol", "The protocol to use for replicating remote-write requests. One of "+strings.Join(replicationProtocols, ", ")).
+		Default(string(receive.ProtobufReplication)).
+		EnumVar(&rc.replicationProtocol, replicationProtocols...)
 
 	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 
