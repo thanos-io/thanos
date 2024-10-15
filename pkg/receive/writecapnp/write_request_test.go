@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package writecapnp
 
 import (
@@ -19,7 +22,7 @@ func TestNewRequest(t *testing.T) {
 	symbols, err := NewSymbols(seg)
 	require.NoError(t, err)
 
-	symbols.SetData([]byte(`foobar`))
+	require.NoError(t, symbols.SetData([]byte(`foobar`)))
 	list, err := capnp.NewUInt32List(
 		seg, 2,
 	)
@@ -27,8 +30,8 @@ func TestNewRequest(t *testing.T) {
 	list.Set(0, 3)
 	list.Set(1, 6)
 
-	symbols.SetOffsets(list)
-	wr.SetSymbols(symbols)
+	require.NoError(t, symbols.SetOffsets(list))
+	require.NoError(t, wr.SetSymbols(symbols))
 
 	req, err := NewRequest(wr)
 	require.NoError(t, err)
