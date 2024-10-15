@@ -112,7 +112,7 @@ require (
 )
 
 require (
-	capnproto.org/go/capnp/v3 v3.0.0-alpha.30
+	capnproto.org/go/capnp/v3 v3.0.1-alpha.2
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
@@ -133,6 +133,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
 	github.com/cilium/ebpf v0.11.0 // indirect
+	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381 // indirect
 	github.com/containerd/cgroups/v3 v3.0.3 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/elastic/go-licenser v0.3.1 // indirect

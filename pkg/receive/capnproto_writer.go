@@ -85,7 +85,7 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 			errorTracker.addHistogramError(err, tLogger, lset, hp.Timestamp)
 		}
 
-		// Current implemetation of app.AppendExemplar doesn't create a new series, so it must be already present.
+		// Current implementation of app.AppendExemplar doesn't create a new series, so it must be already present.
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(series.Exemplars) > 0 {
 			for _, ex := range series.Exemplars {
