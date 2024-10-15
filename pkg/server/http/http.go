@@ -75,15 +75,16 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 // See https://github.com/databricks/rollout-operator?tab=readme-ov-file#delayed-scaledown.
 func RegisterDownscale[K comparable, V any](s *Server, m map[K]V, mtx *sync.RWMutex, t *int64) {
 	s.mux.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Tenant-Count", strconv.Itoa(len(m)))
+		mtx.RLock()
+		n := len(m)
+		mtx.RUnlock()
+		w.Header().Set("Tenant-Count", strconv.Itoa(n))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodDelete {
 			return
 		}
-		mtx.RLock()
-		defer mtx.RUnlock()
 		w.Header().Set("Content-Type", "application/json")
-		if t == nil || len(m) > 0 {
+		if t == nil || n > 0 {
 			now := time.Now().Unix()
 			t = &now
 		}
