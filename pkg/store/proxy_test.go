@@ -2454,6 +2454,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 			h := NewResponseDeduplicator(NewProxyResponseLoserTree(
 				&eagerRespSet{
 					closeSeries:       func() {},
+					cl:                nopClientSendCloser{},
 					wg:                &sync.WaitGroup{},
 					bufferedResponses: tcase.responses,
 				},
