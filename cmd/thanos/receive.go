@@ -464,7 +464,7 @@ func runReceive(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(conf.topMetricsUpdateInterval, ctx.Done(), func() error {
-				level.Info(logger).Log("msg", "getting top metrics")
+				level.Debug(logger).Log("msg", "getting top metrics")
 				for _, ts := range dbs.TenantStats(conf.numTopMetricsPerTenant, labels.MetricName) {
 					for _, ms := range ts.Stats.IndexPostingStats.CardinalityMetricsStats {
 						if ms.Count >= conf.topMetricsMinimumCardinality {
