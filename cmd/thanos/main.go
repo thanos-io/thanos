@@ -48,11 +48,15 @@ func main() {
 	}
 
 	if v := os.Getenv("GOGC"); v != "" {
-		n, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			n = 100
+		if v == "off" {
+			debug.SetGCPercent(-1)
+		} else {
+			n, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				n = 100
+			}
+			debug.SetGCPercent(int(n))
 		}
-		debug.SetGCPercent(int(n))
 	} else {
 		debug.SetGCPercent(DefaultGOGC)
 		os.Setenv("GOGC", strconv.Itoa(DefaultGOGC))
