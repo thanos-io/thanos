@@ -1,5 +1,5 @@
 # Taking a non-alpine image for e2e tests so that cgo can be enabled for the race detector.
-FROM golang:1.23 as builder
+FROM golang:1.23.2 as builder
 
 WORKDIR $GOPATH/src/github.com/thanos-io/thanos
 
