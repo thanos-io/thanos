@@ -108,6 +108,58 @@ func TestReceive(t *testing.T) {
 		})
 	})
 
+	t.Run("ingestor_otlp", func(t *testing.T) {
+		/*
+			The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
+			 ┌──────────┐
+			 │  Prom    │
+			 └────┬─────┘
+			      │
+			 ┌────▼─────┐
+			 │ Ingestor │
+			 └────┬─────┘
+			      │
+			 ┌────▼─────┐
+			 │  Query   │
+			 └──────────┘
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+		*/
+
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("ingestor-otlp")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Router Ingestor.
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+		// Setup Otel
+		otel := e2ethanos.NewOtel(e, "1", e2ethanos.DefaultOtelConfig(e2ethanos.OTLPEndpoint(i.InternalEndpoint("remote-write"))), e2ethanos.DefaultOtelImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(otel))
+
+		q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		println("test")
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"otelcol_process_uptime_total"}, e2emon.WaitMissingMetrics()))
+
+		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":          "otel-collector",
+				"receive":      "receive-ingestor",
+				"service_name": "otelcol-contrib",
+				"tenant_id":    "default-tenant",
+			},
+		})
+	})
+
 	t.Run("ha_ingestor_with_ha_prom", func(t *testing.T) {
 		/*
 			The ha_ingestor_with_ha_prom suite represents a configuration of a
