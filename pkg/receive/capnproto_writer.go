@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"strings"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
@@ -82,6 +83,13 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		ref, lset = getRef.GetRef(series.Labels, series.Labels.Hash())
 		if ref == 0 {
 			lset = series.Labels.Copy()
+			// NOTE(GiedriusS): do a deep copy because the labels are reused in the capnp message.
+			// Creation of new series is much rarer compared to adding extra samples
+			// to an existing series.
+			for i := range lset {
+				lset[i].Name = strings.Clone(lset[i].Name)
+				lset[i].Value = strings.Clone(lset[i].Value)
+			}
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
