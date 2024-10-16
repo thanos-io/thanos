@@ -56,7 +56,7 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	// TSDBInfos returns metadata about each TSDB backed by the client.
-	TSDBInfos() []*infopb.TSDBInfo
+	TSDBInfos() []infopb.TSDBInfo
 
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
@@ -71,6 +71,9 @@ type Client interface {
 	// Addr returns address of the store client. If second parameter is true, the client
 	// represents a local client (server-as-client) and has no remote address.
 	Addr() (addr string, isLocalClient bool)
+
+	// Matches returns true if provided label matchers are allowed in the store.
+	Matches(matches []*labels.Matcher) bool
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -86,8 +89,7 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
-
-	storepb.UnimplementedStoreServer
+	enableDedup       bool
 }
 
 type proxyStoreMetrics struct {
@@ -128,6 +130,13 @@ func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
 	}
 }
 
+// WithoutDedup disabled chunk deduplication when streaming series.
+func WithoutDedup() ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.enableDedup = false
+	}
+}
+
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
 func NewProxyStore(
@@ -158,6 +167,7 @@ func NewProxyStore(
 		metrics:           metrics,
 		retrievalStrategy: retrievalStrategy,
 		tsdbSelector:      DefaultSelector,
+		enableDedup:       true,
 	}
 
 	for _, option := range options {
@@ -167,24 +177,22 @@ func NewProxyStore(
 	return s
 }
 
-func (s *ProxyStore) LabelSet() []*labelpb.LabelSet {
+func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 	stores := s.stores()
 	if len(stores) == 0 {
-		return []*labelpb.LabelSet{}
+		return []labelpb.ZLabelSet{}
 	}
 
-	mergedLabelSets := make(map[uint64]*labelpb.LabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = &labelpb.LabelSet{Labels: labelpb.PromLabelsToLabelpbLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
-	labelSets := make([]*labelpb.LabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
-		v := v
-
 		labelSets = append(labelSets, v)
 	}
 
@@ -192,9 +200,9 @@ func (s *ProxyStore) LabelSet() []*labelpb.LabelSet {
 	// selector-labels represents. If no label-sets are announced by the
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
-	selectorLabels := labelpb.PromLabelsToLabelpbLabels(s.selectorLabels)
+	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
 	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, &labelpb.LabelSet{Labels: selectorLabels})
+		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
 	}
 
 	return labelSets
@@ -220,8 +228,8 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	return minTime, maxTime
 }
 
-func (s *ProxyStore) TSDBInfos() []*infopb.TSDBInfo {
-	infos := make([]*infopb.TSDBInfo, 0)
+func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
+	infos := make([]infopb.TSDBInfo, 0)
 	for _, st := range s.stores() {
 		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {
@@ -311,7 +319,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
-	respHeap := NewResponseDeduplicator(NewProxyResponseLoserTree(storeResponses...))
+	var respHeap seriesStream = NewProxyResponseLoserTree(storeResponses...)
+	if s.enableDedup {
+		respHeap = NewResponseDeduplicator(respHeap)
+	}
 
 	i := 0
 	for respHeap.Next() {
@@ -554,26 +565,32 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 	)
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(ctx, st, minTime, maxTime, matchers...); !ok {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
+		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, reason))
+			}
 			continue
 		}
 		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if !matches {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			if s.debugLogging {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
+			}
 			continue
 		}
 		storeLabelSets = append(storeLabelSets, extraMatchers...)
 
 		stores = append(stores, st)
-		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+		if s.debugLogging {
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+		}
 	}
 
 	return stores, storeLabelSets, storeDebugMsgs
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
-func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
+func storeMatches(ctx context.Context, debugLogging bool, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
 	var storeDebugMatcher [][]*labels.Matcher
 	if ctxVal := ctx.Value(StoreMatcherKey); ctxVal != nil {
 		if value, ok := ctxVal.([][]*labels.Matcher); ok {
@@ -583,22 +600,35 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 
 	storeMinTime, storeMaxTime := s.TimeRange()
 	if mint > storeMaxTime || maxt < storeMinTime {
-		return false, fmt.Sprintf("does not have data within this time period: [%v,%v]. Store time ranges: [%v,%v]", mint, maxt, storeMinTime, storeMaxTime)
+		const s string = "does not have data within this time period"
+		if debugLogging {
+			return false, fmt.Sprintf("%s: [%v,%v]. Store time ranges: [%v,%v]", s, mint, maxt, storeMinTime, storeMaxTime)
+		}
+		return false, s
 	}
 
-	if ok, reason := storeMatchDebugMetadata(s, storeDebugMatcher); !ok {
+	if ok, reason := storeMatchDebugMetadata(s, debugLogging, storeDebugMatcher); !ok {
 		return false, reason
 	}
 
 	extLset := s.LabelSets()
 	if !LabelSetsMatch(matchers, extLset...) {
-		return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
+		const s string = "external labels does not match request label matchers"
+		if debugLogging {
+			return false, fmt.Sprintf("external labels %v does not match request label matchers: %v", extLset, matchers)
+		}
+		return false, s
 	}
+
+	if !s.Matches(matchers) {
+		return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
+	}
+
 	return true, ""
 }
 
 // storeMatchDebugMetadata return true if the store's address match the storeDebugMatchers.
-func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (ok bool, reason string) {
+func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][]*labels.Matcher) (ok bool, reason string) {
 	if len(storeDebugMatchers) == 0 {
 		return true, ""
 	}
@@ -613,7 +643,11 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 		match = match || LabelSetsMatch(sm, labels.FromStrings("__address__", addr))
 	}
 	if !match {
-		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
+		const s string = "__address__ does not match debug store metadata matchers"
+		if debugLogging {
+			return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
+		}
+		return false, s
 	}
 	return true, ""
 }

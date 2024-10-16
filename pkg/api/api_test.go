@@ -27,6 +27,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
+	promLabels "github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	promApiV1 "github.com/prometheus/prometheus/web/api/v1"
@@ -71,7 +72,7 @@ func TestMarshallMatrixNull(t *testing.T) {
 
 func TestRespondSuccess(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Respond(w, "test", nil)
+		Respond(w, "test", nil, log.NewNopLogger())
 	}))
 	defer s.Close()
 
@@ -108,7 +109,7 @@ func TestRespondSuccess(t *testing.T) {
 
 func TestRespondError(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		RespondError(w, &ApiError{ErrorTimeout, errors.New("message")}, "test")
+		RespondError(w, &ApiError{ErrorTimeout, errors.New("message")}, "test", log.NewNopLogger())
 	}))
 	defer s.Close()
 
@@ -172,5 +173,37 @@ func TestOptionsMethod(t *testing.T) {
 		if resp.Header.Get(h) != v {
 			t.Fatalf("Expected %q for header %q, got %q", v, h, resp.Header.Get(h))
 		}
+	}
+}
+
+type nilWriter struct{}
+
+var _ = http.ResponseWriter(&nilWriter{})
+
+func (nilWriter) Write(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+func (nilWriter) Header() http.Header {
+	return http.Header{}
+}
+
+func (nilWriter) WriteHeader(statusCode int) {}
+
+func BenchmarkRespond(b *testing.B) {
+	floats := []promql.FPoint{}
+
+	for i := 0; i < 10000; i++ {
+		floats = append(floats, promql.FPoint{T: 1435781451 + int64(i), F: 1234.123 + float64(i)})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Respond(&nilWriter{}, promql.Matrix{
+			promql.Series{
+				Metric: promLabels.FromMap(map[string]string{"__name__": "up", "job": "prometheus"}),
+				Floats: floats,
+			},
+		}, nil, log.NewNopLogger())
 	}
 }

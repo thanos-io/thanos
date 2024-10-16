@@ -202,12 +202,12 @@ func TestMultiTSDB(t *testing.T) {
 
 var (
 	expectedFooResp = &storepb.Series{
-		Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
-		Chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
+		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
 	}
 	expectedBarResp = &storepb.Series{
-		Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
-		Chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
+		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
 	}
 )
 
@@ -262,7 +262,7 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 	sc, err := storeClient.Series(context.Background(), &storepb.SeriesRequest{
 		MinTime:  0,
 		MaxTime:  10,
-		Matchers: []*storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+		Matchers: []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
 	})
 	if err != nil {
 		return err
@@ -287,21 +287,21 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 var (
 	expectedFooRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
 			Exemplars: []*exemplarspb.Exemplar{
-				{Labels: &labelpb.LabelSet{}, Value: 1, Ts: 1},
-				{Labels: &labelpb.LabelSet{}, Value: 2.1212, Ts: 2},
-				{Labels: &labelpb.LabelSet{}, Value: 3.1313, Ts: 3},
+				{Value: 1, Ts: 1},
+				{Value: 2.1212, Ts: 2},
+				{Value: 3.1313, Ts: 3},
 			},
 		},
 	}
 	expectedBarRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
 			Exemplars: []*exemplarspb.Exemplar{
-				{Value: 11, Ts: 1, Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "traceID", Value: "abc"}}}},
-				{Value: 22.1212, Ts: 2, Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "traceID", Value: "def"}}}},
-				{Value: 33.1313, Ts: 3, Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "traceID", Value: "ghi"}}}},
+				{Value: 11, Ts: 1, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "abc"}}}},
+				{Value: 22.1212, Ts: 2, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "def"}}}},
+				{Value: 33.1313, Ts: 3, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "ghi"}}}},
 			},
 		},
 	}
@@ -384,7 +384,7 @@ func newExemplarsServer(ctx context.Context) *exemplarsServer {
 }
 
 func (e *exemplarsServer) Send(r *exemplarspb.ExemplarsResponse) error {
-	e.Size += int64(r.SizeVT())
+	e.Size += int64(r.Size())
 
 	if r.GetWarning() != "" {
 		e.Warnings = append(e.Warnings, r.GetWarning())
@@ -410,7 +410,7 @@ func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarD
 		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)
 		testutil.Equals(t, len(expected[i].Exemplars), len(data[i].Exemplars))
 		for j := range data[i].Exemplars {
-			testutil.Equals(t, expected[i].Exemplars[j], data[i].Exemplars[j])
+			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
 		}
 	}
 }

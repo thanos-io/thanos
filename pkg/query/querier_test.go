@@ -18,6 +18,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -351,7 +352,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 			// Regression test 1 against https://github.com/thanos-io/thanos/issues/2890.
 			name: "when switching replicas don't miss samples when set with a big enough lookback delta",
 			storeAPI: newProxyStore(func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()),
@@ -475,7 +476,7 @@ func TestQuerier_Select(t *testing.T) {
 				},
 			},
 			expectedAfterDedup: []series{{
-				lset: labels.EmptyLabels(),
+				lset: nil,
 				// We don't expect correctness here, it's just random non-replica data.
 				samples: []sample{{1, 1}, {2, 2}, {3, 3}, {5, 5}, {6, 6}, {7, 7}},
 			}},
@@ -484,7 +485,7 @@ func TestQuerier_Select(t *testing.T) {
 		{
 			name: "realistic data with stale marker",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -528,7 +529,7 @@ func TestQuerier_Select(t *testing.T) {
 		{
 			name: "realistic data with stale marker with 100000 step",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -579,7 +580,7 @@ func TestQuerier_Select(t *testing.T) {
 			// Thanks to @Superq and GitLab for real data reproducing this.
 			name: "realistic data with stale marker with hints rate function",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -846,11 +847,18 @@ func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 		nil,
 		func() []store.Client { return cls },
 		component.Query,
-		labels.EmptyLabels(),
+		nil,
 		0,
 		store.EagerRetrieval,
 	)
 }
+
+var emptyLabelsSameAsNotAllocatedLabels = cmp.Transformer("", func(l labels.Labels) labels.Labels {
+	if len(l) == 0 {
+		return labels.Labels(nil)
+	}
+	return l
+})
 
 func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) {
 	var series []storage.Series
@@ -868,7 +876,7 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 	}())
 
 	for i, s := range series {
-		testutil.Equals(t, expected[i].lset, s.Labels())
+		testutil.WithGoCmp(emptyLabelsSameAsNotAllocatedLabels).Equals(t, expected[i].lset, s.Labels())
 		samples := expandSeries(t, s.Iterator(nil))
 		expectedCpy := make([]sample, 0, len(expected[i].samples))
 		for _, s := range expected[i].samples {
@@ -893,12 +901,15 @@ func jsonToSeries(t *testing.T, filename string) []series {
 
 	var ss []series
 	for _, ser := range data.Data.Results {
-		b := labels.NewBuilder(labels.EmptyLabels())
+		var lbls labels.Labels
 		for n, v := range ser.Metric {
-			b.Set(string(n), string(v))
+			lbls = append(lbls, labels.Label{
+				Name:  string(n),
+				Value: string(v),
+			})
 		}
 		// Label names need to be sorted.
-		lbls := b.Labels()
+		sort.Sort(lbls)
 
 		var smpls []sample
 		for _, smp := range ser.Values {
@@ -1047,7 +1058,7 @@ func (s *mockedSeriesIterator) Err() error { return nil }
 func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
-	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 	testutil.Ok(t, err)
 
 	t.Run("dedup=false", func(t *testing.T) {
@@ -1085,7 +1096,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset1, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset1, Floats: []promql.FPoint{
 					{T: 1587690300000, F: 13.652631578947368}, {T: 1587690400000, F: 14.049122807017543}, {T: 1587690500000, F: 13.961403508771928}, {T: 1587690600000, F: 13.617543859649121}, {T: 1587690700000, F: 14.568421052631578}, {T: 1587690800000, F: 14.989473684210525},
 					{T: 1587690900000, F: 16.2}, {T: 1587691000000, F: 16.052631578947366}, {T: 1587691100000, F: 15.831578947368419}, {T: 1587691200000, F: 15.659649122807016}, {T: 1587691300000, F: 14.842105263157894}, {T: 1587691400000, F: 14.003508771929823},
 					{T: 1587691500000, F: 13.782456140350876}, {T: 1587691600000, F: 13.86315789473684}, {T: 1587691700000, F: 15.270282598474376}, {T: 1587691800000, F: 14.343859649122805}, {T: 1587691900000, F: 13.975438596491227}, {T: 1587692000000, F: 13.399999999999999},
@@ -1093,7 +1104,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 					{T: 1587692700000, F: 8.19298245614035}, {T: 1587692800000, F: 11.91870302641626}, {T: 1587692900000, F: 13.75813610765101}, {T: 1587693000000, F: 13.087719298245613}, {T: 1587693100000, F: 13.466666666666665}, {T: 1587693200000, F: 14.028070175438595},
 					{T: 1587693300000, F: 14.23859649122807}, {T: 1587693400000, F: 15.407017543859647}, {T: 1587693500000, F: 15.915789473684208}, {T: 1587693600000, F: 15.712280701754384},
 				}},
-				{Metric: expectedLset2, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset2, Floats: []promql.FPoint{
 					{T: 1587690300000, F: 13.691228070175438}, {T: 1587690400000, F: 14.098245614035086}, {T: 1587690500000, F: 13.905263157894735}, {T: 1587690600000, F: 13.617543859649121}, {T: 1587690700000, F: 14.350877192982455}, {T: 1587690800000, F: 15.003508771929823},
 					{T: 1587690900000, F: 16.12280701754386}, {T: 1587691000000, F: 16.049122807017543}, {T: 1587691100000, F: 15.922807017543859}, {T: 1587691200000, F: 15.63157894736842}, {T: 1587691300000, F: 14.982456140350875}, {T: 1587691400000, F: 14.187259188557553},
 					{T: 1587691500000, F: 13.828070175438596}, {T: 1587691600000, F: 13.971929824561402}, {T: 1587691700000, F: 15.31994329585807}, {T: 1587691800000, F: 14.30877192982456}, {T: 1587691900000, F: 13.915789473684208}, {T: 1587692000000, F: 13.312280701754384},
@@ -1114,10 +1125,10 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset1, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset1, Floats: []promql.FPoint{
 					{T: 1587691800000, F: 14.457142857142856}, {T: 1587692300000, F: 14.761904761904761}, {T: 1587692800000, F: 13.127170868347338}, {T: 1587693300000, F: 12.93501400560224},
 				}},
-				{Metric: expectedLset2, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset2, Floats: []promql.FPoint{
 					{T: 1587691800000, F: 14.464425770308122}, {T: 1587692300000, F: 14.763025210084033}, {T: 1587692800000, F: 13.148909112808576}, {T: 1587693300000, F: 12.92829131652661},
 				}},
 			}, vec)
@@ -1155,7 +1166,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset, Floats: []promql.FPoint{
 					{T: 1587690300000, F: 13.691228070175438}, {T: 1587690400000, F: 14.098245614035086}, {T: 1587690500000, F: 13.905263157894735}, {T: 1587690600000, F: 13.617543859649121},
 					{T: 1587690700000, F: 14.350877192982455}, {T: 1587690800000, F: 15.003508771929823}, {T: 1587690900000, F: 16.12280701754386}, {T: 1587691000000, F: 16.049122807017543},
 					{T: 1587691100000, F: 15.922807017543859}, {T: 1587691200000, F: 15.63157894736842}, {T: 1587691300000, F: 14.982456140350875}, {T: 1587691400000, F: 14.187259188557553},
@@ -1179,7 +1190,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset, Floats: []promql.FPoint{
 					{T: 1587691800000, F: 14.464425770308122},
 					{T: 1587692300000, F: 14.763025210084033},
 					{T: 1587692800000, F: 13.143575607888273},
@@ -1234,9 +1245,9 @@ func (s *testStoreServer) Series(r *storepb.SeriesRequest, srv storepb.Store_Ser
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	lset.Range(func(l labels.Label) {
-		s.Labels = append(s.Labels, &labelpb.Label{Name: l.Name, Value: l.Value})
-	})
+	for _, l := range lset {
+		s.Labels = append(s.Labels, labelpb.ZLabel{Name: l.Name, Value: l.Value})
+	}
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()
@@ -1253,7 +1264,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		}
 
-		s.Chunks = append(s.Chunks, &ch)
+		s.Chunks = append(s.Chunks, ch)
 	}
 	return storepb.NewSeriesResponse(&s)
 }

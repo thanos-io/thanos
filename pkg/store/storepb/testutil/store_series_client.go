@@ -41,6 +41,7 @@ func (c *StoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 		return nil, io.EOF
 	}
 	s := c.RespSet[c.i]
+
 	c.i++
 
 	return s, nil
@@ -49,3 +50,4 @@ func (c *StoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 func (c *StoreSeriesClient) Context() context.Context {
 	return c.Ctx
 }
+func (c *StoreSeriesClient) CloseSend() error { return nil }

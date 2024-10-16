@@ -4,13 +4,23 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "github.com/thanos-io/thanos/pkg/store/storepb";
+option go_package = "storepb";
 
+import "gogoproto/gogo.proto";
 import "store/labelpb/types.proto";
-import "github.com/planetscale/vtprotobuf/vtproto/ext.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message Chunk {
-  option (vtproto.mempool) = true;
   enum Encoding {
     XOR = 0;
     HISTOGRAM = 1;
@@ -18,16 +28,15 @@ message Chunk {
   }
   Encoding type  = 1;
   bytes data     = 2;
-  uint64 hash   = 3;
+  uint64 hash   = 3 [(gogoproto.nullable) = true];
 }
 
 message Series {
-  repeated Label labels      = 1;
-  repeated AggrChunk chunks  = 2;
+  repeated Label labels      = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  repeated AggrChunk chunks  = 2 [(gogoproto.nullable) = false];
 }
 
 message AggrChunk {
-  option (vtproto.mempool) = true;
   int64 min_time = 1;
   int64 max_time = 2;
 

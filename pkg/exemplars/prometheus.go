@@ -21,8 +21,6 @@ type Prometheus struct {
 	client *promclient.Client
 
 	extLabels func() labels.Labels
-
-	exemplarspb.UnimplementedExemplarsServer
 }
 
 // NewPrometheus creates new exemplars.Prometheus.
