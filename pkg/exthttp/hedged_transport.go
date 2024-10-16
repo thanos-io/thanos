@@ -66,6 +66,8 @@ func (lrt *LoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	// Log the request
 	log.Printf("Request: %s %s", req.Method, req.URL.String())
 
+	// Proceed with the actual request using the base transport
+	lrt.Transport.RoundTrip(req)
 	log.Printf("Simulating nil response to trigger hedged requests")
 
 	// Return nil response to make the server behave as if it failed
