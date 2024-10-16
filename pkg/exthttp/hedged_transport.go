@@ -45,12 +45,12 @@ func HedgedTransport(config HTTPConfig) (http.RoundTripper, error) {
 		TLSClientConfig:       tlsConfig,
 	}
 	// hedged RoundTripper
-	delay := 10
+	delay := 5 * time.Second
 	upto := 3
 	hedgedTransport, err := hedgedhttp.NewRoundTripper(
-		time.Duration(delay), // Timeout for hedged requests
-		upto,                 // Maximum number of hedged requests
-		transport,            // Base RoundTripper
+		delay,     // Timeout for hedged requests
+		upto,      // Maximum number of hedged requests
+		transport, // Base RoundTripper
 	)
 	if err != nil {
 		return nil, err
@@ -58,25 +58,18 @@ func HedgedTransport(config HTTPConfig) (http.RoundTripper, error) {
 	return hedgedTransport, nil
 }
 
-// LoggingRoundTripper logs the requests and forwards them to the base RoundTripper.
 type LoggingRoundTripper struct {
 	Transport http.RoundTripper
 }
 
 func (lrt *LoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Log the HTTP method and URL of the request
+	// Log the request
 	log.Printf("Request: %s %s", req.Method, req.URL.String())
 
-	// Proceed with the actual request using the base transport
-	resp, err := lrt.Transport.RoundTrip(req)
+	log.Printf("Simulating nil response to trigger hedged requests")
 
-	if err != nil {
-		log.Printf("Request to %s failed: %v", req.URL.String(), err)
-	} else {
-		log.Printf("Response from %s: %s", req.URL.String(), resp.Status)
-	}
-
-	return resp, err
+	// Return nil response to make the server behave as if it failed
+	return nil, nil
 }
 
 func HedgedTransportWithLogging(config HTTPConfig) (http.RoundTripper, error) {
@@ -87,5 +80,7 @@ func HedgedTransportWithLogging(config HTTPConfig) (http.RoundTripper, error) {
 	}
 
 	// Wrap it with logging RoundTripper
-	return &LoggingRoundTripper{Transport: hedgedTransport}, nil
+	return &LoggingRoundTripper{
+		Transport: hedgedTransport,
+	}, nil
 }
