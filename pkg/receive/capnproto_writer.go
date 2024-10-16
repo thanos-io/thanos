@@ -6,6 +6,8 @@ package receive
 import (
 	"context"
 
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/exemplar"
@@ -67,6 +69,14 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 	for wreq.Next() {
 		wreq.At(&series)
 
+		// Check if time series labels are valid. If not, skip the time series
+		// and report the error.
+		if err := validateLabels(series.Labels); err != nil {
+			lset := &labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(series.Labels)}
+			errorTracker.addLabelsError(err, lset, tLogger)
+			continue
+		}
+
 		var lset labels.Labels
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(series.Labels, series.Labels.Hash())
@@ -108,4 +118,40 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
 	return errs.ErrOrNil()
+}
+
+// ValidateLabels validates label names and values (checks for empty
+// names and values, out of order labels and duplicate label names)
+// Returns appropriate error if validation fails on a label.
+func validateLabels(lbls labels.Labels) error {
+	if lbls.Len() == 0 {
+		return labelpb.ErrEmptyLabels
+	}
+
+	var (
+		prev *labels.Label
+		err  error
+	)
+	lbls.Range(func(l labels.Label) {
+		if err != nil {
+			return
+		}
+		if l.Name == "" || l.Value == "" {
+			err = labelpb.ErrEmptyLabels
+		}
+		if prev == nil {
+			prev = &l
+			return
+		}
+
+		if l.Name == prev.Name {
+			err = labelpb.ErrDuplicateLabels
+		}
+		if l.Name < prev.Name {
+			err = labelpb.ErrOutOfOrderLabels
+		}
+		prev = &l
+	})
+
+	return err
 }

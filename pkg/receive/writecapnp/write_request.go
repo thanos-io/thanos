@@ -61,9 +61,12 @@ func NewRequest(wr WriteRequest) (*Request, error) {
 	start := uint32(0)
 	for i := 0; i < offsets.Len(); i++ {
 		end := offsets.At(i)
-
-		b := data[start:end]
-		*strings = append(*strings, unsafe.String(&b[0], len(b)))
+		if start == end {
+			*strings = append(*strings, "")
+		} else {
+			b := data[start:end]
+			*strings = append(*strings, unsafe.String(&b[0], len(b)))
+		}
 		start = end
 	}
 
@@ -91,7 +94,6 @@ func (s *Request) At(t *Series) {
 		lbl := lbls.At(i)
 		s.builder.Add((*s.symbols)[lbl.Name()], (*s.symbols)[lbl.Value()])
 	}
-	s.builder.Sort()
 	s.builder.Overwrite(&t.Labels)
 
 	samples, err := s.series.At(s.i).Samples()
