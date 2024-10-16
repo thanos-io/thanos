@@ -23,15 +23,6 @@ func TestGenerateCacheKey(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "non thanos req",
-			req: &queryrange.PrometheusRequest{
-				Query: "up",
-				Start: 0,
-				Step:  60 * seconds,
-			},
-			expected: "request_type_not_supported",
-		},
-		{
 			name: "non downsampling resolution specified",
 			req: &ThanosQueryRangeRequest{
 				Query:         "up",
@@ -163,4 +154,24 @@ func TestGenerateCacheKey(t *testing.T) {
 			testutil.Equals(t, tc.expected, key)
 		})
 	}
+}
+
+func TestGenerateCacheKey_UnsupportedRequest(t *testing.T) {
+	splitter := newThanosCacheKeyGenerator()
+
+	req := &queryrange.PrometheusRequest{
+		Query: "up",
+		Start: 0,
+		Step:  60 * seconds,
+	}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic")
+		} else {
+			testutil.Assert(t, r == "request type not supported", "unexpected panic: %v", r)
+		}
+	}()
+
+	splitter.GenerateCacheKey("", req)
 }

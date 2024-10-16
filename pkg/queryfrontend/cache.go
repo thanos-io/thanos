@@ -24,26 +24,26 @@ func newThanosCacheKeyGenerator() thanosCacheKeyGenerator {
 // GenerateCacheKey generates a cache key based on the Request and interval.
 // TODO(yeya24): Add other request params as request key.
 func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Request) string {
-	switch tr := r.(type) {
-	case *ThanosQueryRangeRequest:
-		i := 0
-		for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
+	if sr, ok := r.(SplitRequest); ok {
+		splitInterval := sr.GetSplitInterval().Milliseconds()
+		currentInterval := r.GetStart() / splitInterval
+
+		switch tr := r.(type) {
+		case *ThanosQueryRangeRequest:
+			i := 0
+			for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
+			}
+			shardInfoKey := generateShardInfoKey(tr)
+			return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%d:%s:%d:%s", userID, tr.Query, tr.Step, splitInterval, currentInterval, i, shardInfoKey, tr.LookbackDelta, tr.Engine)
+		case *ThanosLabelsRequest:
+			return fmt.Sprintf("fe:%s:%s:%s:%d:%d", userID, tr.Label, tr.Matchers, splitInterval, currentInterval)
+		case *ThanosSeriesRequest:
+			return fmt.Sprintf("fe:%s:%s:%d:%d", userID, tr.Matchers, splitInterval, currentInterval)
 		}
-		shardInfoKey := generateShardInfoKey(tr)
-		splitInterval := tr.SplitInterval.Milliseconds()
-		currentInterval := r.GetStart() / splitInterval
-		return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%d:%s:%d:%s", userID, tr.Query, tr.Step, splitInterval, currentInterval, i, shardInfoKey, tr.LookbackDelta, tr.Engine)
-	case *ThanosLabelsRequest:
-		splitInterval := tr.SplitInterval.Milliseconds()
-		currentInterval := r.GetStart() / splitInterval
-		return fmt.Sprintf("fe:%s:%s:%s:%d:%d", userID, tr.Label, tr.Matchers, splitInterval, currentInterval)
-	case *ThanosSeriesRequest:
-		splitInterval := tr.SplitInterval.Milliseconds()
-		currentInterval := r.GetStart() / splitInterval
-		return fmt.Sprintf("fe:%s:%s:%d:%d", userID, tr.Matchers, splitInterval, currentInterval)
 	}
 
-	return "request_type_not_supported"
+	// all possible request types are already covered
+	panic("request type not supported")
 }
 
 func generateShardInfoKey(r *ThanosQueryRangeRequest) string {
