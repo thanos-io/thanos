@@ -28,7 +28,7 @@ This algorithm uses a `hashmod` function over all labels to decide which receive
 
 ### Replication protocols
 
-By default, Receivers will replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can often be resource intensive and cause a lot of GC pressure. It is possible to use [Cap'N Proto](https://capnproto.org/) as the replication encoding and RPC framework.
+By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'N Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
 
 In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
 
