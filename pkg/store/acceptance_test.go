@@ -740,6 +740,46 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				},
 			},
 		},
+		{
+			desc: "label_values(kube_pod_info{}, pod) don't fetch postings for pod!=''",
+			appendFn: func(app storage.Appender) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-1"), timestamp.FromTime(now), 1)
+				testutil.Ok(t, err)
+				_, err = app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-2"), timestamp.FromTime(now), 1)
+				testutil.Ok(t, err)
+				_, err = app.Append(0, labels.FromStrings("__name__", "kube_pod_info", "pod", "pod-1"), timestamp.FromTime(now), 1)
+				testutil.Ok(t, err)
+				testutil.Ok(t, app.Commit())
+			},
+			labelNameCalls: []labelNameCallCase{
+				{
+					start:         timestamp.FromTime(minTime),
+					end:           timestamp.FromTime(maxTime),
+					expectedNames: []string{"__name__", "pod", "region"},
+					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
+				},
+				{
+					start:         timestamp.FromTime(minTime),
+					end:           timestamp.FromTime(maxTime),
+					expectedNames: []string{"__name__", "pod", "region"},
+				},
+			},
+			labelValuesCalls: []labelValuesCallCase{
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "pod",
+					expectedValues: []string{"pod-1"},
+					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "pod",
+					expectedValues: []string{"pod-1", "pod-2"},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			appendFn := tc.appendFn
