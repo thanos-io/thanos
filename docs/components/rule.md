@@ -463,6 +463,9 @@ Flags:
                                  Label names to be ignored when restoring alerts
                                  from the remote storage. This is only used in
                                  stateless mode.
+      --rule-concurrent-evaluation=1
+                                 How many rules can be evaluated concurrently.
+                                 Default is 1.
       --rule-file=rules/ ...     Rule files that should be used by rule
                                  manager. Can be in glob format (repeated).
                                  Note that rules are not automatically detected,

@@ -1574,8 +1574,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				tenant,
 			)
 
-			defer blockClient.Close()
-
 			g.Go(func() error {
 
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
@@ -1992,6 +1990,14 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
+	var hasMetricNameEqMatcher = false
+	for _, m := range reqSeriesMatchers {
+		if m.Name == labels.MetricName && m.Type == labels.MatchEqual {
+			hasMetricNameEqMatcher = true
+			break
+		}
+	}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	var reqBlockMatchers []*labels.Matcher
@@ -2015,6 +2021,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
+	var stats = &queryStats{}
 
 	for _, b := range s.blocks {
 		b := b
@@ -2033,7 +2040,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 		// If we have series matchers and the Label is not an external one, add <labelName> != "" matcher
 		// to only select series that have given label name.
-		if len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
+		// We don't need such matcher if matchers already contain __name__=="something" matcher.
+		if !hasMetricNameEqMatcher && len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
 			m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
 			if err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -2101,7 +2109,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 					tenant,
 				)
-				defer blockClient.Close()
+				defer func() {
+					mtx.Lock()
+					stats = blockClient.MergeStats(stats)
+					mtx.Unlock()
+					blockClient.Close()
+				}()
 
 				if err := blockClient.ExpandPostings(
 					sortedReqSeriesMatchersNoExtLabels,
@@ -2130,7 +2143,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					}
 
 					val := labelpb.ZLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
-					if val != "" { // Should never be empty since we added labelName!="" matcher to the list of matchers.
+					if val != "" {
 						values[val] = struct{}{}
 					}
 				}
@@ -2153,6 +2166,15 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}
 
 	s.mtx.RUnlock()
+
+	defer func() {
+		if s.debugLogging {
+			level.Debug(logger).Log("msg", "stats query processed",
+				"request", req,
+				"tenant", tenant,
+				"stats", fmt.Sprintf("%+v", stats), "err", err)
+		}
+	}()
 
 	if err := g.Wait(); err != nil {
 		code := codes.Internal
@@ -3353,6 +3375,11 @@ func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]sym
 // Close released the underlying resources of the reader.
 func (r *bucketIndexReader) Close() error {
 	r.block.pendingReaders.Done()
+	return nil
+}
+
+func (b *blockSeriesClient) CloseSend() error {
+	b.Close()
 	return nil
 }
 

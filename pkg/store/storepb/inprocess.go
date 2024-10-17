@@ -55,6 +55,9 @@ func (c *inProcessClient) Recv() (*SeriesResponse, error) {
 		return nil, err
 	}
 	if !ok {
+		if c.ctx.Err() != nil {
+			return nil, c.ctx.Err()
+		}
 		return nil, io.EOF
 	}
 	return resp, err

@@ -98,16 +98,17 @@ type ruleConfig struct {
 
 	rwConfig *extflag.PathOrContent
 
-	resendDelay       time.Duration
-	evalInterval      time.Duration
-	outageTolerance   time.Duration
-	forGracePeriod    time.Duration
-	ruleFiles         []string
-	objStoreConfig    *extflag.PathOrContent
-	dataDir           string
-	lset              labels.Labels
-	ignoredLabelNames []string
-	storeRateLimits   store.SeriesSelectLimits
+	resendDelay        time.Duration
+	evalInterval       time.Duration
+	outageTolerance    time.Duration
+	forGracePeriod     time.Duration
+	ruleFiles          []string
+	objStoreConfig     *extflag.PathOrContent
+	dataDir            string
+	lset               labels.Labels
+	ignoredLabelNames  []string
+	storeRateLimits    store.SeriesSelectLimits
+	ruleConcurrentEval int64
 
 	extendedFunctionsEnabled bool
 }
@@ -156,6 +157,7 @@ func registerRule(app *extkingpin.App) {
 		Default("10m").DurationVar(&conf.forGracePeriod)
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
+	cmd.Flag("rule-concurrent-evaluation", "How many rules can be evaluated concurrently. Default is 1.").Default("1").Int64Var(&conf.ruleConcurrentEval)
 
 	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
@@ -624,22 +626,28 @@ func runRule(
 			alertQ.Push(res)
 		}
 
+		managerOpts := rules.ManagerOptions{
+			NotifyFunc:      notifyFunc,
+			Logger:          logger,
+			Appendable:      appendable,
+			ExternalURL:     nil,
+			Queryable:       queryable,
+			ResendDelay:     conf.resendDelay,
+			OutageTolerance: conf.outageTolerance,
+			ForGracePeriod:  conf.forGracePeriod,
+		}
+		if conf.ruleConcurrentEval > 1 {
+			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
+			managerOpts.ConcurrentEvalsEnabled = true
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		logger = log.With(logger, "component", "rules")
 		ruleMgr = thanosrules.NewManager(
 			tracing.ContextWithTracer(ctx, tracer),
 			reg,
 			conf.dataDir,
-			rules.ManagerOptions{
-				NotifyFunc:      notifyFunc,
-				Logger:          logger,
-				Appendable:      appendable,
-				ExternalURL:     nil,
-				Queryable:       queryable,
-				ResendDelay:     conf.resendDelay,
-				OutageTolerance: conf.outageTolerance,
-				ForGracePeriod:  conf.forGracePeriod,
-			},
+			managerOpts,
 			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus

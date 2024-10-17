@@ -148,7 +148,7 @@ func TestHashringGet(t *testing.T) {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
 				continue
 			}
-			if _, ok := tc.nodes[h]; !ok {
+			if _, ok := tc.nodes[h.Address]; !ok {
 				t.Errorf("case %q: got unexpected node %q", tc.name, h)
 			}
 			continue
@@ -236,7 +236,7 @@ func TestKetamaHashringGet(t *testing.T) {
 
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
 			require.NoError(t, err)
-			require.Equal(t, test.expectedNode, result)
+			require.Equal(t, test.expectedNode, result.Address)
 		})
 	}
 }
@@ -459,7 +459,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 				testutil.Ok(t, err)
 
 				for _, n := range tt.nodes {
-					if !strings.HasPrefix(n.Address, r) {
+					if !strings.HasPrefix(n.Address, r.Address) {
 						continue
 					}
 					azSpread[n.AZ]++
@@ -561,7 +561,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 					r, err := hashRing.GetN(tenant, ts, uint64(j))
 					testutil.Ok(t, err)
 
-					nodeSpread[r]++
+					nodeSpread[r.Address]++
 				}
 			}
 			for _, node := range nodeSpread {
@@ -636,7 +636,7 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 			if err != nil {
 				return nil, err
 			}
-			assignments[result] = append(assignments[result], ts)
+			assignments[result.Address] = append(assignments[result.Address], ts)
 
 		}
 	}
