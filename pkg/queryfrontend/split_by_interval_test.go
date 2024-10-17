@@ -30,10 +30,11 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   60 * 60 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         0,
+					End:           60 * 60 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: day,
 				},
 			},
 			interval: day,
@@ -47,10 +48,11 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 60 * 60 * seconds,
-					End:   60 * 60 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         60 * 60 * seconds,
+					End:           60 * 60 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: day,
 				},
 			},
 			interval: day,
@@ -64,10 +66,11 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   60 * 60 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         0,
+					End:           60 * 60 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 			},
 			interval: 3 * time.Hour,
@@ -81,10 +84,11 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   24 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         0,
+					End:           24 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: day,
 				},
 			},
 			interval: day,
@@ -98,10 +102,11 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   3 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         0,
+					End:           3 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 			},
 			interval: 3 * time.Hour,
@@ -115,16 +120,18 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   (24 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo @ 0.000",
+					Start:         0,
+					End:           (24 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo @ 0.000",
+					SplitInterval: day,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 24 * 3600 * seconds,
-					End:   2 * 24 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo @ 0.000",
+					Start:         24 * 3600 * seconds,
+					End:           2 * 24 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo @ 0.000",
+					SplitInterval: day,
 				},
 			},
 			interval: day,
@@ -138,16 +145,18 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   (24 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo @ 172800.000",
+					Start:         0,
+					End:           (24 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo @ 172800.000",
+					SplitInterval: day,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 24 * 3600 * seconds,
-					End:   2 * 24 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo @ 172800.000",
+					Start:         24 * 3600 * seconds,
+					End:           2 * 24 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo @ 172800.000",
+					SplitInterval: day,
 				},
 			},
 			interval: day,
@@ -161,16 +170,18 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 0,
-					End:   (3 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         0,
+					End:           (3 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 3 * 3600 * seconds,
-					End:   2 * 3 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         3 * 3600 * seconds,
+					End:           2 * 3 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 			},
 			interval: 3 * time.Hour,
@@ -184,22 +195,25 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 3 * 3600 * seconds,
-					End:   (24 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         3 * 3600 * seconds,
+					End:           (24 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: day,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 24 * 3600 * seconds,
-					End:   (2 * 24 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         24 * 3600 * seconds,
+					End:           (2 * 24 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: day,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 2 * 24 * 3600 * seconds,
-					End:   3 * 24 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         2 * 24 * 3600 * seconds,
+					End:           3 * 24 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: day,
 				},
 			},
 			interval: day,
@@ -213,22 +227,25 @@ func TestSplitQuery(t *testing.T) {
 			},
 			expected: []queryrange.Request{
 				&ThanosQueryRangeRequest{
-					Start: 2 * 3600 * seconds,
-					End:   (3 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         2 * 3600 * seconds,
+					End:           (3 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 3 * 3600 * seconds,
-					End:   (2 * 3 * 3600 * seconds) - (15 * seconds),
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         3 * 3600 * seconds,
+					End:           (2 * 3 * 3600 * seconds) - (15 * seconds),
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 				&ThanosQueryRangeRequest{
-					Start: 2 * 3 * 3600 * seconds,
-					End:   3 * 3 * 3600 * seconds,
-					Step:  15 * seconds,
-					Query: "foo",
+					Start:         2 * 3 * 3600 * seconds,
+					End:           3 * 3 * 3600 * seconds,
+					Step:          15 * seconds,
+					Query:         "foo",
+					SplitInterval: 3 * time.Hour,
 				},
 			},
 			interval: 3 * time.Hour,
@@ -248,6 +265,23 @@ func TestSplitQuery_PromQLErrorReturnsJson(t *testing.T) {
 		End:   3 * 3 * 3600 * seconds,
 		Step:  15 * seconds,
 		Query: "foo{",
+	}
+	queries, err := splitQuery(input, 1*time.Hour)
+	require.Error(t, err)
+	require.Nil(t, queries)
+
+	resp, ok := httpgrpc.HTTPResponseFromError(err)
+	require.True(t, ok, "could not assemble httpgrpc.HTTPResponse, is not status.Status")
+
+	require.True(t, json.Valid(resp.Body), "error message is not valid JSON: %s", resp.Body)
+}
+
+func TestSplitQuery_PrometheusRequest(t *testing.T) {
+	input := &queryrange.PrometheusRequest{
+		Start: 2 * 3600 * seconds,
+		End:   3 * 3 * 3600 * seconds,
+		Step:  15 * seconds,
+		Query: "foo",
 	}
 	queries, err := splitQuery(input, 1*time.Hour)
 	require.Error(t, err)
