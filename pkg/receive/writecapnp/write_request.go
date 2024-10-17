@@ -83,10 +83,10 @@ func (s *Request) Next() bool {
 	return s.i < s.series.Len()
 }
 
-func (s *Request) At(t *Series) {
+func (s *Request) At(t *Series) error {
 	lbls, err := s.series.At(s.i).Labels()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	s.builder.Reset()
@@ -98,7 +98,7 @@ func (s *Request) At(t *Series) {
 
 	samples, err := s.series.At(s.i).Samples()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	t.Samples = t.Samples[:0]
 	for i := 0; i < samples.Len(); i++ {
@@ -111,31 +111,37 @@ func (s *Request) At(t *Series) {
 
 	histograms, err := s.series.At(s.i).Histograms()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	t.Histograms = t.Histograms[:0]
 	for i := 0; i < histograms.Len(); i++ {
-		t.Histograms = append(t.Histograms, s.readHistogram(histograms.At(i)))
+		h, err := s.readHistogram(histograms.At(i))
+		if err != nil {
+			return err
+		}
+		t.Histograms = append(t.Histograms, h)
 	}
 
 	exemplars, err := s.series.At(s.i).Exemplars()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	t.Exemplars = t.Exemplars[:0]
 	for i := 0; i < exemplars.Len(); i++ {
 		ex, err := s.readExemplar(s.symbols, exemplars.At(i))
 		if err != nil {
-			panic(err)
+			return err
 		}
 		t.Exemplars = append(t.Exemplars, ex)
 	}
+	return nil
 }
 
-func (s *Request) readHistogram(src Histogram) HistogramSample {
+func (s *Request) readHistogram(src Histogram) (HistogramSample, error) {
 	var (
-		h  *histogram.Histogram
-		fh *histogram.FloatHistogram
+		h   *histogram.Histogram
+		fh  *histogram.FloatHistogram
+		err error
 	)
 	if src.Count().Which() == Histogram_count_Which_countInt {
 		h = &histogram.Histogram{
@@ -146,11 +152,14 @@ func (s *Request) readHistogram(src Histogram) HistogramSample {
 			ZeroThreshold:    src.ZeroThreshold(),
 			ZeroCount:        src.ZeroCount().ZeroCountInt(),
 		}
-		h.PositiveSpans, h.NegativeSpans = createSpans(src)
+		h.PositiveSpans, h.NegativeSpans, err = createSpans(src)
+		if err != nil {
+			return HistogramSample{}, err
+		}
 
 		positiveDeltas, err := src.PositiveDeltas()
 		if err != nil {
-			panic(err)
+			return HistogramSample{}, err
 		}
 		if positiveDeltas.Len() > 0 {
 			h.PositiveBuckets = make([]int64, positiveDeltas.Len())
@@ -161,7 +170,7 @@ func (s *Request) readHistogram(src Histogram) HistogramSample {
 
 		negativeDeltas, err := src.NegativeDeltas()
 		if err != nil {
-			panic(err)
+			return HistogramSample{}, err
 		}
 		if negativeDeltas.Len() > 0 {
 			h.NegativeBuckets = make([]int64, negativeDeltas.Len())
@@ -178,11 +187,14 @@ func (s *Request) readHistogram(src Histogram) HistogramSample {
 			ZeroThreshold:    src.ZeroThreshold(),
 			ZeroCount:        src.ZeroCount().ZeroCountFloat(),
 		}
-		fh.PositiveSpans, fh.NegativeSpans = createSpans(src)
+		fh.PositiveSpans, fh.NegativeSpans, err = createSpans(src)
+		if err != nil {
+			return HistogramSample{}, err
+		}
 
 		positiveCounts, err := src.PositiveCounts()
 		if err != nil {
-			panic(err)
+			return HistogramSample{}, err
 		}
 		if positiveCounts.Len() > 0 {
 			fh.PositiveBuckets = make([]float64, positiveCounts.Len())
@@ -193,7 +205,7 @@ func (s *Request) readHistogram(src Histogram) HistogramSample {
 
 		negativeCounts, err := src.NegativeCounts()
 		if err != nil {
-			panic(err)
+			return HistogramSample{}, err
 		}
 		if negativeCounts.Len() > 0 {
 			fh.NegativeBuckets = make([]float64, negativeCounts.Len())
@@ -207,7 +219,7 @@ func (s *Request) readHistogram(src Histogram) HistogramSample {
 		Timestamp:      src.Timestamp(),
 		Histogram:      h,
 		FloatHistogram: fh,
-	}
+	}, nil
 }
 
 type spanGetter interface {
@@ -215,16 +227,16 @@ type spanGetter interface {
 	NegativeSpans() (BucketSpan_List, error)
 }
 
-func createSpans(src spanGetter) ([]histogram.Span, []histogram.Span) {
+func createSpans(src spanGetter) ([]histogram.Span, []histogram.Span, error) {
 	positiveSpans, err := src.PositiveSpans()
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 	negativeSpans, err := src.NegativeSpans()
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
-	return copySpans(positiveSpans), copySpans(negativeSpans)
+	return copySpans(positiveSpans), copySpans(negativeSpans), nil
 }
 
 func copySpans(src BucketSpan_List) []histogram.Span {

@@ -71,7 +71,9 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		builder labels.ScratchBuilder
 	)
 	for wreq.Next() {
-		wreq.At(&series)
+		if err := wreq.At(&series); err != nil {
+			return errors.Wrap(err, "request.At")
+		}
 
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.

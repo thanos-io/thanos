@@ -135,7 +135,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 			iter, err := NewRequest(wr)
 			require.NoError(b, err)
 			for iter.Next() {
-				iter.At(&ts)
+				require.NoError(b, iter.At(&ts))
 			}
 			iter.Close()
 		}

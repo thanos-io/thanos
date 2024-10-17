@@ -98,7 +98,7 @@ func TestMarshalWriteRequest(t *testing.T) {
 	request, err := NewRequest(wr)
 	require.NoError(t, err)
 	for request.Next() {
-		request.At(&actual)
+		require.NoError(t, request.At(&actual))
 		expected := wreq.Timeseries[i]
 
 		t.Run("test_labels", func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 	require.NoError(t, err)
 
 	for request.Next() {
-		request.At(&current)
+		require.NoError(t, request.At(&current))
 		for _, h := range current.Histograms {
 			if h.FloatHistogram != nil {
 				readFloatHistograms = append(readFloatHistograms, h.FloatHistogram)
