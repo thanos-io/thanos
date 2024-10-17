@@ -48,15 +48,19 @@ type responseDeduplicator struct {
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
 // It also deduplicates identical chunks identified by the same checksum from each series message.
 func NewResponseDeduplicator(h seriesStream) *responseDeduplicator {
+	return NewResponseDeduplicatorInternal(h, false)
+}
+
+func NewResponseDeduplicatorInternal(h seriesStream, quorumChunkDedup bool) *responseDeduplicator {
 	ok := h.Next()
 	var prev *storepb.SeriesResponse
 	if ok {
 		prev = h.At()
 	}
 	return &responseDeduplicator{
-		h:             h,
-		ok:            ok,
-		prev:          prev,
+		h:    h,
+		ok:   ok,
+		prev: prev,
 	}
 }
 
@@ -155,7 +159,7 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 			// NB: this is specific to Databricks' setup where each time series is written to at least 2 out of 3 replicas.
 			// Each chunk should have 3 replicas in most cases, and 2 replicas in the worst acceptable cases.
 			// Quorum-based deduplication is used to pick the majority value among 3 replicas.
-			// If a chunck has only 2 identical replicas, there might be another chunk with corrupt data.
+			// If a chunk has only 2 identical replicas, there might be another chunk with corrupt data.
 			// We want to send those two identical replicas to the later quorum-based deduplication process to dominate any corrupt third replica.
 			if chunckCountMap[hash] >= 3 {
 				// Most of cases should hit this branch.
@@ -362,9 +366,6 @@ func newLazyRespSet(
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
-			if len(seriesStats.ChunkSt) > 0 {
-				l.span.SetTag("processed.chunk_stats", seriesStats.ChunkSt)
-			}
 			l.span.Finish()
 		}()
 
@@ -628,9 +629,6 @@ func newEagerRespSet(
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
-			if len(seriesStats.ChunkSt) > 0 {
-				l.span.SetTag("processed.chunk_stats", seriesStats.ChunkSt)
-			}
 			l.span.Finish()
 			ret.wg.Done()
 		}()

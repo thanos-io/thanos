@@ -5,11 +5,9 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"hash"
 	"io"
 	"math"
-	"math/rand"
 	"sort"
 	"strings"
 	"sync"
@@ -155,13 +153,6 @@ func NewTSDBStore(
 	return st
 }
 
-func (s *TSDBStore) SkipMatchExternalLabels() {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	s.skipMatchExternalLabels = true
-}
-
 func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -255,26 +246,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	} else {
 		srv = fs
 	}
-	var (
-		match    bool
-		matchers []*labels.Matcher
-		err      error
-	)
-	if s.skipMatchExternalLabels {
-		// NB: This is specific to Databricks' setup. No query uses external labels which are hidden to end users.
-		matchers, err = storepb.MatchersToPromMatchers(r.Matchers...)
-		match = true
-		// This is a double check on sampled calls.
-		if err == nil && rand.Float32() < 0.001 {
-			_, pendingMatcher, matchErr := matchesExternalLabels(r.Matchers, s.getExtLset())
-			if matchErr == nil && len(pendingMatcher) != len(matchers) {
-				// TODO: bump a counter here
-				return status.Error(codes.Internal, fmt.Sprintf("A Series request uses external labels: %+v", r.Matchers))
-			}
-		}
-	} else {
-		match, matchers, err = matchesExternalLabels(r.Matchers, s.getExtLset())
-	}
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

@@ -252,10 +252,6 @@ func runSidecar(
 			if err != nil {
 				return errors.Wrap(err, "initial external labels query")
 			}
-			promUp.Set(1)
-			statusProber.Ready()
-
-			close(readyToStartGRPC)
 
 			if m.Labels().Len() == 0 {
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")

@@ -62,7 +62,6 @@ type MultiTSDB struct {
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
-	skipMatchExternalLabels bool
 	tsdbClients           []store.Client
 	tsdbClientsNeedUpdate bool
 
@@ -114,7 +113,6 @@ func NewMultiTSDB(
 		bucket:                    bucket,
 		allowOutOfOrderUpload:     allowOutOfOrderUpload,
 		hashFunc:                  hashFunc,
-        skipMatchExternalLabels:   false
 	}
 
 	for _, option := range options {
@@ -122,10 +120,6 @@ func NewMultiTSDB(
 	}
 
 	return mt
-}
-
-func (t *MultiTSDB) SkipMatchExternalLabels() {
-	t.skipMatchExternalLabels = true
 }
 
 type localClient struct {
@@ -153,22 +147,12 @@ func (l *localClient) LabelValues(ctx context.Context, in *storepb.LabelValuesRe
 	return l.store.LabelValues(ctx, in)
 }
 
-func newLocalClient(store *store.TSDBStore) *localClient {
-	return &localClient{
-		store: store,
-	}
-}
-
 func (l *localClient) GroupKey() string {
 	return ""
 }
 
 func (l *localClient) ReplicaKey() string {
 	return ""
-}
-
-func (l *localClient) MatchesMetricName(metricName string) bool {
-	return l.store.MatchesMetricName(metricName)
 }
 
 func (l *localClient) Matches(matchers []*labels.Matcher) bool {

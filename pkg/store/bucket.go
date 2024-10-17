@@ -677,7 +677,6 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}()
 	}
 
-	level.Info(s.logger).Log("msg", "started to sync blocks", "num_blocks", len(metas))
 	for id, meta := range metas {
 		if b := s.getBlock(id); b != nil {
 			continue
@@ -771,16 +770,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	}
 	start := time.Now()
 
-	level.Debug(s.logger).Log("msg", "loading new block",
-		"id", meta.ULID,
-		"min_time", meta.MinTime,
-		"duration_hours", 1.0*(meta.MaxTime-meta.MinTime)/(3600*1000),
-		"num_series", meta.Stats.NumSeries,
-		"num_samples", meta.Stats.NumSamples,
-		"num_chunks", meta.Stats.NumChunks,
-		"resolution", meta.Thanos.Downsample.Resolution,
-		"compaction_level", meta.Compaction.Level,
-	)
+	level.Debug(s.logger).Log("msg", "loading new block", "id", meta.ULID)
 	defer func() {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
@@ -2000,6 +1990,14 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	resHints := &hintspb.LabelValuesResponseHints{}
 
+	var hasMetricNameEqMatcher = false
+	for _, m := range reqSeriesMatchers {
+		if m.Name == labels.MetricName && m.Type == labels.MatchEqual {
+			hasMetricNameEqMatcher = true
+			break
+		}
+	}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	var reqBlockMatchers []*labels.Matcher
@@ -2023,6 +2021,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series", tenant))
 	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes", tenant))
 	var logger = s.requestLoggerFunc(ctx, s.logger)
+	var stats = &queryStats{}
 
 	for _, b := range s.blocks {
 		b := b
@@ -2041,7 +2040,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 		// If we have series matchers and the Label is not an external one, add <labelName> != "" matcher
 		// to only select series that have given label name.
-		if len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
+		// We don't need such matcher if matchers already contain __name__=="something" matcher.
+		if !hasMetricNameEqMatcher && len(reqSeriesMatchersNoExtLabels) > 0 && !b.extLset.Has(req.Label) {
 			m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
 			if err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -2109,7 +2109,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 					tenant,
 				)
-				defer blockClient.Close()
+				defer func() {
+					mtx.Lock()
+					stats = blockClient.MergeStats(stats)
+					mtx.Unlock()
+					blockClient.Close()
+				}()
 
 				if err := blockClient.ExpandPostings(
 					sortedReqSeriesMatchersNoExtLabels,
@@ -2138,7 +2143,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					}
 
 					val := labelpb.ZLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
-					if val != "" { // Should never be empty since we added labelName!="" matcher to the list of matchers.
+					if val != "" {
 						values[val] = struct{}{}
 					}
 				}
@@ -2161,6 +2166,15 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}
 
 	s.mtx.RUnlock()
+
+	defer func() {
+		if s.debugLogging {
+			level.Debug(logger).Log("msg", "stats query processed",
+				"request", req,
+				"tenant", tenant,
+				"stats", fmt.Sprintf("%+v", stats), "err", err)
+		}
+	}()
 
 	if err := g.Wait(); err != nil {
 		code := codes.Internal
@@ -3603,10 +3617,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	} else {
 		buf = make([]byte, r.block.estimatedMaxChunkSize)
 	}
-	if cap(buf) < r.block.estimatedMaxChunkSize {
-		return errors.Errorf("chunk buffer too small, expected at least %d, got %d", r.block.estimatedMaxChunkSize, cap(buf))
-	}
-	defer r.block.chunkPool.Put(&buf)
 
 	for i, pIdx := range pIdxs {
 		// Fast forward range reader to the next chunk start in case of sparse (for our purposes) byte range.
@@ -3625,10 +3635,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 			if diff = pIdxs[i+1].offset - pIdx.offset; int(diff) < chunkLen {
 				chunkLen = int(diff)
 			}
-		}
-		if cap(buf) < chunkLen {
-			return errors.Errorf("chunk buffer too small. expected at least %d(estimatedMaxChunkSize = %d), got %d",
-				chunkLen, r.block.estimatedMaxChunkSize, cap(buf))
 		}
 		cb := buf[:chunkLen]
 		n, err = io.ReadFull(bufReader, cb)

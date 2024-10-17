@@ -58,9 +58,30 @@ type QueryableCreator func(
 	seriesStatsReporter seriesStatsReporter,
 ) storage.Queryable
 
+type Options struct {
+	GroupReplicaPartialResponseStrategy bool
+	EnableDedupMerge                    bool
+}
+
 // NewQueryableCreator creates QueryableCreator.
 // NOTE(bwplotka): Proxy assumes to be replica_aware, see thanos.store.info.StoreInfo.replica_aware field.
-func newQueryableCreator(
+func NewQueryableCreator(
+	logger log.Logger,
+	reg prometheus.Registerer,
+	proxy storepb.StoreServer,
+	maxConcurrentSelects int,
+	selectTimeout time.Duration,
+) QueryableCreator {
+	return NewQueryableCreatorWithOptions(
+		logger,
+		reg,
+		proxy,
+		maxConcurrentSelects,
+		selectTimeout,
+		Options{},
+	)
+}
+func NewQueryableCreatorWithOptions(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	proxy storepb.StoreServer,
@@ -101,46 +122,6 @@ func newQueryableCreator(
 	}
 }
 
-type Options struct {
-	GroupReplicaPartialResponseStrategy bool
-	EnableDedupMerge                    bool
-}
-
-func NewQueryableCreator(
-	logger log.Logger,
-	reg prometheus.Registerer,
-	proxy storepb.StoreServer,
-	maxConcurrentSelects int,
-	selectTimeout time.Duration,
-) QueryableCreator {
-	return NewQueryableCreatorWithOptions(
-		logger,
-		reg,
-		proxy,
-		maxConcurrentSelects,
-		selectTimeout,
-		Options{},
-	)
-}
-
-func NewQueryableCreatorWithOptions(
-	logger log.Logger,
-	reg prometheus.Registerer,
-	proxy storepb.StoreServer,
-	maxConcurrentSelects int,
-	selectTimeout time.Duration,
-	opts Options,
-) QueryableCreator {
-	return newQueryableCreator(
-		logger,
-		reg,
-		proxy,
-		maxConcurrentSelects,
-		selectTimeout,
-		opts,
-	)
-}
-
 type queryable struct {
 	logger               log.Logger
 	replicaLabels        []string
@@ -178,16 +159,6 @@ type querier struct {
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
 	enableDedupMerge        bool
-
-	returnChunksMtx sync.Mutex
-	returnChunks    []*storepb.AggrChunk
-}
-
-var returnChunksSlicePool = sync.Pool{
-	New: func() interface{} {
-		r := make([]*storepb.AggrChunk, 0)
-		return &r
-	},
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -239,7 +210,7 @@ func newQuerierWithOpts(
 
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
 	if opts.GroupReplicaPartialResponseStrategy {
-		level.Debug(logger).Log("msg", "Enabled group-replica partial response strategy in newQuerierInternal")
+		level.Info(logger).Log("msg", "Enabled group-replica partial response strategy in newQuerierInternal")
 		partialResponseStrategy = storepb.PartialResponseStrategy_GROUP_REPLICA
 	} else if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN
@@ -261,7 +232,6 @@ func newQuerierWithOpts(
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
 		enableDedupMerge:        opts.EnableDedupMerge,
-		returnChunks:            *returnChunks,
 	}
 }
 

@@ -156,9 +156,10 @@ type endpointSetNodeCollector struct {
 	storeNodesAddr  map[string]map[string]int
 	storeNodesKeys  map[string]map[string]int
 
-    logger              log.Logger
-	connectionsDesc     *prometheus.Desc
-	labels              []string
+	logger          log.Logger
+	connectionsDesc *prometheus.Desc
+	labels          []string
+
 	connectionsWithAddr *prometheus.Desc
 	connectionsWithKeys *prometheus.Desc
 }
@@ -204,11 +205,11 @@ func truncateExtLabels(s string, threshold int) string {
 	return s
 }
 func (c *endpointSetNodeCollector) Update(
-	nodes map[component.Component]map[string]int,
+	nodes map[string]map[string]int,
 	nodesAddr map[string]map[string]int,
 	nodesKeys map[string]map[string]int,
 ) {
-	storeNodes := make(map[component.Component]map[string]int, len(nodes))
+	storeNodes := make(map[string]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
 	for storeType, occurrencesPerExtLset := range nodes {
@@ -423,13 +424,15 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	e.endpointsMtx.Lock()
 	defer e.endpointsMtx.Unlock()
 	for addr, er := range newRefs {
+		extLset := labelpb.PromLabelSetsToString(er.LabelSets())
 		level.Info(e.logger).Log("msg", fmt.Sprintf("adding new %v with %+v", er.ComponentType(), er.apisPresent()),
 			"group_key", er.groupKey, "replica_key", er.replicaKey,
-			"address", addr)
+			"address", addr, "extLset", extLset)
 		e.endpoints[addr] = er
 	}
 	for addr, er := range staleRefs {
 		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.addr,
+			"extLset", labelpb.PromLabelSetsToString(er.LabelSets()),
 			"group_key", er.groupKey, "replica_key", er.replicaKey)
 		er.Close()
 		delete(e.endpoints, addr)
@@ -460,7 +463,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset]+1))
 		}
-		stats[er.ComponentType()][extLset]++
+		stats[er.ComponentType().String()][extLset]++
 		bumpCounter(er.replicaKey, strings.Split(addr, ":")[0], statsAddr)
 		bumpCounter(er.groupKey, er.replicaKey, statsKeys)
 	}

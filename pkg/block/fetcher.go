@@ -173,7 +173,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 			Help:      "Number of metadata blocks synced broken down by tenant",
 		},
 		[]string{"tenant"},
-		// No init label values is fine. The only downside is those guages won't be reset to 0, but it's fine for the use case.
+		// No init label values is fine. The only downside is those gauges won't be reset to 0, but it's fine for the use case.
 	)
 	m.Assigned = extprom.NewTxGaugeVec(
 		reg,
@@ -183,7 +183,7 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 			Help:      "Number of metadata blocks assigned to this pod after all filters.",
 		},
 		[]string{"tenant", "level"},
-		// No init label values is fine. The only downside is those guages won't be reset to 0, but it's fine for the use case.
+		// No init label values is fine. The only downside is those gauges won't be reset to 0, but it's fine for the use case.
 	)
 	return &m
 }

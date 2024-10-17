@@ -75,13 +75,11 @@ type Client interface {
 	// A replica key defines a set of endpoints belong to the same replica.
 	// E.g, "pantheon-db-rep0", "pantheon-db-rep1", "long-range-store".
 	ReplicaKey() string
-	// A group key defeines a group of replicas that belong to the same group.
+	// A group key defines a group of replicas that belong to the same group.
 	// E.g. "pantheon-db" has replicas "pantheon-db-rep0", "pantheon-db-rep1".
 	//		"long-range-store" has only one replica, "long-range-store".
 	GroupKey() string
 
-	// MatchesMetricName returns true if the metric name is allowed in the store.
-	MatchesMetricName(metricName string) bool
 	// Matches returns true if provided label matchers are allowed in the store.
 	Matches(matches []*labels.Matcher) bool
 }
@@ -336,20 +334,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
-	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
-	r := &storepb.SeriesRequest{
-		MinTime:                 originalRequest.MinTime,
-		MaxTime:                 originalRequest.MaxTime,
-		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
-		Aggregates:              originalRequest.Aggregates,
-		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
-		SkipChunks:              originalRequest.SkipChunks,
-		QueryHints:              originalRequest.QueryHints,
-		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
-		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
-		ShardInfo:               originalRequest.ShardInfo,
-		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
-	}
+	storeResponses := make([]respSet, 0, len(stores))
 
 	checkGroupReplicaErrors := func(st Client, err error) error {
 		if len(failedStores[st.GroupKey()]) > 1 {
@@ -386,8 +371,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
-			// NB: respSet is nil in case of error.
-			level.Error(reqLogger).Log("err", err)
 			level.Warn(s.logger).Log("msg", "Store failure", "group", st.GroupKey(), "replica", st.ReplicaKey(), "err", err)
 			s.metrics.storeFailureCount.WithLabelValues(st.GroupKey(), st.ReplicaKey()).Inc()
 			bumpCounter(st.GroupKey(), st.ReplicaKey(), failedStores)
@@ -397,7 +380,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 					return err
 				}
 				continue
-			} else if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			}
+			level.Error(reqLogger).Log("err", err)
+			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
@@ -415,8 +400,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	var respHeap seriesStream = NewProxyResponseLoserTree(storeResponses...)
 	if s.enableDedup {
-		respHeap = NewResponseDeduplicator(respHeap)
-        respHeap.quorumChunkDedup = s.quorumChunkDedup
+		respHeap = NewResponseDeduplicatorInternal(respHeap, s.quorumChunkDedup)
 	}
 
 	i := 0

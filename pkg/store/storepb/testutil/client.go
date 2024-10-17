@@ -21,10 +21,9 @@ type TestClient struct {
 	WithoutReplicaLabelsEnabled bool
 	IsLocalStore                bool
 	StoreTSDBInfos              []infopb.TSDBInfo
-
-	GroupKeyStr   string
-	ReplicaKeyStr string
-	MetricNameFilter            filter.MetricNameFilter
+	StoreFilterNotMatches       bool
+	GroupKeyStr                 string
+	ReplicaKeyStr               string
 }
 
 func (c TestClient) LabelSets() []labels.Labels         { return c.ExtLset }
@@ -34,9 +33,8 @@ func (c TestClient) SupportsSharding() bool             { return c.Shardable }
 func (c TestClient) SupportsWithoutReplicaLabels() bool { return c.WithoutReplicaLabelsEnabled }
 func (c TestClient) String() string                     { return c.Name }
 func (c TestClient) Addr() (string, bool)               { return c.Name, c.IsLocalStore }
-func (c TestClient) GroupKey() string                   { return c.GroupKeyStr }
-func (c TestClient) ReplicaKey() string                 { return c.ReplicaKeyStr }
-func (c TestClient) MatchesMetricName(_ string) bool    { return true }
-func (c TestClient) MatchesMetricName(metricName string) bool {
-	return c.MetricNameFilter.MatchesMetricName(metricName)
-}
+
+func (c TestClient) Matches(matches []*labels.Matcher) bool { return !c.StoreFilterNotMatches }
+
+func (c TestClient) GroupKey() string   { return c.GroupKeyStr }
+func (c TestClient) ReplicaKey() string { return c.ReplicaKeyStr }

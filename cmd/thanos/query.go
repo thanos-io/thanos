@@ -129,7 +129,7 @@ func registerQuery(app *extkingpin.App) {
 
 	enableDedupMerge := cmd.Flag("query.dedup-merge", "Enable deduplication merge of multiple time series with the same labels.").
 		Default("false").Bool()
-	enableQuorumChunkDedup := cmd.Flag("query.quorum-chunk-dedup", "Enable quorum-based deduplication for chuncks from replicas.").
+	enableQuorumChunkDedup := cmd.Flag("query.quorum-chunk-dedup", "Enable quorum-based deduplication for chunks from replicas.").
 		Default("false").Bool()
 
 	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
@@ -597,7 +597,7 @@ func runQuery(
 	queryableCreator = query.NewQueryableCreatorWithOptions(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_", reg),
-		proxy,
+		seriesProxy,
 		maxConcurrentSelects,
 		queryTimeout,
 		opts,

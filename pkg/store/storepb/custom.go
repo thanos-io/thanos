@@ -485,11 +485,6 @@ func (m *Chunk) XORNumSamples() int {
 	return 0
 }
 
-type ChunkStats struct {
-	MinTime, MaxTime int64
-	Samples          int
-}
-
 type SeriesStatsCounter struct {
 	lastSeriesHash uint64
 
@@ -497,7 +492,6 @@ type SeriesStatsCounter struct {
 	Chunks  int
 	Samples int
 	Bytes   uint64
-	ChunkSt []ChunkStats
 }
 
 func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
@@ -512,10 +506,7 @@ func (c *SeriesStatsCounter) Count(r *SeriesResponse) {
 	if r.GetSeries() != nil {
 		series := r.GetSeries()
 		c.CountSeries(series.Labels)
-		c.ChunkSt = make([]ChunkStats, min(10, len(series.Chunks)))
-		for ci, chk := range series.Chunks {
-			// Keep the old value of c.Samples so that the samples in this chunck can be computed
-			accSamples := c.Samples
+		for _, chk := range series.Chunks {
 			if chk.Raw != nil {
 				c.Chunks++
 				c.Samples += chk.Raw.XORNumSamples()
@@ -544,11 +535,6 @@ func (c *SeriesStatsCounter) Count(r *SeriesResponse) {
 			if chk.Sum != nil {
 				c.Chunks++
 				c.Samples += chk.Sum.XORNumSamples()
-			}
-			if ci < len(c.ChunkSt) {
-				c.ChunkSt[ci].MinTime = chk.MinTime
-				c.ChunkSt[ci].MaxTime = chk.MaxTime
-				c.ChunkSt[ci].Samples = c.Samples - accSamples
 			}
 		}
 	}
