@@ -23,17 +23,17 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
-	"go.uber.org/goleak"
 
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/testiters"
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 func TestDownsampleAndReadResultingData(t *testing.T) {
@@ -1770,10 +1770,10 @@ func (b *memBlock) addSeries(s *series) {
 	b.postings = append(b.postings, sid)
 	b.series = append(b.series, s)
 
-	s.lset.Range(func(l labels.Label) {
+	for _, l := range s.lset {
 		b.symbols[l.Name] = struct{}{}
 		b.symbols[l.Value] = struct{}{}
-	})
+	}
 
 	for i, cm := range s.chunks {
 		if b.minTime == -1 || cm.MinTime < b.minTime {

@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"os"
 	"path"
 	"strings"
@@ -53,7 +55,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
-const compressionNone = "none"
+const (
+	compressionNone   = "none"
+	metricNamesFilter = "metric-names-filter"
+)
 
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
@@ -136,6 +141,14 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
+	multiTSDBOptions := []receive.MultiTSDBOption{}
+	for _, feature := range *conf.featureList {
+		if feature == metricNamesFilter {
+			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
+			level.Info(logger).Log("msg", "metric name filter feature enabled")
+		}
+	}
+
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
 	if err != nil {
 		return err
@@ -215,6 +228,7 @@ func runReceive(
 		bkt,
 		conf.allowOutOfOrderUpload,
 		hashFunc,
+		multiTSDBOptions...,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,
@@ -259,6 +273,7 @@ func runReceive(
 		Limiter:              limiter,
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
+		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -323,6 +338,7 @@ func runReceive(
 
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
+			store.WithoutDedup(),
 		}
 
 		proxy := store.NewProxyStore(
@@ -343,7 +359,7 @@ func runReceive(
 
 		infoSrv := info.NewInfoServer(
 			component.Receive.String(),
-			info.WithLabelSetFunc(func() []*labelpb.LabelSet { return proxy.LabelSet() }),
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					minTime, maxTime := proxy.TimeRange()
@@ -450,6 +466,26 @@ func runReceive(
 				cancel()
 			})
 		}
+	}
+
+	{
+		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
+			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
+		})
+		handler := receive.NewCapNProtoHandler(logger, capNProtoWriter)
+		listener, err := net.Listen("tcp", conf.replicationAddr)
+		if err != nil {
+			return err
+		}
+		server := receive.NewCapNProtoServer(listener, handler, logger)
+		g.Add(func() error {
+			return server.ListenAndServe()
+		}, func(err error) {
+			server.Shutdown()
+			if err := listener.Close(); err != nil {
+				level.Warn(logger).Log("msg", "Cap'n Proto server did not shut down gracefully", "err", err.Error())
+			}
+		})
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
@@ -782,6 +818,7 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
+	replicationAddr    string
 	rwAddress          string
 	rwServerCert       string
 	rwServerKey        string
@@ -803,17 +840,18 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	refreshInterval   *model.Duration
-	endpoint          string
-	tenantHeader      string
-	tenantField       string
-	tenantLabelName   string
-	defaultTenantID   string
-	replicaHeader     string
-	replicationFactor uint64
-	forwardTimeout    *model.Duration
-	maxBackoff        *model.Duration
-	compression       string
+	refreshInterval     *model.Duration
+	endpoint            string
+	tenantHeader        string
+	tenantField         string
+	tenantLabelName     string
+	defaultTenantID     string
+	replicaHeader       string
+	replicationFactor   uint64
+	forwardTimeout      *model.Duration
+	maxBackoff          *model.Duration
+	compression         string
+	replicationProtocol string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -845,6 +883,8 @@ type receiveConfig struct {
 	limitsConfigReloadTimer time.Duration
 
 	asyncForwardWorkerCount uint
+
+	featureList *[]string
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -913,6 +953,13 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
+
+	replicationProtocols := []string{string(receive.ProtobufReplication), string(receive.CapNProtoReplication)}
+	cmd.Flag("receive.replication-protocol", "The protocol to use for replicating remote-write requests. One of "+strings.Join(replicationProtocols, ", ")).
+		Default(string(receive.ProtobufReplication)).
+		EnumVar(&rc.replicationProtocol, replicationProtocols...)
+
+	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
@@ -985,6 +1032,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.writeLimitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
 	cmd.Flag("receive.limits-config-reload-timer", "Minimum amount of time to pass for the limit configuration to be reloaded. Helps to avoid excessive reloads.").
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
+
+	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

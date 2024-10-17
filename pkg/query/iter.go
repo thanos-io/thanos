@@ -64,12 +64,10 @@ type storeSeriesSet struct {
 	// TODO(bwplotka): Don't buffer all, we have to buffer single series (to sort and dedup chunks), but nothing more.
 	series []storepb.Series
 	i      int
-
-	promLabels []labels.Labels
 }
 
 func newStoreSeriesSet(s []storepb.Series) *storeSeriesSet {
-	return &storeSeriesSet{series: s, i: -1, promLabels: make([]labels.Labels, len(s))}
+	return &storeSeriesSet{series: s, i: -1}
 }
 
 func (s *storeSeriesSet) Next() bool {
@@ -84,24 +82,20 @@ func (*storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s *storeSeriesSet) At() (labels.Labels, []*storepb.AggrChunk) {
-	// stringlabels are immutable, so we can cache them.
-	if s.promLabels[s.i].IsEmpty() {
-		s.promLabels[s.i] = s.series[s.i].PromLabels()
-	}
-	return s.promLabels[s.i], s.series[s.i].Chunks
+func (s *storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+	return s.series[s.i].PromLabels(), s.series[s.i].Chunks
 }
 
 // chunkSeries implements storage.Series for a series on storepb types.
 type chunkSeries struct {
 	lset       labels.Labels
-	chunks     []*storepb.AggrChunk
+	chunks     []storepb.AggrChunk
 	mint, maxt int64
 	aggrs      []storepb.Aggr
 }
 
 // newChunkSeries allows to iterate over samples for each sorted and non-overlapped chunks.
-func newChunkSeries(lset labels.Labels, chunks []*storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
+func newChunkSeries(lset labels.Labels, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
 	return &chunkSeries{
 		lset:   lset,
 		chunks: chunks,

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -103,7 +104,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -119,7 +120,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthGood),
@@ -134,7 +135,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthGood),
@@ -150,7 +151,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WithLimit",
 					State: rulespb.AlertState_INACTIVE,
 					Query: `promhttp_metric_handler_requests_total`,
-					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthBad),
@@ -183,7 +184,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 		}
 
 		for ig, g := range res {
-			res[ig].LastEvaluation = nil
+			res[ig].LastEvaluation = time.Time{}
 			res[ig].EvaluationDurationSeconds = 0
 			res[ig].Interval = 0
 			res[ig].PartialResponseStrategy = 0
@@ -210,10 +211,8 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 			}
 		}
 
-		for i := range want {
-			if !want[i].EqualVT(res[i]) {
-				return errors.Errorf("unexpected result\nwant %v\ngot: %v", want[i], res[i])
-			}
+		if !reflect.DeepEqual(want, res) {
+			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
 		}
 
 		return nil

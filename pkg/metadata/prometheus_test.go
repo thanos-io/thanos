@@ -73,27 +73,27 @@ scrape_configs:
 		name         string
 		metric       string
 		limit        int32
-		expectedFunc func(map[string][]*metadatapb.Meta) bool
+		expectedFunc func(map[string][]metadatapb.Meta) bool
 	}{
 		{
 			name:  "all metadata return",
 			limit: -1,
 			// We just check two metrics here.
-			expectedFunc: func(m map[string][]*metadatapb.Meta) bool {
+			expectedFunc: func(m map[string][]metadatapb.Meta) bool {
 				return len(m["prometheus_build_info"]) > 0 && len(m["prometheus_engine_query_duration_seconds"]) > 0
 			},
 		},
 		{
 			name:  "no metadata return",
 			limit: 0,
-			expectedFunc: func(m map[string][]*metadatapb.Meta) bool {
+			expectedFunc: func(m map[string][]metadatapb.Meta) bool {
 				return len(m) == 0
 			},
 		},
 		{
 			name:  "only 1 metadata return",
 			limit: 1,
-			expectedFunc: func(m map[string][]*metadatapb.Meta) bool {
+			expectedFunc: func(m map[string][]metadatapb.Meta) bool {
 				return len(m) == 1
 			},
 		},
@@ -101,7 +101,7 @@ scrape_configs:
 			name:   "only prometheus_build_info metadata return",
 			metric: "prometheus_build_info",
 			limit:  1,
-			expectedFunc: func(m map[string][]*metadatapb.Meta) bool {
+			expectedFunc: func(m map[string][]metadatapb.Meta) bool {
 				return len(m) == 1 && len(m["prometheus_build_info"]) > 0
 			},
 		},

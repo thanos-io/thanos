@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -19,9 +20,17 @@ func TestRecoverableServer(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := storepb.NewInProcessStream(ctx, 1)
+	client := storepb.ServerAsClient(store)
+	seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{})
+	testutil.Ok(t, err)
 
-	testutil.Ok(t, store.Series(&storepb.SeriesRequest{}, srv))
+	for {
+		_, err := seriesClient.Recv()
+		if err == io.EOF {
+			break
+		}
+		testutil.Ok(t, err)
+	}
 }
 
 type panicStoreServer struct {

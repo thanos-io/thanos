@@ -25,12 +25,12 @@ func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
 
 // SamplesFromPromqlSamples converts a slice of promql.Sample
 // to a slice of Sample.
-func SamplesFromPromqlSamples(samples ...promql.Sample) ([]*Sample, []*Histogram) {
-	floats := make([]*Sample, 0, len(samples))
-	histograms := make([]*Histogram, 0, len(samples))
+func SamplesFromPromqlSamples(samples ...promql.Sample) ([]Sample, []Histogram) {
+	floats := make([]Sample, 0, len(samples))
+	histograms := make([]Histogram, 0, len(samples))
 	for _, s := range samples {
 		if s.H == nil {
-			floats = append(floats, &Sample{
+			floats = append(floats, Sample{
 				Value:     s.F,
 				Timestamp: s.T,
 			})
@@ -43,15 +43,15 @@ func SamplesFromPromqlSamples(samples ...promql.Sample) ([]*Sample, []*Histogram
 }
 
 // SamplesFromPromqlSeries converts promql.Series to a slice of Sample and a slice of Histogram.
-func SamplesFromPromqlSeries(series promql.Series) ([]*Sample, []*Histogram) {
-	floats := make([]*Sample, 0, len(series.Floats))
+func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
+	floats := make([]Sample, 0, len(series.Floats))
 	for _, f := range series.Floats {
-		floats = append(floats, &Sample{
+		floats = append(floats, Sample{
 			Value:     f.F,
 			Timestamp: f.T,
 		})
 	}
-	histograms := make([]*Histogram, 0, len(series.Histograms))
+	histograms := make([]Histogram, 0, len(series.Histograms))
 	for _, h := range series.Histograms {
 		histograms = append(histograms, FloatHistogramToHistogramProto(h.T, h.H))
 	}
@@ -63,7 +63,7 @@ func SamplesFromPromqlSeries(series promql.Series) ([]*Sample, []*Histogram) {
 // provided proto message. The caller has to make sure that the proto message
 // represents an integer histogram and not a float histogram.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L626-L645
-func HistogramProtoToHistogram(hp *Histogram) *histogram.Histogram {
+func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 	if hp.IsFloatHistogram() {
 		panic("HistogramProtoToHistogram called with a float histogram")
 	}
@@ -83,7 +83,7 @@ func HistogramProtoToHistogram(hp *Histogram) *histogram.Histogram {
 
 // FloatHistogramToHistogramProto converts a float histogram to a protobuf type.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L647-L667
-func FloatHistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogram {
+func FloatHistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	if !hp.IsFloatHistogram() {
 		panic("FloatHistogramProtoToFloatHistogram called with an integer histogram")
 	}
@@ -105,7 +105,7 @@ func FloatHistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogra
 // provided proto message to a Float Histogram. The caller has to make sure that
 // the proto message represents an float histogram and not a integer histogram.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L669-L688
-func HistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogram {
+func HistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	if hp.IsFloatHistogram() {
 		panic("HistogramProtoToFloatHistogram called with a float histogram")
 	}
@@ -123,7 +123,7 @@ func HistogramProtoToFloatHistogram(hp *Histogram) *histogram.FloatHistogram {
 	}
 }
 
-func spansProtoToSpans(s []*BucketSpan) []histogram.Span {
+func spansProtoToSpans(s []BucketSpan) []histogram.Span {
 	spans := make([]histogram.Span, len(s))
 	for i := 0; i < len(s); i++ {
 		spans[i] = histogram.Span{Offset: s[i].Offset, Length: s[i].Length}
@@ -143,8 +143,8 @@ func deltasToCounts(deltas []int64) []float64 {
 }
 
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L709-L723
-func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) *Histogram {
-	return &Histogram{
+func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) Histogram {
+	return Histogram{
 		Count:          &Histogram_CountInt{CountInt: h.Count},
 		Sum:            h.Sum,
 		Schema:         h.Schema,
@@ -160,8 +160,8 @@ func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) *Histogr
 }
 
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L725-L739
-func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogram) *Histogram {
-	return &Histogram{
+func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogram) Histogram {
+	return Histogram{
 		Count:          &Histogram_CountFloat{CountFloat: fh.Count},
 		Sum:            fh.Sum,
 		Schema:         fh.Schema,
@@ -176,10 +176,10 @@ func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogra
 	}
 }
 
-func spansToSpansProto(s []histogram.Span) []*BucketSpan {
-	spans := make([]*BucketSpan, len(s))
+func spansToSpansProto(s []histogram.Span) []BucketSpan {
+	spans := make([]BucketSpan, len(s))
 	for i := 0; i < len(s); i++ {
-		spans[i] = &BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
+		spans[i] = BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
 	}
 
 	return spans
