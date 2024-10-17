@@ -48,9 +48,9 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 		Timeseries: series,
 	}
 	var (
-		bs, err             = wreq.Marshal()
-		bsProto, paddedErr  = Marshal(wreq.Tenant, wreq.Timeseries)
-		bsPacked, packedErr = MarshalPacked(wreq.Tenant, wreq.Timeseries)
+		protoBytes, err                 = wreq.Marshal()
+		capnprotoBytes, paddedErr       = Marshal(wreq.Tenant, wreq.Timeseries)
+		capnprotoBytesPacked, packedErr = MarshalPacked(wreq.Tenant, wreq.Timeseries)
 	)
 	require.NoError(b, err)
 	require.NoError(b, paddedErr)
@@ -58,7 +58,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	b.Run("marshal_proto", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var err error
-			bsProto, err = wreq.Marshal()
+			_, err = wreq.Marshal()
 			require.NoError(b, err)
 		}
 	})
@@ -68,7 +68,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 			require.NoError(b, err)
 		}
 	})
-	b.Run("encoder", func(b *testing.B) {
+	b.Run("encode", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var err error
 			wr, err := Build("example_tenant", wreq.Timeseries)
@@ -78,7 +78,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 			require.NoError(b, capnp.NewEncoder(buf).Encode(wr.Message()))
 		}
 	})
-	b.Run("encoder_packed", func(b *testing.B) {
+	b.Run("encode_packed", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var err error
 			wr, err := Build("example_tenant", wreq.Timeseries)
@@ -92,12 +92,12 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	b.Run("unmarshal_proto", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			wr := storepb.WriteRequest{}
-			require.NoError(b, wr.Unmarshal(bsProto))
+			require.NoError(b, wr.Unmarshal(protoBytes))
 		}
 	})
 	b.Run("unmarshal", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			msg, err := capnp.Unmarshal(bs)
+			msg, err := capnp.Unmarshal(capnprotoBytes)
 			require.NoError(b, err)
 
 			_, err = ReadRootWriteRequest(msg)
@@ -106,16 +106,17 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	})
 	b.Run("unmarshal_packed", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			msg, err := capnp.UnmarshalPacked(bsPacked)
+			msg, err := capnp.UnmarshalPacked(capnprotoBytesPacked)
 			require.NoError(b, err)
 
 			_, err = ReadRootWriteRequest(msg)
 			require.NoError(b, err)
 		}
 	})
+
 	b.Run("decoder", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			msg, err := capnp.NewDecoder(bytes.NewReader(bs)).Decode()
+			msg, err := capnp.NewDecoder(bytes.NewReader(capnprotoBytes)).Decode()
 			require.NoError(b, err)
 
 			_, err = ReadRootWriteRequest(msg)
@@ -125,7 +126,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	b.Run("decoder_packed", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			msg, err := capnp.NewPackedDecoder(bytes.NewReader(bsPacked)).Decode()
+			msg, err := capnp.NewPackedDecoder(bytes.NewReader(capnprotoBytesPacked)).Decode()
 			require.NoError(b, err)
 
 			wr, err := ReadRootWriteRequest(msg)
