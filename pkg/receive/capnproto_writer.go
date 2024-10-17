@@ -142,29 +142,28 @@ func validateLabels(lbls labels.Labels) error {
 	}
 
 	var (
-		prev *labels.Label
-		err  error
+		isFirst  = true
+		prevName string
 	)
-	lbls.Range(func(l labels.Label) {
-		if err != nil {
-			return
-		}
+	return lbls.Validate(func(l labels.Label) error {
 		if l.Name == "" || l.Value == "" {
-			err = labelpb.ErrEmptyLabels
+			return labelpb.ErrEmptyLabels
 		}
-		if prev == nil {
-			prev = &l
-			return
+		if isFirst {
+			prevName = l.Name
+			isFirst = false
+			return nil
 		}
 
-		if l.Name == prev.Name {
-			err = labelpb.ErrDuplicateLabels
+		cmp := strings.Compare(l.Name, prevName)
+		switch cmp {
+		case 0:
+			return labelpb.ErrDuplicateLabels
+		case -1:
+			return labelpb.ErrOutOfOrderLabels
 		}
-		if l.Name < prev.Name {
-			err = labelpb.ErrOutOfOrderLabels
-		}
-		prev = &l
+
+		prevName = l.Name
+		return nil
 	})
-
-	return err
 }
