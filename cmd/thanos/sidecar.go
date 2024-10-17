@@ -59,6 +59,11 @@ func registerSidecar(app *extkingpin.App) {
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
+		lset, err := parseFlagLabels(conf.labelStrs)
+		if err != nil {
+			return errors.Wrap(err, "parse labels")
+		}
+
 		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(conf.reqLogConfig)
 
 		if err != nil {
@@ -102,7 +107,7 @@ func registerSidecar(app *extkingpin.App) {
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			&opts)
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, httpClient, grpcLogOpts, logFilterMethods)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, httpClient, grpcLogOpts, logFilterMethods, lset)
 	})
 }
 
@@ -117,6 +122,7 @@ func runSidecar(
 	httpClient *http.Client,
 	grpcLogOpts []grpc_logging.Option,
 	logFilterMethods []string,
+	lset labels.Labels,
 ) error {
 
 	var m = &promMetadata{
@@ -229,28 +235,33 @@ func runSidecar(
 				return errors.Wrap(err, "failed to get prometheus version")
 			}
 
-			// Blocking query of external labels before joining as a Source Peer into gossip.
-			// We retry infinitely until we reach and fetch labels from our Prometheus.
-			err = runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
-				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
-				defer iterCancel()
+			if !lset.IsEmpty() {
+				level.Info(logger).Log("msg", "overwriting external labels with configured labels", "labels", lset.String())
+				m.labels = lset
+			} else {
+				// Blocking query of external labels before joining as a Source Peer into gossip.
+				// We retry infinitely until we reach and fetch labels from our Prometheus.
+				err = runutil.Retry(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
+					iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
+					defer iterCancel()
 
-				if err := m.UpdateLabels(iterCtx); err != nil {
-					level.Warn(logger).Log(
-						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
-						"err", err,
+					if err := m.UpdateLabels(iterCtx); err != nil {
+						level.Warn(logger).Log(
+							"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
+							"err", err,
+						)
+						return err
+					}
+
+					level.Info(logger).Log(
+						"msg", "successfully loaded prometheus external labels",
+						"external_labels", m.Labels().String(),
 					)
-					return err
+					return nil
+				})
+				if err != nil {
+					return errors.Wrap(err, "initial external labels query")
 				}
-
-				level.Info(logger).Log(
-					"msg", "successfully loaded prometheus external labels",
-					"external_labels", m.Labels().String(),
-				)
-				return nil
-			})
-			if err != nil {
-				return errors.Wrap(err, "initial external labels query")
 			}
 
 			if m.Labels().Len() == 0 {
@@ -267,7 +278,14 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 				defer iterCancel()
 
-				if err := m.UpdateLabels(iterCtx); err != nil {
+				var err error
+				if lset.IsEmpty() {
+					err = m.UpdateLabels(iterCtx)
+				} else {
+					err = m.CheckHealth(iterCtx)
+				}
+
+				if err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 					statusProber.NotReady(err)
@@ -490,6 +508,10 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
+func (s *promMetadata) CheckHealth(ctx context.Context) error {
+	return s.client.Health(ctx, s.promURL)
+}
+
 func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -547,6 +569,7 @@ type sidecarConfig struct {
 	shipper         shipperConfig
 	limitMinTime    thanosmodel.TimeOrDurationValue
 	storeRateLimits store.SeriesSelectLimits
+	labelStrs       []string
 }
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -561,4 +584,5 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.storeRateLimits.RegisterFlags(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
+	cmd.Flag("label", "External labels to announce. If not defined, Prometheus external labels will used.").PlaceHolder("key=\"value\"").StringsVar(&sc.labelStrs)
 }
