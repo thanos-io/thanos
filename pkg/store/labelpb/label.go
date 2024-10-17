@@ -303,7 +303,7 @@ func ExtendSortedLabels(lset, extend labels.Labels) labels.Labels {
 }
 
 func PromLabelSetsToString(lsets []labels.Labels) string {
-	return PromLabelSetsToStringN(lsets, 500)
+	return PromLabelSetsToStringN(lsets, 200)
 }
 
 func PromLabelSetsToStringN(lsets []labels.Labels, maxLength int) string {
@@ -317,35 +317,6 @@ func PromLabelSetsToStringN(lsets []labels.Labels, maxLength int) string {
 		if maxLength <= 0 {
 			break
 		}
-	}
-	sort.Strings(s)
-	return strings.Join(s, ",")
-}
-
-func (m *ZLabelSet) UnmarshalJSON(entry []byte) error {
-	lbls := labels.Labels{}
-	if err := lbls.UnmarshalJSON(entry); err != nil {
-		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
-	}
-	m.Labels = ZLabelsFromPromLabels(lbls)
-	return nil
-}
-
-func (m *ZLabelSet) MarshalJSON() ([]byte, error) {
-	return m.PromLabels().MarshalJSON()
-}
-
-// PromLabels return Prometheus labels.Labels without extra allocation.
-func (m *ZLabelSet) PromLabels() labels.Labels {
-	return ZLabelsToPromLabels(m.Labels)
-}
-
-// DeepCopy copies labels and each label's string to separate bytes.
-func DeepCopy(lbls []ZLabel) []ZLabel {
-	ret := make([]ZLabel, len(lbls))
-	for i := range lbls {
-		ret[i].Name = string(noAllocBytes(lbls[i].Name))
-		ret[i].Value = string(noAllocBytes(lbls[i].Value))
 	}
 	sort.Strings(s)
 	return strings.Join(s, ",")
