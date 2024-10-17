@@ -1,10 +1,14 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package receive
 
 import (
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/stretchr/testify/require"
 	"strconv"
 	"testing"
+
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkValidateLabels(b *testing.B) {
