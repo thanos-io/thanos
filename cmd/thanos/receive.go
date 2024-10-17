@@ -818,17 +818,17 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
-	replicationAddr    string
-	rwAddress          string
-	rwServerCert       string
-	rwServerKey        string
-	rwServerClientCA   string
-	rwClientCert       string
-	rwClientKey        string
-	rwClientSecure     bool
-	rwClientServerCA   string
-	rwClientServerName string
-	rwClientSkipVerify bool
+	replicationAddr       string
+	rwAddress             string
+	rwServerCert          string
+	rwServerKey           string
+	rwServerClientCA      string
+	rwClientCert          string
+	rwClientKey           string
+	rwClientSecure        bool
+	rwClientServerCA      string
+	rwClientServerName    string
+	rwClientSkipVerify    bool
 	rwServerTlsMinVersion string
 
 	dataDir   string
