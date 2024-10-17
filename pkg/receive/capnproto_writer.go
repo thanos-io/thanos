@@ -66,7 +66,10 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		Appender:       app,
 	}
 
-	var series writecapnp.Series
+	var (
+		series  writecapnp.Series
+		builder labels.ScratchBuilder
+	)
 	for wreq.Next() {
 		wreq.At(&series)
 
@@ -82,14 +85,14 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(series.Labels, series.Labels.Hash())
 		if ref == 0 {
-			lset = series.Labels.Copy()
 			// NOTE(GiedriusS): do a deep copy because the labels are reused in the capnp message.
 			// Creation of new series is much rarer compared to adding extra samples
 			// to an existing series.
-			for i := range lset {
-				lset[i].Name = strings.Clone(lset[i].Name)
-				lset[i].Value = strings.Clone(lset[i].Value)
-			}
+			builder.Reset()
+			series.Labels.Range(func(l labels.Label) {
+				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+			})
+			lset = builder.Labels()
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
