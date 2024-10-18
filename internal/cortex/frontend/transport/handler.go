@@ -204,8 +204,10 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats *stats.BuiltinStats) {
 	remoteUser, _, _ := r.BasicAuth()
 
+	level.Debug(util_log.WithContext(r.Context(), f.log)).Log("msg", "query stats raw", "stats", fmt.Sprintf("%+v", stats))
+
 	// Log stats.
-	fields := []interface{}{
+	logMessage := []interface{}{
 		"msg", "query stats",
 		"component", "query-frontend",
 		"method", r.Method,
@@ -220,8 +222,6 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"query_timings_inner_eval_time", stats.Timings.InnerEvalTime,
 		"query_timings_result_sort_time", stats.Timings.ResultSortTime,
 	}
-	logMessage := append(fields, formatQueryString(queryString)...)
-
 	if stats.Samples != nil {
 		samples := stats.Samples
 
@@ -230,6 +230,8 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 			"peak_samples", samples.PeakSamples,
 		}...)
 	}
+
+	logMessage = append(logMessage, formatQueryString(queryString)...)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
