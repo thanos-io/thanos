@@ -13,17 +13,18 @@ import (
 
 // RoundTripper that forwards requests to downstream URL.
 type downstreamRoundTripper struct {
-	downstreamURL *url.URL
-	transport     http.RoundTripper
+	downstreamURL     *url.URL
+	transport         http.RoundTripper
+	queryStatsEnabled bool
 }
 
-func NewDownstreamRoundTripper(downstreamURL string, transport http.RoundTripper) (http.RoundTripper, error) {
+func NewDownstreamRoundTripper(downstreamURL string, transport http.RoundTripper, queryStatsEnabled bool) (http.RoundTripper, error) {
 	u, err := url.Parse(downstreamURL)
 	if err != nil {
 		return nil, err
 	}
 
-	return &downstreamRoundTripper{downstreamURL: u, transport: transport}, nil
+	return &downstreamRoundTripper{downstreamURL: u, transport: transport, queryStatsEnabled: queryStatsEnabled}, nil
 }
 
 func (d downstreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -34,6 +35,13 @@ func (d downstreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, erro
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if d.queryStatsEnabled {
+		// add &stats query param to get thanos-query to add query statistics to log
+		q := r.URL.Query()
+		q.Set("stats", "true")
+		r.URL.RawQuery = q.Encode()
 	}
 
 	r.URL.Scheme = d.downstreamURL.Scheme
