@@ -132,8 +132,11 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 			wr, err := ReadRootWriteRequest(msg)
 			require.NoError(b, err)
 
+			data, err := wr.Data()
+			require.NoError(b, err)
+
 			var ts Series
-			iter, err := NewRequest(wr)
+			iter, err := NewRequest(data.At(0))
 			require.NoError(b, err)
 			for iter.Next() {
 				require.NoError(b, iter.At(&ts))

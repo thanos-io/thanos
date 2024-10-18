@@ -58,6 +58,7 @@ message WriteRequest {
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+  repeated TimeSeriesTenantTuple timeseriesTenantData = 4 [(gogoproto.nullable) = false];
 }
 
 message SeriesRequest {
@@ -107,10 +108,14 @@ message SeriesRequest {
   // This allows faster deduplication by clients.
   // NOTE(bwplotka): thanos.info.store.supports_without_replica_labels field has to return true to let client knows
   // server supports it.
-  repeated string without_replica_labels = 14;
+  repeated string without_replica_labels = 15;
 
   // limit is used to limit the number of results returned
-  int64 limit = 15;
+  int64 limit = 16;
+
+  // TODO(GiedriusS): not used. Just here to maintain compatibility
+  // with current protos in prod.
+  uint64 maximum_string_slots = 14;
 }
 
 // QueryHints represents hints from PromQL that might help to
@@ -171,6 +176,12 @@ enum Aggr {
   MAX = 4;
   COUNTER = 5;
 }
+
+message TimeSeriesTenantTuple {
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+}
+
 
 message SeriesResponse {
   oneof result {

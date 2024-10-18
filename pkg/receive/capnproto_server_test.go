@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -25,7 +26,7 @@ func TestCapNProtoServer_SingleConcurrentClient(t *testing.T) {
 			&CapNProtoWriterOptions{},
 		)
 		listener = bufconn.Listen(1024)
-		handler  = NewCapNProtoHandler(log.NewNopLogger(), writer)
+		handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
 		srv      = NewCapNProtoServer(listener, handler, log.NewNopLogger())
 	)
 	go func() {
@@ -53,7 +54,7 @@ func TestCapNProtoServer_MultipleConcurrentClients(t *testing.T) {
 			&CapNProtoWriterOptions{},
 		)
 		listener = bufconn.Listen(1024)
-		handler  = NewCapNProtoHandler(log.NewNopLogger(), writer)
+		handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
 		srv      = NewCapNProtoServer(listener, handler, log.NewNopLogger())
 	)
 	go func() {

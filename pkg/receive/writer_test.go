@@ -363,7 +363,10 @@ func TestWriter(t *testing.T) {
 					capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, req.Timeseries)
 					testutil.Ok(t, err)
 
-					wr, err := writecapnp.NewRequest(capnpReq)
+					data, err := capnpReq.Data()
+					testutil.Ok(t, err)
+
+					wr, err := writecapnp.NewRequest(data.At(0))
 					testutil.Ok(t, err)
 					err = w.Write(context.Background(), tenancy.DefaultTenant, wr)
 

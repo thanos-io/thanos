@@ -254,7 +254,7 @@ func newTestHandlerHashring(
 			writer := NewCapNProtoWriter(logger, newFakeTenantAppendable(appendables[i]), nil)
 			var (
 				listener = bufconn.Listen(1024)
-				handler  = NewCapNProtoHandler(log.NewNopLogger(), writer)
+				handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
 			)
 			srv := NewCapNProtoServer(listener, handler, log.NewNopLogger())
 			client := writecapnp.NewRemoteWriteClient(listener, logger)
@@ -1780,17 +1780,23 @@ func TestDistributeSeries(t *testing.T) {
 	hr := &hashringSeenTenants{Hashring: hashring}
 	h.Hashring(hr)
 
-	_, remote, err := h.distributeTimeseriesToReplicas(
-		"foo",
-		[]uint64{0},
-		[]prompb.TimeSeries{
+	_, remote, _, err := h.distributeTimeseriesToReplicas(
+		[]wreqTenantTuple{
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
-			},
-			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+				tenant: "foo",
+				wreq: &prompb.WriteRequest{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", metaLabelTenantID, "bar")),
+						},
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", metaLabelTenantID, "boo")),
+						},
+					},
+				},
 			},
 		},
+		[]uint64{0},
 	)
 	require.NoError(t, err)
 	require.Len(t, remote, 1)
@@ -1838,17 +1844,22 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 				return
 			}
 
-			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
-					{
-						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
-						Samples: []prompb.Sample{
+			_, err := h.handleRequest(ctx, 0, []wreqTenantTuple{
+				{
+					wreq: &prompb.WriteRequest{
+						Timeseries: []prompb.TimeSeries{
 							{
-								Timestamp: time.Now().Unix(),
-								Value:     123,
+								Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+								Samples: []prompb.Sample{
+									{
+										Timestamp: time.Now().Unix(),
+										Value:     123,
+									},
+								},
 							},
 						},
 					},
+					tenant: "test",
 				},
 			})
 			require.Error(t, err)
