@@ -146,6 +146,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var statsResponse ResponseWithStats
 		if err := json.Unmarshal(respBuf.Bytes(), &statsResponse); err == nil {
 			if statsResponse.Data.Stats != nil {
+				queryString = f.parseRequestQueryString(r, buf)
 				f.reportQueryStats(r, queryString, queryResponseTime, statsResponse.Data.Stats)
 			} else {
 				level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "error parsing query stats", "err", errors.New("stats are nil"))
