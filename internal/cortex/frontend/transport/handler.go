@@ -130,6 +130,10 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(resp.StatusCode)
+
+	var respBuf bytes.Buffer
+	resp.Body = io.NopCloser(io.TeeReader(resp.Body, &respBuf))
+
 	// log copy response body error so that we will know even though success response code returned
 	bytesCopied, err := io.Copy(w, resp.Body)
 	if err != nil && !errors.Is(err, syscall.EPIPE) {
@@ -138,7 +142,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if f.cfg.QueryStatsEnabled {
 		var statsResponse ResponseWithStats
-		if err := json.Unmarshal(buf.Bytes(), &statsResponse); err == nil {
+		if err := json.Unmarshal(respBuf.Bytes(), &statsResponse); err == nil {
 			if statsResponse.Stats != nil {
 				f.reportQueryStats(r, queryString, queryResponseTime, statsResponse.Stats)
 			} else {
