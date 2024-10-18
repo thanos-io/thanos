@@ -97,8 +97,11 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 	return h
 }
 
-type ResponseWithStats struct {
+type ResponseDataWithStats struct {
 	Stats *stats.BuiltinStats `json:"stats"`
+}
+type ResponseWithStats struct {
+	Data ResponseDataWithStats `json:"data"`
 }
 
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +146,8 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f.cfg.QueryStatsEnabled {
 		var statsResponse ResponseWithStats
 		if err := json.Unmarshal(respBuf.Bytes(), &statsResponse); err == nil {
-			if statsResponse.Stats != nil {
-				f.reportQueryStats(r, queryString, queryResponseTime, statsResponse.Stats)
+			if statsResponse.Data.Stats != nil {
+				f.reportQueryStats(r, queryString, queryResponseTime, statsResponse.Data.Stats)
 			} else {
 				level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "error parsing query stats", "err", errors.New("stats are nil"))
 			}
