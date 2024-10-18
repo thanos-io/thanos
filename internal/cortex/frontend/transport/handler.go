@@ -6,12 +6,13 @@ package transport
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/prometheus/prometheus/util/stats"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,12 +20,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/httpgrpc/server"
 
-	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
-	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
 	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 )
@@ -71,47 +69,45 @@ func NewHandler(cfg HandlerConfig, roundTripper http.RoundTripper, log log.Logge
 		roundTripper: roundTripper,
 	}
 
-	if cfg.QueryStatsEnabled {
-		h.querySeconds = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_query_seconds_total",
-			Help: "Total amount of wall clock time spend processing queries.",
-		}, []string{"user"})
-
-		h.querySeries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_query_fetched_series_total",
-			Help: "Number of series fetched to execute a query.",
-		}, []string{"user"})
-
-		h.queryBytes = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_query_fetched_chunks_bytes_total",
-			Help: "Size of all chunks fetched to execute a query in bytes.",
-		}, []string{"user"})
-
-		h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
-			h.querySeconds.DeleteLabelValues(user)
-			h.querySeries.DeleteLabelValues(user)
-			h.queryBytes.DeleteLabelValues(user)
-		})
-		// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
-		_ = h.activeUsers.StartAsync(context.Background())
-	}
+	//if cfg.QueryStatsEnabled {
+	//	h.querySeconds = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	//		Name: "cortex_query_seconds_total",
+	//		Help: "Total amount of wall clock time spend processing queries.",
+	//	}, []string{"user"})
+	//
+	//	h.querySeries = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	//		Name: "cortex_query_fetched_series_total",
+	//		Help: "Number of series fetched to execute a query.",
+	//	}, []string{"user"})
+	//
+	//	h.queryBytes = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	//		Name: "cortex_query_fetched_chunks_bytes_total",
+	//		Help: "Size of all chunks fetched to execute a query in bytes.",
+	//	}, []string{"user"})
+	//
+	//	h.activeUsers = util.NewActiveUsersCleanupWithDefaultValues(func(user string) {
+	//		h.querySeconds.DeleteLabelValues(user)
+	//		h.querySeries.DeleteLabelValues(user)
+	//		h.queryBytes.DeleteLabelValues(user)
+	//	})
+	//	// If cleaner stops or fail, we will simply not clean the metrics for inactive users.
+	//	_ = h.activeUsers.StartAsync(context.Background())
+	//}
 
 	return h
 }
 
+type ResponseDataWithStats struct {
+	Stats *stats.BuiltinStats `json:"stats"`
+}
+type ResponseWithStats struct {
+	Data ResponseDataWithStats `json:"data"`
+}
+
 func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		stats       *querier_stats.Stats
 		queryString url.Values
 	)
-
-	// Initialise the stats in the context and make sure it's propagated
-	// down the request chain.
-	if f.cfg.QueryStatsEnabled {
-		var ctx context.Context
-		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
-		r = r.WithContext(ctx)
-	}
 
 	defer func() {
 		_ = r.Body.Close()
@@ -136,15 +132,32 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hs[h] = vs
 	}
 
-	if f.cfg.QueryStatsEnabled {
-		writeServiceTimingHeader(queryResponseTime, hs, stats)
-	}
-
 	w.WriteHeader(resp.StatusCode)
+
+	var respBuf bytes.Buffer
+	resp.Body = io.NopCloser(io.TeeReader(resp.Body, &respBuf))
+
 	// log copy response body error so that we will know even though success response code returned
 	bytesCopied, err := io.Copy(w, resp.Body)
 	if err != nil && !errors.Is(err, syscall.EPIPE) {
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log("msg", "write response body error", "bytesCopied", bytesCopied, "err", err)
+	}
+
+	if f.cfg.QueryStatsEnabled {
+		var statsResponse ResponseWithStats
+		if err := json.Unmarshal(respBuf.Bytes(), &statsResponse); err == nil {
+			if statsResponse.Data.Stats != nil {
+				if statsResponse.Data.Stats.Samples != nil && statsResponse.Data.Stats.Samples.PeakSamples == 0 {
+					level.Debug(util_log.WithContext(r.Context(), f.log)).Log("responseBody", string(respBuf.Bytes()), "msg", "no samples returned")
+				}
+				queryString = f.parseRequestQueryString(r, buf)
+				f.reportQueryStats(r, queryString, queryResponseTime, statsResponse.Data.Stats)
+			} else {
+				level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "error parsing query stats", "err", errors.New("stats are nil"))
+			}
+		} else {
+			level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "error parsing query stats", "err", err)
+		}
 	}
 
 	// Check whether we should parse the query string.
@@ -155,9 +168,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if shouldReportSlowQuery {
 		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
-	}
-	if f.cfg.QueryStatsEnabled {
-		f.reportQueryStats(r, queryString, queryResponseTime, stats)
 	}
 }
 
@@ -201,25 +211,13 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
-func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats *querier_stats.Stats) {
-	tenantIDs, err := tenant.TenantIDs(r.Context())
-	if err != nil {
-		return
-	}
-	userID := tenant.JoinTenantIDs(tenantIDs)
-	wallTime := stats.LoadWallTime()
-	numSeries := stats.LoadFetchedSeries()
-	numBytes := stats.LoadFetchedChunkBytes()
+func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats *stats.BuiltinStats) {
 	remoteUser, _, _ := r.BasicAuth()
 
-	// Track stats.
-	f.querySeconds.WithLabelValues(userID).Add(wallTime.Seconds())
-	f.querySeries.WithLabelValues(userID).Add(float64(numSeries))
-	f.queryBytes.WithLabelValues(userID).Add(float64(numBytes))
-	f.activeUsers.UpdateUserTimestamp(userID, time.Now())
+	level.Debug(util_log.WithContext(r.Context(), f.log)).Log("msg", "query stats raw", "stats", fmt.Sprintf("%+v", stats))
 
 	// Log stats.
-	logMessage := append([]interface{}{
+	logMessage := []interface{}{
 		"msg", "query stats",
 		"component", "query-frontend",
 		"method", r.Method,
@@ -227,10 +225,23 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"remote_user", remoteUser,
 		"remote_addr", r.RemoteAddr,
 		"response_time", queryResponseTime,
-		"query_wall_time_seconds", wallTime.Seconds(),
-		"fetched_series_count", numSeries,
-		"fetched_chunks_bytes", numBytes,
-	}, formatQueryString(queryString)...)
+		"query_timings_preparation_time", stats.Timings.QueryPreparationTime,
+		"query_timings_eval_total_time", stats.Timings.EvalTotalTime,
+		"query_timings_exec_total_time", stats.Timings.ExecTotalTime,
+		"query_timings_exec_queue_time", stats.Timings.ExecQueueTime,
+		"query_timings_inner_eval_time", stats.Timings.InnerEvalTime,
+		"query_timings_result_sort_time", stats.Timings.ResultSortTime,
+	}
+	if stats.Samples != nil {
+		samples := stats.Samples
+
+		logMessage = append(logMessage, []interface{}{
+			"total_queryable_samples", samples.TotalQueryableSamples,
+			"peak_samples", samples.PeakSamples,
+		}...)
+	}
+
+	logMessage = append(logMessage, formatQueryString(queryString)...)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
@@ -268,18 +279,4 @@ func writeError(w http.ResponseWriter, err error) {
 		}
 	}
 	server.WriteError(w, err)
-}
-
-func writeServiceTimingHeader(queryResponseTime time.Duration, headers http.Header, stats *querier_stats.Stats) {
-	if stats != nil {
-		parts := make([]string, 0)
-		parts = append(parts, statsValue("querier_wall_time", stats.LoadWallTime()))
-		parts = append(parts, statsValue("response_time", queryResponseTime))
-		headers.Set(ServiceTimingHeaderName, strings.Join(parts, ", "))
-	}
-}
-
-func statsValue(name string, d time.Duration) string {
-	durationInMs := strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', -1, 64)
-	return name + ";dur=" + durationInMs
 }
