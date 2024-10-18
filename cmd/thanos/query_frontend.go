@@ -313,7 +313,7 @@ func runQueryFrontend(
 		return err
 	}
 
-	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
+	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper, cfg.CortexHandlerConfig.QueryStatsEnabled)
 	if err != nil {
 		return errors.Wrap(err, "setup downstream roundtripper")
 	}
