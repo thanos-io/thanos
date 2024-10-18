@@ -200,7 +200,7 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
-func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats stats.QueryStats) {
+func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats *stats.BuiltinStats) {
 	remoteUser, _, _ := r.BasicAuth()
 
 	// Log stats.
@@ -212,22 +212,22 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"remote_user", remoteUser,
 		"remote_addr", r.RemoteAddr,
 		"response_time", queryResponseTime,
-		"query_timings_preparation_time", stats.Builtin().Timings.QueryPreparationTime,
-		"query_timings_eval_total_time", stats.Builtin().Timings.EvalTotalTime,
-		"query_timings_exec_total_time", stats.Builtin().Timings.ExecTotalTime,
-		"query_timings_exec_queue_time", stats.Builtin().Timings.ExecQueueTime,
-		"query_timings_inner_eval_time", stats.Builtin().Timings.InnerEvalTime,
-		"query_timings_result_sort_time", stats.Builtin().Timings.ResultSortTime,
+		"query_timings_preparation_time", stats.Timings.QueryPreparationTime,
+		"query_timings_eval_total_time", stats.Timings.EvalTotalTime,
+		"query_timings_exec_total_time", stats.Timings.ExecTotalTime,
+		"query_timings_exec_queue_time", stats.Timings.ExecQueueTime,
+		"query_timings_inner_eval_time", stats.Timings.InnerEvalTime,
+		"query_timings_result_sort_time", stats.Timings.ResultSortTime,
 	}
 	logMessage := append(fields, formatQueryString(queryString)...)
 
-	if stats.Builtin().Samples != nil {
-		samples := stats.Builtin().Samples
+	if stats.Samples != nil {
+		samples := stats.Samples
 
 		logMessage = append(logMessage, []interface{}{
 			"total_queryable_samples", samples.TotalQueryableSamples,
 			"peak_samples", samples.PeakSamples,
-		})
+		}...)
 	}
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
