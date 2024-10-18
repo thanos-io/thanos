@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"net"
-	"unsafe"
 
 	"capnproto.org/go/capnp/v3"
 	"capnproto.org/go/capnp/v3/rpc"
@@ -95,12 +94,12 @@ func (c *CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_wri
 		}
 		defer req.Close()
 
-		tenant, err := d.TenantBytes()
+		tenant, err := d.Tenant()
 		if err != nil {
 			return err
 		}
 
-		errs.Add(c.writer.Write(ctx, unsafe.String(&tenant[0], len(tenant)), req))
+		errs.Add(c.writer.Write(ctx, tenant, req))
 	}
 
 	if err := errs.ErrOrNil(); err != nil {
