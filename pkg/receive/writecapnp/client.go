@@ -84,11 +84,21 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 		if err := params.SetWr(wr); err != nil {
 			return err
 		}
-		wr, err = params.Wr()
+
+		tl, err := NewTimeSeriesTenantTuple_List(seg, int32(len(in.TimeseriesTenantData)))
 		if err != nil {
 			return err
 		}
-		return BuildInto(wr, in.Tenant, in.Timeseries)
+		if err := wr.SetData(tl); err != nil {
+			return err
+		}
+
+		for i, d := range in.TimeseriesTenantData {
+			if err := BuildInto(tl.At(i), d.Tenant, d.Timeseries); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	defer release()
 

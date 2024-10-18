@@ -1154,6 +1154,115 @@ func TestReceiveExtractsTenant(t *testing.T) {
 	})
 }
 
+func TestReceiveMultipleTenants(t *testing.T) {
+	t.Run("proto", func(t *testing.T) {
+		e, err := e2e.NewDockerEnvironment("receive-mptenant")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+		h := receive.HashringConfig{
+			TenantMatcherType: "glob",
+			Tenants: []string{
+				"foo*",
+			},
+			Endpoints: []receive.Endpoint{
+				{Address: i.InternalEndpoint("grpc"), CapNProtoAddress: i.InternalEndpoint("capnp")},
+			},
+		}
+
+		r := e2ethanos.NewReceiveBuilder(e, "router").WithRouting(1, h).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+		ts := time.Now()
+
+		var attempts int
+		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+			attempts++
+			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []prompb.Label{
+							{Name: model.MetricNameLabel, Value: "myself"},
+							{Name: "thanos_tenant_id", Value: "foobar"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: timestamp.FromTime(ts)},
+						},
+					},
+					{
+						Labels: []prompb.Label{
+							{Name: model.MetricNameLabel, Value: "myself"},
+							{Name: "thanos_tenant_id", Value: "foobaq"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: timestamp.FromTime(ts)},
+						},
+					},
+				},
+			})
+		}))
+
+		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(float64(attempts)), []string{"grpc_server_handled_total"}, e2emon.WaitMissingMetrics()))
+	})
+
+	t.Run("capnp", func(t *testing.T) {
+		e, err := e2e.NewDockerEnvironment("receive-mctenant")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+		h := receive.HashringConfig{
+			TenantMatcherType: "glob",
+			Tenants: []string{
+				"foo*",
+			},
+			Endpoints: []receive.Endpoint{
+				{Address: i.InternalEndpoint("grpc"), CapNProtoAddress: i.InternalEndpoint("capnp")},
+			},
+		}
+
+		r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(1, h).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+		ts := time.Now()
+
+		var attempts int
+		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+			attempts++
+			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []prompb.Label{
+							{Name: model.MetricNameLabel, Value: "myself"},
+							{Name: "thanos_tenant_id", Value: "foobar"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: timestamp.FromTime(ts)},
+						},
+					},
+					{
+						Labels: []prompb.Label{
+							{Name: model.MetricNameLabel, Value: "myself"},
+							{Name: "thanos_tenant_id", Value: "foobaq"},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: timestamp.FromTime(ts)},
+						},
+					},
+				},
+			})
+		}))
+
+		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(float64(attempts)), []string{"thanos_receive_capnproto_handled_total"}, e2emon.WaitMissingMetrics()))
+	})
+
+}
+
 func TestReceiveCpnp(t *testing.T) {
 	e, err := e2e.NewDockerEnvironment("receive-cpnp")
 	testutil.Ok(t, err)

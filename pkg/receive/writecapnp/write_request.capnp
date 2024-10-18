@@ -72,10 +72,17 @@ struct TimeSeries {
     exemplars @3: List(Exemplar);
 }
 
+struct TimeSeriesTenantTuple {
+    symbols @0: Symbols;
+    timeSeries @1 :List(TimeSeries);
+    tenant @2: Text;
+}
+
 struct WriteRequest {
     symbols @0: Symbols;
     timeSeries @1 :List(TimeSeries);
     tenant @2: Text;
+    data @3 :List(TimeSeriesTenantTuple);
 }
 
 enum WriteError {

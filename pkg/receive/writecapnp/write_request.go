@@ -39,7 +39,7 @@ type Request struct {
 	series  TimeSeries_List
 }
 
-func NewRequest(wr WriteRequest) (*Request, error) {
+func NewRequest(wr TimeSeriesTenantTuple) (*Request, error) {
 	ts, err := wr.TimeSeries()
 	if err != nil {
 		return nil, err

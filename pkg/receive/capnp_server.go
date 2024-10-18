@@ -12,6 +12,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -55,32 +57,51 @@ func (c *CapNProtoServer) Shutdown() {
 }
 
 type CapNProtoHandler struct {
-	writer *CapNProtoWriter
-	logger log.Logger
+	writer       *CapNProtoWriter
+	logger       log.Logger
+	handledTotal prometheus.Counter
 }
 
-func NewCapNProtoHandler(logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
-	return &CapNProtoHandler{logger: logger, writer: writer}
+func NewCapNProtoHandler(reg prometheus.Registerer, logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
+	handledTotal := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_capnproto_handled_total",
+		Help: "Total number of handled CapNProto requests.",
+	})
+
+	return &CapNProtoHandler{handledTotal: handledTotal, logger: logger, writer: writer}
 }
 
-func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_write) error {
+func (c *CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_write) error {
+	c.handledTotal.Inc()
+
 	call.Go()
 	wr, err := call.Args().Wr()
 	if err != nil {
 		return err
 	}
-	t, err := wr.Tenant()
+
+	data, err := wr.Data()
 	if err != nil {
 		return err
 	}
-	req, err := writecapnp.NewRequest(wr)
-	if err != nil {
-		return err
-	}
-	defer req.Close()
 
 	var errs writeErrors
-	errs.Add(c.writer.Write(ctx, t, req))
+	for i := 0; i < data.Len(); i++ {
+		d := data.At(i)
+		req, err := writecapnp.NewRequest(d)
+		if err != nil {
+			return err
+		}
+		defer req.Close()
+
+		tenant, err := d.Tenant()
+		if err != nil {
+			return err
+		}
+
+		errs.Add(c.writer.Write(ctx, tenant, req))
+	}
+
 	if err := errs.ErrOrNil(); err != nil {
 		level.Debug(c.logger).Log("msg", "failed to handle request", "err", err)
 		result, allocErr := call.AllocResults()

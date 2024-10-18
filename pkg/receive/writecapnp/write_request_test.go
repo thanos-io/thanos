@@ -19,6 +19,11 @@ func TestNewRequest(t *testing.T) {
 	wr, err := NewRootWriteRequest(seg)
 	require.NoError(t, err)
 
+	l, err := NewTimeSeriesTenantTuple_List(seg, 1)
+	require.NoError(t, err)
+
+	require.NoError(t, wr.SetData(l))
+
 	symbols, err := NewSymbols(seg)
 	require.NoError(t, err)
 
@@ -31,9 +36,9 @@ func TestNewRequest(t *testing.T) {
 	list.Set(1, 6)
 
 	require.NoError(t, symbols.SetOffsets(list))
-	require.NoError(t, wr.SetSymbols(symbols))
+	require.NoError(t, l.At(0).SetSymbols(symbols))
 
-	req, err := NewRequest(wr)
+	req, err := NewRequest(l.At(0))
 	require.NoError(t, err)
 
 	require.Equal(t, "foo", (*req.symbols)[0])

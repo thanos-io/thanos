@@ -254,7 +254,7 @@ func newTestHandlerHashring(
 			writer := NewCapNProtoWriter(logger, newFakeTenantAppendable(appendables[i]), nil)
 			var (
 				listener = bufconn.Listen(1024)
-				handler  = NewCapNProtoHandler(log.NewNopLogger(), writer)
+				handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
 			)
 			srv := NewCapNProtoServer(listener, handler, log.NewNopLogger())
 			client := writecapnp.NewRemoteWriteClient(listener, logger)
