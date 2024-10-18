@@ -148,7 +148,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check whether we should parse the query string.
-	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
+	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 &&
+		queryResponseTime > f.cfg.LogQueriesLongerThan &&
+		isQueryEndpoint(r.URL.Path)
 	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
 		queryString = f.parseRequestQueryString(r, buf)
 	}
@@ -159,6 +161,13 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
 	}
+}
+
+// isQueryEndpoint returns true if the path is any of the Prometheus HTTP API,
+// query-related endpoints.
+// Example: /api/v1/query, /api/v1/query_range, /api/v1/series, /api/v1/label, /api/v1/labels
+func isQueryEndpoint(path string) bool {
+	return strings.HasPrefix(path, "/api/v1")
 }
 
 // reportSlowQuery reports slow queries.
