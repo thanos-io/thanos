@@ -902,6 +902,9 @@ func (h *Handler) distributeTimeseriesToReplicas(
 				if endpoint.HasAddress(h.options.Endpoint) {
 					writeDestination = localWrites
 					localTenantsSeen[tenant] = struct{}{}
+					// All local writes are considered replicated i.e. it is the final destination so
+					// replica field value does not matter.
+					endpointReplica.replica = 0
 				}
 				writeableSeries, ok := writeDestination[endpointReplica]
 				if !ok {
