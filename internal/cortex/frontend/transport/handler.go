@@ -146,6 +146,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var statsResponse ResponseWithStats
 		if err := json.Unmarshal(respBuf.Bytes(), &statsResponse); err == nil {
 			if statsResponse.Data.Stats != nil {
+				if statsResponse.Data.Stats.Samples != nil && statsResponse.Data.Stats.Samples.PeakSamples == 0 {
+					level.Debug(util_log.WithContext(r.Context(), f.log)).Log("responseBody", string(respBuf.Bytes()), "msg", "no samples returned")
+				}
 				queryString = f.parseRequestQueryString(r, buf)
 				f.reportQueryStats(r, queryString, queryResponseTime, statsResponse.Data.Stats)
 			} else {
