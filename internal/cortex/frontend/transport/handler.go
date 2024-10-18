@@ -23,7 +23,6 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/httpgrpc/server"
 
-	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
 	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"
 )
@@ -202,15 +201,7 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 }
 
 func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats stats.QueryStats) {
-	tenantIDs, err := tenant.TenantIDs(r.Context())
-	if err != nil {
-		return
-	}
-	userID := tenant.JoinTenantIDs(tenantIDs)
 	remoteUser, _, _ := r.BasicAuth()
-
-	// Track stats.
-	f.activeUsers.UpdateUserTimestamp(userID, time.Now())
 
 	// Log stats.
 	fields := []interface{}{
