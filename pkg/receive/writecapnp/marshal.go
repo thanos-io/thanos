@@ -45,13 +45,14 @@ func Build(tenant string, tsreq []prompb.TimeSeries) (WriteRequest, error) {
 	if err := wr.SetData(t); err != nil {
 		return WriteRequest{}, err
 	}
-	if err := BuildInto(t.At(0), tenant, tsreq); err != nil {
+	ttd := t.At(0)
+	if err := BuildInto(&ttd, tenant, tsreq); err != nil {
 		return WriteRequest{}, err
 	}
 	return wr, nil
 }
 
-func BuildInto(wr TimeSeriesTenantTuple, tenant string, tsreq []prompb.TimeSeries) error {
+func BuildInto(wr *TimeSeriesTenantTuple, tenant string, tsreq []prompb.TimeSeries) error {
 	if err := wr.SetTenant(tenant); err != nil {
 		return err
 	}
