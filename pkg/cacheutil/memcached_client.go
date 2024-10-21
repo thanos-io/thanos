@@ -134,7 +134,7 @@ type MemcachedClientConfig struct {
 	MaxItemSize model.Bytes `yaml:"max_item_size"`
 
 	// MaxGetMultiBatchSize specifies the maximum number of keys a single underlying
-	// GetMulti() should run. If more keys are specified, internally keys are splitted
+	// GetMulti() should run. If more keys are specified, internally keys are split
 	// into multiple batches and fetched concurrently, honoring MaxGetMultiConcurrency parallelism.
 	// If set to 0, the max batch size is unlimited.
 	MaxGetMultiBatchSize int `yaml:"max_get_multi_batch_size"`

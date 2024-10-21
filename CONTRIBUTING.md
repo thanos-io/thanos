@@ -68,7 +68,7 @@ The following section explains various suggestions and procedures to note during
 
 * It is strongly recommended that you use Linux distributions systems or macOS for development.
 * Running [WSL 2 (on Windows)](https://learn.microsoft.com/en-us/windows/wsl/) is also possible. Note that if during development you run a local Kubernetes cluster and have a Service with `service.spec.sessionAffinity: ClientIP`, it will break things until it's removed[^windows_xt_recent].
-* Go 1.21.x or higher.
+* Go 1.22.x or higher.
 * Docker (to run e2e tests)
 * For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
@@ -164,7 +164,7 @@ $ git push origin <your_branch_for_new_pr>
 
 **Formatting**
 
-First of all, fall back to `make help` to see all availible commands. There are a few checks that happen when making a PR and these need to pass. We can make sure locally before making the PR by using commands that are related to your changes:
+First of all, fall back to `make help` to see all available commands. There are a few checks that happen when making a PR and these need to pass. We can make sure locally before making the PR by using commands that are related to your changes:
 - `make docs` generates, formats and cleans up white noise.
 - `make changed-docs` does same as above, but just for changed docs by checking `git diff` on which files are changed.
 - `make check-docs` generates, formats, cleans up white noise and checks links. Since it can be annoying to wait on link check results - it takes forever - to skip the check, you can use `make docs`).

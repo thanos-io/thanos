@@ -490,6 +490,14 @@ func runCompact(
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
 
+			// Regenerate the filtered list of blocks after the sync,
+			// to include the blocks created by the first pass.
+			filteredMetas = sy.Metas()
+			noDownsampleBlocks = noDownsampleMarkerFilter.NoDownsampleMarkedBlocks()
+			for ul := range noDownsampleBlocks {
+				delete(filteredMetas, ul)
+			}
+
 			if err := downsampleBucket(
 				ctx,
 				logger,

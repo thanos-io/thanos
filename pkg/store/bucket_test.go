@@ -48,6 +48,7 @@ import (
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -233,7 +234,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
 	}
 	_, ok := b.FilterExtLabelsMatchers(ms)
-	testutil.Equals(t, ok, false)
+	testutil.Equals(t, ok, true)
 
 	ms = []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
@@ -246,6 +247,18 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
 	}
 	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 1)
+	testutil.Equals(t, res, ms)
+
+	// validate that it can filter out ext labels that match non-equal matchers
+	ext, err := labels.NewMatcher(labels.MatchRegexp, "a", ".*")
+	if err != nil {
+		t.Error(err)
+	}
+	ms = []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
+	}
+	res, _ = b.FilterExtLabelsMatchers(append(ms, ext))
 	testutil.Equals(t, len(res), 1)
 	testutil.Equals(t, res, ms)
 }
@@ -601,7 +614,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 		},
 		{
 			input: [][2]int{
-				// Mimick AllPostingsKey, where range specified whole range.
+				// Mimic AllPostingsKey, where range specified whole range.
 				{1, 15},
 				{1, maxGapSize + 100},
 				{maxGapSize + 31, maxGapSize + 40},
@@ -721,47 +734,6 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 			MaxTime: 2000,
 		},
 	})
-}
-
-func TestBucketStore_Info(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dir := t.TempDir()
-
-	chunkPool, err := NewDefaultChunkBytesPool(2e5)
-	testutil.Ok(t, err)
-
-	bucketStore, err := NewBucketStore(
-		nil,
-		nil,
-		dir,
-		NewChunksLimiterFactory(0),
-		NewSeriesLimiterFactory(0),
-		NewBytesLimiterFactory(0),
-		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		20,
-		true,
-		DefaultPostingOffsetInMemorySampling,
-		false,
-		false,
-		0,
-		WithChunkPool(chunkPool),
-		WithFilterConfig(allowAllFilterConf),
-	)
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bucketStore.Close()) }()
-
-	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
-	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
-	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
-	testutil.Equals(t, []labelpb.ZLabelSet(nil), resp.LabelSets)
-	testutil.Equals(t, []labelpb.ZLabel(nil), resp.Labels)
 }
 
 type recorder struct {
@@ -1010,14 +982,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			})
 			testutil.Equals(t, sc.expectedIDs, ids)
 
-			// Check Info endpoint.
-			resp, err := bucketStore.Info(context.Background(), &storepb.InfoRequest{})
-			testutil.Ok(t, err)
-
-			testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
-			testutil.Equals(t, []labelpb.ZLabel(nil), resp.Labels)
-			testutil.Equals(t, sc.expectedAdvLabels, resp.LabelSets)
-
 			// Make sure we don't download files we did not expect to.
 			// Regression test: https://github.com/thanos-io/thanos/issues/1664
 
@@ -1238,7 +1202,7 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 	testutil.Ok(t, app.Commit())
 }
 
-// Very similar benchmark to ths: https://github.com/prometheus/prometheus/blob/1d1732bc25cc4b47f513cb98009a4eb91879f175/tsdb/querier_bench_test.go#L82,
+// Very similar benchmark to this: https://github.com/prometheus/prometheus/blob/1d1732bc25cc4b47f513cb98009a4eb91879f175/tsdb/querier_bench_test.go#L82,
 // but with postings results check when run as test.
 func benchmarkExpandedPostings(
 	t testutil.TB,
@@ -1522,7 +1486,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 	f, err := block.NewRawMetaFetcher(logger, ibkt, baseBlockIDsFetcher)
 	testutil.Ok(t, err)
 
-	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 1e9) // 1GB.
+	chunkPool, err := pool.NewBucketedPool[byte](chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 1e9) // 1GB.
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
@@ -1629,7 +1593,7 @@ func (m fakePool) Get(sz int) (*[]byte, error) {
 func (m fakePool) Put(_ *[]byte) {}
 
 type mockedPool struct {
-	parent  pool.Bytes
+	parent  pool.Pool[byte]
 	balance atomic.Uint64
 	gets    atomic.Uint64
 }
@@ -1664,7 +1628,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		Source:     metadata.TestSource,
 	}
 
-	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 100e7)
+	chunkPool, err := pool.NewBucketedPool[byte](chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 100e7)
 	testutil.Ok(t, err)
 
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{
@@ -2744,7 +2708,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
 
 	// Create a chunk pool with buckets between 8B and 32KB.
-	chunkPool, err := pool.NewBucketedBytes(8, 32*1024, 2, 1e10)
+	chunkPool, err := pool.NewBucketedPool[byte](8, 32*1024, 2, 1e10)
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
@@ -2932,8 +2896,20 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 }
 
 func TestExpandPostingsWithContextCancel(t *testing.T) {
+	// Not enough number of postings to check context cancellation.
 	p := index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8})
 	ctx, cancel := context.WithCancel(context.Background())
+
+	cancel()
+	_, err := ExpandPostingsWithContext(ctx, p)
+	testutil.Ok(t, err)
+
+	refs := make([]storage.SeriesRef, 0)
+	for i := 0; i < 128; i++ {
+		refs = append(refs, storage.SeriesRef(i))
+	}
+	p = index.NewListPostings(refs)
+	ctx, cancel = context.WithCancel(context.Background())
 
 	cancel()
 	res, err := ExpandPostingsWithContext(ctx, p)
@@ -3922,4 +3898,139 @@ func (m *compositeBytesLimiterMock) ReserveWithType(num uint64, dataType StoreDa
 		}
 	}
 	return nil
+}
+
+func TestBucketStoreMetadataLimit(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(tb, bkt.Close()) }()
+
+	uploadTestBlock(tb, tmpDir, bkt, 30000)
+
+	instrBkt := objstore.WithNoopInstr(bkt)
+	logger := log.NewNopLogger()
+
+	// Instance a real bucket store we'll use to query the series.
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		instrBkt,
+		fetcher,
+		tmpDir,
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		10,
+		false,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+		false,
+		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	seriesTests := map[string]struct {
+		limit           int64
+		expectedResults int
+	}{
+		"series without limit": {
+			expectedResults: 12000,
+		},
+		"series with limit": {
+			limit:           11000,
+			expectedResults: 11000,
+		},
+	}
+
+	for testName, testData := range seriesTests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.SeriesRequest{
+				MinTime: timestamp.FromTime(minTime),
+				MaxTime: timestamp.FromTime(maxTime),
+				Limit:   testData.limit,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "j", Value: "foo"},
+				},
+			}
+
+			srv := newStoreSeriesServer(context.Background())
+			err = store.Series(req, srv)
+			testutil.Ok(t, err)
+			testutil.Assert(t, len(srv.SeriesSet) == testData.expectedResults)
+		})
+	}
+
+	labelNamesTests := map[string]struct {
+		limit           int64
+		expectedResults []string
+	}{
+		"label names without limit": {
+			expectedResults: []string{"ext1", "i", "j", "n", "uniq"},
+		},
+		"label names with limit": {
+			limit:           3,
+			expectedResults: []string{"ext1", "i", "j"},
+		},
+	}
+
+	for testName, testData := range labelNamesTests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.LabelNamesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Limit: testData.limit,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "j", Value: "foo"},
+				},
+			}
+
+			resp, err := store.LabelNames(context.Background(), req)
+			testutil.Ok(t, err)
+			testutil.Equals(t, testData.expectedResults, resp.Names)
+		})
+	}
+
+	labelValuesTests := map[string]struct {
+		limit           int64
+		expectedResults []string
+	}{
+		"label values without limit": {
+			expectedResults: []string{"bar", "foo"},
+		},
+		"label values with limit": {
+			limit:           1,
+			expectedResults: []string{"bar"},
+		},
+	}
+
+	for testName, testData := range labelValuesTests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.LabelValuesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Label: "j",
+				Limit: testData.limit,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "j", Value: "(foo|bar)"},
+				},
+			}
+
+			resp, err := store.LabelValues(context.Background(), req)
+			testutil.Ok(t, err)
+			testutil.Equals(t, testData.expectedResults, resp.Values)
+		})
+	}
 }

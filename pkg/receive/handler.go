@@ -711,32 +711,38 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(remoteWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
 	var stats tenantRequestStats = make(tenantRequestStats)
 
-	for er := range remoteWrites {
-		if er.replica != 0 {
-			continue // Skip replicated writes, only count once.
-		}
-		for tenant, series := range remoteWrites[er] {
-			samples := 0
+	for _, write := range writes {
+		for er := range write {
+			for tenant, series := range write[er] {
+				samples := 0
 
-			for _, ts := range series.timeSeries {
-				samples += len(ts.Samples)
-			}
+				for _, ts := range series.timeSeries {
+					samples += len(ts.Samples)
+				}
 
-			if st, ok := stats[tenant]; ok {
-				st.timeseries += len(series.timeSeries)
-				st.totalSamples += samples
+				if st, ok := stats[tenant]; ok {
+					st.timeseries += len(series.timeSeries)
+					st.totalSamples += samples
 
-				stats[tenant] = st
-			} else {
-				stats[tenant] = requestStats{
-					timeseries:   len(series.timeSeries),
-					totalSamples: samples,
+					stats[tenant] = st
+				} else {
+					stats[tenant] = requestStats{
+						timeseries:   len(series.timeSeries),
+						totalSamples: samples,
+					}
 				}
 			}
 		}
+	}
+
+	// adjust counters by the replication factor
+	for tenant, st := range stats {
+		st.timeseries /= rf
+		st.totalSamples /= rf
+		stats[tenant] = st
 	}
 
 	return stats
@@ -746,6 +752,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
+	var stats tenantRequestStats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -765,11 +772,10 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
-		return tenantRequestStats{}, err
+		return stats, err
 	}
 
-	// Specific to Databricks setup, we only measure remote writes
-	stats := h.gatherWriteStats(remoteWrites)
+	stats = h.gatherWriteStats(len(params.replicas), localWrites, remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
@@ -977,7 +983,7 @@ func (h *Handler) sendLocalWrite(
 
 }
 
-// sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not
+// sendRemoteWrite sends a write request to the remote node. It takes care of checking whether the endpoint is up or not
 // in the peerGroup, correctly marking them as up or down when appropriate.
 // The responses are sent to the responses channel.
 func (h *Handler) sendRemoteWrite(
@@ -1029,6 +1035,13 @@ func (h *Handler) sendRemoteWrite(
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
+	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
+	// would need to succeed all the time. Another way to think about it is when migrating
+	// from a Sidecar based setup with 2 Prometheus nodes to a Receiver setup, we want to
+	// keep the same guarantees.
+	if h.options.ReplicationFactor == 2 {
+		return 1
+	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 

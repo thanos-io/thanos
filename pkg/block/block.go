@@ -130,7 +130,7 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	}
 
 	if checkExternalLabels {
-		if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
+		if len(meta.Thanos.Labels) == 0 {
 			return errors.New("empty external labels are not allowed for Thanos block.")
 		}
 	}

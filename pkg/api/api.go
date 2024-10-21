@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-kit/log"
@@ -39,6 +40,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tracing"
+
+	// NOTE(GiedriusS): to register jsoniter marshalers.
+	_ "github.com/prometheus/prometheus/web/api/v1"
 )
 
 type status string
@@ -107,6 +111,7 @@ type RuntimeInfo struct {
 	GOMAXPROCS     int       `json:"GOMAXPROCS"`
 	GOGC           string    `json:"GOGC"`
 	GODEBUG        string    `json:"GODEBUG"`
+	GOMEMLIMIT     int64     `json:"GOMEMLIMIT"`
 }
 
 // RuntimeInfoFn returns updated runtime information about Thanos.
@@ -195,6 +200,7 @@ func GetRuntimeInfoFunc(logger log.Logger) RuntimeInfoFn {
 			GOMAXPROCS:     runtime.GOMAXPROCS(0),
 			GOGC:           os.Getenv("GOGC"),
 			GODEBUG:        os.Getenv("GODEBUG"),
+			GOMEMLIMIT:     debug.SetMemoryLimit(-1),
 		}
 	}
 }
@@ -215,10 +221,10 @@ func GetInstr(
 				SetCORS(w)
 			}
 			if data, warnings, err, releaseResources := f(r); err != nil {
-				RespondError(w, err, data)
+				RespondError(w, err, data, logger)
 				releaseResources()
 			} else if data != nil {
-				Respond(w, data, warnings)
+				Respond(w, data, warnings, logger)
 				releaseResources()
 			} else {
 				w.WriteHeader(http.StatusNoContent)
@@ -249,7 +255,7 @@ func shouldNotCacheBecauseOfWarnings(warnings []error) bool {
 	return false
 }
 
-func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
+func Respond(w http.ResponseWriter, data interface{}, warnings []error, logger log.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	if shouldNotCacheBecauseOfWarnings(warnings) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -263,10 +269,21 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	for _, warn := range warnings {
 		resp.Warnings = append(resp.Warnings, warn.Error())
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	b, err := json.Marshal(resp)
+	if err != nil {
+		level.Error(logger).Log("msg", "error marshaling response", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, err := w.Write(b); err != nil {
+		level.Error(logger).Log("msg", "error writing response", "bytesWritten", n, "err", err)
+	}
 }
 
-func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
+func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}, logger log.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 
@@ -285,10 +302,20 @@ func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
 	}
 	w.WriteHeader(code)
 
-	_ = json.NewEncoder(w).Encode(&response{
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	b, err := json.Marshal(&response{
 		Status:    StatusError,
 		ErrorType: apiErr.Typ,
 		Error:     apiErr.Err.Error(),
 		Data:      data,
 	})
+	if err != nil {
+		level.Error(logger).Log("msg", "error marshaling response", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, err := w.Write(b); err != nil {
+		level.Error(logger).Log("msg", "error writing response", "bytesWritten", n, "err", err)
+	}
 }

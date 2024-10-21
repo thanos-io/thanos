@@ -1857,16 +1857,14 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 func TestIngestorRestart(t *testing.T) {
 	var err error
 	logger := log.NewLogfmtLogger(os.Stderr)
-	addr1, addr2, addr3 := "localhost:14090", "localhost:14091", "localhost:14092"
-	ing1, ing2 := startIngestor(logger, addr1, 0), startIngestor(logger, addr2, 0)
-	defer ing1.Shutdown(err) // srv1 is stable and will only be closed after the test ends
+	addr1, addr2 := "localhost:14090", "localhost:14091"
+	ing1 := startIngestor(logger, addr1, 0)
 
 	clientAddr := "ingestor.com"
 	dnsBuilder := &dnsResolverBuilder{
 		logger: logger,
 		addrStore: map[string][]string{
-			addr1:      {addr1},
-			clientAddr: {addr2},
+			clientAddr: {addr1},
 		},
 	}
 	resolver.Register(dnsBuilder)
@@ -1878,19 +1876,19 @@ func TestIngestorRestart(t *testing.T) {
 	client := NewHandler(logger, &Options{
 		MaxBackoff:        1 * time.Second,
 		DialOpts:          dialOpts,
-		ReplicationFactor: 2,
+		ReplicationFactor: 1,
 		ReceiverMode:      RouterOnly,
 		ForwardTimeout:    15 * time.Second,
 	})
 	// one of the endpoints is DNS and wire up to different backend address on the fly
-	client.Hashring(&simpleHashring{addr1, fmt.Sprintf("%s:///%s", dnsScheme, clientAddr)})
+	client.Hashring(&simpleHashring{fmt.Sprintf("%s:///%s", dnsScheme, clientAddr)})
 	defer client.Close()
 
 	ctx := context.TODO()
 	data := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", addr3)),
+				Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
 				Samples: []prompb.Sample{{Timestamp: time.Now().Unix(), Value: 123}},
 			},
 		},
@@ -1903,11 +1901,11 @@ func TestIngestorRestart(t *testing.T) {
 	}, stats)
 
 	// close srv2 to simulate ingestor down
-	ing2.Shutdown(err)
-	ing3 := startIngestor(logger, addr3, 2*time.Second)
-	defer ing3.Shutdown(err)
+	ing1.Shutdown(err)
+	ing2 := startIngestor(logger, addr2, 2*time.Second)
+	defer ing2.Shutdown(err)
 	// bind the new backend to the same DNS
-	dnsBuilder.updateStore(clientAddr, []string{addr3})
+	dnsBuilder.updateStore(clientAddr, []string{addr2})
 
 	iter, errs := 10, 0
 	for i := 0; i < iter; i++ {

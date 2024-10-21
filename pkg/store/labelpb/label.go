@@ -303,7 +303,7 @@ func ExtendSortedLabels(lset, extend labels.Labels) labels.Labels {
 }
 
 func PromLabelSetsToString(lsets []labels.Labels) string {
-	return PromLabelSetsToStringN(lsets, 500)
+	return PromLabelSetsToStringN(lsets, 200)
 }
 
 func PromLabelSetsToStringN(lsets []labels.Labels, maxLength int) string {

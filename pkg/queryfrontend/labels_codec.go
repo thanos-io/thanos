@@ -107,7 +107,10 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 
 func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request, forwardHeaders []string) (queryrange.Request, error) {
 	if err := r.ParseForm(); err != nil {
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
+		return nil, httpgrpc.ErrorFromHTTPResponse(&httpgrpc.HTTPResponse{
+			Code: int32(http.StatusBadRequest),
+			Body: []byte(err.Error()),
+		})
 	}
 
 	var (
@@ -207,7 +210,10 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
 		body, _ := io.ReadAll(r.Body)
-		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
+		return nil, httpgrpc.ErrorFromHTTPResponse(&httpgrpc.HTTPResponse{
+			Code: int32(r.StatusCode),
+			Body: body,
+		})
 	}
 	log, _ := spanlogger.New(ctx, "ParseQueryResponse") //nolint:ineffassign,staticcheck
 	defer log.Finish()

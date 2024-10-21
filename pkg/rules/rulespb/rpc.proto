@@ -41,6 +41,9 @@ message RulesRequest {
     Type type = 1;
     PartialResponseStrategy partial_response_strategy = 2;
     repeated string matcher_string = 3;
+    repeated string rule_name = 4;
+    repeated string rule_group = 5;
+    repeated string file = 6;
 }
 
 message RulesResponse {

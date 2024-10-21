@@ -33,6 +33,7 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
+  chunk_size_bytes: 0
 prefix: ""
 ```
 
@@ -373,6 +374,12 @@ The **required** settings are:
 
 - `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md#dns-service-discovery) provider. If your cluster supports auto-discovery, you should use the flag `auto_discovery` instead and only point to *one of* the memcached servers. This typically means that there should be only one address specified that resolves to any of the alive memcached servers. Use this for Amazon ElastiCache and other similar services.
 
+**NOTE**: The Memcached client uses a jump hash algorithm to shard cached entries across a cluster of Memcached servers. For this reason, you should make sure memcached servers are not behind any kind of load balancer and their address is configured so that servers are added/removed to the end of the list whenever a scale up/down occurs. For example, if you’re running Memcached in Kubernetes, you may:
+
+1. Deploy your Memcached cluster using a [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
+2. Create a [headless](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services) service for Memcached StatefulSet
+3. Configure the Thanos's memcached `addresses` using the `dnssrvnoa+` [DNS service discovery](../service-discovery.md#dns-service-discovery)
+
 While the remaining settings are **optional**:
 
 - `timeout`: the socket read/write timeout.
@@ -380,7 +387,7 @@ While the remaining settings are **optional**:
 - `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
 - `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
 - `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
-- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are split into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.

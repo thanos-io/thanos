@@ -454,24 +454,3 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 		testutil.Equals(t, want, got)
 	}
 }
-
-func TestPrometheusStore_Info(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), nil, component.Sidecar,
-		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 123, 456 },
-		nil)
-	testutil.Ok(t, err)
-
-	resp, err := proxy.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, []labelpb.ZLabel{{Name: "region", Value: "eu-west"}}, resp.Labels)
-	testutil.Equals(t, storepb.StoreType_SIDECAR, resp.StoreType)
-	testutil.Equals(t, int64(123), resp.MinTime)
-	testutil.Equals(t, int64(456), resp.MaxTime)
-}

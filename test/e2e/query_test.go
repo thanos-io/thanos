@@ -16,7 +16,6 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -39,7 +38,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/prompb"
-	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -52,13 +50,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/extannotations"
-	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -443,17 +437,17 @@ func TestQueryLabelNames(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) > 0
 	})
 
 	// Outside time range.
-	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, q.Endpoint("http"), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), 0, func(res []string) bool {
 		return len(res) == 0
 	})
 
 	labelNames(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			// Expected result: [__name__, instance, job, prometheus, replica, receive, tenant_id]
 			// Pre-labelnames pushdown we've done Select() over all series and picked out the label names hence they all had external labels.
 			// With labelnames pushdown we had to extend the LabelNames() call to enrich the response with the external labelset when there is more than one label.
@@ -461,9 +455,17 @@ func TestQueryLabelNames(t *testing.T) {
 		},
 	)
 
+	// With limit
+	labelNames(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 3, func(res []string) bool {
+			// Same test as above but requesting limited results.
+			return len(res) == 3
+		},
+	)
+
 	// There is no matched series.
 	labelNames(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "foobar"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 0
 		},
 	)
@@ -490,24 +492,67 @@ func TestQueryLabelValues(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) == 1 && res[0] == "localhost:9090"
 	})
 
 	// Outside time range.
-	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+	labelValues(t, ctx, q.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), 0, func(res []string) bool {
 		return len(res) == 0
 	})
 
 	labelValues(t, ctx, q.Endpoint("http"), "__name__", []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1 && res[0] == "up"
 		},
 	)
 
+	labelValues(t, ctx, q.Endpoint("http"), "__name__", []*labels.Matcher{},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 2, func(res []string) bool {
+			return len(res) == 2
+		},
+	)
+
 	labelValues(t, ctx, q.Endpoint("http"), "__name__", []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "foobar"}},
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 0
+		},
+	)
+}
+
+func TestQuerySeries(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("series")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+
+	// Without limit
+	series(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
+			return len(res) == 3
+		},
+	)
+
+	// With limit
+	series(t, ctx, q.Endpoint("http"), []*labels.Matcher{{Type: labels.MatchEqual, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 1, func(res []map[string]string) bool {
+			return len(res) == 1
 		},
 	)
 }
@@ -539,199 +584,6 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 			"replica":    "0",
 		},
 	})
-}
-
-func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
-	t.Parallel()
-	if runtime.GOARCH != "amd64" {
-		t.Skip("Skip pre-info API test because of lack of multi-arch image for Thanos v0.22.0.")
-	}
-
-	for i, tcase := range []struct {
-		queryImage   string
-		sidecarImage string
-	}{
-		{
-			queryImage:   e2ethanos.DefaultImage(),
-			sidecarImage: "quay.io/thanos/thanos:v0.22.0", // Thanos components from version before 0.23 does not have new InfoAPI.
-		},
-		{
-			queryImage:   "quay.io/thanos/thanos:v0.22.0", // Thanos querier from version before 0.23 did not know about InfoAPI.
-			sidecarImage: e2ethanos.DefaultImage(),
-		},
-	} {
-		i := i
-		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("query-comp-%d", i))
-			testutil.Ok(t, err)
-			t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-			qBuilder := e2ethanos.NewQuerierBuilder(e, "1")
-
-			// Use qBuilder work dir to share rules.
-			promRulesSubDir := "rules"
-			testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
-			// Create the abort_on_partial_response alert for Prometheus.
-			// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-			createRuleFile(t, filepath.Join(qBuilder.Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
-
-			p1, s1 := e2ethanos.NewPrometheusWithSidecarCustomImage(
-				e,
-				"p1",
-				e2ethanos.DefaultPromConfig("p1", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget, qBuilder.InternalEndpoint("http")),
-				"",
-				e2ethanos.DefaultPrometheusImage(),
-				"",
-				tcase.sidecarImage,
-				e2ethanos.FeatureExemplarStorage,
-			)
-			testutil.Ok(t, e2e.StartAndWaitReady(p1, s1))
-
-			// Newest querier with old --rules --meta etc flags.
-			q := qBuilder.
-				WithStoreAddresses(s1.InternalEndpoint("grpc")).
-				WithMetadataAddresses(s1.InternalEndpoint("grpc")).
-				WithExemplarAddresses(s1.InternalEndpoint("grpc")).
-				WithTargetAddresses(s1.InternalEndpoint("grpc")).
-				WithRuleAddresses(s1.InternalEndpoint("grpc")).
-				WithTracingConfig(fmt.Sprintf(`type: JAEGER
-config:
-  sampler_type: const
-  sampler_param: 1
-  service_name: %s`, qBuilder.Name())). // Use fake tracing config to trigger exemplar.
-				WithImage(tcase.queryImage).
-				Init()
-			testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			t.Cleanup(cancel)
-
-			// We should have single TCP connection, since all APIs are against the same server.
-			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-
-			queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
-				Deduplicate: false,
-			}, []model.Metric{
-				{
-					"job":        "myself",
-					"prometheus": "p1",
-					"replica":    "0",
-				},
-			})
-
-			// We expect rule and other APIs to work.
-
-			// Metadata.
-			{
-				var promMeta map[string][]metadatapb.Meta
-				// Wait metadata response to be ready as Prometheus gets metadata after scrape.
-				testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
-					promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+p1.Endpoint("http")), "", -1)
-					testutil.Ok(t, err)
-					if len(promMeta) > 0 {
-						return nil
-					}
-					return fmt.Errorf("empty metadata response from Prometheus")
-				}))
-
-				thanosMeta, err := promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
-				testutil.Ok(t, err)
-				testutil.Assert(t, len(thanosMeta) > 0, "got empty metadata response from Thanos")
-
-				// Metadata response from Prometheus and Thanos Querier should be the same after deduplication.
-				metadataEqual(t, thanosMeta, promMeta)
-			}
-
-			// Exemplars.
-			{
-				now := time.Now()
-				start := timestamp.FromTime(now.Add(-time.Hour))
-				end := timestamp.FromTime(now.Add(time.Hour))
-
-				// Send HTTP requests to thanos query to trigger exemplars.
-				labelNames(t, ctx, q.Endpoint("http"), nil, start, end, func(res []string) bool {
-					return true
-				})
-
-				queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names"}`, start, end, exemplarsOnExpectedSeries(map[string]string{
-					"__name__":   "http_request_duration_seconds_bucket",
-					"handler":    "label_names",
-					"job":        "myself",
-					"method":     "get",
-					"prometheus": "p1",
-				}))
-			}
-
-			// Targets.
-			{
-				targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
-					ActiveTargets: []*targetspb.ActiveTarget{
-						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "__address__", Value: "localhost:9090"},
-								{Name: "__metrics_path__", Value: "/metrics"},
-								{Name: "__scheme__", Value: "http"},
-								{Name: "__scrape_interval__", Value: "1s"},
-								{Name: "__scrape_timeout__", Value: "1s"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "instance", Value: "localhost:9090"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							ScrapePool: "myself",
-							ScrapeUrl:  "http://localhost:9090/metrics",
-							Health:     targetspb.TargetHealth_UP,
-						},
-						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "__address__", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
-								{Name: "__metrics_path__", Value: "/metrics"},
-								{Name: "__scheme__", Value: "http"},
-								{Name: "__scrape_interval__", Value: "1s"},
-								{Name: "__scrape_timeout__", Value: "1s"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "instance", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							ScrapePool: "myself",
-							ScrapeUrl:  fmt.Sprintf("http://query-comp-%d-querier-1:8080/metrics", i),
-							Health:     targetspb.TargetHealth_UP,
-						},
-					},
-					DroppedTargets: []*targetspb.DroppedTarget{},
-				})
-			}
-
-			// Rules.
-			{
-				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
-					{
-						Name: "example_abort",
-						File: q.Dir() + "/rules/rules.yaml",
-						Rules: []*rulespb.Rule{
-							rulespb.NewAlertingRule(&rulespb.Alert{
-								Name:  "TestAlert_AbortOnPartialResponse",
-								State: rulespb.AlertState_FIRING,
-								Query: "absent(some_metric)",
-								Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-									{Name: "prometheus", Value: "p1"},
-									{Name: "severity", Value: "page"},
-								}},
-								Health: string(rules.HealthGood),
-							}),
-						},
-					},
-				})
-			}
-		})
-	}
 }
 
 type fakeMetricSample struct {
@@ -1563,13 +1415,13 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() str
 	testutil.Equals(t, expected, result)
 }
 
-func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, check func(res []string) bool) {
+func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, limit int, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
+		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end, limit)
 		if err != nil {
 			return err
 		}
@@ -1582,13 +1434,13 @@ func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labe
 }
 
 //nolint:unparam
-func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers []*labels.Matcher, start, end int64, check func(res []string) bool) {
+func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers []*labels.Matcher, start, end int64, limit int, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, matchers, start, end)
+		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, matchers, start, end, limit)
 		if err != nil {
 			return err
 		}
@@ -1600,13 +1452,13 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 	}))
 }
 
-func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, check func(res []map[string]string) bool) {
+func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, limit int, check func(res []map[string]string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
+		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end, limit)
 		if err != nil {
 			return err
 		}
@@ -1791,7 +1643,9 @@ func storeWriteRequest(ctx context.Context, rawRemoteWriteURL string, req *promp
 	}
 
 	compressed := snappy.Encode(buf, pBuf.Bytes())
-	return client.Store(ctx, compressed, 0)
+
+	_, err = client.Store(ctx, compressed, 0)
+	return err
 }
 
 func TestGrpcInstantQuery(t *testing.T) {
@@ -2361,23 +2215,23 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		})
 
 	// default-tenant should only see two labels when enforcing is on (c,tenant_id)
-	labelNames(t, ctx, querierEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, querierEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) == 2
 	})
 
 	// default-tenant should only see all labels when enforcing is not on (a,b,c,tenant_id)
-	labelNames(t, ctx, querierNoEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, querierNoEnforce.Endpoint("http"), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 		return len(res) == 4
 	})
 
 	// default tenant can just the value of the C label
 	labelValues(t, ctx, querierEnforce.Endpoint("http"), "c", nil,
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1
 		},
 	)
 	labelValues(t, ctx, querierEnforce.Endpoint("http"), "a", nil,
-		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 0
 		},
 	)
@@ -2400,7 +2254,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	matcherSetB = append(matcherSetB, labelMatcher)
 
 	// default-tenant can see series with matcher C
-	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetC, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetC, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
 		var expected = []map[string]string{
 			{
 				"c":         "3",
@@ -2411,12 +2265,12 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	})
 
 	// default-tenant cannot see series with matcher B when tenancy is enabled
-	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+	series(t, ctx, querierEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
 		return len(res) == 0
 	})
 
 	// default-tenant can see series with matcher B when tenancy is not enabled
-	series(t, ctx, querierNoEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []map[string]string) bool {
+	series(t, ctx, querierNoEnforce.Endpoint("http"), matcherSetB, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []map[string]string) bool {
 		var expected = []map[string]string{
 			{
 				"b":         "2",

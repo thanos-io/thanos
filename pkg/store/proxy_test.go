@@ -6,6 +6,9 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	"math"
 	"math/rand"
@@ -19,15 +22,12 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -58,27 +58,6 @@ type mockedStartTimeDB struct {
 }
 
 func (db *mockedStartTimeDB) StartTime() (int64, error) { return db.startTime, nil }
-
-func TestProxyStore_Info(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return nil },
-		component.Query,
-		labels.EmptyLabels(), 0*time.Second, EagerRetrieval,
-	)
-
-	resp, err := q.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-	testutil.Equals(t, []labelpb.ZLabelSet(nil), resp.LabelSets)
-	testutil.Equals(t, storepb.StoreType_QUERY, resp.StoreType)
-	testutil.Equals(t, int64(0), resp.MinTime)
-	testutil.Equals(t, int64(0), resp.MaxTime)
-}
 
 func TestProxyStore_TSDBInfos(t *testing.T) {
 	stores := []Client{
@@ -739,6 +718,46 @@ func TestProxyStore_Series(t *testing.T) {
 				{
 					lset:   labels.FromStrings("zone", "3"),
 					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+			},
+		},
+		{
+			title: "skip chunks with limit",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "3")),
+							storeSeriesResponse(t, labels.FromStrings("a", "4")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: "[1-4]", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      2,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset: labels.FromStrings("a", "1"),
+				},
+				{
+					lset: labels.FromStrings("a", "2"),
 				},
 			},
 		},
@@ -1439,7 +1458,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			Warnings: []string{"warning"},
 		},
 	}
-	cls := []Client{
+	storeApis := []Client{
 		&storetestutil.TestClient{StoreClient: m1},
 		&storetestutil.TestClient{StoreClient: &mockedStoreAPI{
 			RespLabelValues: &storepb.LabelValuesResponse{
@@ -1454,41 +1473,82 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			MaxTime: timestamp.FromTime(time.Now()),
 		},
 	}
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return cls },
-		component.Query,
-		labels.EmptyLabels(),
-		0*time.Second, EagerRetrieval,
-	)
 
-	ctx := context.Background()
-	req := &storepb.LabelValuesRequest{
-		Label:                   "a",
-		PartialResponseDisabled: true,
-		Start:                   timestamp.FromTime(minTime),
-		End:                     timestamp.FromTime(maxTime),
+	for _, tc := range []struct {
+		title     string
+		storeAPIs []Client
+
+		req *storepb.LabelValuesRequest
+
+		expectedValues      []string
+		expectedErr         error
+		expectedWarningsLen int
+	}{
+		{
+			title:     "request all time range",
+			storeAPIs: storeApis,
+			req: &storepb.LabelValuesRequest{
+				Label:                   "a",
+				PartialResponseDisabled: true,
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+			},
+			expectedValues:      []string{"1", "2", "3", "4", "5", "6"},
+			expectedWarningsLen: 1,
+		},
+		{
+			title:     "outside the time range of the last store client",
+			storeAPIs: storeApis,
+			req: &storepb.LabelValuesRequest{
+				Label:                   "a",
+				PartialResponseDisabled: true,
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(time.Now().Add(-1 * time.Hour)),
+			},
+			expectedValues:      []string{"1", "2", "3", "4"},
+			expectedWarningsLen: 1,
+		},
+		{
+			title:     "request all time range with limit",
+			storeAPIs: storeApis,
+			req: &storepb.LabelValuesRequest{
+				Label:                   "a",
+				PartialResponseDisabled: true,
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+				Limit:                   2,
+			},
+			expectedValues:      []string{"1", "2"},
+			expectedWarningsLen: 1,
+		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			q := NewProxyStore(
+				nil,
+				nil,
+				func() []Client { return tc.storeAPIs },
+				component.Query,
+				labels.EmptyLabels(),
+				0*time.Second, EagerRetrieval,
+			)
+
+			ctx := context.Background()
+
+			resp, err := q.LabelValues(ctx, tc.req)
+			if tc.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+				return
+			}
+			testutil.Ok(t, err)
+			testutil.Assert(t, proto.Equal(tc.req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", tc.req, m1.LastLabelValuesReq)
+
+			testutil.Equals(t, tc.expectedValues, resp.Values)
+			testutil.Equals(t, tc.expectedWarningsLen, len(resp.Warnings), "got %v", resp.Warnings)
+		}); !ok {
+			return
+		}
 	}
-	resp, err := q.LabelValues(ctx, req)
-	testutil.Ok(t, err)
-	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
-
-	testutil.Equals(t, []string{"1", "2", "3", "4", "5", "6"}, resp.Values)
-	testutil.Equals(t, 1, len(resp.Warnings))
-
-	// Request outside the time range of the last store client.
-	req = &storepb.LabelValuesRequest{
-		Label:                   "a",
-		PartialResponseDisabled: true,
-		Start:                   timestamp.FromTime(minTime),
-		End:                     timestamp.FromTime(time.Now().Add(-1 * time.Hour)),
-	}
-	resp, err = q.LabelValues(ctx, req)
-	testutil.Ok(t, err)
-	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
-
-	testutil.Equals(t, []string{"1", "2", "3", "4"}, resp.Values)
-	testutil.Equals(t, 1, len(resp.Warnings))
 }
 
 func TestProxyStore_LabelNames(t *testing.T) {
@@ -1648,6 +1708,33 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				PartialResponseDisabled: false,
 			},
 			storeDebugMatchers:  [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}},
+			expectedNames:       []string{"a", "b"},
+			expectedWarningsLen: 0,
+		},
+		{
+			title: "label_names partial response disabled with limit",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "c", "d"},
+						},
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
+				PartialResponseDisabled: true,
+				Limit:                   2,
+			},
 			expectedNames:       []string{"a", "b"},
 			expectedWarningsLen: 0,
 		},
@@ -1840,9 +1927,33 @@ func TestStoreMatches(t *testing.T) {
 			maxt:          1,
 			expectedMatch: true,
 		},
+		{
+			s: &storetestutil.TestClient{ExtLset: []labels.Labels{labels.FromStrings("a", "b")}},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "test_metric_name"),
+			},
+			maxt:          1,
+			expectedMatch: true,
+		},
+		{
+			s: &storetestutil.TestClient{
+				ExtLset: []labels.Labels{
+					labels.FromStrings("a", "b"),
+				},
+				StoreFilterNotMatches: true,
+			},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
+				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "test_metric_name"),
+			},
+			maxt:           1,
+			expectedMatch:  false,
+			expectedReason: "store does not match filter for matchers: [a=\"b\" __name__=\"test_metric_name\"]",
+		},
 	} {
 		t.Run("", func(t *testing.T) {
-			ok, reason := storeMatches(context.TODO(), c.s, c.mint, c.maxt, c.ms...)
+			ok, reason := storeMatches(context.TODO(), true, c.s, c.mint, c.maxt, c.ms...)
 			testutil.Equals(t, c.expectedMatch, ok)
 			testutil.Equals(t, c.expectedReason, reason)
 
@@ -1911,10 +2022,6 @@ type mockedStoreAPI struct {
 	// injectedError will be injected into Recv() if not nil.
 	injectedError      error
 	injectedErrorIndex int
-}
-
-func (s *mockedStoreAPI) Info(context.Context, *storepb.InfoRequest, ...grpc.CallOption) (*storepb.InfoResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *mockedStoreAPI) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
@@ -2036,9 +2143,12 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		for _, r := range m.RespSeries {
 			allResps = append(allResps, r)
 
-			x := storepb.Series{Labels: r.GetSeries().Labels}
+			sr := r.GetSeries()
+			sr = proto.Clone(sr).(*storepb.Series)
+
+			x := storepb.Series{Labels: sr.Labels}
 			if x.String() == lastLabels.String() {
-				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, r.GetSeries().Chunks...)
+				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, sr.Chunks...)
 				continue
 			}
 			lastLabels = x
@@ -2105,86 +2215,144 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 
-	clients := []Client{
-		&storetestutil.TestClient{
-			StoreClient: &mockedStoreAPI{
-				RespSeries: []*storepb.SeriesResponse{
-					// Ensure more than 10 (internal respCh channel).
-					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-				},
-			},
-			MinTime: math.MinInt64,
-			MaxTime: math.MaxInt64,
-		},
-		&storetestutil.TestClient{
-			StoreClient: &mockedStoreAPI{
-				RespSeries: []*storepb.SeriesResponse{
-					storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storeSeriesResponse(t, labels.FromStrings("b", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-				},
-			},
-			MinTime: math.MinInt64,
-			MaxTime: math.MaxInt64,
-		},
-	}
-
 	logger := log.NewNopLogger()
-	p := &ProxyStore{
-		logger:            logger,
-		stores:            func() []Client { return clients },
-		metrics:           newProxyStoreMetrics(nil),
-		responseTimeout:   0,
-		retrievalStrategy: EagerRetrieval,
-		tsdbSelector:      DefaultSelector,
-	}
 
-	t.Run("failling send", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		// We mimic failing series server, but practically context cancel will do the same.
-		testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
-			ctx: ctx,
-			send: func(*storepb.SeriesResponse) error {
-				cancel()
-				return ctx.Err()
-			},
-		}))
-		testutil.NotOk(t, ctx.Err())
-	})
+	for _, respStrategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+		t.Run(fmt.Sprintf("strategy=%v", respStrategy), func(t *testing.T) {
+			t.Run("failing send", func(t *testing.T) {
+				clients := []Client{
+					&storetestutil.TestClient{
+						StoreClient: &mockedStoreAPI{
+							RespSeries: []*storepb.SeriesResponse{
+								// Ensure more than 10 (internal respCh channel).
+								storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("a", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							},
+						},
+						MinTime: math.MinInt64,
+						MaxTime: math.MaxInt64,
+					},
+					&storetestutil.TestClient{
+						StoreClient: &mockedStoreAPI{
+							RespSeries: []*storepb.SeriesResponse{
+								storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							},
+						},
+						MinTime: math.MinInt64,
+						MaxTime: math.MaxInt64,
+					},
+				}
+
+				p := &ProxyStore{
+					logger:            logger,
+					stores:            func() []Client { return clients },
+					metrics:           newProxyStoreMetrics(nil),
+					responseTimeout:   50 * time.Millisecond,
+					retrievalStrategy: respStrategy,
+					tsdbSelector:      DefaultSelector,
+				}
+
+				ctx, cancel := context.WithCancel(context.Background())
+				// We mimic failing series server, but practically context cancel will do the same.
+				testutil.NotOk(t, p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
+					ctx: ctx,
+					send: func(*storepb.SeriesResponse) error {
+						cancel()
+						return ctx.Err()
+					},
+				}))
+				testutil.NotOk(t, ctx.Err())
+			})
+
+			t.Run("client timeout", func(t *testing.T) {
+				clients := []Client{
+					&storetestutil.TestClient{
+						StoreClient: storepb.ServerAsClient(&storeServerStub{
+							delay: 50 * time.Millisecond,
+							responses: []*storepb.SeriesResponse{
+								storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+								storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							},
+						}),
+						MinTime: math.MinInt64,
+						MaxTime: math.MaxInt64,
+					},
+				}
+
+				p := &ProxyStore{
+					logger:            logger,
+					stores:            func() []Client { return clients },
+					metrics:           newProxyStoreMetrics(nil),
+					responseTimeout:   50 * time.Millisecond,
+					retrievalStrategy: respStrategy,
+					tsdbSelector:      DefaultSelector,
+				}
+
+				ctx := context.Background()
+				err := p.Series(&storepb.SeriesRequest{Matchers: []storepb.LabelMatcher{{}}, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
+					ctx: ctx,
+					send: func(*storepb.SeriesResponse) error {
+						return nil
+					},
+				})
+
+				testutil.Assert(t, strings.Contains(err.Error(), context.Canceled.Error()))
+			})
+		})
+	}
+}
+
+type storeServerStub struct {
+	storepb.StoreServer
+
+	delay     time.Duration
+	responses []*storepb.SeriesResponse
+}
+
+func (m *storeServerStub) Series(_ *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
+	for _, r := range m.responses {
+		<-time.After(m.delay)
+		if err := server.Send(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := storetestutil.TestClient{Name: "testaddr"}
 	c.IsLocalStore = true
 
-	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
+	ok, reason := storeMatchDebugMetadata(c, true, [][]*labels.Matcher{{}})
 	testutil.Assert(t, !ok)
 	testutil.Equals(t, "the store is not remote, cannot match __address__", reason)
 
 	// Change client to remote.
 	c.IsLocalStore = false
 
-	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
+	ok, reason = storeMatchDebugMetadata(c, true, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
 	testutil.Assert(t, !ok)
 	testutil.Equals(t, "__address__ testaddr does not match debug store metadata matchers: [[__address__=\"wrong\"]]", reason)
 
-	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
+	ok, reason = storeMatchDebugMetadata(c, true, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
 	testutil.Assert(t, ok)
 	testutil.Equals(t, "", reason)
 }
@@ -2286,6 +2454,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 			h := NewResponseDeduplicator(NewProxyResponseLoserTree(
 				&eagerRespSet{
 					closeSeries:       func() {},
+					cl:                nopClientSendCloser{},
 					wg:                &sync.WaitGroup{},
 					bufferedResponses: tcase.responses,
 				},
@@ -2491,14 +2660,14 @@ func TestDedupRespHeap_QuorumChunkDedup(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.tname, func(t *testing.T) {
-			h := NewResponseDeduplicator(NewProxyResponseLoserTree(
+			h := NewResponseDeduplicatorInternal(NewProxyResponseLoserTree(
 				&eagerRespSet{
 					closeSeries:       func() {},
+					cl:                nopClientSendCloser{},
 					wg:                &sync.WaitGroup{},
 					bufferedResponses: tcase.responses,
 				},
-			))
-			h.quorumChunkDedup = true
+			), true)
 			tcase.testFn(tcase.responses, h)
 		})
 	}

@@ -329,7 +329,10 @@ func (m *Chunk) Compare(b *Chunk) int {
 func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 	fieldStr, err := strconv.Unquote(string(entry))
 	if err != nil {
-		return errors.Wrapf(err, fmt.Sprintf("failed to unqote %v, in order to unmarshal as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
+		return errors.Wrapf(
+			err,
+			"failed to unqote %v, in order to unmarshal as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ","),
+		)
 	}
 
 	if fieldStr == "" {
@@ -340,7 +343,11 @@ func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 
 	strategy, ok := PartialResponseStrategy_value[strings.ToUpper(fieldStr)]
 	if !ok {
-		return errors.Errorf(fmt.Sprintf("failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
+		return errors.Errorf(
+			"failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s",
+			string(entry),
+			strings.Join(PartialResponseStrategyValues, ","),
+		)
 	}
 	*x = PartialResponseStrategy(strategy)
 	return nil
@@ -478,11 +485,6 @@ func (m *Chunk) XORNumSamples() int {
 	return 0
 }
 
-type ChunkStats struct {
-	MinTime, MaxTime int64
-	Samples          int
-}
-
 type SeriesStatsCounter struct {
 	lastSeriesHash uint64
 
@@ -490,7 +492,6 @@ type SeriesStatsCounter struct {
 	Chunks  int
 	Samples int
 	Bytes   uint64
-	ChunkSt []ChunkStats
 }
 
 func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
@@ -502,52 +503,44 @@ func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 }
 
 func (c *SeriesStatsCounter) Count(r *SeriesResponse) {
-	if r.GetSeries() != nil {
-		series := r.GetSeries()
-		c.CountSeries(series.Labels)
-		c.ChunkSt = make([]ChunkStats, min(10, len(series.Chunks)))
-		for ci, chk := range series.Chunks {
-			// Keep the old value of c.Samples so that the samples in this chunck can be computed
-			accSamples := c.Samples
-			if chk.Raw != nil {
-				c.Chunks++
-				c.Samples += chk.Raw.XORNumSamples()
-			}
-
-			if chk.Count != nil {
-				c.Chunks++
-				c.Samples += chk.Count.XORNumSamples()
-			}
-
-			if chk.Counter != nil {
-				c.Chunks++
-				c.Samples += chk.Counter.XORNumSamples()
-			}
-
-			if chk.Max != nil {
-				c.Chunks++
-				c.Samples += chk.Max.XORNumSamples()
-			}
-
-			if chk.Min != nil {
-				c.Chunks++
-				c.Samples += chk.Min.XORNumSamples()
-			}
-
-			if chk.Sum != nil {
-				c.Chunks++
-				c.Samples += chk.Sum.XORNumSamples()
-			}
-			if ci < len(c.ChunkSt) {
-				c.ChunkSt[ci].MinTime = chk.MinTime
-				c.ChunkSt[ci].MaxTime = chk.MaxTime
-				c.ChunkSt[ci].Samples = c.Samples - accSamples
-			}
-		}
-	}
-
 	//aggregate # of bytes fetched
 	c.Bytes += uint64(r.Size())
+	if r.GetSeries() == nil {
+		return
+	}
+	series := r.GetSeries()
+	c.CountSeries(series.Labels)
+	for _, chk := range series.Chunks {
+		if chk.Raw != nil {
+			c.Chunks++
+			c.Samples += chk.Raw.XORNumSamples()
+		}
+
+		if chk.Count != nil {
+			c.Chunks++
+			c.Samples += chk.Count.XORNumSamples()
+		}
+
+		if chk.Counter != nil {
+			c.Chunks++
+			c.Samples += chk.Counter.XORNumSamples()
+		}
+
+		if chk.Max != nil {
+			c.Chunks++
+			c.Samples += chk.Max.XORNumSamples()
+		}
+
+		if chk.Min != nil {
+			c.Chunks++
+			c.Samples += chk.Min.XORNumSamples()
+		}
+
+		if chk.Sum != nil {
+			c.Chunks++
+			c.Samples += chk.Sum.XORNumSamples()
+		}
+	}
 }
 
 func (m *SeriesRequest) ToPromQL() string {

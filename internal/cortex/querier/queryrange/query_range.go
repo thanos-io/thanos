@@ -273,6 +273,7 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 
 	var (
 		analyzes          = make([]*Analysis, 0, len(responses))
+        seriesStatsCounters = make([]*SeriesStatsCounter, 0, len(responses))
 		warnings []string = nil
 	)
 	for i := range promResponses {
@@ -282,15 +283,9 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 		if len(promResponses[i].Warnings) > 0 {
 			warnings = append(warnings, promResponses[i].Warnings...)
 		}
-	}
-
-	seriesStatsCounters := make([]*SeriesStatsCounter, 0, len(responses))
-	for i := range promResponses {
-		if promResponses[i].Data.GetSeriesStatsCounter() == nil {
-			continue
-		}
-
-		seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
+		if promResponses[i].Data.GetSeriesStatsCounter() != nil {
+		    seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
+        }
 	}
 
 	response := PrometheusResponse{
