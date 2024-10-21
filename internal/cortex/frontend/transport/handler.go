@@ -23,6 +23,7 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/httpgrpc/server"
 
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -207,6 +208,9 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		"trace_id", thanosTraceID,
 	}, formatQueryString(queryString)...)
 
+	logMessage = addQueryRangeToLogMessage(queryString, logMessage)
+	logMessage = f.addStatsToLogMessage(r.Header, logMessage)
+
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
@@ -263,6 +267,42 @@ func formatQueryString(queryString url.Values) (fields []interface{}) {
 		fields = append(fields, fmt.Sprintf("param_%s", k), strings.Join(v, ","))
 	}
 	return fields
+}
+
+func (f *Handler) addStatsToLogMessage(respHeaders http.Header, message []interface{}) []interface{} {
+	if vs, ok := respHeaders[queryrange.StatsPeakSamplesHeader]; ok {
+		message = append(message, "peak_samples", vs[0])
+	}
+	if vs, ok := respHeaders[queryrange.StatsTotalSamplesHeader]; ok {
+		message = append(message, "total_samples", vs[0])
+	}
+
+	return message
+}
+
+func addQueryRangeToLogMessage(queryString url.Values, logMessage []interface{}) []interface{} {
+	queryRange := extractQueryRange(queryString)
+	if queryRange != time.Duration(0) {
+		logMessage = append(logMessage, "query_range_hours", int(queryRange.Hours()))
+		logMessage = append(logMessage, "query_range_human", queryRange.String())
+	}
+	return logMessage
+}
+
+// extractQueryRange extracts query range from query string.
+// If start and end are not provided or are invalid, it returns a duration with zero-value.
+func extractQueryRange(queryString url.Values) time.Duration {
+	startStr := queryString.Get("start")
+	endStr := queryString.Get("end")
+	var queryRange = time.Duration(0)
+	if startStr != "" && endStr != "" {
+		start, serr := util.ParseTime(startStr)
+		end, eerr := util.ParseTime(endStr)
+		if serr == nil && eerr == nil {
+			queryRange = time.Duration(end-start) * time.Millisecond
+		}
+	}
+	return queryRange
 }
 
 func writeError(w http.ResponseWriter, err error) {
