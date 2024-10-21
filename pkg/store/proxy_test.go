@@ -2660,14 +2660,14 @@ func TestDedupRespHeap_QuorumChunkDedup(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.tname, func(t *testing.T) {
-			h := NewResponseDeduplicator(NewProxyResponseLoserTree(
+			h := NewResponseDeduplicatorInternal(NewProxyResponseLoserTree(
 				&eagerRespSet{
 					closeSeries:       func() {},
+					cl:                nopClientSendCloser{},
 					wg:                &sync.WaitGroup{},
 					bufferedResponses: tcase.responses,
 				},
-			))
-			h.quorumChunkDedup = true
+			), true)
 			tcase.testFn(tcase.responses, h)
 		})
 	}

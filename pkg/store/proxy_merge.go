@@ -42,6 +42,8 @@ type responseDeduplicator struct {
 	prev *storepb.SeriesResponse
 	ok   bool
 
+	chunkDedupMap    map[uint64]*storepb.AggrChunk
+	chunkCountMap    map[uint64]int
 	quorumChunkDedup bool
 }
 
@@ -58,9 +60,12 @@ func NewResponseDeduplicatorInternal(h seriesStream, quorumChunkDedup bool) *res
 		prev = h.At()
 	}
 	return &responseDeduplicator{
-		h:    h,
-		ok:   ok,
-		prev: prev,
+		h:                h,
+		ok:               ok,
+		prev:             prev,
+		chunkDedupMap:    make(map[uint64]*storepb.AggrChunk),
+		chunkCountMap:    make(map[uint64]int),
+		quorumChunkDedup: quorumChunkDedup,
 	}
 }
 
@@ -120,8 +125,8 @@ func (d *responseDeduplicator) Next() bool {
 }
 
 func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
-	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
-	chunckCountMap := map[uint64]int{}
+	clear(d.chunkDedupMap)
+	clear(d.chunkCountMap)
 
 	for _, s := range series {
 		for _, chk := range s.GetSeries().Chunks {
@@ -136,36 +141,36 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 					hash = xxhash.Sum64(field.Data)
 				}
 
-				if _, ok := chunkDedupMap[hash]; !ok {
+				if _, ok := d.chunkDedupMap[hash]; !ok {
 					chk := chk
-					chunkDedupMap[hash] = &chk
-					chunckCountMap[hash] = 1
+					d.chunkDedupMap[hash] = &chk
+					d.chunkCountMap[hash] = 1
 					break
 				} else {
-					chunckCountMap[hash]++
+					d.chunkCountMap[hash]++
 				}
 			}
 		}
 	}
 
 	// If no chunks were requested.
-	if len(chunkDedupMap) == 0 {
+	if len(d.chunkDedupMap) == 0 {
 		return series[0]
 	}
 
-	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
-	for hash, chk := range chunkDedupMap {
+	finalChunks := make([]storepb.AggrChunk, 0, len(d.chunkDedupMap))
+	for hash, chk := range d.chunkDedupMap {
 		if d.quorumChunkDedup {
 			// NB: this is specific to Databricks' setup where each time series is written to at least 2 out of 3 replicas.
 			// Each chunk should have 3 replicas in most cases, and 2 replicas in the worst acceptable cases.
 			// Quorum-based deduplication is used to pick the majority value among 3 replicas.
 			// If a chunk has only 2 identical replicas, there might be another chunk with corrupt data.
 			// We want to send those two identical replicas to the later quorum-based deduplication process to dominate any corrupt third replica.
-			if chunckCountMap[hash] >= 3 {
+			if d.chunkCountMap[hash] >= 3 {
 				// Most of cases should hit this branch.
 				finalChunks = append(finalChunks, *chk)
 			} else {
-				for i := 0; i < chunckCountMap[hash]; i++ {
+				for i := 0; i < d.chunkCountMap[hash]; i++ {
 					finalChunks = append(finalChunks, *chk)
 				}
 			}
