@@ -86,7 +86,10 @@ func (r *resolver) run() {
 				raddr := grpcresolver.Address{Addr: addr}
 				state.Addresses = append(state.Addresses, raddr)
 			}
-			_ = r.cc.UpdateState(state)
+			err = r.cc.UpdateState(state)
+			if err != nil {
+				continue
+			}
 		}
 		select {
 		case <-r.ctx.Done():
