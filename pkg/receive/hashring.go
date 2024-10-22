@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/cespare/xxhash"
+	"golang.org/x/exp/slices"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -53,63 +55,66 @@ func (i *insufficientNodesError) Error() string {
 // It returns the node and any error encountered.
 type Hashring interface {
 	// Get returns the first node that should handle the given tenant and time series.
-	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
+	Get(tenant string, timeSeries *prompb.TimeSeries) (Endpoint, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
-	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (string, error)
+	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (Endpoint, error)
 	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
 	// if, for example, the same address is used for multiple tenants in the multi-hashring.
-	Nodes() []string
+	Nodes() []Endpoint
 }
 
 // SingleNodeHashring always returns the same node.
 type SingleNodeHashring string
 
 // Get implements the Hashring interface.
-func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
 	return s.GetN(tenant, ts, 0)
 }
 
-func (s SingleNodeHashring) Nodes() []string {
-	return []string{string(s)}
+func (s SingleNodeHashring) Nodes() []Endpoint {
+	return []Endpoint{{Address: string(s), CapNProtoAddress: string(s)}}
 }
 
 // GetN implements the Hashring interface.
-func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (string, error) {
+func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (Endpoint, error) {
 	if n > 0 {
-		return "", &insufficientNodesError{have: 1, want: n + 1}
+		return Endpoint{}, &insufficientNodesError{have: 1, want: n + 1}
 	}
-	return string(s), nil
+	return Endpoint{
+		Address:          string(s),
+		CapNProtoAddress: string(s),
+	}, nil
 }
 
 // simpleHashring represents a group of nodes handling write requests by hashmoding individual series.
-type simpleHashring []string
+type simpleHashring []Endpoint
 
 func newSimpleHashring(endpoints []Endpoint) (Hashring, error) {
-	addresses := make([]string, len(endpoints))
 	for i := range endpoints {
 		if endpoints[i].AZ != "" {
 			return nil, errors.New("Hashmod algorithm does not support AZ aware hashring configuration. Either use Ketama or remove AZ configuration.")
 		}
-		addresses[i] = endpoints[i].Address
 	}
-	sort.Strings(addresses)
+	slices.SortFunc(endpoints, func(a, b Endpoint) int {
+		return strings.Compare(a.Address, b.Address)
+	})
 
-	return simpleHashring(addresses), nil
+	return simpleHashring(endpoints), nil
 }
 
-func (s simpleHashring) Nodes() []string {
+func (s simpleHashring) Nodes() []Endpoint {
 	return s
 }
 
 // Get returns a target to handle the given tenant and time series.
-func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
 	return s.GetN(tenant, ts, 0)
 }
 
 // GetN returns the nth target to handle the given tenant and time series.
-func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
 	if n >= uint64(len(s)) {
-		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
+		return Endpoint{}, &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
 
 	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
@@ -134,7 +139,6 @@ type ketamaHashring struct {
 	endpoints    []Endpoint
 	sections     sections
 	numEndpoints uint64
-	nodes        []string
 }
 
 func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFactor uint64) (*ketamaHashring, error) {
@@ -148,10 +152,8 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 	availabilityZones := make(map[string]struct{})
 	ringSections := make(sections, 0, numSections)
 
-	nodes := []string{}
 	for endpointIndex, endpoint := range endpoints {
 		availabilityZones[endpoint.AZ] = struct{}{}
-		nodes = append(nodes, endpoint.Address)
 		for i := 1; i <= sectionsPerNode; i++ {
 			_, _ = hash.Write([]byte(endpoint.Address + ":" + strconv.Itoa(i)))
 			n := &section{
@@ -166,19 +168,17 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 		}
 	}
 	sort.Sort(ringSections)
-	sort.Strings(nodes)
 	calculateSectionReplicas(ringSections, replicationFactor, availabilityZones)
 
 	return &ketamaHashring{
 		endpoints:    endpoints,
 		sections:     ringSections,
 		numEndpoints: uint64(len(endpoints)),
-		nodes:        nodes,
 	}, nil
 }
 
-func (k *ketamaHashring) Nodes() []string {
-	return k.nodes
+func (k *ketamaHashring) Nodes() []Endpoint {
+	return k.endpoints
 }
 
 func sizeOfLeastOccupiedAZ(azSpread map[string]int64) int64 {
@@ -219,13 +219,13 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 	}
 }
 
-func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
 	return c.GetN(tenant, ts, 0)
 }
 
-func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
 	if n >= c.numEndpoints {
-		return "", &insufficientNodesError{have: c.numEndpoints, want: n + 1}
+		return Endpoint{}, &insufficientNodesError{have: c.numEndpoints, want: n + 1}
 	}
 
 	v := labelpb.HashWithPrefix(tenant, ts.Labels)
@@ -241,7 +241,7 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 	}
 
 	endpointIndex := c.sections[i].replicas[n]
-	return c.endpoints[endpointIndex].Address, nil
+	return c.endpoints[endpointIndex], nil
 }
 
 // multiHashring represents a set of hashrings.
@@ -257,16 +257,16 @@ type multiHashring struct {
 	// and read from.
 	mu sync.RWMutex
 
-	nodes []string
+	nodes []Endpoint
 }
 
 // Get returns a target to handle the given tenant and time series.
-func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
 	return m.GetN(tenant, ts, 0)
 }
 
 // GetN returns the nth target to handle the given tenant and time series.
-func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
 	m.mu.RLock()
 	h, ok := m.cache[tenant]
 	m.mu.RUnlock()
@@ -292,7 +292,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 					case TenantMatcherGlob:
 						matches, err := filepath.Match(tenantPattern, tenant)
 						if err != nil {
-							return "", fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
+							return Endpoint{}, fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
 						}
 						found = matches
 					case TenantMatcherTypeExact:
@@ -314,10 +314,10 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 			return m.hashrings[i].GetN(tenant, ts, n)
 		}
 	}
-	return "", errors.New("no matching hashring to handle tenant")
+	return Endpoint{}, errors.New("no matching hashring to handle tenant")
 }
 
-func (m *multiHashring) Nodes() []string {
+func (m *multiHashring) Nodes() []Endpoint {
 	return m.nodes
 }
 
@@ -352,7 +352,9 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		}
 		m.tenantSets = append(m.tenantSets, t)
 	}
-	sort.Strings(m.nodes)
+	slices.SortFunc(m.nodes, func(a, b Endpoint) int {
+		return strings.Compare(a.Address, b.Address)
+	})
 	return m, nil
 }
 
