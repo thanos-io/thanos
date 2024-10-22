@@ -278,6 +278,10 @@ Flags:
                                  functions in query-frontend.
                                  --no-query-frontend.enable-x-functions for
                                  disabling.
+      --query-frontend.force-query-stats
+                                 Will always pass "stats" param to upstream
+                                 queriers and collect query statistics reporting
+                                 them as logs.
       --query-frontend.forward-header=<http-header-name> ...
                                  List of headers forwarded by the query-frontend
                                  to downstream queriers, default is empty
