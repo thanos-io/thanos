@@ -6,8 +6,11 @@ package tls
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,7 +20,7 @@ import (
 )
 
 // NewServerConfig provides new server TLS configuration.
-func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA string) (*tls.Config, error) {
+func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string) (*tls.Config, error) {
 	if keyPath == "" && certPath == "" {
 		if clientCA != "" {
 			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
@@ -33,8 +36,13 @@ func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA string) (*tl
 		return nil, errors.New("both server key and certificate must be provided")
 	}
 
+	minTlsVersion, err := getTlsVersion(tlsMinVersion)
+	if err != nil {
+		return nil, err
+	}
+
 	tlsCfg := &tls.Config{
-		MinVersion: tls.VersionTLS13,
+		MinVersion: minTlsVersion,
 	}
 	// Certificate is loaded during server startup to check for any errors.
 	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
@@ -189,4 +197,36 @@ func (m *clientTLSManager) getClientCertificate(*tls.CertificateRequestInfo) (*t
 	}
 
 	return m.cert, nil
+}
+
+type validOption struct {
+	tlsOption map[string]uint16
+}
+
+func (validOption validOption) joinString() string {
+	var keys []string
+
+	for key := range validOption.tlsOption {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+func getTlsVersion(tlsMinVersion string) (uint16, error) {
+
+	validOption := validOption{
+		tlsOption: map[string]uint16{
+			"1.0": tls.VersionTLS10,
+			"1.1": tls.VersionTLS11,
+			"1.2": tls.VersionTLS12,
+			"1.3": tls.VersionTLS13,
+		},
+	}
+
+	if _, ok := validOption.tlsOption[tlsMinVersion]; !ok {
+		return 0, errors.New(fmt.Sprintf("invalid TLS version: %s, valid values are %s", tlsMinVersion, validOption.joinString()))
+	}
+
+	return validOption.tlsOption[tlsMinVersion], nil
 }
