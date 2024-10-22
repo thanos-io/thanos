@@ -2,21 +2,21 @@ package queryrange
 
 import (
 	"context"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/thanos-io/thanos/internal/cortex/querier/stats"
 )
 
 func Test_statsMiddleware_AddsHeaderWithStats(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name          string
-		forceStats    bool
-		peakSamples   int
-		totalSamples  int64
-		expectedStats bool
+		name         string
+		forceStats   bool
+		peakSamples  int32
+		totalSamples int64
 	}{
 		{
 			name:         "With forceStats true",
@@ -44,7 +44,7 @@ func Test_statsMiddleware_AddsHeaderWithStats(t *testing.T) {
 						Stats: &PrometheusResponseStats{
 							Samples: &PrometheusResponseSamplesStats{
 								TotalQueryableSamples: tt.totalSamples,
-								PeakSamples:           int32(tt.peakSamples),
+								PeakSamples:           tt.peakSamples,
 							},
 						},
 					},
@@ -54,7 +54,10 @@ func Test_statsMiddleware_AddsHeaderWithStats(t *testing.T) {
 			middleware := NewStatsMiddleware(tt.forceStats)
 			wrappedHandler := middleware.Wrap(fakeHandler)
 
-			resp, err := wrappedHandler.Do(context.Background(), &PrometheusRequest{
+			origCtx := context.Background()
+			qryStats, ctx := stats.ContextWithEmptyStats(origCtx)
+
+			resp, err := wrappedHandler.Do(ctx, &PrometheusRequest{
 				Path:  "/api/v1/query_range",
 				Start: 1536673680 * 1e3,
 				End:   1536716898 * 1e3,
@@ -76,15 +79,10 @@ func Test_statsMiddleware_AddsHeaderWithStats(t *testing.T) {
 			promResp, ok := resp.(*PrometheusResponse)
 			require.True(t, ok)
 
-			assert.Contains(t, promResp.Headers, &PrometheusResponseHeader{
-				Name:   StatsTotalSamplesHeader,
-				Values: []string{strconv.FormatInt(tt.totalSamples, 10)},
-			})
-			assert.Contains(t, promResp.Headers, &PrometheusResponseHeader{
-				Name:   StatsPeakSamplesHeader,
-				Values: []string{strconv.FormatInt(int64(tt.peakSamples), 10)},
-			})
-
+			assert.Equal(t, qryStats.LoadPeakSamples(), tt.peakSamples)
+			assert.Equal(t, qryStats.LoadTotalSamples(), tt.totalSamples)
+			assert.Equal(t, promResp.Data.Stats.Samples.PeakSamples, tt.peakSamples)
+			assert.Equal(t, promResp.Data.Stats.Samples.TotalQueryableSamples, tt.totalSamples)
 		})
 	}
 }
