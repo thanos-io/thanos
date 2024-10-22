@@ -82,7 +82,7 @@ class TimeInput extends Component<TimeInputProps> {
     this.$time.on('change.datetimepicker', (e: any) => {
       // The end time can also be set by dragging a section on the graph,
       // and that value will have decimal places.
-      if (e.date && e.date.valueOf() !== Math.trunc(this.props.time?.valueOf()!)) {
+      if (e.date && e.date.valueOf() !== Math.trunc(this.props.time?.valueOf() ?? 0)) {
         this.props.onChangeTime(e.date.valueOf());
       }
     });
