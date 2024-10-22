@@ -23,7 +23,6 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/httpgrpc/server"
 
-	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	querier_stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -108,11 +107,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Initialise the stats in the context and make sure it's propagated
 	// down the request chain.
-	if f.cfg.QueryStatsEnabled {
-		var ctx context.Context
-		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
-		r = r.WithContext(ctx)
-	}
+	var ctx context.Context
+	stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
+	r = r.WithContext(ctx)
 
 	defer func() {
 		_ = r.Body.Close()
@@ -157,7 +154,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldReportSlowQuery {
-		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
+		f.reportSlowQuery(r, hs, queryString, queryResponseTime, stats)
 	}
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
@@ -172,7 +169,13 @@ func isQueryEndpoint(path string) bool {
 }
 
 // reportSlowQuery reports slow queries.
-func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
+func (f *Handler) reportSlowQuery(
+	r *http.Request,
+	responseHeaders http.Header,
+	queryString url.Values,
+	queryResponseTime time.Duration,
+	stats *querier_stats.Stats,
+) {
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -209,7 +212,7 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 	}, formatQueryString(queryString)...)
 
 	logMessage = addQueryRangeToLogMessage(queryString, logMessage)
-	logMessage = f.addStatsToLogMessage(r.Header, logMessage)
+	logMessage = f.addStatsToLogMessage(logMessage, stats)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
@@ -269,12 +272,10 @@ func formatQueryString(queryString url.Values) (fields []interface{}) {
 	return fields
 }
 
-func (f *Handler) addStatsToLogMessage(respHeaders http.Header, message []interface{}) []interface{} {
-	if vs, ok := respHeaders[queryrange.StatsPeakSamplesHeader]; ok {
-		message = append(message, "peak_samples", vs[0])
-	}
-	if vs, ok := respHeaders[queryrange.StatsTotalSamplesHeader]; ok {
-		message = append(message, "total_samples", vs[0])
+func (f *Handler) addStatsToLogMessage(message []interface{}, stats *querier_stats.Stats) []interface{} {
+	if stats != nil {
+		message = append(message, "peak_samples", stats.LoadPeakSamples())
+		message = append(message, "total_samples_loaded", stats.LoadTotalSamples())
 	}
 
 	return message

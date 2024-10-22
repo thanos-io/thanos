@@ -5,12 +5,8 @@ package queryrange
 
 import (
 	"context"
-	"strconv"
-)
 
-const (
-	StatsTotalSamplesHeader = "X-Thanos-Stats-Total-Samples"
-	StatsPeakSamplesHeader  = "X-Thanos-Stats-Peak-Samples"
+	"github.com/thanos-io/thanos/internal/cortex/querier/stats"
 )
 
 type statsMiddleware struct {
@@ -37,27 +33,14 @@ func (s statsMiddleware) Do(ctx context.Context, r Request) (Response, error) {
 	}
 
 	if resp.GetStats() != nil {
-		if pr, ok := resp.(*PrometheusResponse); ok {
-			pr.Headers = addStatsHeaders(pr.Headers, resp)
-		}
-		if pir, ok := resp.(*PrometheusInstantQueryResponse); ok {
-			pir.Headers = addStatsHeaders(pir.Headers, resp)
+		sts := stats.FromContext(ctx)
+		if sts != nil {
+			if sts.LoadPeakSamples() < resp.GetStats().Samples.PeakSamples {
+				sts.SetPeakSamples(resp.GetStats().Samples.PeakSamples)
+			}
+			sts.AddTotalSamples(resp.GetStats().Samples.TotalQueryableSamples)
 		}
 	}
 
 	return resp, err
-}
-
-func addStatsHeaders(h []*PrometheusResponseHeader, resp Response) []*PrometheusResponseHeader {
-	return append(
-		h,
-		&PrometheusResponseHeader{
-			Name:   StatsTotalSamplesHeader,
-			Values: []string{strconv.FormatInt(resp.GetStats().Samples.TotalQueryableSamples, 10)},
-		},
-		&PrometheusResponseHeader{
-			Name:   StatsPeakSamplesHeader,
-			Values: []string{strconv.FormatInt(int64(resp.GetStats().Samples.PeakSamples), 10)},
-		},
-	)
 }
