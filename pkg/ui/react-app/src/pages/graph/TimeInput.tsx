@@ -78,6 +78,7 @@ class TimeInput extends Component<TimeInputProps> {
       defaultDate: this.props.time,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.$time.on('change.datetimepicker', (e: any) => {
       // The end time can also be set by dragging a section on the graph,
       // and that value will have decimal places.
