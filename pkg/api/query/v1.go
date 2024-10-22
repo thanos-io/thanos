@@ -175,8 +175,9 @@ type QueryAPI struct {
 	enableExemplarPartialResponse       bool
 	disableCORS                         bool
 
-	replicaLabels  []string
-	endpointStatus func() []query.EndpointStatus
+	deduplicationFunc string
+	replicaLabels     []string
+	endpointStatus    func() []query.EndpointStatus
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -211,6 +212,7 @@ func NewQueryAPI(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	deduplicationFunc string,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -247,6 +249,7 @@ func NewQueryAPI(
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
+		deduplicationFunc:                      deduplicationFunc,
 		replicaLabels:                          replicaLabels,
 		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -578,6 +581,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 		ctx,
 		qapi.queryableCreate(
 			enableDedup,
+			qapi.deduplicationFunc,
 			replicaLabels,
 			storeDebugMatchers,
 			maxSourceResolution,
@@ -681,6 +685,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			ctx,
 			qapi.queryableCreate(
 				enableDedup,
+				qapi.deduplicationFunc,
 				replicaLabels,
 				storeDebugMatchers,
 				maxSourceResolution,
@@ -849,6 +854,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 		ctx,
 		qapi.queryableCreate(
 			enableDedup,
+			qapi.deduplicationFunc,
 			replicaLabels,
 			storeDebugMatchers,
 			maxSourceResolution,
@@ -982,6 +988,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			ctx,
 			qapi.queryableCreate(
 				enableDedup,
+				qapi.deduplicationFunc,
 				replicaLabels,
 				storeDebugMatchers,
 				maxSourceResolution,
@@ -1080,6 +1087,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 
 	q, err := qapi.queryableCreate(
 		true,
+		qapi.deduplicationFunc,
 		nil,
 		storeDebugMatchers,
 		0,
@@ -1186,6 +1194,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 
 	q, err := qapi.queryableCreate(
 		enableDedup,
+		qapi.deduplicationFunc,
 		replicaLabels,
 		storeDebugMatchers,
 		math.MaxInt64,
@@ -1260,6 +1269,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 
 	q, err := qapi.queryableCreate(
 		true,
+		qapi.deduplicationFunc,
 		nil,
 		storeDebugMatchers,
 		0,
