@@ -92,6 +92,7 @@ message PrometheusResponseStats {
 message PrometheusResponseSamplesStats {
   int64 totalQueryableSamples = 1 [(gogoproto.jsontag) = "totalQueryableSamples"];
   repeated PrometheusResponseQueryableSamplesStatsPerStep totalQueryableSamplesPerStep = 2 [(gogoproto.jsontag) = "totalQueryableSamplesPerStep"];
+  int32 peakSamples = 3 [(gogoproto.jsontag) = "peakSamples"];
 }
 
 message PrometheusResponseQueryableSamplesStatsPerStep {
