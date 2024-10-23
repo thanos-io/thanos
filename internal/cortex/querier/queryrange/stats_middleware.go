@@ -33,11 +33,8 @@ func (s statsMiddleware) Do(ctx context.Context, r Request) (Response, error) {
 	}
 
 	if resp.GetStats() != nil {
-		sts := stats.FromContext(ctx)
-		if sts != nil {
-			if sts.LoadPeakSamples() < resp.GetStats().Samples.PeakSamples {
-				sts.SetPeakSamples(resp.GetStats().Samples.PeakSamples)
-			}
+		if sts := stats.FromContext(ctx); sts != nil {
+			sts.SetPeakSamples(max(sts.LoadPeakSamples(), resp.GetStats().Samples.PeakSamples))
 			sts.AddTotalSamples(resp.GetStats().Samples.TotalQueryableSamples)
 		}
 	}
