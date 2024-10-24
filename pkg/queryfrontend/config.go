@@ -162,13 +162,15 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		}
 		return &cortexcache.Config{
 			Redis: cortexcache.RedisConfig{
-				Endpoint:   config.Redis.Addr,
-				Timeout:    config.Redis.ReadTimeout,
-				MasterName: config.Redis.MasterName,
-				Expiration: config.Expiration,
-				DB:         config.Redis.DB,
-				Password:   flagext.Secret{Value: config.Redis.Password},
-				Username:   config.Redis.Username,
+				Endpoint:           config.Redis.Addr,
+				Timeout:            config.Redis.ReadTimeout,
+				MasterName:         config.Redis.MasterName,
+				Expiration:         config.Expiration,
+				DB:                 config.Redis.DB,
+				Password:           flagext.Secret{Value: config.Redis.Password},
+				Username:           config.Redis.Username,
+				EnableTLS:          config.Redis.TLSEnabled,
+				InsecureSkipVerify: config.Redis.TLSConfig.InsecureSkipVerify,
 			},
 			Background: cortexcache.BackgroundConfig{
 				WriteBackBuffer:     config.Redis.MaxSetMultiConcurrency * config.Redis.SetMultiBatchSize,
