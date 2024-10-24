@@ -89,6 +89,38 @@ func (s *Stats) LoadFetchedChunkBytes() uint64 {
 	return atomic.LoadUint64(&s.FetchedChunkBytes)
 }
 
+func (s *Stats) SetPeakSamples(peakSamples int32) {
+	if s == nil {
+		return
+	}
+
+	atomic.StoreInt32(&s.PeakLoadedSamples, peakSamples)
+}
+
+func (s *Stats) LoadPeakSamples() int32 {
+	if s == nil {
+		return 0
+	}
+
+	return atomic.LoadInt32(&s.PeakLoadedSamples)
+}
+
+func (s *Stats) AddTotalSamples(totalSamples int64) {
+	if s == nil {
+		return
+	}
+
+	atomic.AddInt64(&s.TotalLoadedSamples, totalSamples)
+}
+
+func (s *Stats) LoadTotalSamples() int64 {
+	if s == nil {
+		return 0
+	}
+
+	return atomic.LoadInt64(&s.TotalLoadedSamples)
+}
+
 // Merge the provide Stats into this one.
 func (s *Stats) Merge(other *Stats) {
 	if s == nil || other == nil {
