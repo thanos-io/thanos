@@ -208,6 +208,17 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 	return cfg.GlobalConfig.ExternalLabels, nil
 }
 
+func (c *Client) Health(ctx context.Context, base *url.URL) error {
+	u := *base
+	u.Path = path.Join(u.Path, "/-/healthy")
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_health HTTP[client]")
+	defer span.Finish()
+
+	_, _, err := c.req2xx(ctx, &u, http.MethodHead, nil)
+	return err
+}
+
 type Flags struct {
 	TSDBPath           string         `json:"storage.tsdb.path"`
 	TSDBRetention      model.Duration `json:"storage.tsdb.retention"`
