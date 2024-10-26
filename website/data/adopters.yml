@@ -255,3 +255,6 @@ adopters:
 - name: XNET
   url: https://xnet.company/
   logo: XNET.png
+- name: Logz.io
+  url: https://logz.io
+  logo: logzio.png
