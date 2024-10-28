@@ -26,6 +26,8 @@ import (
 )
 
 func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
+	t.Parallel()
+
 	t.Run("compressed", func(t *testing.T) {
 		b := make([]byte, 100)
 		for i := 0; i < 100; i++ {
@@ -70,6 +72,8 @@ func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
 }
 
 func TestDiffVarintCodec(t *testing.T) {
+	t.Parallel()
+
 	chunksDir := t.TempDir()
 
 	headOpts := tsdb.DefaultHeadOptions()
@@ -343,6 +347,8 @@ func FuzzSnappyStreamEncoding(f *testing.F) {
 }
 
 func TestRegressionIssue6545(t *testing.T) {
+	t.Parallel()
+
 	diffVarintPostings, err := os.ReadFile("6545postingsrepro")
 	testutil.Ok(t, err)
 

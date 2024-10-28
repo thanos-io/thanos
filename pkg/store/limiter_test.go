@@ -19,6 +19,8 @@ import (
 )
 
 func TestLimiter(t *testing.T) {
+	t.Parallel()
+
 	c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 	l := NewLimiter(10, c)
 
@@ -36,6 +38,8 @@ func TestLimiter(t *testing.T) {
 }
 
 func TestRateLimitedServer(t *testing.T) {
+	t.Parallel()
+
 	numSamples := 60
 	series := []*storepb.SeriesResponse{
 		storeSeriesResponse(t, labels.FromStrings("series", "1"), makeSamples(numSamples)),
