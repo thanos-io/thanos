@@ -14,6 +14,8 @@ import (
 )
 
 func TestValidateConfig(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name string
 		cfg  interface{}
@@ -73,6 +75,8 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestUnmarshalEndpointSlice(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name      string
 		json      string
