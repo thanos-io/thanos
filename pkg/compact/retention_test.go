@@ -28,6 +28,8 @@ import (
 )
 
 func TestApplyRetentionPolicyByResolution(t *testing.T) {
+	t.Parallel()
+
 	type testBlock struct {
 		id         string
 		minTime    time.Time

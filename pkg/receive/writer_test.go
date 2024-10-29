@@ -31,6 +31,8 @@ import (
 )
 
 func TestWriter(t *testing.T) {
+	t.Parallel()
+
 	now := model.Now()
 	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {

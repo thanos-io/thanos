@@ -10,6 +10,8 @@ import (
 )
 
 func TestRequestLimiter_limitsFor(t *testing.T) {
+	t.Parallel()
+
 	tenantWithLimits := "limited-tenant"
 	tenantWithoutLimits := "unlimited-tenant"
 
@@ -59,6 +61,8 @@ func TestRequestLimiter_limitsFor(t *testing.T) {
 }
 
 func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		defaultLimits *requestLimitsConfig
@@ -117,6 +121,8 @@ func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
 }
 
 func TestRequestLimiter_AllowSeries(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		seriesLimit int64
@@ -175,6 +181,8 @@ func TestRequestLimiter_AllowSeries(t *testing.T) {
 }
 
 func TestRequestLimiter_AllowSamples(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		samplesLimit int64

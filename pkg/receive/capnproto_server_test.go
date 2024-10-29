@@ -17,6 +17,8 @@ import (
 )
 
 func TestCapNProtoServer_SingleConcurrentClient(t *testing.T) {
+	t.Parallel()
+
 	var (
 		writer = NewCapNProtoWriter(
 			log.NewNopLogger(),
@@ -45,6 +47,8 @@ func TestCapNProtoServer_SingleConcurrentClient(t *testing.T) {
 }
 
 func TestCapNProtoServer_MultipleConcurrentClients(t *testing.T) {
+	t.Parallel()
+
 	var (
 		writer = NewCapNProtoWriter(
 			log.NewNopLogger(),
