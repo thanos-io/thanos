@@ -43,7 +43,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7704](https://github.com/thanos-io/thanos/pull/7704) *: *breaking :warning:* remove Store gRPC Info function. This has been deprecated for 3 years, its time to remove it.
 - [#7741](https://github.com/thanos-io/thanos/pull/7741) Deps: Bump Objstore to `v0.0.0-20240913074259-63feed0da069`
 - [#7813](https://github.com/thanos-io/thanos/pull/7813) Receiver: enable initial TSDB compaction time randomization
-- [] Ruler: add ability to run rule with remote write AND tsdb (statelessMode flag)
+- [#7875](https://github.com/thanos-io/thanos/pull/7875) Ruler: add ability to run rule with remote write AND tsdb (statelessMode flag)
 
 ### Removed
 
