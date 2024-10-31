@@ -304,19 +304,10 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if rs.markAfter {
-		deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
-		deletionMarkExists, err := rs.fromBkt.Exists(ctx, deletionMarkFile)
-		if err != nil {
-			return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
-		}
-
-		if !deletionMarkExists {
-			level.Debug(rs.logger).Log("msg", "marking block for deletion", "block_uuid", blockID)
-			if err := block.MarkForDeletion(ctx, rs.logger, rs.fromBkt, id, "marked for deletion by thanos bucket replicate", rs.metrics.blocksMarkedForDeletion); err != nil {
-				return errors.Wrapf(err, "mark %v for deletion", id)
-			}
-		} else {
-			level.Debug(rs.logger).Log("msg", "block already marked for deletion", "block_uuid", blockID)
+		level.Debug(rs.logger).Log("msg", "marking block for deletion", "block_uuid", blockID)
+		// we're using NopLogger here to avoid confusion when MarkForDeletion warns deletion mark already exists
+		if err := block.MarkForDeletion(ctx, log.NewNopLogger(), rs.fromBkt, id, "marked for deletion by thanos bucket replicate", rs.metrics.blocksMarkedForDeletion); err != nil {
+			return errors.Wrapf(err, "mark %v for deletion", id)
 		}
 	}
 
