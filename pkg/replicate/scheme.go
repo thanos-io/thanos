@@ -128,6 +128,7 @@ type replicationMetrics struct {
 	blocksAlreadyReplicated prometheus.Counter
 	blocksReplicated        prometheus.Counter
 	objectsReplicated       prometheus.Counter
+	blocksMarkedForDeletion prometheus.Counter
 }
 
 func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
@@ -143,6 +144,10 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 		objectsReplicated: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_objects_replicated_total",
 			Help: "Total number of objects replicated.",
+		}),
+		blocksMarkedForDeletion: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_replicate_blocks_marked_for_deletion_total",
+			Help: "Total number of blocks marked for deletion after being replicated.",
 		}),
 	}
 	return m
@@ -307,7 +312,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 		if !deletionMarkExists {
 			level.Debug(rs.logger).Log("msg", "marking block for deletion", "block_uuid", blockID)
-			if err := block.MarkForDeletion(ctx, rs.logger, rs.fromBkt, id, "marked for deletion by thanos bucket replicate", promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+			if err := block.MarkForDeletion(ctx, rs.logger, rs.fromBkt, id, "marked for deletion by thanos bucket replicate", rs.metrics.blocksMarkedForDeletion); err != nil {
 				return errors.Wrapf(err, "mark %v for deletion", id)
 			}
 		} else {
