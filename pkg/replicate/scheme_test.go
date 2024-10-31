@@ -382,12 +382,8 @@ func TestReplicationSchemeAll(t *testing.T) {
 				gotOrigin := len(originBucket.Objects())
 				gotTarget := len(targetBucket.Objects())
 
-				if gotOrigin != expectedOrigin {
-					t.Fatalf("OriginBucket should have one block made up of three objects replicated + deletion mark. Got %d but expected %d objects.", gotOrigin, expectedOrigin)
-				}
-				if gotTarget != expectedTarget {
-					t.Fatalf("TargetBucket should have one block made up of three objects replicated. Got %d but expected %d objects.", gotTarget, expectedTarget)
-				}
+				testutil.Equals(t, expectedOrigin, gotOrigin)
+				testutil.Equals(t, expectedTarget, gotTarget)
 			},
 		},
 	}
