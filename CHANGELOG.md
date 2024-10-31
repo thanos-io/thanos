@@ -101,6 +101,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7886](https://github.com/thanos-io/thanos/pull/7886) Discovery: Preserve results from other resolve calls
 - [#7745](https://github.com/thanos-io/thanos/pull/7745) *: Build with Prometheus stringlabels tags
 - [#7669](https://github.com/thanos-io/thanos/pull/7669) Receive: Change quorum calculation for rf=2
+- [#7875](https://github.com/thanos-io/thanos/pull/7875) Ruler: add ability to run rule with remote write AND tsdb (statelessMode flag)
 
 ### Removed
 
