@@ -98,17 +98,18 @@ type ruleConfig struct {
 
 	rwConfig *extflag.PathOrContent
 
-	resendDelay        time.Duration
-	evalInterval       time.Duration
-	outageTolerance    time.Duration
-	forGracePeriod     time.Duration
-	ruleFiles          []string
-	objStoreConfig     *extflag.PathOrContent
-	dataDir            string
-	lset               labels.Labels
-	ignoredLabelNames  []string
-	storeRateLimits    store.SeriesSelectLimits
-	ruleConcurrentEval int64
+	resendDelay          time.Duration
+	evalInterval         time.Duration
+	outageTolerance      time.Duration
+	forGracePeriod       time.Duration
+	ruleFiles            []string
+	objStoreConfig       *extflag.PathOrContent
+	dataDir              string
+	lset                 labels.Labels
+	ignoredLabelNames    []string
+	storeRateLimits      store.SeriesSelectLimits
+	ruleConcurrentEval   int64
+	statelessModeEnabled bool
 
 	extendedFunctionsEnabled bool
 }
@@ -164,9 +165,11 @@ func registerRule(app *extkingpin.App) {
 
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
 
-	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
+
+	cmd.Flag("stateless", "Enable stateless mode for the ruler").Default("false").BoolVar(&conf.statelessModeEnabled)
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
@@ -475,38 +478,7 @@ func runRule(
 		return err
 	}
 
-	if len(rwCfgYAML) > 0 {
-		var rwCfg struct {
-			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
-		}
-		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
-			return errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
-		}
-
-		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
-		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
-			return 0, nil
-		}, conf.dataDir, 1*time.Minute, nil, false)
-		if err := remoteStore.ApplyConfig(&config.Config{
-			GlobalConfig: config.GlobalConfig{
-				ExternalLabels: labelsTSDBToProm(conf.lset),
-			},
-			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
-		}); err != nil {
-			return errors.Wrap(err, "applying config to remote storage")
-		}
-
-		agentDB, err = agent.Open(logger, reg, remoteStore, conf.dataDir, agentOpts)
-		if err != nil {
-			return errors.Wrap(err, "start remote write agent db")
-		}
-		fanoutStore := storage.NewFanout(logger, agentDB, remoteStore)
-		appendable = fanoutStore
-		// Use a separate queryable to restore the ALERTS firing states.
-		// We cannot use remoteStore directly because it uses remote read for
-		// query. However, remote read is not implemented in Thanos Receiver.
-		queryable = thanosrules.NewPromClientsQueryable(logger, queryClients, promClients, conf.query.httpMethod, conf.query.step, conf.ignoredLabelNames)
-	} else {
+	if !conf.statelessModeEnabled {
 		tsdbDB, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 		if err != nil {
 			return errors.Wrap(err, "open TSDB")
@@ -528,6 +500,44 @@ func runRule(
 		}
 		appendable = tsdbDB
 		queryable = tsdbDB
+	}
+
+	if len(rwCfgYAML) > 0 {
+		var rwCfg struct {
+			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
+		}
+		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
+			return errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
+		}
+
+		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
+		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
+			return 0, nil
+		}, conf.dataDir, 1*time.Minute, nil, false)
+		if err := remoteStore.ApplyConfig(&config.Config{
+			GlobalConfig: config.GlobalConfig{
+				ExternalLabels: labelsTSDBToProm(conf.lset),
+			},
+			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
+		}); err != nil {
+			return errors.Wrap(err, "applying config to remote storage")
+		}
+
+		var fanoutStore storage.Storage
+		if !conf.statelessModeEnabled {
+			fanoutStore = storage.NewFanout(logger, tsdbDB, remoteStore)
+		} else {
+			agentDB, err = agent.Open(logger, reg, remoteStore, conf.dataDir, agentOpts)
+			if err != nil {
+				return errors.Wrap(err, "start remote write agent db")
+			}
+			fanoutStore = storage.NewFanout(logger, agentDB, remoteStore)
+		}
+		appendable = fanoutStore
+		// Use a separate queryable to restore the ALERTS firing states.
+		// We cannot use remoteStore directly because it uses remote read for
+		// query. However, remote read is not implemented in Thanos Receiver.
+		queryable = thanosrules.NewPromClientsQueryable(logger, queryClients, promClients, conf.query.httpMethod, conf.query.step, conf.ignoredLabelNames)
 	}
 
 	// Build the Alertmanager clients.
