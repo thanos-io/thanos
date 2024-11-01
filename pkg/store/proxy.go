@@ -338,20 +338,26 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	checkGroupReplicaErrors := func(st Client, err error) error {
 		if len(failedStores[st.GroupKey()]) > 1 {
+			msg := "Multiple replicas have failures for the same group"
+			group := st.GroupKey()
+			replicas := fmt.Sprintf("%+v", failedStores[group])
 			level.Error(reqLogger).Log(
-				"msg", "Multipel replicas have failures for the same group",
-				"group", st.GroupKey(),
-				"replicas", fmt.Sprintf("%+v", failedStores[st.GroupKey()]),
+				"msg", msg,
+				"group", group,
+				"replicas", replicas,
 			)
-			return err
+			return fmt.Errorf("%s group=%s replicas=%s: %w", msg, group, replicas, err)
 		}
 		if len(groupReplicaStores[st.GroupKey()]) == 1 && failedStores[st.GroupKey()][st.ReplicaKey()] > 1 {
+			msg := "A group with single replica has multiple failures"
+			group := st.GroupKey()
+			replicas := fmt.Sprintf("%+v", failedStores[group])
 			level.Error(reqLogger).Log(
-				"msg", "A single replica group has multiple failures",
-				"group", st.GroupKey(),
-				"replicas", fmt.Sprintf("%+v", failedStores[st.GroupKey()]),
+				"msg", msg,
+				"group", group,
+				"replicas", replicas,
 			)
-			return err
+			return fmt.Errorf("%s group=%s replicas=%s: %w", msg, group, replicas, err)
 		}
 		return nil
 	}
@@ -404,6 +410,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	i := 0
+	var firstWarning *string
 	for respHeap.Next() {
 		i++
 		if r.Limit > 0 && i > int(r.Limit) {
@@ -422,10 +429,14 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 				// TODO: attribute the warning to the store(group key and replica key) that produced it.
 				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
 				if totalFailedStores > 1 {
-					level.Error(reqLogger).Log("msg", "more than one stores have failed")
+					level.Error(reqLogger).Log("msg", "more than one stores had warnings")
 					// If we don't know which store has failed, we can tolerate at most one failed store.
+					if firstWarning != nil {
+						warning += "; " + *firstWarning
+					}
 					return status.Error(codes.Aborted, warning)
 				}
+				firstWarning = &warning
 			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return status.Error(codes.Aborted, resp.GetWarning())
 			}
