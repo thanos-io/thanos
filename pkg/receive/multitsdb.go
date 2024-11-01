@@ -147,6 +147,7 @@ func (l *localClient) LabelValues(ctx context.Context, in *storepb.LabelValuesRe
 	return l.store.LabelValues(ctx, in)
 }
 
+<<<<<<< HEAD
 func (l *localClient) GroupKey() string {
 	return ""
 }
@@ -155,6 +156,8 @@ func (l *localClient) ReplicaKey() string {
 	return ""
 }
 
+=======
+>>>>>>> thanos-io-main
 func (l *localClient) Matches(matchers []*labels.Matcher) bool {
 	return l.store.Matches(matchers)
 }

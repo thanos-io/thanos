@@ -62,6 +62,7 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 		}
 
 		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
+<<<<<<< HEAD
 	}
 
 	var seriesStatsCounters []*queryrange.SeriesStatsCounter
@@ -71,6 +72,8 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 		}
 
 		seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
+=======
+>>>>>>> thanos-io-main
 	}
 
 	var res queryrange.Response
@@ -181,6 +184,7 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
 	result.Engine = r.FormValue("engine")
+	result.Stats = r.FormValue(queryv1.Stats)
 
 	for _, header := range forwardHeaders {
 		for h, hv := range r.Header {
@@ -206,6 +210,7 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
 		queryv1.EngineParam:          []string{thanosReq.Engine},
 		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
+		queryv1.Stats:                []string{thanosReq.Stats},
 	}
 
 	if thanosReq.Time > 0 {

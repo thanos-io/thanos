@@ -243,6 +243,7 @@ func AnalyzesMerge(analysis ...*Analysis) *Analysis {
 	return root
 }
 
+<<<<<<< HEAD
 func SeriesStatsCounterMerge(seriesStatsCounters ...*SeriesStatsCounter) *SeriesStatsCounter {
 	result := SeriesStatsCounter{}
 	for _, c := range seriesStatsCounters {
@@ -254,6 +255,8 @@ func SeriesStatsCounterMerge(seriesStatsCounters ...*SeriesStatsCounter) *Series
 	return &result
 }
 
+=======
+>>>>>>> thanos-io-main
 func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response, error) {
 	if len(responses) == 0 {
 		return NewEmptyPrometheusResponse(), nil
@@ -273,12 +276,21 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 
 	var (
 		analyzes          = make([]*Analysis, 0, len(responses))
+<<<<<<< HEAD
         seriesStatsCounters = make([]*SeriesStatsCounter, 0, len(responses))
+=======
+>>>>>>> thanos-io-main
 		warnings []string = nil
 	)
 	for i := range promResponses {
 		if promResponses[i].Data.GetAnalysis() != nil {
 			analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
+<<<<<<< HEAD
+=======
+		}
+		if len(promResponses[i].Warnings) > 0 {
+			warnings = append(warnings, promResponses[i].Warnings...)
+>>>>>>> thanos-io-main
 		}
 		if len(promResponses[i].Warnings) > 0 {
 			warnings = append(warnings, promResponses[i].Warnings...)
@@ -347,6 +359,7 @@ func (prometheusCodec) DecodeRequest(_ context.Context, r *http.Request, forward
 	result.Query = r.FormValue("query")
 	result.Stats = r.FormValue("stats")
 	result.Path = r.URL.Path
+	result.Stats = r.FormValue("stats")
 
 	// Include the specified headers from http request in prometheusRequest.
 	for _, header := range forwardHeaders {
@@ -599,11 +612,18 @@ func (s *StringSample) UnmarshalJSON(b []byte) error {
 // UnmarshalJSON implements json.Unmarshaler.
 func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	var queryData struct {
+<<<<<<< HEAD
 		ResultType         string                   `json:"resultType"`
 		Result             jsoniter.RawMessage      `json:"result"`
 		Stats              *PrometheusResponseStats `json:"stats,omitempty"`
 		Analysis           *Analysis                `json:"analysis,omitempty"`
 		SeriesStatsCounter *SeriesStatsCounter      `json:"seriesStatsCounter,omitempty"`
+=======
+		ResultType string                   `json:"resultType"`
+		Result     jsoniter.RawMessage      `json:"result"`
+		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+		Analysis   *Analysis                `json:"analysis,omitempty"`
+>>>>>>> thanos-io-main
 	}
 
 	if err := json.Unmarshal(data, &queryData); err != nil {
@@ -613,7 +633,10 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	s.ResultType = queryData.ResultType
 	s.Stats = queryData.Stats
 	s.Analysis = queryData.Analysis
+<<<<<<< HEAD
 	s.SeriesStatsCounter = queryData.SeriesStatsCounter
+=======
+>>>>>>> thanos-io-main
 	switch s.ResultType {
 	case model.ValVector.String():
 		var result struct {
@@ -673,6 +696,7 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 	switch s.ResultType {
 	case model.ValVector.String():
 		res := struct {
+<<<<<<< HEAD
 			ResultType         string                   `json:"resultType"`
 			Data               []*Sample                `json:"result"`
 			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
@@ -684,10 +708,22 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 			Stats:              s.Stats,
 			Analysis:           s.Analysis,
 			SeriesStatsCounter: s.SeriesStatsCounter,
+=======
+			ResultType string                   `json:"resultType"`
+			Data       []*Sample                `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
+		}{
+			ResultType: s.ResultType,
+			Data:       s.Result.GetVector().Samples,
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
+>>>>>>> thanos-io-main
 		}
 		return json.Marshal(res)
 	case model.ValMatrix.String():
 		res := struct {
+<<<<<<< HEAD
 			ResultType         string                   `json:"resultType"`
 			Data               []*SampleStream          `json:"result"`
 			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
@@ -699,10 +735,22 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 			Stats:              s.Stats,
 			Analysis:           s.Analysis,
 			SeriesStatsCounter: s.SeriesStatsCounter,
+=======
+			ResultType string                   `json:"resultType"`
+			Data       []*SampleStream          `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
+		}{
+			ResultType: s.ResultType,
+			Data:       s.Result.GetMatrix().SampleStreams,
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
+>>>>>>> thanos-io-main
 		}
 		return json.Marshal(res)
 	case model.ValScalar.String():
 		res := struct {
+<<<<<<< HEAD
 			ResultType         string                   `json:"resultType"`
 			Data               *cortexpb.Sample         `json:"result"`
 			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
@@ -714,10 +762,22 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 			Stats:              s.Stats,
 			Analysis:           s.Analysis,
 			SeriesStatsCounter: s.SeriesStatsCounter,
+=======
+			ResultType string                   `json:"resultType"`
+			Data       *cortexpb.Sample         `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
+		}{
+			ResultType: s.ResultType,
+			Data:       s.Result.GetScalar(),
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
+>>>>>>> thanos-io-main
 		}
 		return json.Marshal(res)
 	case model.ValString.String():
 		res := struct {
+<<<<<<< HEAD
 			ResultType         string                   `json:"resultType"`
 			Data               *StringSample            `json:"result"`
 			Stats              *PrometheusResponseStats `json:"stats,omitempty"`
@@ -729,6 +789,17 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 			Stats:              s.Stats,
 			Analysis:           s.Analysis,
 			SeriesStatsCounter: s.SeriesStatsCounter,
+=======
+			ResultType string                   `json:"resultType"`
+			Data       *StringSample            `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+			Analysis   *Analysis                `json:"analysis,omitempty"`
+		}{
+			ResultType: s.ResultType,
+			Data:       s.Result.GetStringSample(),
+			Stats:      s.Stats,
+			Analysis:   s.Analysis,
+>>>>>>> thanos-io-main
 		}
 		return json.Marshal(res)
 	default:
@@ -741,6 +812,8 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 func StatsMerge(resps []Response) *PrometheusResponseStats {
 	output := map[int64]*PrometheusResponseQueryableSamplesStatsPerStep{}
 	hasStats := false
+	peakSamples := int32(0)
+	totalSamples := int64(0)
 	for _, resp := range resps {
 		stats := resp.GetStats()
 		if stats == nil {
@@ -755,6 +828,11 @@ func StatsMerge(resps []Response) *PrometheusResponseStats {
 		for _, s := range stats.Samples.TotalQueryableSamplesPerStep {
 			output[s.GetTimestampMs()] = s
 		}
+
+		if stats.Samples.PeakSamples > peakSamples {
+			peakSamples = stats.Samples.PeakSamples
+		}
+		totalSamples += stats.Samples.TotalQueryableSamples
 	}
 
 	if !hasStats {
@@ -768,10 +846,12 @@ func StatsMerge(resps []Response) *PrometheusResponseStats {
 
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
-	result := &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}}
+	result := &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{
+		PeakSamples:           peakSamples,
+		TotalQueryableSamples: totalSamples,
+	}}
 	for _, key := range keys {
 		result.Samples.TotalQueryableSamplesPerStep = append(result.Samples.TotalQueryableSamplesPerStep, output[key])
-		result.Samples.TotalQueryableSamples += output[key].Value
 	}
 
 	return result

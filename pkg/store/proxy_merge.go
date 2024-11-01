@@ -42,30 +42,44 @@ type responseDeduplicator struct {
 	prev *storepb.SeriesResponse
 	ok   bool
 
+<<<<<<< HEAD
 	chunkDedupMap    map[uint64]*storepb.AggrChunk
 	chunkCountMap    map[uint64]int
 	quorumChunkDedup bool
+=======
+	chunkDedupMap map[uint64]storepb.AggrChunk
+>>>>>>> thanos-io-main
 }
 
 // NewResponseDeduplicator returns a wrapper around a loser tree that merges duplicated series messages into one.
 // It also deduplicates identical chunks identified by the same checksum from each series message.
 func NewResponseDeduplicator(h seriesStream) *responseDeduplicator {
+<<<<<<< HEAD
 	return NewResponseDeduplicatorInternal(h, false)
 }
 
 func NewResponseDeduplicatorInternal(h seriesStream, quorumChunkDedup bool) *responseDeduplicator {
+=======
+>>>>>>> thanos-io-main
 	ok := h.Next()
 	var prev *storepb.SeriesResponse
 	if ok {
 		prev = h.At()
 	}
 	return &responseDeduplicator{
+<<<<<<< HEAD
 		h:                h,
 		ok:               ok,
 		prev:             prev,
 		chunkDedupMap:    make(map[uint64]*storepb.AggrChunk),
 		chunkCountMap:    make(map[uint64]int),
 		quorumChunkDedup: quorumChunkDedup,
+=======
+		h:             h,
+		ok:            ok,
+		prev:          prev,
+		chunkDedupMap: make(map[uint64]storepb.AggrChunk),
+>>>>>>> thanos-io-main
 	}
 }
 
@@ -126,7 +140,10 @@ func (d *responseDeduplicator) Next() bool {
 
 func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
 	clear(d.chunkDedupMap)
+<<<<<<< HEAD
 	clear(d.chunkCountMap)
+=======
+>>>>>>> thanos-io-main
 
 	for _, s := range series {
 		for _, chk := range s.GetSeries().Chunks {
@@ -143,8 +160,12 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 
 				if _, ok := d.chunkDedupMap[hash]; !ok {
 					chk := chk
+<<<<<<< HEAD
 					d.chunkDedupMap[hash] = &chk
 					d.chunkCountMap[hash] = 1
+=======
+					d.chunkDedupMap[hash] = chk
+>>>>>>> thanos-io-main
 					break
 				} else {
 					d.chunkCountMap[hash]++
@@ -159,6 +180,7 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 	}
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(d.chunkDedupMap))
+<<<<<<< HEAD
 	for hash, chk := range d.chunkDedupMap {
 		if d.quorumChunkDedup {
 			// NB: this is specific to Databricks' setup where each time series is written to at least 2 out of 3 replicas.
@@ -177,6 +199,10 @@ func (d *responseDeduplicator) chainSeriesAndRemIdenticalChunks(series []*storep
 		} else {
 			finalChunks = append(finalChunks, *chk)
 		}
+=======
+	for _, chk := range d.chunkDedupMap {
+		finalChunks = append(finalChunks, chk)
+>>>>>>> thanos-io-main
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
@@ -425,7 +451,11 @@ func newLazyRespSet(
 			}
 
 			if resp.GetSeries() != nil {
+<<<<<<< HEAD
 				seriesStats.Count(resp)
+=======
+				seriesStats.Count(resp.GetSeries())
+>>>>>>> thanos-io-main
 			}
 
 			l.bufferedResponsesMtx.Lock()
@@ -682,7 +712,11 @@ func newEagerRespSet(
 			}
 
 			if resp.GetSeries() != nil {
+<<<<<<< HEAD
 				seriesStats.Count(resp)
+=======
+				seriesStats.Count(resp.GetSeries())
+>>>>>>> thanos-io-main
 			}
 
 			l.bufferedResponses = append(l.bufferedResponses, resp)

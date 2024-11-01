@@ -255,3 +255,9 @@ adopters:
 - name: XNET
   url: https://xnet.company/
   logo: XNET.png
+<<<<<<< HEAD
+=======
+- name: Logz.io
+  url: https://logz.io
+  logo: logzio.png
+>>>>>>> thanos-io-main

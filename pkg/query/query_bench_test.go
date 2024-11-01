@@ -28,6 +28,8 @@ import (
 // this many times and within different interval e.g
 // TODO(bwplotka): Add benchmarks with PromQL involvement.
 func TestQuerySelect(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchQuerySelect(t, samplesPerSeries, series, true)

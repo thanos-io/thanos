@@ -33,6 +33,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestReloader_ConfigApply(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
@@ -199,6 +201,8 @@ config:
 }
 
 func TestReloader_ConfigRollback(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
@@ -311,6 +315,11 @@ faulty_config:
 }
 
 func TestReloader_ConfigDirApply(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -612,6 +621,11 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 }
 
 func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -821,6 +835,8 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 }
 
 func TestReloader_DirectoriesApply(t *testing.T) {
+	t.Parallel()
+
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -1031,6 +1047,11 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 }
 
 func TestReloader_DirectoriesApplyBasedOnWatchInterval(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -1166,6 +1187,8 @@ func TestReloader_DirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 }
 
 func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 

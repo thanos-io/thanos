@@ -204,11 +204,15 @@ func truncateExtLabels(s string, threshold int) string {
 	}
 	return s
 }
+<<<<<<< HEAD
 func (c *endpointSetNodeCollector) Update(
 	nodes map[string]map[string]int,
 	nodesAddr map[string]map[string]int,
 	nodesKeys map[string]map[string]int,
 ) {
+=======
+func (c *endpointSetNodeCollector) Update(nodes map[string]map[string]int) {
+>>>>>>> thanos-io-main
 	storeNodes := make(map[string]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
@@ -257,6 +261,7 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 				level.Warn(c.logger).Log("msg", "failed to collect endpointset metrics", "timeout", 1*time.Second)
 				return
 			}
+<<<<<<< HEAD
 		}
 	}
 	for replicaKey, occurrencesPerAddr := range c.storeNodesAddr {
@@ -273,6 +278,8 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 				c.connectionsWithKeys, prometheus.GaugeValue,
 				float64(occurrences),
 				groupKey, replicaKeys)
+=======
+>>>>>>> thanos-io-main
 		}
 	}
 }
@@ -464,8 +471,11 @@ func (e *EndpointSet) Update(ctx context.Context) {
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset]+1))
 		}
 		stats[er.ComponentType().String()][extLset]++
+<<<<<<< HEAD
 		bumpCounter(er.replicaKey, strings.Split(addr, ":")[0], statsAddr)
 		bumpCounter(er.groupKey, er.replicaKey, statsKeys)
+=======
+>>>>>>> thanos-io-main
 	}
 
 	e.endpointsMetric.Update(stats, statsAddr, statsKeys)
@@ -543,8 +553,11 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 				StoreClient: storepb.NewStoreClient(er.cc),
 				addr:        er.addr,
 				metadata:    er.metadata,
+<<<<<<< HEAD
 				groupKey:    er.GroupKey(),
 				replicaKey:  er.ReplicaKey(),
+=======
+>>>>>>> thanos-io-main
 				status:      er.status,
 			})
 			er.mtx.RUnlock()

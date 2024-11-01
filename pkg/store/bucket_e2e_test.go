@@ -555,6 +555,8 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 }
 
 func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	bkt := objstore.NewInMemBucket()
@@ -608,6 +610,8 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 }
 
 func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
+	t.Parallel()
+
 	// The query will fetch 2 series from 6 blocks, so we do expect to hit a total of 12 chunks.
 	expectedChunks := uint64(2 * 6)
 
@@ -678,6 +682,11 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 }
 
 func TestBucketStore_Series_CustomBytesLimiters_e2e(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	bkt := objstore.NewInMemBucket()
@@ -822,6 +831,8 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]struct {
 		maxSeriesLimit uint64
 		expectedErr    string
@@ -980,6 +991,8 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]struct {
 		maxSeriesLimit uint64
 		expectedErr    string

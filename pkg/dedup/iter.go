@@ -110,15 +110,23 @@ func (o *overlapSplitSet) Err() error {
 // NewSeriesSet returns seriesSet that deduplicates the same series.
 // The series in series set are expected be sorted by all labels.
 func NewSeriesSet(set storage.SeriesSet, f string) storage.SeriesSet {
+<<<<<<< HEAD
 	s := &dedupSeriesSet{set: set, f: f}
+=======
+	// TODO: remove dependency on knowing whether it is a counter.
+	s := &dedupSeriesSet{set: set, isCounter: isCounter(f), f: f}
+>>>>>>> thanos-io-main
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
 	}
 
+<<<<<<< HEAD
 	return s
 }
 
+=======
+>>>>>>> thanos-io-main
 func (s *dedupSeriesSet) Next() bool {
 	if !s.ok {
 		return false
@@ -160,10 +168,14 @@ func (s *dedupSeriesSet) At() storage.Series {
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
+<<<<<<< HEAD
 	if s.f == UseMergedSeries {
 		// merge all samples which are ingested via receiver, no skips.
 		return NewMergedSeries(s.lset, repl)
 	}
+=======
+
+>>>>>>> thanos-io-main
 	return newDedupSeries(s.lset, repl, s.f)
 }
 

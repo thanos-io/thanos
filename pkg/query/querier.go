@@ -141,7 +141,11 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
+<<<<<<< HEAD
 	return newQuerierWithOpts(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.opts), nil
+=======
+	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
+>>>>>>> thanos-io-main
 }
 
 type querier struct {
@@ -420,11 +424,16 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		aggrs,
 		warns,
 	)
+<<<<<<< HEAD
 	f := hints.Func
 	if q.enableDedupMerge {
 		f = dedup.UseMergedSeries
 	}
 	return dedup.NewSeriesSet(set, f), resp.seriesSetStats, nil
+=======
+
+	return dedup.NewSeriesSet(set, hints.Func), resp.seriesSetStats, nil
+>>>>>>> thanos-io-main
 }
 
 // LabelValues returns all potential values for a label name.

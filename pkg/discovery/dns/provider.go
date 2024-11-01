@@ -177,6 +177,7 @@ func (p *Provider) AddressesForHost(host string) []string {
 
 	return res
 }
+<<<<<<< HEAD
 
 func (p *Provider) AddressesWithDNS() map[string][]string {
 	p.RLock()
@@ -188,3 +189,5 @@ func (p *Provider) AddressesWithDNS() map[string][]string {
 	}
 	return result
 }
+=======
+>>>>>>> thanos-io-main

@@ -39,6 +39,8 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	logger := log.NewLogfmtLogger(os.Stderr)
@@ -416,6 +418,8 @@ func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarD
 }
 
 func TestMultiTSDBPrune(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		bucket          objstore.Bucket
@@ -511,6 +515,8 @@ func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error 
 }
 
 func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -536,6 +542,8 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 }
 
 func TestAlignedHeadFlush(t *testing.T) {
+	t.Parallel()
+
 	hourInSeconds := int64(1 * 60 * 60)
 
 	tests := []struct {
@@ -617,6 +625,8 @@ func TestAlignedHeadFlush(t *testing.T) {
 }
 
 func TestMultiTSDBStats(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tenants       []string
@@ -675,6 +685,8 @@ func TestMultiTSDBStats(t *testing.T) {
 
 // Regression test for https://github.com/thanos-io/thanos/issues/6047.
 func TestMultiTSDBWithNilStore(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -716,6 +728,8 @@ func (s *slowClient) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 }
 
 func TestProxyLabelValues(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	m := NewMultiTSDB(
 		dir, nil, prometheus.NewRegistry(), &tsdb.Options{
@@ -848,6 +862,11 @@ func BenchmarkMultiTSDB(b *testing.B) {
 }
 
 func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	tenant := &tenant{
 		mtx: &sync.RWMutex{},
 	}

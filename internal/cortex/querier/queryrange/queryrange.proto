@@ -50,7 +50,10 @@ message PrometheusData {
   repeated SampleStream Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
   Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+<<<<<<< HEAD
   SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter,omitempty"];
+=======
+>>>>>>> thanos-io-main
 }
 
 message PrometheusInstantQueryResponse {
@@ -67,7 +70,10 @@ message PrometheusInstantQueryData {
   PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
   Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+<<<<<<< HEAD
   SeriesStatsCounter seriesStatsCounter = 5 [(gogoproto.jsontag) = "seriesStatsCounter,omitempty"];
+=======
+>>>>>>> thanos-io-main
 }
 
 message PrometheusInstantQueryResult {
@@ -94,6 +100,7 @@ message PrometheusResponseStats {
 message PrometheusResponseSamplesStats {
   int64 totalQueryableSamples = 1 [(gogoproto.jsontag) = "totalQueryableSamples"];
   repeated PrometheusResponseQueryableSamplesStatsPerStep totalQueryableSamplesPerStep = 2 [(gogoproto.jsontag) = "totalQueryableSamplesPerStep"];
+  int32 peakSamples = 3 [(gogoproto.jsontag) = "peakSamples"];
 }
 
 message PrometheusResponseQueryableSamplesStatsPerStep {
@@ -167,6 +174,7 @@ message Analysis {
   google.protobuf.Duration executionTime = 2 [(gogoproto.customtype) = "Duration", (gogoproto.nullable) = false, (gogoproto.jsontag) = "executionTime"];
   repeated Analysis children = 3 [(gogoproto.jsontag) = "children"];
 }
+<<<<<<< HEAD
 
 message SeriesStatsCounter {
   int64 Series = 1 [(gogoproto.jsontag) = "Series"];
@@ -174,3 +182,5 @@ message SeriesStatsCounter {
   int64 Samples = 3 [(gogoproto.jsontag) = "Samples"];
   int64 Bytes = 4 [(gogoproto.jsontag) = "Bytes"];
 }
+=======
+>>>>>>> thanos-io-main

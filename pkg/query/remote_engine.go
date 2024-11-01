@@ -327,6 +327,12 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 
 			ts := msg.GetTimeseries()
+<<<<<<< HEAD
+=======
+			if ts == nil {
+				continue
+			}
+>>>>>>> thanos-io-main
 			builder.Reset()
 			for _, l := range ts.Labels {
 				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))

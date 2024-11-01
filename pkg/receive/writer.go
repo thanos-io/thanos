@@ -73,23 +73,8 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage, opts *WriterOptions) 
 	}
 }
 
-func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
+func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeSeries) error {
 	tLogger := log.With(r.logger, "tenant", tenantID)
-
-	var (
-		numLabelsOutOfOrder = 0
-		numLabelsDuplicates = 0
-		numLabelsEmpty      = 0
-
-		numSamplesOutOfOrder  = 0
-		numSamplesDuplicates  = 0
-		numSamplesOutOfBounds = 0
-		numSamplesTooOld      = 0
-
-		numExemplarsOutOfOrder  = 0
-		numExemplarsDuplicate   = 0
-		numExemplarsLabelLength = 0
-	)
 
 	s, err := r.multiTSDB.TenantAppendable(tenantID)
 	if err != nil {
@@ -105,33 +90,21 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 	getRef := app.(storage.GetRef)
 	var (
-		ref  storage.SeriesRef
-		errs writeErrors
+		ref          storage.SeriesRef
+		errorTracker writeErrorTracker
 	)
 	app = &ReceiveAppender{
 		tLogger:        tLogger,
 		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
 		Appender:       app,
 	}
-	for _, t := range wreq.Timeseries {
+
+	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
 		if err := labelpb.ValidateLabels(t.Labels); err != nil {
 			lset := &labelpb.ZLabelSet{Labels: t.Labels}
-			switch err {
-			case labelpb.ErrOutOfOrderLabels:
-				numLabelsOutOfOrder++
-				level.Debug(tLogger).Log("msg", "Out of order labels in the label set", "lset", lset.String())
-			case labelpb.ErrDuplicateLabels:
-				numLabelsDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate labels in the label set", "lset", lset.String())
-			case labelpb.ErrEmptyLabels:
-				numLabelsEmpty++
-				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", lset.String())
-			default:
-				level.Debug(tLogger).Log("msg", "Error validating labels", "err", err)
-			}
-
+			errorTracker.addLabelsError(err, lset, tLogger)
 			continue
 		}
 
@@ -149,6 +122,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
 			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
+<<<<<<< HEAD
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numSamplesOutOfOrder++
@@ -169,7 +143,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 					level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
 				}
 			}
+=======
+			errorTracker.addSampleError(err, tLogger, lset, s.Timestamp, s.Value)
+>>>>>>> thanos-io-main
 		}
+
+		b := labels.ScratchBuilder{}
+		b.Labels()
 
 		for _, hp := range t.Histograms {
 			var (
@@ -184,24 +164,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			}
 
 			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, fh)
-			switch err {
-			case storage.ErrOutOfOrderSample:
-				numSamplesOutOfOrder++
-				level.Debug(tLogger).Log("msg", "Out of order histogram", "lset", lset, "timestamp", hp.Timestamp)
-			case storage.ErrDuplicateSampleForTimestamp:
-				numSamplesDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate histogram for timestamp", "lset", lset, "timestamp", hp.Timestamp)
-			case storage.ErrOutOfBounds:
-				numSamplesOutOfBounds++
-				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "timestamp", hp.Timestamp)
-			case storage.ErrTooOldSample:
-				numSamplesTooOld++
-				level.Debug(tLogger).Log("msg", "Histogram is too old", "lset", lset, "timestamp", hp.Timestamp)
-			default:
-				if err != nil {
-					level.Debug(tLogger).Log("msg", "Error ingesting histogram", "err", err)
-				}
-			}
+			errorTracker.addHistogramError(err, tLogger, lset, hp.Timestamp)
 		}
 
 		// Current implementation of app.AppendExemplar doesn't create a new series, so it must be already present.
@@ -216,6 +179,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 					Ts:     ex.Timestamp,
 					HasTs:  true,
 				}); err != nil {
+<<<<<<< HEAD
 					switch err {
 					case storage.ErrOutOfOrderExemplar:
 						numExemplarsOutOfOrder++
@@ -229,11 +193,15 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 					default:
 						level.Debug(exLogger).Log("msg", "Error ingesting exemplar", "err", err)
 					}
+=======
+					errorTracker.addExemplarError(err, exLogger)
+>>>>>>> thanos-io-main
 				}
 			}
 		}
 	}
 
+<<<<<<< HEAD
 	if numLabelsOutOfOrder > 0 {
 		level.Info(tLogger).Log("msg", "Error on series with out-of-order labels", "numDropped", numLabelsOutOfOrder)
 		errs.Add(errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add %d series", numLabelsOutOfOrder))
@@ -278,6 +246,9 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 	span, _ := tracing.StartSpan(ctx, "receive_commit")
 	defer span.Finish()
+=======
+	errs := errorTracker.collectErrors(tLogger)
+>>>>>>> thanos-io-main
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}

@@ -44,6 +44,7 @@ var (
 
 // HandlerConfig Config for a Handler.
 type HandlerConfig struct {
+<<<<<<< HEAD
 	LogQueriesLongerThan        time.Duration `yaml:"log_queries_longer_than"`
 	MaxBodySize                 int64         `yaml:"max_body_size"`
 	QueryStatsEnabled           bool          `yaml:"query_stats_enabled"`
@@ -51,6 +52,12 @@ type HandlerConfig struct {
 	FailedQueryCacheCapacity    int           `yaml:"failed_query_cache_capacity"`
 	SlowQueryLogsUserHeader     string        `yaml:"slow_query_logs_user_header"`
 	LogQueriesMoreExpensiveThan uint64        `yaml:"log_queries_more_expensive_than"`
+=======
+	LogQueriesLongerThan    time.Duration `yaml:"log_queries_longer_than"`
+	MaxBodySize             int64         `yaml:"max_body_size"`
+	QueryStatsEnabled       bool          `yaml:"query_stats_enabled"`
+	SlowQueryLogsUserHeader string        `yaml:"slow_query_logs_user_header"`
+>>>>>>> thanos-io-main
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -210,10 +217,17 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check whether we should parse the query string.
+<<<<<<< HEAD
 	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
 	queryBytesFetched := queryrange.GetQueryBytesFetchedFromHeader(resp.Header)
 	shouldReportExpensiveQuery := f.cfg.LogQueriesMoreExpensiveThan != 0 && queryBytesFetched > f.cfg.LogQueriesMoreExpensiveThan
 	if shouldReportSlowQuery || shouldReportExpensiveQuery || f.cfg.QueryStatsEnabled {
+=======
+	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 &&
+		queryResponseTime > f.cfg.LogQueriesLongerThan &&
+		isQueryEndpoint(r.URL.Path)
+	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
+>>>>>>> thanos-io-main
 		queryString = f.parseRequestQueryString(r, buf)
 	}
 
@@ -228,6 +242,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+<<<<<<< HEAD
 func (f *Handler) reportFailedQuery(r *http.Request, queryString url.Values, err error, queryResponseTime time.Duration) {
 	f.failedQueryCount.Inc()
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
@@ -284,6 +299,13 @@ func (f *Handler) reportExpensiveQuery(r *http.Request, queryString url.Values, 
 	}, formatQueryString(queryString)...)
 
 	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+=======
+// isQueryEndpoint returns true if the path is any of the Prometheus HTTP API,
+// query-related endpoints.
+// Example: /api/v1/query, /api/v1/query_range, /api/v1/series, /api/v1/label, /api/v1/labels
+func isQueryEndpoint(path string) bool {
+	return strings.HasPrefix(path, "/api/v1")
+>>>>>>> thanos-io-main
 }
 
 // reportSlowQuery reports slow queries.

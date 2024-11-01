@@ -1197,7 +1197,11 @@ func TestQueryFrontendAnalyze(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	r := regexp.MustCompile(
+<<<<<<< HEAD
 		`{"status":"success","data":{"resultType":"scalar","result":\[.+,".+"\],"analysis":{"name":"\[duplicateLabelCheck\]","executionTime":".+","children":\[{"name":"\[noArgFunction\]","executionTime":".+","children":null}\]},"seriesStatsCounter":{.+}}}`,
+=======
+		`{"status":"success","data":{"resultType":"scalar","result":\[.+,".+"\],"analysis":{"name":"\[duplicateLabelCheck\]","executionTime":".+","children":\[{"name":"\[noArgFunction\]","executionTime":".+","children":null}\]}}}`,
+>>>>>>> thanos-io-main
 	)
 	t.Log(strings.TrimSpace(string(body)))
 

@@ -246,6 +246,10 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	} else {
 		srv = fs
 	}
+<<<<<<< HEAD
+=======
+
+>>>>>>> thanos-io-main
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())

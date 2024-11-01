@@ -72,6 +72,7 @@ type Client interface {
 	// represents a local client (server-as-client) and has no remote address.
 	Addr() (addr string, isLocalClient bool)
 
+<<<<<<< HEAD
 	// A replica key defines a set of endpoints belong to the same replica.
 	// E.g, "pantheon-db-rep0", "pantheon-db-rep1", "long-range-store".
 	ReplicaKey() string
@@ -80,6 +81,8 @@ type Client interface {
 	//		"long-range-store" has only one replica, "long-range-store".
 	GroupKey() string
 
+=======
+>>>>>>> thanos-io-main
 	// Matches returns true if provided label matchers are allowed in the store.
 	Matches(matches []*labels.Matcher) bool
 }
@@ -97,7 +100,10 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
+<<<<<<< HEAD
 	quorumChunkDedup  bool
+=======
+>>>>>>> thanos-io-main
 	enableDedup       bool
 }
 
@@ -137,12 +143,15 @@ func WithProxyStoreDebugLogging(enable bool) ProxyStoreOption {
 	}
 }
 
+<<<<<<< HEAD
 func WithQuorumChunkDedup(enable bool) ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.quorumChunkDedup = enable
 	}
 }
 
+=======
+>>>>>>> thanos-io-main
 // WithTSDBSelector sets the TSDB selector for the proxy.
 func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
 	return func(s *ProxyStore) {
@@ -293,6 +302,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
+<<<<<<< HEAD
 	var (
 		stores         []Client
 		storeLabelSets []labels.Labels
@@ -313,6 +323,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for _, st := range stores {
 		bumpCounter(st.GroupKey(), st.ReplicaKey(), groupReplicaStores)
 	}
+=======
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.MinTime, originalRequest.MaxTime, matchers)
+>>>>>>> thanos-io-main
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
@@ -333,6 +346,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		ShardInfo:               originalRequest.ShardInfo,
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
+<<<<<<< HEAD
 
 	storeResponses := make([]respSet, 0, len(stores))
 
@@ -372,6 +386,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 	defer logGroupReplicaErrors()
 
+=======
+
+	storeResponses := make([]respSet, 0, len(stores))
+>>>>>>> thanos-io-main
 	for _, st := range stores {
 		st := st
 
@@ -406,11 +424,18 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	var respHeap seriesStream = NewProxyResponseLoserTree(storeResponses...)
 	if s.enableDedup {
+<<<<<<< HEAD
 		respHeap = NewResponseDeduplicatorInternal(respHeap, s.quorumChunkDedup)
 	}
 
 	i := 0
 	var firstWarning *string
+=======
+		respHeap = NewResponseDeduplicator(respHeap)
+	}
+
+	i := 0
+>>>>>>> thanos-io-main
 	for respHeap.Next() {
 		i++
 		if r.Limit > 0 && i > int(r.Limit) {

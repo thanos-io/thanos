@@ -14,6 +14,11 @@ import (
 )
 
 func TestMatchersForLabelSets(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	tests := []struct {
 		name      string
 		labelSets []labels.Labels

@@ -41,6 +41,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
+func TestMain(m *testing.M) {
+	custom.TolerantVerifyLeakMain(m)
+}
+
 type labelNameCallCase struct {
 	matchers []storepb.LabelMatcher
 	start    int64
@@ -740,6 +744,49 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				},
 			},
 		},
+<<<<<<< HEAD
+=======
+		{
+			desc: "label_values(kube_pod_info{}, pod) don't fetch postings for pod!=''",
+			appendFn: func(app storage.Appender) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-1"), timestamp.FromTime(now), 1)
+				testutil.Ok(t, err)
+				_, err = app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-2"), timestamp.FromTime(now), 1)
+				testutil.Ok(t, err)
+				_, err = app.Append(0, labels.FromStrings("__name__", "kube_pod_info", "pod", "pod-1"), timestamp.FromTime(now), 1)
+				testutil.Ok(t, err)
+				testutil.Ok(t, app.Commit())
+			},
+			labelNameCalls: []labelNameCallCase{
+				{
+					start:         timestamp.FromTime(minTime),
+					end:           timestamp.FromTime(maxTime),
+					expectedNames: []string{"__name__", "pod", "region"},
+					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
+				},
+				{
+					start:         timestamp.FromTime(minTime),
+					end:           timestamp.FromTime(maxTime),
+					expectedNames: []string{"__name__", "pod", "region"},
+				},
+			},
+			labelValuesCalls: []labelValuesCallCase{
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "pod",
+					expectedValues: []string{"pod-1"},
+					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "pod",
+					expectedValues: []string{"pod-1", "pod-2"},
+				},
+			},
+		},
+>>>>>>> thanos-io-main
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			appendFn := tc.appendFn
@@ -833,7 +880,6 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 
 		extLset := labels.FromStrings("region", "eu-west")
 		appendFn := func(app storage.Appender) {
-
 			var (
 				ref storage.SeriesRef
 				err error
@@ -883,7 +929,8 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 }
 
 func TestBucketStore_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
+
 	ctx := context.Background()
 
 	startStore := func(lazyExpandedPostings bool) func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -978,7 +1025,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 }
 
 func TestPrometheusStore_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		p, err := e2eutil.NewPrometheus()
@@ -1011,7 +1058,7 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 }
 
 func TestTSDBStore_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		db, err := e2eutil.NewTSDB()
@@ -1029,7 +1076,10 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 	t.Skip("This is a known issue, we need to think how to fix it")
 
+<<<<<<< HEAD
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+=======
+>>>>>>> thanos-io-main
 	ctx := context.Background()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1164,7 +1214,11 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 }
 
 func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
+<<<<<<< HEAD
 	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+=======
+	t.Parallel()
+>>>>>>> thanos-io-main
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {

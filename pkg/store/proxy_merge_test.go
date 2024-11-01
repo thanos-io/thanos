@@ -16,6 +16,8 @@ import (
 )
 
 func TestRmLabelsCornerCases(t *testing.T) {
+	t.Parallel()
+
 	testutil.Equals(t, rmLabels(labelsFromStrings("aa", "bb"), map[string]struct{}{
 		"aa": {},
 	}), labels.Labels{})
@@ -25,6 +27,11 @@ func TestRmLabelsCornerCases(t *testing.T) {
 }
 
 func TestProxyResponseTreeSort(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	for _, tcase := range []struct {
 		title string
 		input []respSet
@@ -238,6 +245,8 @@ type nopClientSendCloser struct {
 func (c nopClientSendCloser) CloseSend() error { return nil }
 
 func TestSortWithoutLabels(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		input       []*storepb.SeriesResponse
 		exp         []*storepb.SeriesResponse

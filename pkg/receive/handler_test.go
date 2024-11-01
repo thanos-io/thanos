@@ -22,10 +22,12 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
+	goerrors "errors"
+
 	"github.com/alecthomas/units"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -41,15 +43,24 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/stretchr/testify/require"
+<<<<<<< HEAD
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/resolver"
 
 	"github.com/efficientgo/core/testutil"
+=======
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
+>>>>>>> thanos-io-main
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
+<<<<<<< HEAD
+=======
+	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
+>>>>>>> thanos-io-main
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -232,11 +243,16 @@ func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels
 }
 
 type fakePeersGroup struct {
+<<<<<<< HEAD
 	clients map[string]WriteableStoreAsyncClient
+=======
+	clients map[Endpoint]*peerWorker
+>>>>>>> thanos-io-main
 
-	closeCalled map[string]bool
+	closeCalled map[Endpoint]bool
 }
 
+<<<<<<< HEAD
 func (g *fakePeersGroup) markPeerUnavailable(s string) {
 }
 
@@ -249,38 +265,83 @@ func (g *fakePeersGroup) reset() {
 func (g *fakePeersGroup) close(addr string) error {
 	if g.closeCalled == nil {
 		g.closeCalled = map[string]bool{}
+=======
+func (g *fakePeersGroup) Close() error {
+	for _, c := range g.clients {
+		c.wp.Close()
+>>>>>>> thanos-io-main
 	}
-	g.closeCalled[addr] = true
 	return nil
 }
 
+<<<<<<< HEAD
 func (g *fakePeersGroup) closeAll() error {
 	return nil
 }
 
 func (g *fakePeersGroup) getConnection(_ context.Context, addr string) (WriteableStoreAsyncClient, error) {
 	c, ok := g.clients[addr]
+=======
+func (g *fakePeersGroup) markPeerUnavailable(s Endpoint) {
+}
+
+func (g *fakePeersGroup) markPeerAvailable(s Endpoint) {
+}
+
+func (g *fakePeersGroup) reset() {
+}
+
+func (g *fakePeersGroup) close(addr Endpoint) error {
+	if g.closeCalled == nil {
+		g.closeCalled = map[Endpoint]bool{}
+	}
+	g.closeCalled[addr] = true
+	g.clients[addr].wp.Close()
+	return nil
+}
+
+func (g *fakePeersGroup) getConnection(_ context.Context, endpoint Endpoint) (WriteableStoreAsyncClient, error) {
+	c, ok := g.clients[endpoint]
+>>>>>>> thanos-io-main
 	if !ok {
-		return nil, fmt.Errorf("client %s not found", addr)
+		return nil, fmt.Errorf("client %s not found", endpoint)
 	}
 	return c, nil
 }
 
 var _ = (peersContainer)(&fakePeersGroup{})
 
-func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
+func newTestHandlerHashring(
+	appendables []*fakeAppendable,
+	replicationFactor uint64,
+	hashringAlgo HashringAlgorithm,
+	capnpReplication bool,
+) ([]*Handler, Hashring, func() error, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
 		wOpts    = &WriterOptions{}
 	)
 	fakePeers := &fakePeersGroup{
+<<<<<<< HEAD
 		clients: map[string]WriteableStoreAsyncClient{},
 	}
 
 	ag := addrGen{}
 	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	logger := logging.NewLogger("debug", "logfmt", "receive_test")
+=======
+		clients: map[Endpoint]*peerWorker{},
+	}
+
+	var (
+		closers = make([]func() error, 0)
+
+		ag         = addrGen{}
+		logger     = logging.NewLogger("debug", "logfmt", "receive_test")
+		limiter, _ = NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	)
+>>>>>>> thanos-io-main
 	for i := range appendables {
 		h := NewHandler(logger, &Options{
 			TenantHeader:      tenancy.DefaultTenantHeader,
@@ -291,11 +352,30 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
-		addr := ag.newAddr()
 		h.peers = fakePeers
-		fakePeers.clients[addr] = &fakeRemoteWriteGRPCServer{h: h}
-		h.options.Endpoint = addr
-		cfg[0].Endpoints = append(cfg[0].Endpoints, Endpoint{Address: h.options.Endpoint})
+		endpoint := ag.newEndpoint()
+		h.options.Endpoint = endpoint.Address
+		cfg[0].Endpoints = append(cfg[0].Endpoints, endpoint)
+
+		var peer *peerWorker
+		if capnpReplication {
+			writer := NewCapNProtoWriter(logger, newFakeTenantAppendable(appendables[i]), nil)
+			var (
+				listener = bufconn.Listen(1024)
+				handler  = NewCapNProtoHandler(log.NewNopLogger(), writer)
+			)
+			srv := NewCapNProtoServer(listener, handler, log.NewNopLogger())
+			client := writecapnp.NewRemoteWriteClient(listener, logger)
+			peer = newPeerWorker(client, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1)
+			closers = append(closers, func() error {
+				srv.Shutdown()
+				return goerrors.Join(listener.Close(), client.Close())
+			})
+			go func() { _ = srv.ListenAndServe() }()
+		} else {
+			peer = newPeerWorker(&fakeRemoteWriteGRPCServer{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1)
+		}
+		fakePeers.clients[endpoint] = peer
 	}
 	// Use hashmod as default.
 	if hashringAlgo == "" {
@@ -304,15 +384,22 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 
 	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
-	return handlers, hashring, nil
+	closeFunc := func() error {
+		errs := make([]error, 0, len(closers))
+		for _, closeFunc := range closers {
+			errs = append(errs, closeFunc())
+		}
+		return goerrors.Join(errs...)
+	}
+	return handlers, hashring, closeFunc, nil
 }
 
-func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsistencyDelay bool) {
+func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsistencyDelay, capnpReplication bool) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	tooOldSampleErrFn := func() error { return storage.ErrTooOldSample }
@@ -680,10 +767,19 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo)
+			handlers, hashring, closeFunc, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo, capnpReplication)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
+			defer func() {
+				testutil.Ok(t, closeFunc())
+				// Wait a few milliseconds for peer workers to process the queue.
+				time.AfterFunc(50*time.Millisecond, func() {
+					for _, h := range handlers {
+						h.Close()
+					}
+				})
+			}()
 			tenant := "test"
 
 			if tc.randomNode {
@@ -748,6 +844,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
 						}
 					}
+
 				}
 			}
 		})
@@ -755,22 +852,48 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 }
 
 func TestReceiveQuorumHashmod(t *testing.T) {
-	testReceiveQuorum(t, AlgorithmHashmod, false)
+	t.Parallel()
+
+	for _, capnpReplication := range []bool{false, true} {
+		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
+			testReceiveQuorum(t, AlgorithmHashmod, false, capnpReplication)
+		})
+	}
 }
 
 func TestReceiveQuorumKetama(t *testing.T) {
-	testReceiveQuorum(t, AlgorithmKetama, false)
+	t.Parallel()
+
+	for _, capnpReplication := range []bool{false, true} {
+		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
+			testReceiveQuorum(t, AlgorithmKetama, false, capnpReplication)
+		})
+	}
 }
 
 func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
-	testReceiveQuorum(t, AlgorithmHashmod, true)
+	t.Parallel()
+
+	for _, capnpReplication := range []bool{false, true} {
+		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
+			testReceiveQuorum(t, AlgorithmHashmod, true, capnpReplication)
+		})
+	}
 }
 
 func TestReceiveWithConsistencyDelayKetama(t *testing.T) {
-	testReceiveQuorum(t, AlgorithmKetama, true)
+	t.Parallel()
+
+	for _, capnpReplication := range []bool{false, true} {
+		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
+			testReceiveQuorum(t, AlgorithmKetama, true, capnpReplication)
+		})
+	}
 }
 
 func TestReceiveWriteRequestLimits(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name          string
 		status        int
@@ -822,10 +945,20 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					appender: newFakeAppender(nil, nil, nil),
 				},
 			}
-			handlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+			handlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
+			defer func() {
+				testutil.Ok(t, closeFunc())
+				// Wait a few milliseconds for peer workers to process the queue.
+				time.AfterFunc(50*time.Millisecond, func() {
+					for _, h := range handlers {
+						h.Close()
+					}
+				})
+			}()
+
 			handler := handlers[0]
 
 			tenant := "test"
@@ -887,7 +1020,7 @@ func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, t
 		if err != nil {
 			t.Fatalf("got unexpected error querying hashring: %v", err)
 		}
-		if e == endpoint {
+		if e.HasAddress(endpoint) {
 			return true
 		}
 	}
@@ -931,9 +1064,13 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 
 type addrGen struct{ n int }
 
-func (a *addrGen) newAddr() string {
+func (a *addrGen) newEndpoint() Endpoint {
 	a.n++
-	return fmt.Sprintf("http://node-%d:%d", a.n, 12345+a.n)
+	addr := fmt.Sprintf("http://node-%d:%d", a.n, 12345+a.n)
+	return Endpoint{
+		Address:          addr,
+		CapNProtoAddress: addr,
+	}
 }
 
 type fakeRemoteWriteGRPCServer struct {
@@ -954,11 +1091,18 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *st
 	cb(err)
 }
 
+<<<<<<< HEAD
+=======
+func (f *fakeRemoteWriteGRPCServer) Close() error { return nil }
+
+>>>>>>> thanos-io-main
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b))
 }
 
 func TestHandlerReceiveHTTP(t *testing.T) {
+	t.Parallel()
+
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
 
@@ -1044,10 +1188,13 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir := b.TempDir()
 
-	handlers, _, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod)
+	handlers, _, closeFunc, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
 	if err != nil {
 		b.Fatalf("unable to create test handler: %v", err)
 	}
+	defer func() {
+		testutil.Ok(b, closeFunc())
+	}()
 	handler := handlers[0]
 
 	reg := prometheus.NewRegistry()
@@ -1224,6 +1371,8 @@ func Heap(dir string) (err error) {
 }
 
 func TestIsTenantValid(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		name   string
 		tenant string
@@ -1271,6 +1420,8 @@ func TestIsTenantValid(t *testing.T) {
 }
 
 func TestRelabel(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		name                 string
 		relabel              []*relabel.Config
@@ -1640,6 +1791,8 @@ func TestRelabel(t *testing.T) {
 }
 
 func TestGetStatsLimitParameter(t *testing.T) {
+	t.Parallel()
+
 	t.Run("invalid limit parameter, not integer", func(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
 		testutil.Ok(t, err)
@@ -1686,13 +1839,9 @@ func TestGetStatsLimitParameter(t *testing.T) {
 	})
 }
 
-func TestSortedSliceDiff(t *testing.T) {
-	testutil.Equals(t, []string{"a"}, getSortedStringSliceDiff([]string{"a", "a", "foo"}, []string{"b", "b", "foo"}))
-	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{"b", "b", "foo"}))
-	testutil.Equals(t, []string{}, getSortedStringSliceDiff([]string{}, []string{}))
-}
-
 func TestHashringChangeCallsClose(t *testing.T) {
+	t.Parallel()
+
 	appendables := []*fakeAppendable{
 		{
 			appender: newFakeAppender(nil, nil, nil),
@@ -1704,13 +1853,15 @@ func TestHashringChangeCallsClose(t *testing.T) {
 			appender: newFakeAppender(nil, nil, nil),
 		},
 	}
-	allHandlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+	allHandlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
 	testutil.Ok(t, err)
+	testutil.Ok(t, closeFunc())
 
 	appendables = appendables[1:]
 
-	_, smallHashring, err := newTestHandlerHashring(appendables, 2, AlgorithmHashmod)
+	_, smallHashring, closeFunc, err := newTestHandlerHashring(appendables, 2, AlgorithmHashmod, false)
 	testutil.Ok(t, err)
+	testutil.Ok(t, closeFunc())
 
 	allHandlers[0].Hashring(smallHashring)
 
@@ -1719,6 +1870,11 @@ func TestHashringChangeCallsClose(t *testing.T) {
 }
 
 func TestHandlerEarlyStop(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	h := NewHandler(nil, &Options{})
 	h.Close()
 
@@ -1733,7 +1889,11 @@ type hashringSeenTenants struct {
 	seenTenants map[string]struct{}
 }
 
+<<<<<<< HEAD
 func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+=======
+func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+>>>>>>> thanos-io-main
 	if h.seenTenants == nil {
 		h.seenTenants = map[string]struct{}{}
 	}
@@ -1742,16 +1902,26 @@ func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint6
 }
 
 func TestDistributeSeries(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	const tenantIDLabelName = "thanos_tenant_id"
 	h := NewHandler(nil, &Options{
 		SplitTenantLabelName: tenantIDLabelName,
 	})
 
+<<<<<<< HEAD
 	hashring, err := newSimpleHashring([]Endpoint{
 		{
 			Address: "http://localhost:9090",
 		},
 	})
+=======
+	endpoint := Endpoint{Address: "http://localhost:9090", CapNProtoAddress: "http://localhost:19391"}
+	hashring, err := newSimpleHashring([]Endpoint{endpoint})
+>>>>>>> thanos-io-main
 	require.NoError(t, err)
 	hr := &hashringSeenTenants{Hashring: hashring}
 	h.Hashring(hr)
@@ -1770,15 +1940,29 @@ func TestDistributeSeries(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, remote, 1)
+<<<<<<< HEAD
 	require.Len(t, remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries, 1)
 	require.Len(t, remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["boo"].timeSeries, 1)
 
 	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["bar"].timeSeries[0].Labels).Len())
 	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: "http://localhost:9090", replica: 0}]["boo"].timeSeries[0].Labels).Len())
+=======
+	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries, 1)
+	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries, 1)
+
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries[0].Labels).Len())
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries[0].Labels).Len())
+
+>>>>>>> thanos-io-main
 	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
 }
 
 func TestHandlerFlippingHashrings(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Parallel()
+
+>>>>>>> thanos-io-main
 	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
 	t.Cleanup(h.Close)
 
@@ -1853,6 +2037,7 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+<<<<<<< HEAD
 
 func TestIngestorRestart(t *testing.T) {
 	var err error
@@ -1946,3 +2131,5 @@ func startIngestor(logger log.Logger, serverAddress string, delay time.Duration)
 	}()
 	return srv
 }
+=======
+>>>>>>> thanos-io-main

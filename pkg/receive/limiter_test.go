@@ -17,6 +17,8 @@ import (
 )
 
 func TestLimiter_StartConfigReloader(t *testing.T) {
+	t.Parallel()
+
 	origLimitsFile, err := os.ReadFile(path.Join("testdata", "limits_config", "good_limits.yaml"))
 	testutil.Ok(t, err)
 	copyLimitsFile := path.Join(t.TempDir(), "limits.yaml")
@@ -55,6 +57,8 @@ func (e emptyPathFile) Path() string {
 }
 
 func TestLimiter_CanReload(t *testing.T) {
+	t.Parallel()
+
 	validLimitsPath, err := extkingpin.NewStaticPathContent(
 		path.Join("testdata", "limits_config", "good_limits.yaml"),
 	)
