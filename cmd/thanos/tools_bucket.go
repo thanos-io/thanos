@@ -125,13 +125,13 @@ type bucketWebConfig struct {
 }
 
 type bucketReplicateConfig struct {
-	resolutions []time.Duration
-	compactMin  int
-	compactMax  int
-	compactions []int
-	matcherStrs string
-	singleRun   bool
-	markAfter   bool
+	resolutions     []time.Duration
+	compactMin      int
+	compactMax      int
+	compactions     []int
+	matcherStrs     string
+	singleRun       bool
+	markForDeletion bool
 }
 
 type bucketDownsampleConfig struct {
@@ -230,7 +230,7 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
 
-	cmd.Flag("mark-after", "Mark replicated blocks for deletion in source bucket.").Default("false").BoolVar(&tbc.markAfter)
+	cmd.Flag("mark-deletion", "Mark replicated blocks for deletion in source bucket.").Default("false").BoolVar(&tbc.markForDeletion)
 
 	return tbc
 }
@@ -785,11 +785,11 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
-			tbc.markAfter,
+			tbc.markForDeletion,
 			minTime,
 			maxTime,
 			blockIDs,
-			*ignoreMarkedForDeletion || tbc.markAfter,
+			*ignoreMarkedForDeletion || tbc.markForDeletion,
 		)
 	})
 }
