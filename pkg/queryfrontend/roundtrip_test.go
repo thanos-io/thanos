@@ -358,6 +358,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
 					QueryRangeConfig: QueryRangeConfig{
 						Limits:                 defaultLimits,
 						SplitQueriesByInterval: tc.splitInterval,
@@ -462,6 +463,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 
 	tpw, err := NewTripperware(
 		Config{
+			CortexHandlerConfig: &transport.HandlerConfig{},
 			QueryRangeConfig: QueryRangeConfig{
 				Limits:                 defaultLimits,
 				ResultsCacheConfig:     cacheConf,
@@ -559,6 +561,7 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
+			CortexHandlerConfig: &transport.HandlerConfig{},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
@@ -683,6 +686,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
+			CortexHandlerConfig: &transport.HandlerConfig{},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
@@ -791,6 +795,7 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 
 	tpw, err := NewTripperware(
 		Config{
+			CortexHandlerConfig: &transport.HandlerConfig{},
 			LabelsConfig: LabelsConfig{
 				Limits:                 defaultLimits,
 				ResultsCacheConfig:     cacheConf,
