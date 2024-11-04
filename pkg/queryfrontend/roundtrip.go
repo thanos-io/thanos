@@ -62,7 +62,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryRangeLimits,
 		queryRangeCodec,
 		config.NumShards,
-		config.ForceQueryStats,
+		config.CortexHandlerConfig.QueryStatsEnabled,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryInstantCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
 		config.ForwardHeaders,
-		config.ForceQueryStats,
+		config.CortexHandlerConfig.QueryStatsEnabled,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
 		tripper := newRoundTripper(

@@ -13,17 +13,17 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/atomic"
-
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
+	"go.uber.org/atomic"
 
-	"github.com/efficientgo/core/testutil"
 	cortexcache "github.com/thanos-io/thanos/internal/cortex/chunk/cache"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
+	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -186,6 +186,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
 					QueryRangeConfig: QueryRangeConfig{
 						MaxRetries:             tc.maxRetries,
 						Limits:                 defaultLimits,

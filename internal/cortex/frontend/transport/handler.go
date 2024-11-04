@@ -107,9 +107,11 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Initialise the stats in the context and make sure it's propagated
 	// down the request chain.
-	var ctx context.Context
-	stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
-	r = r.WithContext(ctx)
+	if f.cfg.QueryStatsEnabled {
+		var ctx context.Context
+		stats, ctx = querier_stats.ContextWithEmptyStats(r.Context())
+		r = r.WithContext(ctx)
+	}
 
 	defer func() {
 		_ = r.Body.Close()
@@ -211,7 +213,7 @@ func (f *Handler) reportSlowQuery(
 		"trace_id", thanosTraceID,
 	}, formatQueryString(queryString)...)
 
-	logMessage = addQueryRangeToLogMessage(queryString, logMessage)
+	logMessage = addQueryRangeToLogMessage(logMessage, queryString)
 	logMessage = f.addStatsToLogMessage(logMessage, stats)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
@@ -247,6 +249,8 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"fetched_series_count", numSeries,
 		"fetched_chunks_bytes", numBytes,
 	}, formatQueryString(queryString)...)
+	f.addStatsToLogMessage(logMessage, stats)
+	addQueryRangeToLogMessage(logMessage, queryString)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
@@ -281,7 +285,7 @@ func (f *Handler) addStatsToLogMessage(message []interface{}, stats *querier_sta
 	return message
 }
 
-func addQueryRangeToLogMessage(queryString url.Values, logMessage []interface{}) []interface{} {
+func addQueryRangeToLogMessage(logMessage []interface{}, queryString url.Values) []interface{} {
 	queryRange := extractQueryRange(queryString)
 	if queryRange != time.Duration(0) {
 		logMessage = append(logMessage, "query_range_hours", int(queryRange.Hours()))
