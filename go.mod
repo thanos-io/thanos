@@ -22,7 +22,7 @@ require (
 	github.com/fatih/structtag v1.2.0
 	github.com/felixge/fgprof v0.9.5
 	github.com/fortytw2/leaktest v1.3.0
-	github.com/fsnotify/fsnotify v1.7.0
+	github.com/fsnotify/fsnotify v1.8.0
 	github.com/go-kit/log v0.2.1
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/gogo/protobuf v1.3.2
