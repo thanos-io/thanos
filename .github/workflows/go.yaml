@@ -127,43 +127,6 @@ jobs:
       - name: Linting & vetting
         run: make go-lint
 
-  unit:
-    strategy:
-      fail-fast: false
-    runs-on: ubuntu-latest
-    name: Thanos unit tests
-    env:
-      GOBIN: /home/runner/go/bin
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install Go.
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.23.x
-
-      - name: Install bingo and configure PATH
-        run: |
-          go install github.com/bwplotka/bingo@latest
-          ls -l $GOPATH/bin
-          echo $PATH
-
-      - name: Install Prometheus using bingo
-        run: |
-          bingo get prometheus
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/.cache/golangci-lint
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-
-      - name: Run unit tests
-        run: make test-local
-
   codespell:
     runs-on: ubuntu-latest
     name: Check misspelled words

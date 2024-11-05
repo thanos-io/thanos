@@ -53,7 +53,7 @@ func (e *Endpoint) String() string {
 }
 
 func (e *Endpoint) HasAddress(addr string) bool {
-	return e.Address == addr || e.CapNProtoAddress == addr
+	return e.Address == addr || (e.CapNProtoAddress == addr && e.CapNProtoAddress != "")
 }
 
 func (e *Endpoint) UnmarshalJSON(data []byte) error {

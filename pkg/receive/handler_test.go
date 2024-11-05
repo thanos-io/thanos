@@ -1962,6 +1962,8 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 }
 
 func TestIngestorRestart(t *testing.T) {
+	t.Parallel()
+
 	var err error
 	logger := log.NewLogfmtLogger(os.Stderr)
 	addr1, addr2 := "localhost:14090", "localhost:14091"
@@ -1981,11 +1983,12 @@ func TestIngestorRestart(t *testing.T) {
 		grpc.WithResolvers(resolver.Get(dnsScheme)),
 	}
 	client := NewHandler(logger, &Options{
-		MaxBackoff:        1 * time.Second,
-		DialOpts:          dialOpts,
-		ReplicationFactor: 1,
-		ReceiverMode:      RouterOnly,
-		ForwardTimeout:    15 * time.Second,
+		MaxBackoff:          1 * time.Second,
+		DialOpts:            dialOpts,
+		ReplicationFactor:   1,
+		ReceiverMode:        RouterOnly,
+		ForwardTimeout:      15 * time.Second,
+		ReplicationProtocol: ProtobufReplication,
 	})
 	// one of the endpoints is DNS and wire up to different backend address on the fly
 	client.Hashring(&simpleHashring{Endpoint{Address: fmt.Sprintf("%s:///%s", dnsScheme, clientAddr)}})

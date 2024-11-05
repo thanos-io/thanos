@@ -1460,8 +1460,10 @@ type peerGroup struct {
 }
 
 func (p *peerGroup) Close() error {
-	for _, c := range p.connections {
-		c.wp.Close()
+	p.m.Lock()
+	defer p.m.Unlock()
+	for endpoint := range p.connections {
+		return p.closeUnlocked(endpoint)
 	}
 	return nil
 }
@@ -1469,7 +1471,10 @@ func (p *peerGroup) Close() error {
 func (p *peerGroup) close(endpoint Endpoint) error {
 	p.m.Lock()
 	defer p.m.Unlock()
+	return p.closeUnlocked(endpoint)
+}
 
+func (p *peerGroup) closeUnlocked(endpoint Endpoint) error {
 	c, ok := p.connections[endpoint]
 	if !ok {
 		// NOTE(GiedriusS): this could be valid case when the connection

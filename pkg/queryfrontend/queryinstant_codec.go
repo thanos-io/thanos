@@ -56,14 +56,15 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 	}
 
 	var analyzes []*queryrange.Analysis
-    var seriesStatsCounters []*queryrange.SeriesStatsCounter
 	for i := range promResponses {
 		if promResponses[i].Data.GetAnalysis() == nil {
 			continue
 		}
 
 		analyzes = append(analyzes, promResponses[i].Data.GetAnalysis())
-
+	}
+	var seriesStatsCounters []*queryrange.SeriesStatsCounter
+	for i := range promResponses {
 		if promResponses[i].Data.GetSeriesStatsCounter() == nil {
 			continue
 		}
