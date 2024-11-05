@@ -5,6 +5,7 @@ package dns
 
 import (
 	"context"
+	"maps"
 	"net"
 	"strings"
 	"sync"
@@ -111,7 +112,12 @@ func GetQTypeName(addr string) (qtype, name string) {
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
 // For non-SRV records, it will return an error if a port is not supplied.
 func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
-	resolvedAddrs := map[string][]string{}
+	// NOTE(GiedriusS): we could call this with different addrs (e.g. from gRPC) so we need
+	// to save the previous results.
+	p.RLock()
+	resolvedAddrs := maps.Clone(p.resolved)
+	p.RUnlock()
+
 	errs := errutil.MultiError{}
 
 	for _, addr := range addrs {

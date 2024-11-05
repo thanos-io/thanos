@@ -502,6 +502,7 @@ func runQuery(
 			dns.ResolverType(dnsSDResolver),
 		),
 		dnsSDInterval,
+		logger,
 	)
 
 	dnsEndpointProvider := dns.NewProvider(
