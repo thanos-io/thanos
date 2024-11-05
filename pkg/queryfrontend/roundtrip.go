@@ -216,7 +216,7 @@ func newQueryRangeTripperware(
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			*config.ResultsCacheConfig,
-			newThanosCacheKeyGenerator(dynamicIntervalFn(config)),
+			newThanosCacheKeyGenerator(),
 			limits,
 			codec,
 			queryrange.PrometheusResponseExtractor{},
@@ -299,11 +299,10 @@ func newLabelsTripperware(
 	}
 
 	if config.ResultsCacheConfig != nil {
-		staticIntervalFn := func(_ queryrange.Request) time.Duration { return config.SplitQueriesByInterval }
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			*config.ResultsCacheConfig,
-			newThanosCacheKeyGenerator(staticIntervalFn),
+			newThanosCacheKeyGenerator(),
 			limits,
 			codec,
 			ThanosResponseExtractor{},
