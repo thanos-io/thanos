@@ -844,6 +844,7 @@ func (m *PrometheusResponseStats) GetSamples() *PrometheusResponseSamplesStats {
 type PrometheusResponseSamplesStats struct {
 	TotalQueryableSamples        int64                                             `protobuf:"varint,1,opt,name=totalQueryableSamples,proto3" json:"totalQueryableSamples"`
 	TotalQueryableSamplesPerStep []*PrometheusResponseQueryableSamplesStatsPerStep `protobuf:"bytes,2,rep,name=totalQueryableSamplesPerStep,proto3" json:"totalQueryableSamplesPerStep"`
+	PeakSamples                  int32                                             `protobuf:"varint,3,opt,name=peakSamples,proto3" json:"peakSamples"`
 	XXX_NoUnkeyedLiteral         struct{}                                          `json:"-"`
 	XXX_unrecognized             []byte                                            `json:"-"`
 	XXX_sizecache                int32                                             `json:"-"`
@@ -894,6 +895,13 @@ func (m *PrometheusResponseSamplesStats) GetTotalQueryableSamplesPerStep() []*Pr
 		return m.TotalQueryableSamplesPerStep
 	}
 	return nil
+}
+
+func (m *PrometheusResponseSamplesStats) GetPeakSamples() int32 {
+	if m != nil {
+		return m.PeakSamples
+	}
+	return 0
 }
 
 type PrometheusResponseQueryableSamplesStatsPerStep struct {
@@ -2583,6 +2591,11 @@ func (m *PrometheusResponseSamplesStats) MarshalToSizedBuffer(dAtA []byte) (int,
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
+	if m.PeakSamples != 0 {
+		i = encodeVarintQueryrange(dAtA, i, uint64(m.PeakSamples))
+		i--
+		dAtA[i] = 0x18
+	}
 	if len(m.TotalQueryableSamplesPerStep) > 0 {
 		for iNdEx := len(m.TotalQueryableSamplesPerStep) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -3620,6 +3633,9 @@ func (m *PrometheusResponseSamplesStats) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovQueryrange(uint64(l))
 		}
+	}
+	if m.PeakSamples != 0 {
+		n += 1 + sovQueryrange(uint64(m.PeakSamples))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -5931,6 +5947,25 @@ func (m *PrometheusResponseSamplesStats) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PeakSamples", wireType)
+			}
+			m.PeakSamples = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PeakSamples |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipQueryrange(dAtA[iNdEx:])

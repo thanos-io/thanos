@@ -16,6 +16,7 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -162,6 +163,17 @@ func TestQueryInstantCodec_DecodeRequest(t *testing.T) {
 				Path:          "/api/v1/query",
 				Dedup:         true,
 				LookbackDelta: 1000000,
+				StoreMatchers: [][]*labels.Matcher{},
+			},
+		},
+		{
+			name:            "forwards stats parameter",
+			url:             "/api/v1/query?stats=all",
+			partialResponse: false,
+			expectedRequest: &ThanosQueryInstantRequest{
+				Path:          "/api/v1/query",
+				Stats:         "all",
+				Dedup:         true,
 				StoreMatchers: [][]*labels.Matcher{},
 			},
 		},

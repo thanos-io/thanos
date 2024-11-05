@@ -342,14 +342,16 @@ Flags:
                                 At least one replica label has to be set via
                                 --deduplication.replica-label flag.
       --deduplication.replica-label=DEDUPLICATION.REPLICA-LABEL ...
-                                Label to treat as a replica indicator of blocks
-                                that can be deduplicated (repeated flag). This
-                                will merge multiple replica blocks into one.
-                                This process is irreversible.Experimental.
-                                When one or more labels are set, compactor
-                                will ignore the given labels so that vertical
-                                compaction can merge the blocks.Please note
-                                that by default this uses a NAIVE algorithm
+                                Experimental. Label to treat as a replica
+                                indicator of blocks that can be deduplicated
+                                (repeated flag). This will merge multiple
+                                replica blocks into one. This process is
+                                irreversible. Flag may be specified multiple
+                                times as well as a comma separated list of
+                                labels. When one or more labels are set,
+                                compactor will ignore the given labels so that
+                                vertical compaction can merge the blocks.Please
+                                note that by default this uses a NAIVE algorithm
                                 for merging which works well for deduplication
                                 of blocks with **precisely the same samples**
                                 like produced by Receiver replication.If you

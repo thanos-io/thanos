@@ -133,6 +133,9 @@ export const getOptions = (stacked: boolean, useLocalTime: boolean): jquery.flot
       },
       shadowSize: 0,
     },
+    selection: {
+      mode: 'x',
+    },
   };
 };
 

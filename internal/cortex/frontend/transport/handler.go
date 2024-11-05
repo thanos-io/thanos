@@ -44,13 +44,14 @@ var (
 
 // HandlerConfig Config for a Handler.
 type HandlerConfig struct {
-	LogQueriesLongerThan        time.Duration `yaml:"log_queries_longer_than"`
-	MaxBodySize                 int64         `yaml:"max_body_size"`
-	QueryStatsEnabled           bool          `yaml:"query_stats_enabled"`
-	LogFailedQueries            bool          `yaml:"log_failed_queries"`
-	FailedQueryCacheCapacity    int           `yaml:"failed_query_cache_capacity"`
-	SlowQueryLogsUserHeader     string        `yaml:"slow_query_logs_user_header"`
-	LogQueriesMoreExpensiveThan uint64        `yaml:"log_queries_more_expensive_than"`
+	LogQueriesLongerThan    time.Duration `yaml:"log_queries_longer_than"`
+	MaxBodySize             int64         `yaml:"max_body_size"`
+	QueryStatsEnabled       bool          `yaml:"query_stats_enabled"`
+	SlowQueryLogsUserHeader string        `yaml:"slow_query_logs_user_header"`
+
+	LogFailedQueries            bool   `yaml:"log_failed_queries"`
+	FailedQueryCacheCapacity    int    `yaml:"failed_query_cache_capacity"`
+	LogQueriesMoreExpensiveThan uint64 `yaml:"log_queries_more_expensive_than"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -210,7 +211,9 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check whether we should parse the query string.
-	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
+	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 &&
+		queryResponseTime > f.cfg.LogQueriesLongerThan &&
+		isQueryEndpoint(r.URL.Path)
 	queryBytesFetched := queryrange.GetQueryBytesFetchedFromHeader(resp.Header)
 	shouldReportExpensiveQuery := f.cfg.LogQueriesMoreExpensiveThan != 0 && queryBytesFetched > f.cfg.LogQueriesMoreExpensiveThan
 	if shouldReportSlowQuery || shouldReportExpensiveQuery || f.cfg.QueryStatsEnabled {
@@ -284,6 +287,13 @@ func (f *Handler) reportExpensiveQuery(r *http.Request, queryString url.Values, 
 	}, formatQueryString(queryString)...)
 
 	level.Error(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+}
+
+// isQueryEndpoint returns true if the path is any of the Prometheus HTTP API,
+// query-related endpoints.
+// Example: /api/v1/query, /api/v1/query_range, /api/v1/series, /api/v1/label, /api/v1/labels
+func isQueryEndpoint(path string) bool {
+	return strings.HasPrefix(path, "/api/v1")
 }
 
 // reportSlowQuery reports slow queries.
