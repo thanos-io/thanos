@@ -7,7 +7,7 @@ package stats;
 
 option go_package = "stats";
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 
 option (gogoproto.marshaler_all) = true;
@@ -20,4 +20,8 @@ message Stats {
   uint64 fetched_series_count = 2;
   // The number of bytes of the chunks fetched for the query
   uint64 fetched_chunk_bytes = 3;
+  // The maximum number of samples loaded in a single execution window.
+  int32 peak_loaded_samples = 4;
+  // The total number of samples loaded for the query
+  int64 total_loaded_samples = 5;
 }
