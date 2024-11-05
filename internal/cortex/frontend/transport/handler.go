@@ -156,7 +156,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldReportSlowQuery {
-		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
+		f.reportSlowQuery(r, hs, queryString, queryResponseTime, stats)
 	}
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
@@ -171,7 +171,13 @@ func isQueryEndpoint(path string) bool {
 }
 
 // reportSlowQuery reports slow queries.
-func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
+func (f *Handler) reportSlowQuery(
+	r *http.Request,
+	responseHeaders http.Header,
+	queryString url.Values,
+	queryResponseTime time.Duration,
+	stats *querier_stats.Stats,
+) {
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -207,6 +213,9 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		"trace_id", thanosTraceID,
 	}, formatQueryString(queryString)...)
 
+	logMessage = addQueryRangeToLogMessage(logMessage, queryString)
+	logMessage = f.addStatsToLogMessage(logMessage, stats)
+
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
 
@@ -240,6 +249,8 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"fetched_series_count", numSeries,
 		"fetched_chunks_bytes", numBytes,
 	}, formatQueryString(queryString)...)
+	f.addStatsToLogMessage(logMessage, stats)
+	addQueryRangeToLogMessage(logMessage, queryString)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
@@ -263,6 +274,40 @@ func formatQueryString(queryString url.Values) (fields []interface{}) {
 		fields = append(fields, fmt.Sprintf("param_%s", k), strings.Join(v, ","))
 	}
 	return fields
+}
+
+func (f *Handler) addStatsToLogMessage(message []interface{}, stats *querier_stats.Stats) []interface{} {
+	if stats != nil {
+		message = append(message, "peak_samples", stats.LoadPeakSamples())
+		message = append(message, "total_samples_loaded", stats.LoadTotalSamples())
+	}
+
+	return message
+}
+
+func addQueryRangeToLogMessage(logMessage []interface{}, queryString url.Values) []interface{} {
+	queryRange := extractQueryRange(queryString)
+	if queryRange != time.Duration(0) {
+		logMessage = append(logMessage, "query_range_hours", int(queryRange.Hours()))
+		logMessage = append(logMessage, "query_range_human", queryRange.String())
+	}
+	return logMessage
+}
+
+// extractQueryRange extracts query range from query string.
+// If start and end are not provided or are invalid, it returns a duration with zero-value.
+func extractQueryRange(queryString url.Values) time.Duration {
+	startStr := queryString.Get("start")
+	endStr := queryString.Get("end")
+	var queryRange = time.Duration(0)
+	if startStr != "" && endStr != "" {
+		start, serr := util.ParseTime(startStr)
+		end, eerr := util.ParseTime(endStr)
+		if serr == nil && eerr == nil {
+			queryRange = time.Duration(end-start) * time.Millisecond
+		}
+	}
+	return queryRange
 }
 
 func writeError(w http.ResponseWriter, err error) {

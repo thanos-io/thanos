@@ -146,6 +146,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
+	cmd.Flag("query-frontend.force-query-stats", "Enables query statistics for all queries and will export statistics as logs and service headers.").Default("false").BoolVar(&cfg.CortexHandlerConfig.QueryStatsEnabled)
+
 	cmd.Flag("query-frontend.org-id-header", "Deprecation Warning - This flag will be soon deprecated in favor of query-frontend.tenant-header"+
 		" and both flags cannot be used at the same time. "+
 		"Request header names used to identify the source of slow queries (repeated flag). "+
