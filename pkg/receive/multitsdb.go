@@ -68,7 +68,8 @@ type MultiTSDB struct {
 	exemplarClients           map[string]*exemplars.TSDB
 	exemplarClientsNeedUpdate bool
 
-	metricNameFilterEnabled bool
+	metricNameFilterEnabled      bool
+	disableReceiverChunkTrimming bool
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -78,6 +79,13 @@ type MultiTSDBOption func(mt *MultiTSDB)
 func WithMetricNameFilterEnabled() MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.metricNameFilterEnabled = true
+	}
+}
+
+// DisableReceiverChunkTrimming disables trimming when reading chunks from the TSDB.
+func DisableReceiverChunkTrimming() MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.disableReceiverChunkTrimming = true
 	}
 }
 
@@ -727,7 +735,9 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	options := []store.TSDBStoreOption{}
+	var options = []store.TSDBStoreOption{
+		store.WithChunkTrimming(!t.disableReceiverChunkTrimming),
+	}
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
 	}

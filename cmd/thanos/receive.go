@@ -55,9 +55,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
+type feature string
+
 const (
-	compressionNone   = "none"
-	metricNamesFilter = "metric-names-filter"
+	metricNamesFilter            feature = "metric-names-filter"
+	disableReceiverChunkTrimming feature = "disable-chunk-trimming"
+)
+
+const (
+	compressionNone = "none"
 )
 
 func registerReceive(app *extkingpin.App) {
@@ -141,11 +147,17 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
-	multiTSDBOptions := []receive.MultiTSDBOption{}
-	for _, feature := range *conf.featureList {
-		if feature == metricNamesFilter {
+	var multiTSDBOptions []receive.MultiTSDBOption
+	for _, f := range *conf.featureList {
+		switch feature(f) {
+		case metricNamesFilter:
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
 			level.Info(logger).Log("msg", "metric name filter feature enabled")
+		case disableReceiverChunkTrimming:
+			multiTSDBOptions = append(multiTSDBOptions, receive.DisableReceiverChunkTrimming())
+			level.Info(logger).Log("msg", "disable receiver chunk trimming feature enabled")
+		default:
+			return errors.Errorf("unknown feature %q", f)
 		}
 	}
 
@@ -1036,7 +1048,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.limits-config-reload-timer", "Minimum amount of time to pass for the limit configuration to be reloaded. Helps to avoid excessive reloads.").
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
 
-	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
+	features := []string{string(metricNamesFilter), string(disableReceiverChunkTrimming)}
+	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+strings.Join(features, ",")+".").Default("").Strings()
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
