@@ -330,7 +330,7 @@ func (c HTTPFileSDConfig) convert() (file.SDConfig, error) {
 }
 
 type AddressProvider interface {
-	Resolve(context.Context, []string) error
+	Resolve(context.Context, []string, bool) error
 	Addresses() []string
 }
 
@@ -433,5 +433,5 @@ func (c *HTTPClient) Discover(ctx context.Context) {
 
 // Resolve refreshes and resolves the list of targets.
 func (c *HTTPClient) Resolve(ctx context.Context) error {
-	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...), true)
 }

@@ -452,7 +452,7 @@ func runRule(
 				return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
 					resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
 					defer resolveCancel()
-					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints); err != nil {
+					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints, true); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
 					}
 					return nil

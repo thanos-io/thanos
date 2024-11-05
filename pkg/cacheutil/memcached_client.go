@@ -211,7 +211,7 @@ type memcachedClient struct {
 // AddressProvider performs node address resolution given a list of clusters.
 type AddressProvider interface {
 	// Resolves the provided list of memcached cluster to the actual nodes
-	Resolve(context.Context, []string) error
+	Resolve(context.Context, []string, bool) error
 
 	// Returns the nodes
 	Addresses() []string
@@ -638,7 +638,7 @@ func (c *memcachedClient) resolveAddrs() error {
 	defer cancel()
 
 	// If some of the dns resolution fails, log the error.
-	if err := c.addressProvider.Resolve(ctx, c.config.Addresses); err != nil {
+	if err := c.addressProvider.Resolve(ctx, c.config.Addresses, true); err != nil {
 		level.Error(c.logger).Log("msg", "failed to resolve addresses for memcached", "addresses", strings.Join(c.config.Addresses, ","), "err", err)
 	}
 	// Fail in case no server address is resolved.
