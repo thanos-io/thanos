@@ -1049,7 +1049,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
 
 	features := []string{string(metricNamesFilter), string(disableReceiverChunkTrimming)}
-	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+strings.Join(features, ",")+".").Default("").Strings()
+	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+strings.Join(features, ",")+".").Strings()
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
