@@ -1691,7 +1691,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
-		set := NewResponseDeduplicator(NewProxyResponseLoserTree(respSets...))
+		lt := NewProxyResponseLoserTree(respSets...)
+		defer lt.Close()
+		set := NewResponseDeduplicator(lt)
 		i := 0
 		for set.Next() {
 			i++
