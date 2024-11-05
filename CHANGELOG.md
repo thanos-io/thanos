@@ -36,6 +36,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7855](https://github.com/thanos-io/thanos/pull/7855) Compcat/Query: Add support for comma separated replica labels.
 - [#7654](https://github.com/thanos-io/thanos/pull/7654) *: Add '--grpc-server-tls-min-version' flag to allow user to specify TLS version, otherwise default to TLS 1.3
 - [#7854](https://github.com/thanos-io/thanos/pull/7854) Query Frontend: Add `--query-frontend.force-query-stats` flag to force collection of query statistics from upstream queriers.
+- [#7884](https://github.com/thanos-io/thanos/pull/7884) Receive: Add a `disable-chunk-trimming` feature which can be used to return entire chunks to queriers instead of cutting them to the requested range.
 
 ### Changed
 
