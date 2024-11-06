@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -710,11 +711,17 @@ func (er *endpointRef) labelSets() []labels.Labels {
 	}
 
 	labelSet := make([]labels.Labels, 0, len(er.metadata.LabelSets))
-	for _, ls := range labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...) {
-		if ls.Len() == 0 {
+	builder := labels.NewScratchBuilder(8)
+	for _, lset := range er.metadata.LabelSets {
+		if len(lset.Labels) == 0 {
 			continue
 		}
-		labelSet = append(labelSet, ls.Copy())
+		builder.Reset()
+		for _, lbl := range lset.Labels {
+			builder.Add(strings.Clone(lbl.Name), strings.Clone(lbl.Value))
+		}
+		builder.Sort()
+		labelSet = append(labelSet, builder.Labels())
 	}
 	return labelSet
 }
