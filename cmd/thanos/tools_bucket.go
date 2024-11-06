@@ -870,6 +870,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
+				0,
 			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
@@ -1413,6 +1414,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
+				0,
 			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
