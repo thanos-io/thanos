@@ -102,8 +102,9 @@ type ProxyStore struct {
 }
 
 type proxyStoreMetrics struct {
-	emptyStreamResponses prometheus.Counter
-	storeFailureCount    *prometheus.CounterVec
+	emptyStreamResponses       prometheus.Counter
+	storeFailureCount          *prometheus.CounterVec
+	missingBlockFileErrorCount prometheus.Counter
 }
 
 func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
@@ -117,6 +118,10 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 		Name: "thanos_proxy_store_failure_total",
 		Help: "Total number of store failures.",
 	}, []string{"group", "replica"})
+	m.missingBlockFileErrorCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_proxy_querier_missing_block_file_error_total",
+		Help: "Total number of missing block file errors.",
+	})
 
 	return &m
 }
@@ -421,11 +426,17 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		if resp.GetWarning() != "" {
 			totalFailedStores++
 			maxWarningBytes := 2000
+			shouldIgnore := strings.Contains(resp.GetWarning(), "The specified key does not exist")
 			warning := resp.GetWarning()[:min(maxWarningBytes, len(resp.GetWarning()))]
-			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning)
+			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning, "should_ignore", shouldIgnore)
 			// Don't have group/replica keys here, so we can't attribute the warning to a specific store.
 			s.metrics.storeFailureCount.WithLabelValues("", "").Inc()
-			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+			if shouldIgnore {
+				level.Warn(s.logger).Log("msg", "Ignore 'the specified key does not exist' error from Store")
+				// Ignore this error for now because we know the missing block file is already deleted by compactor.
+				// There is no other reason for this error to occur.
+				s.metrics.missingBlockFileErrorCount.Inc()
+			} else if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
 				// TODO: attribute the warning to the store(group key and replica key) that produced it.
 				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
 				if totalFailedStores > 1 {
