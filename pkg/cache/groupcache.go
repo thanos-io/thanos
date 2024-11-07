@@ -208,7 +208,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				if err := bucket.Iter(ctx, parsedData.Name, func(s string) error {
 					list = append(list, s)
 					return nil
-				}, objstore.WithRecursiveIter); err != nil {
+				}, objstore.WithRecursiveIter()); err != nil {
 					return err
 				}
 
