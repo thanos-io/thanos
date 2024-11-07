@@ -79,8 +79,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
-const dnsSDResolver = "miekgdns"
-
 type ruleConfig struct {
 	http    httpConfig
 	grpc    grpcConfig
@@ -404,17 +402,6 @@ func runRule(
 	}
 
 	if len(grpcEndpoints) > 0 {
-		duplicatedGRPCEndpoints := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_rule_grpc_endpoints_duplicated_total",
-			Help: "The number of times a duplicated grpc endpoint is detected from the different configs in rule",
-		})
-
-		dnsEndpointProvider := dns.NewProvider(
-			logger,
-			extprom.WrapRegistererWithPrefix("thanos_rule_grpc_endpoints_", reg),
-			dnsSDResolver,
-		)
-
 		dialOpts, err := extgrpc.StoreClientGRPCOpts(
 			logger,
 			reg,
@@ -430,36 +417,27 @@ func runRule(
 			return err
 		}
 
-		grpcEndpointSet = prepareEndpointSet(
+		grpcEndpointSet, err = setupEndpointSet(
 			g,
-			logger,
+			comp,
 			reg,
-			[]*dns.Provider{dnsEndpointProvider},
-			duplicatedGRPCEndpoints,
+			logger,
+			nil,
+			1*time.Minute,
+			nil,
+			1*time.Minute,
+			grpcEndpoints,
 			nil,
 			nil,
 			nil,
-			nil,
-			dialOpts,
+			conf.query.dnsSDResolver,
+			conf.query.dnsSDInterval,
 			5*time.Minute,
 			5*time.Second,
+			dialOpts,
 		)
-
-		// Periodically update the GRPC addresses from query config by resolving them using DNS SD if necessary.
-		{
-			ctx, cancel := context.WithCancel(context.Background())
-			g.Add(func() error {
-				return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-					resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
-					defer resolveCancel()
-					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints, true); err != nil {
-						level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
-					}
-					return nil
-				})
-			}, func(error) {
-				cancel()
-			})
+		if err != nil {
+			return err
 		}
 	}
 
