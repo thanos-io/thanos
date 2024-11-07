@@ -9,11 +9,15 @@ import (
 	"github.com/cristalhq/hedgedhttp"
 )
 
-type hedgedOptions struct {
-	maxHedgedRequests uint `yaml:"max_hedged_requests"`
+type CustomBucketConfig struct {
+	HedgingConfig HedgingConfig `yaml:"hedging_config"`
 }
 
-var HedgedOptions hedgedOptions
+type HedgingConfig struct {
+	UpTo uint `yaml:"up_to"`
+}
+
+var HedgedOptions CustomBucketConfig
 
 type durationRoundTripper struct {
 	Transport http.RoundTripper
@@ -24,9 +28,15 @@ type durationRoundTripper struct {
 func (drt *durationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	resp, err := drt.Transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
 	duration := time.Since(start).Seconds()
 	drt.mu.Lock()
-	drt.TDigest.Add(duration)
+	err = drt.TDigest.Add(duration)
+	if err != nil {
+		return nil, err
+	}
 	drt.mu.Unlock()
 	return resp, err
 }
@@ -37,7 +47,7 @@ func (drt *durationRoundTripper) nextFn() (int, time.Duration) {
 
 	delaySec := drt.TDigest.Quantile(0.9)
 	delay := time.Duration(delaySec * float64(time.Second))
-	upto := int(HedgedOptions.maxHedgedRequests)
+	upto := int(HedgedOptions.HedgingConfig.UpTo)
 	return upto, delay
 }
 
@@ -52,7 +62,7 @@ func WrapHedgedRoundTripper(rt http.RoundTripper) http.RoundTripper {
 	}
 	cfg := hedgedhttp.Config{
 		Transport: drt,
-		Upto:      int(HedgedOptions.maxHedgedRequests),
+		Upto:      int(HedgedOptions.HedgingConfig.UpTo),
 		Next:      drt.nextFn,
 	}
 	hedgedrt, err := hedgedhttp.New(cfg)
