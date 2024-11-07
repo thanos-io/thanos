@@ -14,6 +14,8 @@ import (
 )
 
 func TestMatchersForLabelSets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		labelSets []labels.Labels

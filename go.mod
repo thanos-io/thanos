@@ -58,7 +58,7 @@ require (
 	github.com/prometheus/common v0.60.0
 	github.com/prometheus/exporter-toolkit v0.12.0
 	// Prometheus maps version 2.x.y to tags v0.x.y.
-	github.com/prometheus/prometheus v0.54.2-0.20240920164404-6f0d6038b7f9
+	github.com/prometheus/prometheus v0.55.1-0.20241102120812-a6fd22b9d2c8
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
 	github.com/thanos-io/objstore v0.0.0-20241024120700-168679cbbf20
@@ -112,7 +112,7 @@ require (
 )
 
 require (
-	capnproto.org/go/capnp/v3 v3.0.1-alpha.1
+	capnproto.org/go/capnp/v3 v3.0.1-alpha.2.0.20240830165715-46ccd63a72af
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
@@ -224,7 +224,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20240827171923-fa2c70bbbfe5 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/googleapis/enterprise-certificate-proxy v0.3.3 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect

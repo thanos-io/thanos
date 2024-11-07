@@ -520,7 +520,7 @@ func runStore(
 
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

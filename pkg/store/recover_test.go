@@ -15,6 +15,8 @@ import (
 )
 
 func TestRecoverableServer(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	store := NewRecoverableStoreServer(logger, &panicStoreServer{})
 
