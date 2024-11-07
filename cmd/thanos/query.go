@@ -518,6 +518,7 @@ func runQuery(
 			dns.ResolverType(dnsSDResolver),
 		),
 		dnsSDInterval,
+		logger,
 	)
 
 	dnsEndpointProvider := dns.NewProvider(
@@ -633,7 +634,7 @@ func runQuery(
 					fileSDCache.Update(update)
 					endpoints.Update(ctxUpdate)
 
-					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...), true); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 					}
 
@@ -653,22 +654,22 @@ func runQuery(
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				resolveCtx, resolveCancel := context.WithTimeout(ctx, dnsSDInterval)
 				defer resolveCancel()
-				if err := dnsStoreProvider.Resolve(resolveCtx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+				if err := dnsStoreProvider.Resolve(resolveCtx, append(fileSDCache.Addresses(), storeAddrs...), true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 				}
-				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs); err != nil {
+				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
 				}
-				if err := dnsTargetProvider.Resolve(ctx, targetAddrs); err != nil {
+				if err := dnsTargetProvider.Resolve(ctx, targetAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for targetsAPIs", "err", err)
 				}
-				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs); err != nil {
+				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for metadataAPIs", "err", err)
 				}
-				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs); err != nil {
+				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for exemplarsAPI", "err", err)
 				}
-				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs); err != nil {
+				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses passed using endpoint flag", "err", err)
 
 				}

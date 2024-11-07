@@ -24,6 +24,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7821](https://github.com/thanos-io/thanos/pull/7679) Query/Receive: Fix coroutine leak introduced in https://github.com/thanos-io/thanos/pull/7796.
 - [#7843](https://github.com/thanos-io/thanos/pull/7843) Query Frontend: fix slow query logging for non-query endpoints.
 - [#7852](https://github.com/thanos-io/thanos/pull/7852) Query Frontend: pass "stats" parameter forward to queriers and fix Prometheus stats merging.
+- [#7832](https://github.com/thanos-io/thanos/pull/7832) Query Frontend: Fix cache keys for dynamic split intervals.
+- [#7885](https://github.com/thanos-io/thanos/pull/7885) Store: Return chunks to the pool after completing a Series call.
 
 ### Added
 - [#7763](https://github.com/thanos-io/thanos/pull/7763) Ruler: use native histograms for client latency metrics.
@@ -35,6 +37,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7853](https://github.com/thanos-io/thanos/pull/7853) UI: Add support for selecting graph time range with mouse drag.
 - [#7855](https://github.com/thanos-io/thanos/pull/7855) Compcat/Query: Add support for comma separated replica labels.
 - [#7654](https://github.com/thanos-io/thanos/pull/7654) *: Add '--grpc-server-tls-min-version' flag to allow user to specify TLS version, otherwise default to TLS 1.3
+- [#7854](https://github.com/thanos-io/thanos/pull/7854) Query Frontend: Add `--query-frontend.force-query-stats` flag to force collection of query statistics from upstream queriers.
 
 ### Changed
 

@@ -155,6 +155,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("failed-query-cache-capacity", "Capacity of cache for failed queries. 0 means this feature is disabled.").
 		Default("0").IntVar(&cfg.CortexHandlerConfig.FailedQueryCacheCapacity)
 
+	cmd.Flag("query-frontend.force-query-stats", "Enables query statistics for all queries and will export statistics as logs and service headers.").Default("false").BoolVar(&cfg.CortexHandlerConfig.QueryStatsEnabled)
+
 	cmd.Flag("query-frontend.org-id-header", "Deprecation Warning - This flag will be soon deprecated in favor of query-frontend.tenant-header"+
 		" and both flags cannot be used at the same time. "+
 		"Request header names used to identify the source of slow queries (repeated flag). "+

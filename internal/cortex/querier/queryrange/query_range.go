@@ -483,12 +483,25 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 		httpHeader[QueryBytesFetchedHeaderName] = []string{strconv.FormatInt(res.(*PrometheusResponse).Data.SeriesStatsCounter.Bytes, 10)}
 	}
 	resp := http.Response{
-		Header:        httpHeader,
+		Header:        mergeHeaders(a.Headers),
 		Body:          io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode:    http.StatusOK,
 		ContentLength: int64(len(b)),
 	}
 	return &resp, nil
+}
+
+// PrometheusResponseHeader helps preserve the Header from the original Prometheus response, coming from the Tripperware.
+func mergeHeaders(headers []*PrometheusResponseHeader) http.Header {
+	h := make(http.Header, len(headers)+1)
+	for _, header := range headers {
+		if strings.EqualFold("Content-Type", header.Name) {
+			continue
+		}
+		h[header.Name] = header.Values
+	}
+	h["Content-Type"] = []string{"application/json"}
+	return h
 }
 
 // UnmarshalJSON implements json.Unmarshaler and is used for unmarshalling
