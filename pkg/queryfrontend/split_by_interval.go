@@ -8,10 +8,12 @@ package queryfrontend
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
@@ -71,7 +73,9 @@ func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryran
 
 func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Request, error) {
 	var reqs []queryrange.Request
-	if _, ok := r.(*ThanosQueryRangeRequest); ok {
+
+	switch tr := r.(type) {
+	case *ThanosQueryRangeRequest:
 		// Replace @ modifier function to their respective constant values in the query.
 		// This way subqueries will be evaluated at the same time as the parent query.
 		query, err := queryrange.EvaluateAtModifierFunction(r.GetQuery(), r.GetStart(), r.GetEnd())
@@ -79,7 +83,7 @@ func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Requ
 			return nil, err
 		}
 		if start := r.GetStart(); start == r.GetEnd() {
-			reqs = append(reqs, r.WithStartEnd(start, start))
+			reqs = append(reqs, tr.WithSplitInterval(interval).WithStartEnd(start, start))
 		} else {
 			for ; start < r.GetEnd(); start = nextIntervalBoundary(start, r.GetStep(), interval) + r.GetStep() {
 				end := nextIntervalBoundary(start, r.GetStep(), interval)
@@ -87,10 +91,10 @@ func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Requ
 					end = r.GetEnd()
 				}
 
-				reqs = append(reqs, r.WithQuery(query).WithStartEnd(start, end))
+				reqs = append(reqs, tr.WithSplitInterval(interval).WithQuery(query).WithStartEnd(start, end))
 			}
 		}
-	} else {
+	case SplitRequest:
 		dur := int64(interval / time.Millisecond)
 		for start := r.GetStart(); start < r.GetEnd(); start = start + dur {
 			end := start + dur
@@ -98,8 +102,10 @@ func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Requ
 				end = r.GetEnd()
 			}
 
-			reqs = append(reqs, r.WithStartEnd(start, end))
+			reqs = append(reqs, tr.WithSplitInterval(interval).WithStartEnd(start, end))
 		}
+	default:
+		return nil, httpgrpc.Errorf(http.StatusBadRequest, `{"status": "error", "error": "request type %T not supported"}`, r)
 	}
 
 	return reqs, nil
