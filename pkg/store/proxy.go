@@ -424,30 +424,31 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		resp := respHeap.At()
 
 		if resp.GetWarning() != "" {
-			totalFailedStores++
 			maxWarningBytes := 2000
-			shouldIgnore := strings.Contains(resp.GetWarning(), "The specified key does not exist")
 			warning := resp.GetWarning()[:min(maxWarningBytes, len(resp.GetWarning()))]
-			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning, "should_ignore", shouldIgnore)
+			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning)
 			// Don't have group/replica keys here, so we can't attribute the warning to a specific store.
 			s.metrics.storeFailureCount.WithLabelValues("", "").Inc()
-			if shouldIgnore {
-				level.Warn(s.logger).Log("msg", "Ignore 'the specified key does not exist' error from Store")
-				// Ignore this error for now because we know the missing block file is already deleted by compactor.
-				// There is no other reason for this error to occur.
-				s.metrics.missingBlockFileErrorCount.Inc()
-			} else if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
-				// TODO: attribute the warning to the store(group key and replica key) that produced it.
-				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
-				if totalFailedStores > 1 {
-					level.Error(reqLogger).Log("msg", "more than one stores had warnings")
-					// If we don't know which store has failed, we can tolerate at most one failed store.
-					if firstWarning != nil {
-						warning += "; " + *firstWarning
+			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+				if strings.Contains(resp.GetWarning(), "The specified key does not exist") {
+					level.Warn(s.logger).Log("msg", "Ignore 'the specified key does not exist' error from Store")
+					// Ignore this error for now because we know the missing block file is already deleted by compactor.
+					// There is no other reason for this error to occur.
+					s.metrics.missingBlockFileErrorCount.Inc()
+				} else {
+					totalFailedStores++
+					// TODO: attribute the warning to the store(group key and replica key) that produced it.
+					// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
+					if totalFailedStores > 1 {
+						level.Error(reqLogger).Log("msg", "more than one stores had warnings")
+						// If we don't know which store has failed, we can tolerate at most one failed store.
+						if firstWarning != nil {
+							warning += "; " + *firstWarning
+						}
+						return status.Error(codes.Aborted, warning)
 					}
-					return status.Error(codes.Aborted, warning)
+					firstWarning = &warning
 				}
-				firstWarning = &warning
 			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return status.Error(codes.Aborted, resp.GetWarning())
 			}
