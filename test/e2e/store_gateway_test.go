@@ -127,7 +127,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
@@ -453,7 +453,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
@@ -672,7 +672,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -807,7 +807,7 @@ metafile_content_ttl: 0s`
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -934,7 +934,7 @@ config:
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
@@ -1068,7 +1068,7 @@ config:
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -1180,7 +1180,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -1354,7 +1354,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))

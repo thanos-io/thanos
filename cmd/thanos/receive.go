@@ -195,7 +195,7 @@ func runReceive(
 			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
-			bkt, err = client.NewBucket(logger, confContentYaml, comp.String(), nil)
+			bkt, err = client.NewBucket(logger, confContentYaml, comp.String())
 			if err != nil {
 				return err
 			}

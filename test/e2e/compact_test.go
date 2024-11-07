@@ -351,7 +351,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -896,7 +896,7 @@ func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bktCfg := e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir())
-	bkt, err := s3.NewBucketWithConfig(logger, bktCfg, "test", nil)
+	bkt, err := s3.NewBucketWithConfig(logger, bktCfg, "test")
 	testutil.Ok(t, err)
 
 	downsampledBase := blockDesc{
@@ -944,7 +944,7 @@ func TestCompactorIssue6775(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	baseBlockDesc := blockDesc{

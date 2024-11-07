@@ -205,7 +205,7 @@ func runCompact(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, component.String(), nil)
+	bkt, err := client.NewBucket(logger, confContentYaml, component.String())
 	if err != nil {
 		return err
 	}
