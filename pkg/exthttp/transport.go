@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cristalhq/hedgedhttp"
 	"github.com/prometheus/common/model"
 )
 
@@ -67,18 +66,4 @@ func DefaultTransport(config HTTPConfig) (*http.Transport, error) {
 		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
 		TLSClientConfig: tlsConfig,
 	}, nil
-}
-
-func WrapHedgedRoundTripper(rt http.RoundTripper) http.RoundTripper {
-	delay := 5 * time.Second
-	upto := 3
-	hedgedTransport, err := hedgedhttp.NewRoundTripper(
-		delay, // Timeout for hedged requests
-		upto,  // Maximum number of hedged requests
-		rt,    // Base RoundTripper
-	)
-	if err != nil {
-		return nil
-	}
-	return hedgedTransport
 }

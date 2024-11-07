@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	commonmodel "github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -309,7 +310,9 @@ func runStore(
 	if err != nil {
 		return err
 	}
-
+	if err := yaml.Unmarshal(confContentYaml, &exthttp.HedgedOptions); err != nil {
+		return errors.Wrap(err, "parsing config YAML file")
+	}
 	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String(), exthttp.WrapHedgedRoundTripper)
 	if err != nil {
 		return err
