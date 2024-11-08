@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package exthttp
 
 import (
@@ -14,40 +17,45 @@ type CustomBucketConfig struct {
 }
 
 type HedgingConfig struct {
-	UpTo uint `yaml:"up_to"`
+	UpTo     uint    `yaml:"up_to"`
+	Quantile float64 `yaml:"quantile"`
 }
 
-var HedgedOptions CustomBucketConfig
+var CustomBktConfig = CustomBucketConfig{
+	HedgingConfig: HedgingConfig{
+		Quantile: 0.9,
+	},
+}
 
-type durationRoundTripper struct {
+type hedgingRoundTripper struct {
 	Transport http.RoundTripper
 	TDigest   *tdigest.TDigest
-	mu        sync.Mutex
+	mu        sync.RWMutex
 }
 
-func (drt *durationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (hrt *hedgingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
-	resp, err := drt.Transport.RoundTrip(req)
+	resp, err := hrt.Transport.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
-	duration := time.Since(start).Seconds()
-	drt.mu.Lock()
-	err = drt.TDigest.Add(duration)
+	duration := float64(time.Since(start).Milliseconds())
+	hrt.mu.Lock()
+	err = hrt.TDigest.Add(duration)
 	if err != nil {
 		return nil, err
 	}
-	drt.mu.Unlock()
+	hrt.mu.Unlock()
 	return resp, err
 }
 
-func (drt *durationRoundTripper) nextFn() (int, time.Duration) {
-	drt.mu.Lock()
-	defer drt.mu.Unlock()
+func (hrt *hedgingRoundTripper) nextFn() (int, time.Duration) {
+	hrt.mu.Lock()
+	defer hrt.mu.Unlock()
 
-	delaySec := drt.TDigest.Quantile(0.9)
-	delay := time.Duration(delaySec * float64(time.Second))
-	upto := int(HedgedOptions.HedgingConfig.UpTo)
+	delayMs := hrt.TDigest.Quantile(CustomBktConfig.HedgingConfig.Quantile)
+	delay := time.Duration(delayMs) * time.Millisecond
+	upto := int(CustomBktConfig.HedgingConfig.UpTo)
 	return upto, delay
 }
 
@@ -56,14 +64,14 @@ func WrapHedgedRoundTripper(rt http.RoundTripper) http.RoundTripper {
 	if err != nil {
 		panic("Failed to initialize T-Digest")
 	}
-	drt := &durationRoundTripper{
+	hrt := &hedgingRoundTripper{
 		Transport: rt,
 		TDigest:   td,
 	}
 	cfg := hedgedhttp.Config{
-		Transport: drt,
-		Upto:      int(HedgedOptions.HedgingConfig.UpTo),
-		Next:      drt.nextFn,
+		Transport: hrt,
+		Upto:      int(CustomBktConfig.HedgingConfig.UpTo),
+		Next:      hrt.nextFn,
 	}
 	hedgedrt, err := hedgedhttp.New(cfg)
 	if err != nil {
