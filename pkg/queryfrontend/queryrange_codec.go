@@ -136,6 +136,7 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 	}
 	result.Engine = r.FormValue(queryv1.EngineParam)
 	result.Path = r.URL.Path
+	result.Stats = r.FormValue(queryv1.Stats)
 
 	for _, value := range r.Header.Values(cacheControlHeader) {
 		if strings.Contains(value, noStoreValue) {
@@ -170,6 +171,7 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
 		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
 		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
+		queryv1.Stats:                []string{thanosReq.Stats},
 	}
 
 	if thanosReq.AutoDownsampling {

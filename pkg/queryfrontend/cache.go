@@ -12,13 +12,11 @@ import (
 
 // thanosCacheKeyGenerator is a utility for using split interval when determining cache keys.
 type thanosCacheKeyGenerator struct {
-	interval    queryrange.IntervalFn
 	resolutions []int64
 }
 
-func newThanosCacheKeyGenerator(intervalFn queryrange.IntervalFn) thanosCacheKeyGenerator {
+func newThanosCacheKeyGenerator() thanosCacheKeyGenerator {
 	return thanosCacheKeyGenerator{
-		interval:    intervalFn,
 		resolutions: []int64{downsample.ResLevel2, downsample.ResLevel1, downsample.ResLevel0},
 	}
 }
@@ -26,20 +24,26 @@ func newThanosCacheKeyGenerator(intervalFn queryrange.IntervalFn) thanosCacheKey
 // GenerateCacheKey generates a cache key based on the Request and interval.
 // TODO(yeya24): Add other request params as request key.
 func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Request) string {
-	currentInterval := r.GetStart() / t.interval(r).Milliseconds()
-	switch tr := r.(type) {
-	case *ThanosQueryRangeRequest:
-		i := 0
-		for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
+	if sr, ok := r.(SplitRequest); ok {
+		splitInterval := sr.GetSplitInterval().Milliseconds()
+		currentInterval := r.GetStart() / splitInterval
+
+		switch tr := r.(type) {
+		case *ThanosQueryRangeRequest:
+			i := 0
+			for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
+			}
+			shardInfoKey := generateShardInfoKey(tr)
+			return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%d:%s:%d:%s", userID, tr.Query, tr.Step, splitInterval, currentInterval, i, shardInfoKey, tr.LookbackDelta, tr.Engine)
+		case *ThanosLabelsRequest:
+			return fmt.Sprintf("fe:%s:%s:%s:%d:%d", userID, tr.Label, tr.Matchers, splitInterval, currentInterval)
+		case *ThanosSeriesRequest:
+			return fmt.Sprintf("fe:%s:%s:%d:%d", userID, tr.Matchers, splitInterval, currentInterval)
 		}
-		shardInfoKey := generateShardInfoKey(tr)
-		return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%s:%d:%s", userID, tr.Query, tr.Step, currentInterval, i, shardInfoKey, tr.LookbackDelta, tr.Engine)
-	case *ThanosLabelsRequest:
-		return fmt.Sprintf("fe:%s:%s:%s:%d", userID, tr.Label, tr.Matchers, currentInterval)
-	case *ThanosSeriesRequest:
-		return fmt.Sprintf("fe:%s:%s:%d", userID, tr.Matchers, currentInterval)
 	}
-	return fmt.Sprintf("fe:%s:%s:%d:%d", userID, r.GetQuery(), r.GetStep(), currentInterval)
+
+	// all possible request types are already covered
+	panic("request type not supported")
 }
 
 func generateShardInfoKey(r *ThanosQueryRangeRequest) string {

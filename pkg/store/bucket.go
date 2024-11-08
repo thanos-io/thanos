@@ -1688,10 +1688,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		s.metrics.seriesBlocksQueried.WithLabelValues(tenant).Observe(float64(stats.blocksQueried))
 	}
 
+	lt := NewProxyResponseLoserTree(respSets...)
+	defer lt.Close()
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
-		set := NewResponseDeduplicator(NewProxyResponseLoserTree(respSets...))
+		set := NewResponseDeduplicator(lt)
 		i := 0
 		for set.Next() {
 			i++

@@ -246,6 +246,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	} else {
 		srv = fs
 	}
+
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())

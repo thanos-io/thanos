@@ -59,6 +59,8 @@ func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.
 
 // Adapted from https://github.com/prometheus/prometheus/blob/6c56a1faaaad07317ff585bda75b99bdba0517ad/tsdb/compact_test.go#L167
 func TestPlanners_Plan_Compatibility(t *testing.T) {
+	t.Parallel()
+
 	ranges := []int64{
 		20,
 		60,
@@ -387,6 +389,8 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 
 // Adapted form: https://github.com/prometheus/prometheus/blob/6c56a1faaaad07317ff585bda75b99bdba0517ad/tsdb/compact_test.go#L377
 func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
+	t.Parallel()
+
 	ranges := []int64{
 		20,
 		60,
@@ -454,6 +458,8 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 }
 
 func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
+	t.Parallel()
+
 	ranges := []int64{
 		20,
 		60,
@@ -646,6 +652,8 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 }
 
 func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
+	t.Parallel()
+
 	ranges := []int64{
 		20,
 		60,

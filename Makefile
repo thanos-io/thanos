@@ -295,6 +295,13 @@ proto: ## Generates Go files from Thanos proto files.
 proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" scripts/genproto.sh
 
+.PHONY: capnp
+capnp: ## Generates Go files from Thanos capnproto files.
+capnp: check-git
+	capnp compile -I $(shell go list -m -f '{{.Dir}}' capnproto.org/go/capnp/v3)/std -ogo pkg/receive/writecapnp/write_request.capnp
+	@$(GOIMPORTS) -w pkg/receive/writecapnp/write_request.capnp.go
+	go run ./scripts/copyright
+
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
 tarballs-release: $(PROMU)
