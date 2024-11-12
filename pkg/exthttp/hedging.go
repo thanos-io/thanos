@@ -4,6 +4,7 @@
 package exthttp
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -21,16 +22,20 @@ type HedgingConfig struct {
 	Quantile float64 `yaml:"quantile"`
 }
 
-var CustomBktConfig = CustomBucketConfig{
-	HedgingConfig: HedgingConfig{
-		Quantile: 0.9,
-	},
+func DefaultCustomBucketConfig() CustomBucketConfig {
+	return CustomBucketConfig{
+		HedgingConfig: HedgingConfig{
+			UpTo:     3,
+			Quantile: 0.9,
+		},
+	}
 }
 
 type hedgingRoundTripper struct {
 	Transport http.RoundTripper
 	TDigest   *tdigest.TDigest
 	mu        sync.RWMutex
+	config    HedgingConfig
 }
 
 func (hrt *hedgingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -50,32 +55,35 @@ func (hrt *hedgingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 }
 
 func (hrt *hedgingRoundTripper) nextFn() (int, time.Duration) {
-	hrt.mu.Lock()
-	defer hrt.mu.Unlock()
+	hrt.mu.RLock()
+	defer hrt.mu.RUnlock()
 
-	delayMs := hrt.TDigest.Quantile(CustomBktConfig.HedgingConfig.Quantile)
+	delayMs := hrt.TDigest.Quantile(hrt.config.Quantile)
 	delay := time.Duration(delayMs) * time.Millisecond
-	upto := int(CustomBktConfig.HedgingConfig.UpTo)
+	upto := int(hrt.config.UpTo)
 	return upto, delay
 }
 
-func WrapHedgedRoundTripper(rt http.RoundTripper) http.RoundTripper {
-	td, err := tdigest.New()
-	if err != nil {
-		panic("Failed to initialize T-Digest")
+func CreateHedgedTransportWithConfig(config CustomBucketConfig) func(rt http.RoundTripper) http.RoundTripper {
+	return func(rt http.RoundTripper) http.RoundTripper {
+		td, err := tdigest.New()
+		if err != nil {
+			panic(fmt.Sprintf("BUG: Failed to initialize T-Digest: %v", err))
+		}
+		hrt := &hedgingRoundTripper{
+			Transport: rt,
+			TDigest:   td,
+			config:    config.HedgingConfig,
+		}
+		cfg := hedgedhttp.Config{
+			Transport: hrt,
+			Upto:      int(config.HedgingConfig.UpTo),
+			Next:      hrt.nextFn,
+		}
+		hedgedrt, err := hedgedhttp.New(cfg)
+		if err != nil {
+			panic(fmt.Sprintf("BUG: Failed to create hedged transport: %v", err))
+		}
+		return hedgedrt
 	}
-	hrt := &hedgingRoundTripper{
-		Transport: rt,
-		TDigest:   td,
-	}
-	cfg := hedgedhttp.Config{
-		Transport: hrt,
-		Upto:      int(CustomBktConfig.HedgingConfig.UpTo),
-		Next:      hrt.nextFn,
-	}
-	hedgedrt, err := hedgedhttp.New(cfg)
-	if err != nil {
-		panic("Failed to create hedged transport")
-	}
-	return hedgedrt
 }
