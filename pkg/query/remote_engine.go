@@ -126,12 +126,10 @@ func (r *remoteEngine) MinT() int64 {
 				highestMintByLabelSet[key] = lset.MinTime
 				continue
 			}
-
 			if lset.MinTime > lsetMinT {
 				highestMintByLabelSet[key] = lset.MinTime
 			}
 		}
-
 		var mint int64 = math.MaxInt64
 		for _, m := range highestMintByLabelSet {
 			if m < mint {
@@ -190,7 +188,6 @@ func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
 			labelpb.ZLabelsFromPromLabels(builder.Labels())),
 		)
 	}
-
 	return infos
 }
 
