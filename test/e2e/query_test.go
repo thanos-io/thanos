@@ -619,7 +619,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(minio))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Preparing 3 different blocks for the tests.
@@ -807,7 +807,7 @@ func TestQueryStoreDedup(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(minio))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	storeGW := e2ethanos.NewStoreGW(
@@ -2035,7 +2035,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(minio))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Add series from different tenants

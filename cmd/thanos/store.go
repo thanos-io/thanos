@@ -309,7 +309,7 @@ func runStore(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String(), nil)
 	if err != nil {
 		return err
 	}
