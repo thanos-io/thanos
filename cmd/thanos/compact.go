@@ -291,7 +291,10 @@ func runCompact(
 			api.SetLoaded(blocks, err)
 		})
 
-		var syncMetasTimeout = conf.waitInterval
+		// Still use blockViewerSyncBlockTimeout to retain original behavior before this upstream change:
+		// https://github.com/databricks/thanos/commit/ab43b2b20cb42eca2668824a4084307216c6da2e#diff-6c2257b871fd1196514f664bc7e44cb21681215e0929710d0ad5ceea90b8e122R294
+		// Otherwise Azure won't work due to its high latency
+		var syncMetasTimeout = conf.blockViewerSyncBlockTimeout
 		if !conf.wait {
 			syncMetasTimeout = 0
 		}
