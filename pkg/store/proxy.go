@@ -430,8 +430,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			// Don't have group/replica keys here, so we can't attribute the warning to a specific store.
 			s.metrics.storeFailureCount.WithLabelValues("", "").Inc()
 			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
-				if strings.Contains(resp.GetWarning(), "The specified key does not exist") {
-					level.Warn(s.logger).Log("msg", "Ignore 'the specified key does not exist' error from Store")
+				// The first error message is from AWS S3 and the second one is from Azure Blob Storage.
+				if strings.Contains(resp.GetWarning(), "The specified key does not exist") || strings.Contains(resp.GetWarning(), "The specified blob does not exist") {
+					level.Warn(s.logger).Log("msg", "Ignore 'the specified key/blob does not exist' error from Store")
 					// Ignore this error for now because we know the missing block file is already deleted by compactor.
 					// There is no other reason for this error to occur.
 					s.metrics.missingBlockFileErrorCount.Inc()
