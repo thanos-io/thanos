@@ -1722,6 +1722,11 @@ func TestParseStoreDebugMatchersParam(t *testing.T) {
 				labels.MustNewMatcher(labels.MatchEqual, "cluster", "test"),
 			}},
 		},
+		{
+			storeMatchers: `{__address__=~"localhost:.*"}`,
+			fail:          false,
+			result:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchRegexp, "__address__", "localhost:.*")}},
+		},
 	} {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			api := QueryAPI{
@@ -1736,7 +1741,13 @@ func TestParseStoreDebugMatchersParam(t *testing.T) {
 
 			storeMatchers, err := api.parseStoreDebugMatchersParam(r)
 			if !tc.fail {
-				testutil.Equals(t, tc.result, storeMatchers)
+				testutil.Equals(t, len(tc.result), len(storeMatchers))
+				for i, m := range tc.result {
+					testutil.Equals(t, len(m), len(storeMatchers[i]))
+					for j, n := range m {
+						testutil.Equals(t, n.String(), storeMatchers[i][j].String())
+					}
+				}
 				testutil.Equals(t, (*baseAPI.ApiError)(nil), err)
 			} else {
 				testutil.NotOk(t, err)
