@@ -539,6 +539,7 @@ type ReceiveBuilder struct {
 	f e2e.FutureRunnable
 
 	maxExemplars        int
+	capnp               bool
 	ingestion           bool
 	limit               int
 	tenantsLimits       receive.TenantsWriteLimitsConfig
@@ -555,7 +556,7 @@ type ReceiveBuilder struct {
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
 	f := e.Runnable(fmt.Sprintf("receive-%v", name)).
-		WithPorts(map[string]int{"http": 8080, "grpc": 9091, "remote-write": 8081}).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091, "remote-write": 8081, "capnp": 19391}).
 		Future()
 	return &ReceiveBuilder{
 		Linkable:    f,
@@ -583,6 +584,11 @@ func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
 
 func (r *ReceiveBuilder) WithLabel(name, value string) *ReceiveBuilder {
 	r.labels = append(r.labels, fmt.Sprintf(`%s="%s"`, name, value))
+	return r
+}
+
+func (r *ReceiveBuilder) UseCapnpReplication() *ReceiveBuilder {
+	r.capnp = true
 	return r
 }
 
@@ -644,6 +650,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if len(r.labels) > 0 {
 		args["--label"] = fmt.Sprintf("%s,%s", args["--label"], strings.Join(r.labels, ","))
+	}
+
+	if r.capnp {
+		args["--receive.replication-protocol"] = "capnproto"
 	}
 
 	hashring := r.hashringConfigs

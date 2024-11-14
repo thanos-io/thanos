@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
-	"net/http"
+	"fmt"
+	"net"
+  "net/http"
 	"os"
 	"path"
 	"strconv"
@@ -149,7 +151,7 @@ func runReceive(
 		}
 	}
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
 	if err != nil {
 		return err
 	}
@@ -197,7 +199,7 @@ func runReceive(
 			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
-			bkt, err = client.NewBucket(logger, confContentYaml, comp.String())
+			bkt, err = client.NewBucket(logger, confContentYaml, comp.String(), nil)
 			if err != nil {
 				return err
 			}
@@ -277,6 +279,7 @@ func runReceive(
 		Limiter:              limiter,
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
+		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -343,7 +346,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -464,8 +467,8 @@ func runReceive(
 		})
 	}
 
-	level.Debug(logger).Log("msg", "setting up periodic top metrics collection")
-	{
+	if receiveMode == receive.IngestorOnly {
+		level.Debug(logger).Log("msg", "setting up periodic top metrics collection")
 		topMetricNumSeries := promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "thanos_receive_top_metric_num_series",
 			Help: "Number of series in top metric.",
@@ -502,6 +505,26 @@ func runReceive(
 				cancel()
 			})
 		}
+	}
+
+	{
+		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
+			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
+		})
+		handler := receive.NewCapNProtoHandler(logger, capNProtoWriter)
+		listener, err := net.Listen("tcp", conf.replicationAddr)
+		if err != nil {
+			return err
+		}
+		server := receive.NewCapNProtoServer(listener, handler, logger)
+		g.Add(func() error {
+			return server.ListenAndServe()
+		}, func(err error) {
+			server.Shutdown()
+			if err := listener.Close(); err != nil {
+				level.Warn(logger).Log("msg", "Cap'n Proto server did not shut down gracefully", "err", err.Error())
+			}
+		})
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
@@ -837,16 +860,18 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
-	rwAddress          string
-	rwServerCert       string
-	rwServerKey        string
-	rwServerClientCA   string
-	rwClientCert       string
-	rwClientKey        string
-	rwClientSecure     bool
-	rwClientServerCA   string
-	rwClientServerName string
-	rwClientSkipVerify bool
+	replicationAddr       string
+	rwAddress             string
+	rwServerCert          string
+	rwServerKey           string
+	rwServerClientCA      string
+	rwClientCert          string
+	rwClientKey           string
+	rwClientSecure        bool
+	rwClientServerCA      string
+	rwClientServerName    string
+	rwClientSkipVerify    bool
+	rwServerTlsMinVersion string
 
 	dataDir   string
 	labelStrs []string
@@ -858,17 +883,18 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	refreshInterval   *model.Duration
-	endpoint          string
-	tenantHeader      string
-	tenantField       string
-	tenantLabelName   string
-	defaultTenantID   string
-	replicaHeader     string
-	replicationFactor uint64
-	forwardTimeout    *model.Duration
-	maxBackoff        *model.Duration
-	compression       string
+	refreshInterval     *model.Duration
+	endpoint            string
+	tenantHeader        string
+	tenantField         string
+	tenantLabelName     string
+	defaultTenantID     string
+	replicaHeader       string
+	replicationFactor   uint64
+	forwardTimeout      *model.Duration
+	maxBackoff          *model.Duration
+	compression         string
+	replicationProtocol string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -923,6 +949,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
+
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 
 	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&rc.rwClientKey)
@@ -975,6 +1003,13 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
+
+	replicationProtocols := []string{string(receive.ProtobufReplication), string(receive.CapNProtoReplication)}
+	cmd.Flag("receive.replication-protocol", "The protocol to use for replicating remote-write requests. One of "+strings.Join(replicationProtocols, ", ")).
+		Default(string(receive.ProtobufReplication)).
+		EnumVar(&rc.replicationProtocol, replicationProtocols...)
+
+	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 

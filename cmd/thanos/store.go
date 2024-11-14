@@ -309,7 +309,7 @@ func runStore(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -516,7 +516,7 @@ func runStore(
 
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

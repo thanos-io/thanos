@@ -58,7 +58,7 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, dialTimeout time.
 }
 
 // Resolve stores a list of nodes auto-discovered from the provided addresses.
-func (p *Provider) Resolve(ctx context.Context, addresses []string) error {
+func (p *Provider) Resolve(ctx context.Context, addresses []string, flushOld bool) error {
 	clusterConfigs := map[string]*clusterConfig{}
 	errs := errutil.MultiError{}
 
@@ -74,13 +74,9 @@ func (p *Provider) Resolve(ctx context.Context, addresses []string) error {
 			errs.Add(err)
 			p.resolverFailuresCount.Inc()
 
-			// Use cached values.
-			p.RLock()
-			clusterConfigs[address] = p.clusterConfigs[address]
-			p.RUnlock()
-		} else {
-			clusterConfigs[address] = clusterConfig
+			continue
 		}
+		clusterConfigs[address] = clusterConfig
 	}
 
 	p.Lock()
@@ -95,7 +91,12 @@ func (p *Provider) Resolve(ctx context.Context, addresses []string) error {
 	p.resolvedAddresses.Submit()
 	p.configVersion.Submit()
 
-	p.clusterConfigs = clusterConfigs
+	if flushOld && len(errs) == 0 {
+		p.clusterConfigs = map[string]*clusterConfig{}
+	}
+	for addr, config := range clusterConfigs {
+		p.clusterConfigs[addr] = config
+	}
 
 	return errs.Err()
 }

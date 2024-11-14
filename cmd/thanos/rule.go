@@ -453,7 +453,7 @@ func runRule(
 				return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
 					resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
 					defer resolveCancel()
-					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints); err != nil {
+					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints, true); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
 					}
 					return nil
@@ -731,7 +731,7 @@ func runRule(
 	)
 
 	// Start gRPC server.
-	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA, conf.grpc.tlsMinVersion)
 	if err != nil {
 		return errors.Wrap(err, "setup gRPC server")
 	}
@@ -843,7 +843,7 @@ func runRule(
 	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Rule.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Rule.String(), nil)
 		if err != nil {
 			return err
 		}

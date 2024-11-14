@@ -601,10 +601,10 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	t.mtx.RUnlock()
 	t.mtx.Lock()
+	defer t.mtx.Unlock()
 	if !t.tsdbClientsNeedUpdate {
 		return t.tsdbClients
 	}
-	defer t.mtx.Unlock()
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {

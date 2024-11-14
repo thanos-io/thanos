@@ -210,7 +210,7 @@ func newQuerierWithOpts(
 
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
 	if opts.GroupReplicaPartialResponseStrategy {
-		level.Info(logger).Log("msg", "Enabled group-replica partial response strategy in newQuerierInternal")
+		level.Debug(logger).Log("msg", "Enabled group-replica partial response strategy in newQuerierInternal")
 		partialResponseStrategy = storepb.PartialResponseStrategy_GROUP_REPLICA
 	} else if partialResponse {
 		partialResponseStrategy = storepb.PartialResponseStrategy_WARN

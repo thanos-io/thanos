@@ -25,6 +25,8 @@ import (
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
+	t.Parallel()
+
 	client := NewClient(&warnClient{}, "", nil)
 	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
@@ -61,6 +63,8 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 }
 
 func TestRemoteEngine_LabelSets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		tsdbInfos       []infopb.TSDBInfo
@@ -130,6 +134,8 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 }
 
 func TestRemoteEngine_MinT(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tsdbInfos     []infopb.TSDBInfo

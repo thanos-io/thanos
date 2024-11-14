@@ -102,8 +102,9 @@ type ProxyStore struct {
 }
 
 type proxyStoreMetrics struct {
-	emptyStreamResponses prometheus.Counter
-	storeFailureCount    *prometheus.CounterVec
+	emptyStreamResponses       prometheus.Counter
+	storeFailureCount          *prometheus.CounterVec
+	missingBlockFileErrorCount prometheus.Counter
 }
 
 func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
@@ -117,6 +118,10 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 		Name: "thanos_proxy_store_failure_total",
 		Help: "Total number of store failures.",
 	}, []string{"group", "replica"})
+	m.missingBlockFileErrorCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_proxy_querier_missing_block_file_error_total",
+		Help: "Total number of missing block file errors.",
+	})
 
 	return &m
 }
@@ -338,20 +343,26 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	checkGroupReplicaErrors := func(st Client, err error) error {
 		if len(failedStores[st.GroupKey()]) > 1 {
+			msg := "Multiple replicas have failures for the same group"
+			group := st.GroupKey()
+			replicas := fmt.Sprintf("%+v", failedStores[group])
 			level.Error(reqLogger).Log(
-				"msg", "Multipel replicas have failures for the same group",
-				"group", st.GroupKey(),
-				"replicas", fmt.Sprintf("%+v", failedStores[st.GroupKey()]),
+				"msg", msg,
+				"group", group,
+				"replicas", replicas,
 			)
-			return err
+			return fmt.Errorf("%s group=%s replicas=%s: %w", msg, group, replicas, err)
 		}
 		if len(groupReplicaStores[st.GroupKey()]) == 1 && failedStores[st.GroupKey()][st.ReplicaKey()] > 1 {
+			msg := "A group with single replica has multiple failures"
+			group := st.GroupKey()
+			replicas := fmt.Sprintf("%+v", failedStores[group])
 			level.Error(reqLogger).Log(
-				"msg", "A single replica group has multiple failures",
-				"group", st.GroupKey(),
-				"replicas", fmt.Sprintf("%+v", failedStores[st.GroupKey()]),
+				"msg", msg,
+				"group", group,
+				"replicas", replicas,
 			)
-			return err
+			return fmt.Errorf("%s group=%s replicas=%s: %w", msg, group, replicas, err)
 		}
 		return nil
 	}
@@ -404,6 +415,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	i := 0
+	var firstWarning *string
 	for respHeap.Next() {
 		i++
 		if r.Limit > 0 && i > int(r.Limit) {
@@ -412,19 +424,31 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		resp := respHeap.At()
 
 		if resp.GetWarning() != "" {
-			totalFailedStores++
 			maxWarningBytes := 2000
 			warning := resp.GetWarning()[:min(maxWarningBytes, len(resp.GetWarning()))]
 			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning)
 			// Don't have group/replica keys here, so we can't attribute the warning to a specific store.
 			s.metrics.storeFailureCount.WithLabelValues("", "").Inc()
 			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
-				// TODO: attribute the warning to the store(group key and replica key) that produced it.
-				// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
-				if totalFailedStores > 1 {
-					level.Error(reqLogger).Log("msg", "more than one stores have failed")
-					// If we don't know which store has failed, we can tolerate at most one failed store.
-					return status.Error(codes.Aborted, warning)
+				// The first error message is from AWS S3 and the second one is from Azure Blob Storage.
+				if strings.Contains(resp.GetWarning(), "The specified key does not exist") || strings.Contains(resp.GetWarning(), "The specified blob does not exist") {
+					level.Warn(s.logger).Log("msg", "Ignore 'the specified key/blob does not exist' error from Store")
+					// Ignore this error for now because we know the missing block file is already deleted by compactor.
+					// There is no other reason for this error to occur.
+					s.metrics.missingBlockFileErrorCount.Inc()
+				} else {
+					totalFailedStores++
+					// TODO: attribute the warning to the store(group key and replica key) that produced it.
+					// Each client streams a sequence of time series, so it's not trivial to attribute the warning to a specific client.
+					if totalFailedStores > 1 {
+						level.Error(reqLogger).Log("msg", "more than one stores had warnings")
+						// If we don't know which store has failed, we can tolerate at most one failed store.
+						if firstWarning != nil {
+							warning += "; " + *firstWarning
+						}
+						return status.Error(codes.Aborted, warning)
+					}
+					firstWarning = &warning
 				}
 			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return status.Error(codes.Aborted, resp.GetWarning())

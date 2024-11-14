@@ -7,11 +7,42 @@ on:
     tags:
   pull_request:
 
-# TODO(bwplotka): Add tests here.
 permissions:  
   contents: read
 
 jobs:
+  unit:
+    runs-on: ubuntu-latest
+    name: Thanos unit tests
+    env:
+      THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS,SWIFT
+      OS_AUTH_URL: http://127.0.0.1:5000/v2.0
+      OS_PASSWORD: s3cr3t
+      OS_PROJECT_NAME: admin
+      OS_REGION_NAME: RegionOne
+      OS_USERNAME: admin
+      GOBIN: /tmp/.bin
+    services:
+      swift:
+        image: 'quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1'
+        ports:
+          - 5000:5000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install Go.
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: 1.23.x
+
+      - name: Install bingo modules
+        run: make install-tool-deps
+      - name: Add GOBIN to path
+        run: echo "/tmp/.bin" >> $GITHUB_PATH
+      - name: Run unit tests
+        run: make test
+
   cross-build-check:
     runs-on: ubuntu-latest
     name: Go build for different platforms
@@ -95,43 +126,6 @@ jobs:
 
       - name: Linting & vetting
         run: make go-lint
-
-  unit:
-    strategy:
-      fail-fast: false
-    runs-on: ubuntu-latest
-    name: Thanos unit tests
-    env:
-      GOBIN: /home/runner/go/bin
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install Go.
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.23.x
-
-      - name: Install bingo and configure PATH
-        run: |
-          go install github.com/bwplotka/bingo@latest
-          ls -l $GOPATH/bin
-          echo $PATH
-
-      - name: Install Prometheus using bingo
-        run: |
-          bingo get prometheus
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/.cache/golangci-lint
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-
-      - name: Run unit tests
-        run: make test-local
 
   codespell:
     runs-on: ubuntu-latest

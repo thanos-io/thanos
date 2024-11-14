@@ -115,7 +115,7 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate from")
 	}
 
-	bkt, err := client.NewBucket(logger, fromConfContentYaml, component.Replicate.String())
+	bkt, err := client.NewBucket(logger, fromConfContentYaml, component.Replicate.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate to")
 	}
 
-	toBkt, err := client.NewBucket(logger, toConfContentYaml, component.Replicate.String())
+	toBkt, err := client.NewBucket(logger, toConfContentYaml, component.Replicate.String(), nil)
 	if err != nil {
 		return err
 	}
