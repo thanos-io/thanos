@@ -58,7 +58,8 @@ func (a *writeErrorTracker) addSampleError(err error, tLogger log.Logger, lset l
 		a.numSamplesOutOfOrder++
 		level.Debug(tLogger).Log("msg", "Out of order sample", "lset", lset, "value", v, "timestamp", t)
 	case errors.Is(err, storage.ErrDuplicateSampleForTimestamp):
-		a.numSamplesDuplicates++
+		// we don't consider this is an error
+		//a.numSamplesDuplicates++
 		level.Debug(tLogger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "value", v, "timestamp", t)
 	case errors.Is(err, storage.ErrOutOfBounds):
 		a.numSamplesOutOfBounds++
@@ -80,7 +81,7 @@ func (a *writeErrorTracker) addHistogramError(err error, tLogger log.Logger, lse
 		a.numSamplesOutOfOrder++
 		level.Debug(tLogger).Log("msg", "Out of order histogram", "lset", lset, "timestamp", timestamp)
 	case errors.Is(err, storage.ErrDuplicateSampleForTimestamp):
-		a.numSamplesDuplicates++
+		//a.numSamplesDuplicates++
 		level.Debug(tLogger).Log("msg", "Duplicate histogram for timestamp", "lset", lset, "timestamp", timestamp)
 	case errors.Is(err, storage.ErrOutOfBounds):
 		a.numSamplesOutOfBounds++
@@ -103,7 +104,7 @@ func (a *writeErrorTracker) addExemplarError(err error, exLogger log.Logger) {
 		a.numExemplarsOutOfOrder++
 		level.Debug(exLogger).Log("msg", "Out of order exemplar")
 	case errors.Is(err, storage.ErrDuplicateExemplar):
-		a.numExemplarsDuplicate++
+		//a.numExemplarsDuplicate++
 		level.Debug(exLogger).Log("msg", "Duplicate exemplar")
 	case errors.Is(err, storage.ErrExemplarLabelLength):
 		a.numExemplarsLabelLength++
