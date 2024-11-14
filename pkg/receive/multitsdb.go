@@ -122,10 +122,14 @@ func NewMultiTSDB(
 	return mt
 }
 
-func (t *MultiTSDB) GetTenantsLen() int {
+func (t *MultiTSDB) GetTenants() []string {
 	t.mtx.RLock()
+	tenants := make([]string, 0, len(t.tenants))
+	for tname := range t.tenants {
+		tenants = append(tenants, tname)
+	}
 	defer t.mtx.RUnlock()
-	return len(t.tenants)
+	return tenants
 }
 
 type localClient struct {
