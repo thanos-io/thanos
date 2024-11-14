@@ -578,7 +578,7 @@ If timeout is set to zero then there is no timeout for fetching and fetching's l
 
 ## Hedged Requests
 
-Thanos Store Gateway supports `hedged requests` to improve performance and reliability, especially useful in high-latency environments. 
+Thanos Store Gateway supports `hedged requests` to enhance performance and reliability, particularly in high-latency environments. This feature addresses `long-tail latency issues` that can occur between the Thanos Store Gateway and an external cache, reducing the impact of slower response times on overall performance.
 
 The configuration options for hedged requests allow for tuning based on latency tolerance and cost considerations, as some providers may charge per request.
 
