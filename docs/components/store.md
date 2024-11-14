@@ -584,6 +584,7 @@ The configuration options for hedged requests allow for tuning based on latency 
 
 In the `bucket.yml` file, you can specify the following fields under `hedging_config`:
 
+- `enabled`: bool to enable hedged requests.
 - `up_to`: maximum number of hedged requests allowed for each initial request.
   - **Purpose**: controls the redundancy level of hedged requests to improve response times.
   - **Cost vs. Benefit**: increasing up_to can reduce latency but may increase costs, as some providers charge per request. Higher values provide diminishing returns on latency beyond a certain level.
@@ -595,6 +596,7 @@ By default, `hedging_config` is set as follows:
 
 ```yaml
 hedging_config:
+  enabled: false
   up_to: 3
   quantile: 0.9
 ```

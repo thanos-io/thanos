@@ -18,6 +18,7 @@ type CustomBucketConfig struct {
 }
 
 type HedgingConfig struct {
+	Enabled  bool    `yaml:"enabled"`
 	UpTo     uint    `yaml:"up_to"`
 	Quantile float64 `yaml:"quantile"`
 }
@@ -25,6 +26,7 @@ type HedgingConfig struct {
 func DefaultCustomBucketConfig() CustomBucketConfig {
 	return CustomBucketConfig{
 		HedgingConfig: HedgingConfig{
+			Enabled:  false,
 			UpTo:     3,
 			Quantile: 0.9,
 		},
@@ -65,6 +67,11 @@ func (hrt *hedgingRoundTripper) nextFn() (int, time.Duration) {
 }
 
 func CreateHedgedTransportWithConfig(config CustomBucketConfig) func(rt http.RoundTripper) http.RoundTripper {
+	if !config.HedgingConfig.Enabled {
+		return func(rt http.RoundTripper) http.RoundTripper {
+			return rt
+		}
+	}
 	return func(rt http.RoundTripper) http.RoundTripper {
 		td, err := tdigest.New()
 		if err != nil {
