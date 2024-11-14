@@ -456,8 +456,8 @@ func runReceive(
 		})
 	}
 
-	level.Debug(logger).Log("msg", "setting up periodic top metrics collection")
-	{
+	if receiveMode == receive.IngestorOnly {
+		level.Debug(logger).Log("msg", "setting up periodic top metrics collection")
 		topMetricNumSeries := promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "thanos_receive_top_metric_num_series",
 			Help: "Number of series in top metric.",
