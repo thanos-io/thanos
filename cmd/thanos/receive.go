@@ -175,6 +175,10 @@ func runReceive(
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
 
+	if conf.grpcServiceConfig != "" {
+		dialOpts = append(dialOpts, grpc.WithDefaultServiceConfig(conf.grpcServiceConfig))
+	}
+
 	var bkt objstore.Bucket
 	confContentYaml, err := conf.objStoreConfig.Content()
 	if err != nil {
@@ -856,6 +860,7 @@ type receiveConfig struct {
 	maxBackoff          *model.Duration
 	compression         string
 	replicationProtocol string
+	grpcServiceConfig   string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -969,6 +974,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		EnumVar(&rc.replicationProtocol, replicationProtocols...)
 
 	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
+
+	cmd.Flag("receive.grpc-service-config", "gRPC service configuration file or content in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").PlaceHolder("<content>").Default("").StringVar(&rc.grpcServiceConfig)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 

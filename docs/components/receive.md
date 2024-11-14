@@ -429,6 +429,10 @@ Flags:
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
                                  none
+      --receive.grpc-service-config=<content>
+                                 gRPC service configuration file
+                                 or content in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains
