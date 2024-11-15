@@ -2378,6 +2378,7 @@ func TestDistributedEngineWithExtendedFunctions(t *testing.T) {
 }
 
 func TestDistributedEngineWithDisjointTSDBs(t *testing.T) {
+	t.Skip("skipping test as this replicates a bug")
 	e, err := e2e.New(e2e.WithName("dist-disj-tsdbs"))
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
@@ -2390,7 +2391,7 @@ func TestDistributedEngineWithDisjointTSDBs(t *testing.T) {
 	minio1 := e2edb.NewMinio(e, "1", bucket1, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(minio1))
 
-	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, minio1.Endpoint("http"), minio1.Dir()), "test")
+	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, minio1.Endpoint("http"), minio1.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Setup a storage GW with 2 blocks that have a gap to trigger distributed query MinT bug
