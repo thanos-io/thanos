@@ -84,7 +84,7 @@ func registerQuery(app *extkingpin.App) {
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 
 	var grpcServerConfig grpcConfig
-	grpcServerConfig.registerFlag(cmd)
+	grpcServerConfig.registerFlag(cmd, false)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	skipVerify := cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").Bool()

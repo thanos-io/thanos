@@ -33,10 +33,15 @@ type grpcConfig struct {
 	maxConnectionAge time.Duration
 }
 
-func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
+func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause, optionalListener bool) *grpcConfig {
+	var addr = "0.0.0.0:10901"
+	if optionalListener {
+		addr = ""
+	}
 	cmd.Flag("grpc-address",
 		"Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
-		Default("0.0.0.0:10901").StringVar(&gc.bindAddress)
+		Default(addr).StringVar(&gc.bindAddress)
+
 	cmd.Flag("grpc-server-tls-cert",
 		"TLS Certificate for gRPC server, leave blank to disable TLS").
 		Default("").StringVar(&gc.tlsSrvCert)

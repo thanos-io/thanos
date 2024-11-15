@@ -560,7 +560,7 @@ type sidecarConfig struct {
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.http.registerFlag(cmd)
-	sc.grpc.registerFlag(cmd)
+	sc.grpc.registerFlag(cmd, false)
 	sc.prometheus.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)

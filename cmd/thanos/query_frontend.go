@@ -34,9 +34,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tenancy"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -66,6 +68,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	}
 
 	cfg.http.registerFlag(cmd)
+
+	var grpcServerConfig grpcConfig
+	grpcServerConfig.registerFlag(cmd, true)
 
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&cfg.webDisableCORS)
@@ -173,7 +178,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp)
+		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp, grpcServerConfig)
 	})
 }
 
@@ -239,6 +244,7 @@ func runQueryFrontend(
 	httpLogOpts []logging.Option,
 	cfg *queryFrontendConfig,
 	comp component.Component,
+	grpcServerConfig grpcConfig,
 ) error {
 	tenantHeaderProvided := cfg.TenantHeader != "" && cfg.TenantHeader != tenancy.DefaultTenantHeader
 	// If tenant header is set and different from the default tenant header, add it to the list of org id headers.
@@ -330,14 +336,42 @@ func runQueryFrontend(
 	}
 
 	httpProbe := prober.NewHTTP()
+	grpcProbe := prober.NewGRPC()
+
 	statusProber := prober.Combine(
 		httpProbe,
+		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	// Configure Request Logging for HTTP calls.
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 	ins := extpromhttp.NewTenantInstrumentationMiddleware(cfg.TenantHeader, cfg.DefaultTenant, reg, nil)
+
+	instr := func(f http.HandlerFunc) http.HandlerFunc {
+		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			orgId := extractOrgId(cfg, r)
+			name := "query-frontend"
+			if !cfg.webDisableCORS {
+				api.SetCORS(w)
+			}
+			middleware.RequestID(
+				tracing.HTTPMiddleware(
+					tracer,
+					name,
+					logger,
+					ins.NewHandler(
+						name,
+						logMiddleware.HTTPMiddleware(name, f),
+					),
+					// Cortex frontend middlewares require orgID.
+				),
+			).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
+		})
+		return hf
+	}
+
+	instrumentedHandler := instr(handler.ServeHTTP)
 
 	// Start metrics HTTP server.
 	{
@@ -347,29 +381,7 @@ func runQueryFrontend(
 			httpserver.WithTLSConfig(cfg.http.tlsConfig),
 		)
 
-		instr := func(f http.HandlerFunc) http.HandlerFunc {
-			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				orgId := extractOrgId(cfg, r)
-				name := "query-frontend"
-				if !cfg.webDisableCORS {
-					api.SetCORS(w)
-				}
-				middleware.RequestID(
-					tracing.HTTPMiddleware(
-						tracer,
-						name,
-						logger,
-						ins.NewHandler(
-							name,
-							logMiddleware.HTTPMiddleware(name, f),
-						),
-						// Cortex frontend middlewares require orgID.
-					),
-				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
-			})
-			return hf
-		}
-		srv.Handle("/", instr(handler.ServeHTTP))
+		srv.Handle("/", instrumentedHandler)
 
 		g.Add(func() error {
 			statusProber.Healthy()
@@ -383,8 +395,34 @@ func runQueryFrontend(
 		})
 	}
 
+	if grpcServerConfig.bindAddress != "" {
+		level.Info(logger).Log("msg", "starting gRPC server", "address", grpcServerConfig.bindAddress)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcServerConfig.tlsSrvCert, grpcServerConfig.tlsSrvKey, grpcServerConfig.tlsSrvClientCA, grpcServerConfig.tlsMinVersion)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC server")
+		}
+
+		httpgrpcServer := queryfrontend.NewHTTPGRPCServer(instrumentedHandler)
+
+		s := grpcserver.New(logger, reg, tracer, nil, nil, comp, grpcProbe,
+			grpcserver.WithServer(queryfrontend.RegisterHTTPGRPCServer(httpgrpcServer)),
+			grpcserver.WithListen(grpcServerConfig.bindAddress),
+			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
+			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),
+			grpcserver.WithTLSConfig(tlsCfg),
+		)
+
+		g.Add(func() error {
+			statusProber.Ready()
+
+			return s.ListenAndServe()
+		}, func(error) {
+			statusProber.NotReady(err)
+			s.Shutdown(err)
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting query frontend")
-	statusProber.Ready()
 	return nil
 }
 

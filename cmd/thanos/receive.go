@@ -890,7 +890,7 @@ type receiveConfig struct {
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.httpBindAddr, rc.httpGracePeriod, rc.httpTLSConfig = extkingpin.RegisterHTTPFlags(cmd)
-	rc.grpcConfig.registerFlag(cmd)
+	rc.grpcConfig.registerFlag(cmd, false)
 	rc.storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").

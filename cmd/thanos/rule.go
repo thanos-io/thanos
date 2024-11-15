@@ -119,7 +119,7 @@ type Expression struct {
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.http.registerFlag(cmd)
-	rc.grpc.registerFlag(cmd)
+	rc.grpc.registerFlag(cmd, false)
 	rc.web.registerFlag(cmd)
 	rc.shipper.registerFlag(cmd)
 	rc.query.registerFlag(cmd)
