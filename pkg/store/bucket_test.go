@@ -682,6 +682,8 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 		{mint: 3500, maxt: 5000, extLabels: labels.FromStrings("a", "b")},
 		{mint: 0, maxt: 1000, extLabels: labels.FromStrings("a", "c")},
 		{mint: 500, maxt: 2000, extLabels: labels.FromStrings("a", "c")},
+		{mint: 0, maxt: 1000, extLabels: labels.FromStrings("a", "d")},
+		{mint: 2000, maxt: 3000, extLabels: labels.FromStrings("a", "d")},
 	} {
 		id1, err := e2eutil.CreateBlock(ctx, dir, series, 10, tt.mint, tt.maxt, tt.extLabels, 0, metadata.NoneFunc)
 		testutil.Ok(t, err)
@@ -737,6 +739,16 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}}},
 			MinTime: 0,
 			MaxTime: 2000,
+		},
+		{
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}}},
+			MinTime: 0,
+			MaxTime: 1000,
+		},
+		{
+			Labels:  labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}}},
+			MinTime: 2000,
+			MaxTime: 3000,
 		},
 	})
 }
