@@ -227,9 +227,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Namespace: "thanos",
 				Subsystem: "receive",
 				Name:      "write_e2e_latency_seconds",
-				Help:      "The end-to-end latency of the oldest sample in write requests.",
+				Help:      "The end-to-end latency of write requests.",
 				Buckets:   []float64{1, 5, 10, 20, 30, 40, 50, 60, 90, 120, 300, 600, 900, 1200, 1800, 3600},
-			}, []string{"code", "tenant", labelPreAgg},
+			}, []string{"code", "tenant", "rollup"},
 		),
 	}
 
