@@ -1572,6 +1572,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				tenant,
 			)
 
+			defer blockClient.Close()
+
 			g.Go(func() error {
 
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
@@ -1687,7 +1689,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	}
 
 	lt := NewProxyResponseLoserTree(respSets...)
-	defer lt.Close()
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
@@ -3379,7 +3380,6 @@ func (r *bucketIndexReader) Close() error {
 }
 
 func (b *blockSeriesClient) CloseSend() error {
-	b.Close()
 	return nil
 }
 
