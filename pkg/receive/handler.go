@@ -69,6 +69,7 @@ const (
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
+	labelPreAgg  = "__rollup__"
 )
 
 type ReplicationProtocol string
@@ -226,9 +227,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Namespace: "thanos",
 				Subsystem: "receive",
 				Name:      "write_e2e_latency_seconds",
-				Help:      "The end-to-end latency of the oldest sample in write requests.",
+				Help:      "The end-to-end latency of write requests.",
 				Buckets:   []float64{1, 5, 10, 20, 30, 40, 50, 60, 90, 120, 300, 600, 900, 1200, 1800, 3600},
-			}, []string{"code", "tenant"},
+			}, []string{"code", "tenant", "rollup"},
 		),
 	}
 
@@ -484,14 +485,21 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
-func secondsSinceOldestSample(toMS int64, ts prompb.TimeSeries) float64 {
+func secondsSinceFirstSample(toMS int64, ts prompb.TimeSeries) float64 {
 	fromMS := toMS
-	for _, s := range ts.Samples {
-		if s.Timestamp < fromMS {
-			fromMS = s.Timestamp
-		}
+	if len(ts.Samples) > 0 {
+		fromMS = ts.Samples[0].Timestamp
 	}
 	return float64(toMS-fromMS) / 1000
+}
+
+func isPreAgged(ts prompb.TimeSeries) bool {
+	for _, l := range ts.Labels {
+		if l.Name == labelPreAgg && l.Value == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -640,8 +648,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	nowMS := time.Now().UnixNano() / int64(time.Millisecond)
 	for _, ts := range wreq.Timeseries {
-		if lat := secondsSinceOldestSample(nowMS, ts); lat > 0 {
-			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Observe(lat)
+		if lat := secondsSinceFirstSample(nowMS, ts); lat > 0 {
+			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP, strconv.FormatBool(isPreAgged(ts))).Observe(lat)
 		}
 	}
 }
