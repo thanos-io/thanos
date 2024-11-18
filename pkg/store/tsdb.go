@@ -53,6 +53,12 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
+func WithChunkTrimming(enableChunkTrimming bool) TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.trimChunks = enableChunkTrimming
+	}
+}
+
 // TSDBStore implements the store API against a local TSDB instance.
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
@@ -62,6 +68,7 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	buffers          sync.Pool
 	maxBytesPerFrame int
+	trimChunks       bool
 
 	extLset                labels.Labels
 	startStoreFilterUpdate bool
@@ -275,7 +282,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		Start:           r.MinTime,
 		End:             r.MaxTime,
 		Limit:           int(r.Limit),
-		DisableTrimming: true,
+		DisableTrimming: !s.trimChunks,
 	}
 	set := q.Select(srv.Context(), true, hints, matchers...)
 
