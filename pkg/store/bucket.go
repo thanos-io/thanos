@@ -1572,6 +1572,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				tenant,
 			)
 
+			defer blockClient.Close()
+
 			g.Go(func() error {
 
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
@@ -3379,7 +3381,6 @@ func (r *bucketIndexReader) Close() error {
 }
 
 func (b *blockSeriesClient) CloseSend() error {
-	b.Close()
 	return nil
 }
 
