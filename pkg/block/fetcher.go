@@ -213,7 +213,7 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		case ch <- id:
 		}
 		return nil
-	}, objstore.WithRecursiveIter)
+	}, objstore.WithRecursiveIter())
 	return partialBlocks, err
 }
 
