@@ -922,17 +922,15 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 		sort.Slice(infos, func(i, j int) bool { return infos[i].MinTime < infos[j].MinTime })
 
 		cur := infos[0]
-		for i, info := range infos {
+		for _, info := range infos {
 			if info.MinTime > cur.MaxTime {
 				res = append(res, cur)
 				cur = info
 				continue
 			}
 			cur.MaxTime = info.MaxTime
-			if i == len(infos)-1 {
-				res = append(res, cur)
-			}
 		}
+		res = append(res, cur)
 	}
 
 	return res
@@ -1573,6 +1571,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				s.metrics.lazyExpandedPostingSeriesOverfetchedSizeBytes,
 				tenant,
 			)
+
+			defer blockClient.Close()
 
 			g.Go(func() error {
 
@@ -3381,7 +3381,6 @@ func (r *bucketIndexReader) Close() error {
 }
 
 func (b *blockSeriesClient) CloseSend() error {
-	b.Close()
 	return nil
 }
 

@@ -495,7 +495,7 @@ func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	analysis.PeakSamples = a.PeakSamples()
 	analysis.TotalSamples = a.TotalSamples()
 	for _, c := range a.Children {
-		analysis.Children = append(analysis.Children, processAnalysis(&c))
+		analysis.Children = append(analysis.Children, processAnalysis(c))
 	}
 	return analysis
 }
