@@ -34,6 +34,7 @@ config:
       insecure_skip_verify: false
     disable_compression: false
   chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -575,6 +576,33 @@ In the `peers` section it is possible to use the prefix form to automatically lo
 Note that there must be no trailing slash in the `peers` configuration i.e. one of the strings must be identical to `self_url` and others should have the same form. Without this, loading data from peers may fail.
 
 If timeout is set to zero then there is no timeout for fetching and fetching's lifetime is equal to the lifetime to the original request's lifetime. It is recommended to keep it higher than zero. It is generally preferred to keep this value higher because the fetching operation potentially includes loading of data from remote object storage.
+
+## Hedged Requests
+
+Thanos Store Gateway supports `hedged requests` to enhance performance and reliability, particularly in high-latency environments. This feature addresses `long-tail latency issues` that can occur between the Thanos Store Gateway and an external cache, reducing the impact of slower response times on overall performance.
+
+The configuration options for hedged requests allow for tuning based on latency tolerance and cost considerations, as some providers may charge per request.
+
+In the `bucket.yml` file, you can specify the following fields under `hedging_config`:
+
+- `enabled`: bool to enable hedged requests.
+- `up_to`: maximum number of hedged requests allowed for each initial request.
+  - **Purpose**: controls the redundancy level of hedged requests to improve response times.
+  - **Cost vs. Benefit**: increasing up_to can reduce latency but may increase costs, as some providers charge per request. Higher values provide diminishing returns on latency beyond a certain level.
+- `quantile`: latency threshold, specified as a quantile (e.g., percentile), which determines when additional hedged requests should be sent.
+  - **Purpose**: controls when hedged requests are triggered based on response time distribution.
+  - **Cost vs. Benefit**: lower quantile (e.g., 0.7) initiates hedged requests sooner, potentially raising costs while lowering latency variance. A higher quantile (e.g., 0.95) will initiate hedged requests later, reducing cost by limiting redundancy.
+
+By default, `hedging_config` is set as follows:
+
+```yaml
+hedging_config:
+  enabled: false
+  up_to: 3
+  quantile: 0.9
+```
+
+This configuration sends up to three additional requests if the initial request response time exceeds the 90th percentile.
 
 ## Index Header
 

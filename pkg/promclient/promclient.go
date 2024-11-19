@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -201,13 +200,15 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 		return labels.EmptyLabels(), errors.Wrapf(err, "unmarshal response: %v", string(body))
 	}
 	var cfg struct {
-		GlobalConfig config.GlobalConfig `yaml:"global"`
+		GlobalConfig struct {
+			ExternalLabels map[string]string `yaml:"external_labels"`
+		} `yaml:"global"`
 	}
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
 		return labels.EmptyLabels(), errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
 
-	return cfg.GlobalConfig.ExternalLabels, nil
+	return labels.FromMap(cfg.GlobalConfig.ExternalLabels), nil
 }
 
 type Flags struct {
