@@ -161,7 +161,7 @@ func (s *dedupSeriesSet) At() storage.Series {
 	copy(repl, s.replicas)
 
 	if s.deduplicationFunc == AlgorithmChain {
-		return storage.ChainedSeriesMerge(s.replicas...)
+		return seriesWithLabels{Series: storage.ChainedSeriesMerge(repl...), lset: s.lset}
 	} else {
 		return newDedupSeries(s.lset, repl, s.f)
 	}
