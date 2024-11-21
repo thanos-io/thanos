@@ -23,6 +23,12 @@ import (
 // that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
 const initialPenalty = 5000
 
+const (
+	AlgorithmPenalty = "penalty"
+	AlgorithmChain   = "chain"
+	AlgorithmQuorum  = "quorum"
+)
+
 type dedupSeriesSet struct {
 	set storage.SeriesSet
 
@@ -32,7 +38,8 @@ type dedupSeriesSet struct {
 	peek storage.Series
 	ok   bool
 
-	f string
+	f                 string
+	deduplicationFunc string
 }
 
 // isCounter deduces whether a counter metric has been passed. There must be
@@ -109,8 +116,8 @@ func (o *overlapSplitSet) Err() error {
 
 // NewSeriesSet returns seriesSet that deduplicates the same series.
 // The series in series set are expected be sorted by all labels.
-func NewSeriesSet(set storage.SeriesSet, f string) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, f: f}
+func NewSeriesSet(set storage.SeriesSet, f string, deduplicationFunc string) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, f: f, deduplicationFunc: deduplicationFunc}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -160,9 +167,12 @@ func (s *dedupSeriesSet) At() storage.Series {
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
-	if s.f == UseMergedSeries {
+	if s.deduplicationFunc == AlgorithmChain {
+		return storage.ChainedSeriesMerge(repl...)
+	} else if s.deduplicationFunc == AlgorithmQuorum {
 		// merge all samples which are ingested via receiver, no skips.
-		return NewMergedSeries(s.lset, repl)
+		// feed the merged series into dedup series which apply counter adjustment
+		return NewMergedSeries(s.lset, repl, s.f)
 	}
 	return newDedupSeries(s.lset, repl, s.f)
 }

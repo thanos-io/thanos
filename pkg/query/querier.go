@@ -60,7 +60,7 @@ type QueryableCreator func(
 
 type Options struct {
 	GroupReplicaPartialResponseStrategy bool
-	EnableDedupMerge                    bool
+	DeduplicationFunc                   string
 }
 
 // NewQueryableCreator creates QueryableCreator.
@@ -147,6 +147,7 @@ func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
 type querier struct {
 	logger                  log.Logger
 	mint, maxt              int64
+	deduplicationFunc       string
 	replicaLabels           []string
 	storeDebugMatchers      [][]*labels.Matcher
 	proxy                   storepb.StoreServer
@@ -158,7 +159,6 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
-	enableDedupMerge        bool
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -222,6 +222,7 @@ func newQuerierWithOpts(
 
 		mint:                    mint,
 		maxt:                    maxt,
+		deduplicationFunc:       opts.DeduplicationFunc,
 		replicaLabels:           replicaLabels,
 		storeDebugMatchers:      storeDebugMatchers,
 		proxy:                   proxy,
@@ -231,7 +232,6 @@ func newQuerierWithOpts(
 		skipChunks:              skipChunks,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
-		enableDedupMerge:        opts.EnableDedupMerge,
 	}
 }
 
@@ -421,10 +421,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns,
 	)
 	f := hints.Func
-	if q.enableDedupMerge {
-		f = dedup.UseMergedSeries
-	}
-	return dedup.NewSeriesSet(set, f), resp.seriesSetStats, nil
+	return dedup.NewSeriesSet(set, f, q.deduplicationFunc), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.

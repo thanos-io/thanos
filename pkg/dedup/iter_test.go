@@ -538,7 +538,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			if tcase.isCounter {
 				f = "rate"
 			}
-			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f, AlgorithmPenalty)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())
