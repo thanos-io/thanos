@@ -169,8 +169,7 @@ func (s *dedupSeriesSet) At() storage.Series {
 	copy(repl, s.replicas)
 	if s.deduplicationFunc == AlgorithmQuorum {
 		// merge all samples which are ingested via receiver, no skips.
-		// feed the merged series into dedup series which apply counter adjustment
-		return NewMergedSeries(s.lset, repl, s.f)
+		return NewQuorumSeries(s.lset, repl, s.f)
 	}
 	if s.deduplicationFunc == AlgorithmChain {
 		return seriesWithLabels{Series: storage.ChainedSeriesMerge(repl...), lset: s.lset}

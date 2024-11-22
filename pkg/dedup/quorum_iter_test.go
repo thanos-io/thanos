@@ -14,7 +14,7 @@ import (
 )
 
 func TestIteratorEdgeCases(t *testing.T) {
-	ms := NewMergedSeries(labels.Labels{}, []storage.Series{}, "")
+	ms := NewQuorumSeries(labels.Labels{}, []storage.Series{}, "")
 	it := ms.Iterator(nil)
 	testutil.Ok(t, it.Err())
 	testutil.Equals(t, int64(math.MinInt64), it.AtT())

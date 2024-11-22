@@ -12,17 +12,17 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 )
 
-// mergedSeries is a storage.Series that implements a simple merge sort algorithm.
-// when replicas has conflict values at the same timestamp, the first replica will be selected.
-type mergedSeries struct {
+// quorumSeries is a storage.Series that implements quorum algorithm.
+// when replicas has conflict values at the same timestamp, the value in majority replica will be selected.
+type quorumSeries struct {
 	lset     labels.Labels
 	replicas []storage.Series
 
 	isCounter bool
 }
 
-func NewMergedSeries(lset labels.Labels, replicas []storage.Series, f string) storage.Series {
-	return &mergedSeries{
+func NewQuorumSeries(lset labels.Labels, replicas []storage.Series, f string) storage.Series {
+	return &quorumSeries{
 		lset:     lset,
 		replicas: replicas,
 
@@ -30,10 +30,10 @@ func NewMergedSeries(lset labels.Labels, replicas []storage.Series, f string) st
 	}
 }
 
-func (m *mergedSeries) Labels() labels.Labels {
+func (m *quorumSeries) Labels() labels.Labels {
 	return m.lset
 }
-func (m *mergedSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
+func (m *quorumSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	iters := make([]adjustableSeriesIterator, 0, len(m.replicas))
 	oks := make([]bool, 0, len(m.replicas))
 	for _, r := range m.replicas {
@@ -47,7 +47,7 @@ func (m *mergedSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 		iters = append(iters, it)
 		oks = append(oks, ok)
 	}
-	return &mergedSeriesIterator{
+	return &quorumSeriesIterator{
 		iters:    iters,
 		oks:      oks,
 		lastT:    math.MinInt64,
@@ -82,7 +82,7 @@ func (q *quorumValuePicker) addValue(v float64) bool {
 	return false
 }
 
-type mergedSeriesIterator struct {
+type quorumSeriesIterator struct {
 	iters []adjustableSeriesIterator
 	oks   []bool
 
@@ -91,7 +91,7 @@ type mergedSeriesIterator struct {
 	lastIter adjustableSeriesIterator
 }
 
-func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
+func (m *quorumSeriesIterator) Next() chunkenc.ValueType {
 	// m.lastIter points to the last iterator that has the latest timestamp.
 	// m.lastT always aligns with m.lastIter unless when m.lastIter is nil.
 	// m.lastIter is nil only in the following cases:
@@ -131,7 +131,7 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 	return chunkenc.ValFloat
 }
 
-func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
+func (m *quorumSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for m.lastT < t && m.Next() != chunkenc.ValNone {
 	}
@@ -142,25 +142,25 @@ func (m *mergedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	return chunkenc.ValFloat
 }
 
-func (m *mergedSeriesIterator) At() (t int64, v float64) {
+func (m *quorumSeriesIterator) At() (t int64, v float64) {
 	return m.lastIter.At()
 }
 
-func (m *mergedSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+func (m *quorumSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
 	return m.lastIter.AtHistogram(h)
 }
 
-func (m *mergedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+func (m *quorumSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return m.lastIter.AtFloatHistogram(fh)
 }
 
-func (m *mergedSeriesIterator) AtT() int64 {
+func (m *quorumSeriesIterator) AtT() int64 {
 	return m.lastT
 }
 
 // Err All At() funcs should panic if called after Next() or Seek() return ValNone.
 // Only Err() should return nil even after Next() or Seek() return ValNone.
-func (m *mergedSeriesIterator) Err() error {
+func (m *quorumSeriesIterator) Err() error {
 	if m.lastIter == nil {
 		return nil
 	}
