@@ -167,12 +167,13 @@ func (s *dedupSeriesSet) At() storage.Series {
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
-	if s.deduplicationFunc == AlgorithmChain {
-		return storage.ChainedSeriesMerge(repl...)
-	} else if s.deduplicationFunc == AlgorithmQuorum {
+	if s.deduplicationFunc == AlgorithmQuorum {
 		// merge all samples which are ingested via receiver, no skips.
 		// feed the merged series into dedup series which apply counter adjustment
 		return NewMergedSeries(s.lset, repl, s.f)
+	}
+	if s.deduplicationFunc == AlgorithmChain {
+		return seriesWithLabels{Series: storage.ChainedSeriesMerge(repl...), lset: s.lset}
 	}
 	return newDedupSeries(s.lset, repl, s.f)
 }

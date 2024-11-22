@@ -108,6 +108,8 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 		m.oks[i] = it.Seek(m.lastT+initialPenalty) != chunkenc.ValNone
 		// The it.Seek() call above should guarantee that it.AtT() > m.lastT.
 		if m.oks[i] {
+			// adjust the current value for counter functions to avoid unexpected resets
+			it.adjustAtValue(m.lastV)
 			t, v := it.At()
 			if t < minT {
 				minT = t
@@ -124,8 +126,7 @@ func (m *mergedSeriesIterator) Next() chunkenc.ValueType {
 	if m.lastIter == nil {
 		return chunkenc.ValNone
 	}
-	m.lastIter.adjustAtValue(m.lastV)
-	_, m.lastV = m.lastIter.At()
+	m.lastV = quoramValue.currentValue
 	m.lastT = minT
 	return chunkenc.ValFloat
 }

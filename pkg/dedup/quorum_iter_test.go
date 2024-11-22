@@ -311,30 +311,86 @@ func TestMergedSeriesIterator(t *testing.T) {
 				},
 			},
 		},
-		//{
-		//	name:      "Reusable counter with resets and large gaps",
-		//	isCounter: true,
-		//	input: []series{
-		//		{
-		//			lset: labels.FromStrings("a", "1"),
-		//			samples: []sample{
-		//				{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0},
-		//			},
-		//		},
-		//		{
-		//			lset: labels.FromStrings("a", "1"),
-		//			samples: []sample{
-		//				{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0},
-		//			},
-		//		},
-		//	},
-		//	exp: []series{
-		//		{
-		//			lset:    labels.FromStrings("a", "1"),
-		//			samples: []sample{{10000, 8.0}, {20000, 9.0}, {1050001, 10.0}, {1060001, 16.0}, {2060001, 19.0}},
-		//		},
-		//	},
-		//},
+		{
+			name:      "Reusable time series with discrete series without counter functions",
+			isCounter: false,
+			input: []series{
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0},
+					},
+				},
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0},
+					},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0}},
+				},
+			},
+		},
+		{
+			name:      "Reusable counter with discrete series",
+			isCounter: true,
+			input: []series{
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0},
+					},
+				},
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 8.0}, {20000, 9.0}, {1050001, 1.0}, {1060001, 5.0}, {2060001, 3.0},
+					},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 8.0}, {20000, 9.0}, {1050001, 9.0}, {1060001, 13.0}, {2060001, 13.0}},
+				},
+			},
+		},
+		{
+			name:      "counter dedup with resets and large gaps",
+			isCounter: true,
+			input: []series{
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 10.0}, {100000, 8.0}, {110000, 10.0},
+					},
+				},
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 10.0}, {20000, 0.0}, {30000, 1.0}, {40000, 2.0}, {50000, 3.0}, {60000, 4.0}, {70000, 5.0}, {80000, 6.0}, {90000, 7.0}, {100000, 8.0}, {110000, 10.0},
+					},
+				},
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 10.0}, {20000, 0.0}, {30000, 1.0}, {40000, 2.0}, {50000, 3.0}, {60000, 4.0}, {70000, 5.0}, {80000, 6.0}, {90000, 7.0}, {100000, 8.0}, {110000, 10.0},
+					},
+				},
+			},
+			exp: []series{
+				{
+					lset: labels.FromStrings("a", "1"),
+					samples: []sample{
+						{10000, 10.0}, {20000, 10.0}, {30000, 11.0}, {40000, 12.0}, {50000, 13.0}, {60000, 14.0}, {70000, 15.0}, {80000, 16.0}, {90000, 17.0}, {100000, 18.0}, {110000, 20.0},
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
 			// If it is a counter then pass a function which expects a counter.
