@@ -6,7 +6,6 @@ package block
 import (
 	"context"
 	"encoding/json"
-	"github.com/hashicorp/go-multierror"
 	"io"
 	"os"
 	"path"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
