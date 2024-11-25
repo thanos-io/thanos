@@ -125,12 +125,13 @@ type bucketWebConfig struct {
 }
 
 type bucketReplicateConfig struct {
-	resolutions []time.Duration
-	compactMin  int
-	compactMax  int
-	compactions []int
-	matcherStrs string
-	singleRun   bool
+	resolutions     []time.Duration
+	compactMin      int
+	compactMax      int
+	compactions     []int
+	matcherStrs     string
+	singleRun       bool
+	markForDeletion bool
 }
 
 type bucketDownsampleConfig struct {
@@ -228,6 +229,8 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
+
+	cmd.Flag("mark-deletion", "Mark replicated blocks for deletion in source bucket.").Default("false").BoolVar(&tbc.markForDeletion)
 
 	return tbc
 }
@@ -782,10 +785,11 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
+			tbc.markForDeletion,
 			minTime,
 			maxTime,
 			blockIDs,
-			*ignoreMarkedForDeletion,
+			*ignoreMarkedForDeletion || tbc.markForDeletion,
 		)
 	})
 }

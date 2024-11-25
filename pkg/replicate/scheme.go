@@ -21,6 +21,7 @@ import (
 
 	"github.com/thanos-io/objstore"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -109,7 +110,7 @@ type blockFilterFunc func(b *metadata.Meta) bool
 
 // TODO: Add filters field.
 type replicationScheme struct {
-	fromBkt objstore.InstrumentedBucketReader
+	fromBkt objstore.InstrumentedBucket
 	toBkt   objstore.Bucket
 
 	blockFilter blockFilterFunc
@@ -119,12 +120,15 @@ type replicationScheme struct {
 	metrics *replicationMetrics
 
 	reg prometheus.Registerer
+
+	markForDeletion bool
 }
 
 type replicationMetrics struct {
 	blocksAlreadyReplicated prometheus.Counter
 	blocksReplicated        prometheus.Counter
 	objectsReplicated       prometheus.Counter
+	blocksMarkedForDeletion prometheus.Counter
 }
 
 func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
@@ -141,6 +145,10 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 			Name: "thanos_replicate_objects_replicated_total",
 			Help: "Total number of objects replicated.",
 		}),
+		blocksMarkedForDeletion: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_replicate_blocks_marked_for_deletion_total",
+			Help: "Total number of blocks marked for deletion after being replicated.",
+		}),
 	}
 	return m
 }
@@ -150,22 +158,24 @@ func newReplicationScheme(
 	metrics *replicationMetrics,
 	blockFilter blockFilterFunc,
 	fetcher thanosblock.MetadataFetcher,
-	from objstore.InstrumentedBucketReader,
+	from objstore.InstrumentedBucket,
 	to objstore.Bucket,
 	reg prometheus.Registerer,
+	markForDeletion bool,
 ) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	return &replicationScheme{
-		logger:      logger,
-		blockFilter: blockFilter,
-		fetcher:     fetcher,
-		fromBkt:     from,
-		toBkt:       to,
-		metrics:     metrics,
-		reg:         reg,
+		logger:          logger,
+		blockFilter:     blockFilter,
+		fetcher:         fetcher,
+		fromBkt:         from,
+		toBkt:           to,
+		metrics:         metrics,
+		reg:             reg,
+		markForDeletion: markForDeletion,
 	}
 }
 
@@ -246,7 +256,13 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 			// If the origin meta file content and target meta file content is
 			// equal, we know we have already successfully replicated
 			// previously.
-			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
+
+			if rs.markForDeletion {
+				if err := rs.markBlockForDeletion(ctx, id); err != nil {
+					return err
+				}
+			}
+
 			rs.metrics.blocksAlreadyReplicated.Inc()
 
 			return nil
@@ -274,8 +290,23 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 		return errors.Wrap(err, "upload meta file")
 	}
 
+	if rs.markForDeletion {
+		if err := rs.markBlockForDeletion(ctx, id); err != nil {
+			return err
+		}
+	}
+
 	rs.metrics.blocksReplicated.Inc()
 
+	return nil
+}
+
+func (rs *replicationScheme) markBlockForDeletion(ctx context.Context, id ulid.ULID) error {
+	level.Debug(rs.logger).Log("msg", "marking block for deletion", "block_uuid", id.String())
+	// we're using NopLogger here to avoid confusion when MarkForDeletion warns deletion mark already exists
+	if err := block.MarkForDeletion(ctx, log.NewNopLogger(), rs.fromBkt, id, "marked for deletion by thanos bucket replicate", rs.metrics.blocksMarkedForDeletion); err != nil {
+		return errors.Wrapf(err, "mark %v for deletion", id)
+	}
 	return nil
 }
 

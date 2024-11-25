@@ -609,6 +609,8 @@ Flags:
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
+      --mark-deletion           Mark replicated blocks for deletion in source
+                                bucket.
       --matcher=MATCHER         blocks whose external labels match this matcher
                                 will be replicated. All Prometheus matchers are
                                 supported, including =, !=, =~ and !~.
