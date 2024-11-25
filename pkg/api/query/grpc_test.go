@@ -20,6 +20,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -34,7 +35,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	engineFactory := &QueryEngineFactory{
 		thanosEngine: &engineStub{},
 	}
-	api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+	api := NewGRPCAPI(time.Now, dedup.AlgorithmPenalty, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
 
 	expr, err := extpromql.ParseExpr("metric")
 	testutil.Ok(t, err)
@@ -99,7 +100,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 		engineFactory := &QueryEngineFactory{
 			prometheusEngine: test.engine,
 		}
-		api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
+		api := NewGRPCAPI(time.Now, dedup.AlgorithmPenalty, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
 		t.Run("range_query", func(t *testing.T) {
 			rangeRequest := &querypb.QueryRangeRequest{
 				Query:            "metric",

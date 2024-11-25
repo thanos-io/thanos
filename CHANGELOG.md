@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#7808](https://github.com/thanos-io/thanos/pull/7808) Query: Support chain deduplication algorithm.
+
 ### Changed
 
 ### Removed
