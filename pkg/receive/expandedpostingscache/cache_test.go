@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"go.uber.org/atomic"
+	"golang.org/x/exp/rand"
 
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,4 +167,44 @@ func repeatStringIfNeeded(seed string, length int) string {
 	}
 
 	return strings.Repeat(seed, 1+length/len(seed))[:max(length, len(seed))]
+}
+
+func TestLockRaceExpireSeries(t *testing.T) {
+	for j := 0; j < 10; j++ {
+		wg := &sync.WaitGroup{}
+
+		c := NewBlocksPostingsForMatchersCache(ExpandedPostingsCacheMetrics{}, 1<<7, 1<<7, 3)
+		for i := 0; i < 1000; i++ {
+			wg.Add(2)
+
+			go func() {
+				defer wg.Done()
+				for i := 0; i < 10; i++ {
+					c.ExpireSeries(
+						labels.FromMap(map[string]string{"__name__": randSeq(10)}),
+					)
+				}
+			}()
+
+			go func() {
+				defer wg.Done()
+
+				for i := 0; i < 10; i++ {
+					c.getSeedForMetricName(randSeq(10))
+				}
+			}()
+		}
+		wg.Wait()
+	}
+}
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	rand.Seed(uint64(time.Now().UnixNano()))
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
