@@ -28,13 +28,14 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/thanos-io/promql-engine/api"
 
+	"github.com/thanos-io/promql-engine/api"
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -128,10 +129,11 @@ func registerQuery(app *extkingpin.App) {
 		Strings()
 	queryPartitionLabels := cmd.Flag("query.partition-label", "Labels that partition the leaf queriers. This is used to scope down the labelsets of leaf queriers when using the distributed query mode. If set, these labels must form a partition of the leaf queriers. Partition labels must not intersect with replica labels. Every TSDB of a leaf querier must have these labels. This is useful when there are multiple external labels that are irrelevant for the partition as it allows the distributed engine to ignore them for some optimizations. If this is empty then all labels are used as partition labels.").Strings()
 
-	enableDedupMerge := cmd.Flag("query.dedup-merge", "Enable deduplication merge of multiple time series with the same labels.").
-		Default("false").Bool()
-	enableQuorumChunkDedup := cmd.Flag("query.quorum-chunk-dedup", "Enable quorum-based deduplication for chunks from replicas.").
-		Default("false").Bool()
+	queryDeduplicationFunc := cmd.Flag("query.deduplication.func", "Experimental. Deduplication algorithm for merging overlapping series. "+
+		"Possible values are: \"penalty\", \"chain\", \"quorum\". If no value is specified, penalty based deduplication algorithm will be used. "+
+		"When set to chain, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. At least one replica label has to be set via --query.replica-label flag."+
+		"When set to quorum, the databricks deduplication algorithm is used, it is suitable for metrics ingested via receivers.").
+		Default(dedup.AlgorithmPenalty).Enum(dedup.AlgorithmPenalty, dedup.AlgorithmChain, dedup.AlgorithmQuorum)
 
 	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
@@ -338,6 +340,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryConnMetricLabels,
 			*queryReplicaLabels,
 			*queryPartitionLabels,
+			*queryDeduplicationFunc,
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
 			*endpoints,
@@ -381,8 +384,6 @@ func registerQuery(app *extkingpin.App) {
 			*enforceTenancy,
 			*tenantLabel,
 			*enableGroupReplicaPartialStrategy,
-			*enableDedupMerge,
-			*enableQuorumChunkDedup,
 		)
 	})
 }
@@ -423,6 +424,7 @@ func runQuery(
 	queryConnMetricLabels []string,
 	queryReplicaLabels []string,
 	queryPartitionLabels []string,
+	queryDeduplicationFunc string,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
 	endpointAddrs []string,
@@ -466,8 +468,6 @@ func runQuery(
 	enforceTenancy bool,
 	tenantLabel string,
 	groupReplicaPartialResponseStrategy bool,
-	enableDedupMerge bool,
-	enableQuorumChunkDedup bool,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -554,7 +554,7 @@ func runQuery(
 	options := []store.ProxyStoreOption{
 		store.WithTSDBSelector(tsdbSelector),
 		store.WithProxyStoreDebugLogging(debugLogging),
-		store.WithQuorumChunkDedup(enableQuorumChunkDedup),
+		store.WithQuorumChunkDedup(queryDeduplicationFunc == dedup.AlgorithmQuorum),
 	}
 
 	// Parse and sanitize the provided replica labels flags.
@@ -596,7 +596,7 @@ func runQuery(
 	)
 	opts := query.Options{
 		GroupReplicaPartialResponseStrategy: groupReplicaPartialResponseStrategy,
-		EnableDedupMerge:                    enableDedupMerge,
+		DeduplicationFunc:                   queryDeduplicationFunc,
 	}
 	level.Info(logger).Log("msg", "databricks querier features", "opts", fmt.Sprintf("%+v", opts))
 	queryableCreator = query.NewQueryableCreatorWithOptions(
