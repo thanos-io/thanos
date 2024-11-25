@@ -43,7 +43,7 @@ type BlocksPostingsForMatchersCache struct {
 	postingsForMatchersFunc func(ctx context.Context, ix tsdb.IndexReader, ms ...*labels.Matcher) (index.Postings, error)
 	timeNow                 func() time.Time
 
-	metrics *ExpandedPostingsCacheMetrics
+	metrics ExpandedPostingsCacheMetrics
 }
 
 var (
@@ -66,8 +66,8 @@ type ExpandedPostingsCacheMetrics struct {
 	NonCacheableQueries *prometheus.CounterVec
 }
 
-func NewPostingCacheMetrics(r prometheus.Registerer) *ExpandedPostingsCacheMetrics {
-	return &ExpandedPostingsCacheMetrics{
+func NewPostingCacheMetrics(r prometheus.Registerer) ExpandedPostingsCacheMetrics {
+	return ExpandedPostingsCacheMetrics{
 		CacheRequests: promauto.With(r).NewCounterVec(prometheus.CounterOpts{
 			Name: "expanded_postings_cache_requests_total",
 			Help: "Total number of requests to the cache.",
@@ -87,11 +87,15 @@ func NewPostingCacheMetrics(r prometheus.Registerer) *ExpandedPostingsCacheMetri
 	}
 }
 
-func NewBlocksPostingsForMatchersCache(metrics *ExpandedPostingsCacheMetrics, headExpandedPostingsCacheSize uint64, blockExpandedPostingsCacheSize uint64) ExpandedPostingsCache {
+func NewBlocksPostingsForMatchersCache(metrics ExpandedPostingsCacheMetrics, headExpandedPostingsCacheSize uint64, blockExpandedPostingsCacheSize uint64, seedSize int64) *BlocksPostingsForMatchersCache {
+	if seedSize <= 0 {
+		seedSize = seedArraySize
+	}
+
 	return &BlocksPostingsForMatchersCache{
 		headCache:               newFifoCache[[]storage.SeriesRef]("head", metrics, time.Now, headExpandedPostingsCacheSize),
 		blocksCache:             newFifoCache[[]storage.SeriesRef]("block", metrics, time.Now, blockExpandedPostingsCacheSize),
-		headSeedByMetricName:    make([]int, seedArraySize),
+		headSeedByMetricName:    make([]int, seedSize),
 		strippedLock:            make([]sync.RWMutex, numOfSeedsStripes),
 		postingsForMatchersFunc: tsdb.PostingsForMatchers,
 		timeNow:                 time.Now,
@@ -129,7 +133,7 @@ func (c *BlocksPostingsForMatchersCache) ExpireSeries(metric labels.Labels) {
 
 	h := MemHashString(metricName)
 	i := h % uint64(len(c.headSeedByMetricName))
-	l := h % uint64(len(c.strippedLock))
+	l := i % uint64(len(c.strippedLock))
 	c.strippedLock[l].Lock()
 	defer c.strippedLock[l].Unlock()
 	c.headSeedByMetricName[i]++
@@ -200,7 +204,7 @@ func (c *BlocksPostingsForMatchersCache) result(ce *cacheEntryPromise[[]storage.
 func (c *BlocksPostingsForMatchersCache) getSeedForMetricName(metricName string) string {
 	h := MemHashString(metricName)
 	i := h % uint64(len(c.headSeedByMetricName))
-	l := h % uint64(len(c.strippedLock))
+	l := i % uint64(len(c.strippedLock))
 	c.strippedLock[l].RLock()
 	defer c.strippedLock[l].RUnlock()
 	return strconv.Itoa(c.headSeedByMetricName[i])
@@ -276,13 +280,13 @@ type fifoCache[V any] struct {
 	cachedBytes int64
 }
 
-func newFifoCache[V any](name string, metrics *ExpandedPostingsCacheMetrics, timeNow func() time.Time, maxBytes uint64) *fifoCache[V] {
+func newFifoCache[V any](name string, metrics ExpandedPostingsCacheMetrics, timeNow func() time.Time, maxBytes uint64) *fifoCache[V] {
 	return &fifoCache[V]{
 		cachedValues: new(sync.Map),
 		cached:       list.New(),
 		timeNow:      timeNow,
 		name:         name,
-		metrics:      *metrics,
+		metrics:      metrics,
 		ttl:          10 * time.Minute,
 		maxBytes:     int64(maxBytes),
 	}
