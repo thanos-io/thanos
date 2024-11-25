@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -539,6 +540,47 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 
 	testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
 	testutil.Equals(t, 1, len(m.TSDBLocalClients()))
+}
+
+func TestMultiTSDBAddNewTenant(t *testing.T) {
+	t.Parallel()
+	const iterations = 10
+	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
+	for i := 0; i < iterations; i++ {
+		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
+			dir := t.TempDir()
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				objstore.NewInMemBucket(),
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			concurrency := 50
+			var wg sync.WaitGroup
+			for i := 0; i < concurrency; i++ {
+				wg.Add(1)
+				// simulate remote write with new tenant concurrently
+				go func(i int) {
+					defer wg.Done()
+					testutil.Ok(t, appendSample(m, fmt.Sprintf("tenant-%d", i), time.UnixMilli(int64(10))))
+				}(i)
+				// simulate read request concurrently
+				go func() {
+					m.TSDBLocalClients()
+				}()
+			}
+			wg.Wait()
+			testutil.Equals(t, concurrency, len(m.TSDBLocalClients()))
+		})
+	}
 }
 
 func TestAlignedHeadFlush(t *testing.T) {

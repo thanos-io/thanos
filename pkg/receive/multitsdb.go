@@ -64,12 +64,6 @@ type MultiTSDB struct {
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
-	tsdbClients           []store.Client
-	tsdbClientsNeedUpdate bool
-
-	exemplarClients           map[string]*exemplars.TSDB
-	exemplarClientsNeedUpdate bool
-
 	metricNameFilterEnabled bool
 
 	headExpandedPostingsCacheSize  uint64
@@ -117,19 +111,17 @@ func NewMultiTSDB(
 	}
 
 	mt := &MultiTSDB{
-		dataDir:                   dataDir,
-		logger:                    log.With(l, "component", "multi-tsdb"),
-		reg:                       reg,
-		tsdbOpts:                  tsdbOpts,
-		mtx:                       &sync.RWMutex{},
-		tenants:                   map[string]*tenant{},
-		labels:                    labels,
-		tsdbClientsNeedUpdate:     true,
-		exemplarClientsNeedUpdate: true,
-		tenantLabelName:           tenantLabelName,
-		bucket:                    bucket,
-		allowOutOfOrderUpload:     allowOutOfOrderUpload,
-		hashFunc:                  hashFunc,
+		dataDir:               dataDir,
+		logger:                log.With(l, "component", "multi-tsdb"),
+		reg:                   reg,
+		tsdbOpts:              tsdbOpts,
+		mtx:                   &sync.RWMutex{},
+		tenants:               map[string]*tenant{},
+		labels:                labels,
+		tenantLabelName:       tenantLabelName,
+		bucket:                bucket,
+		allowOutOfOrderUpload: allowOutOfOrderUpload,
+		hashFunc:              hashFunc,
 	}
 
 	for _, option := range options {
@@ -434,8 +426,6 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 
 		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
 		delete(t.tenants, tenantID)
-		t.tsdbClientsNeedUpdate = true
-		t.exemplarClientsNeedUpdate = true
 	}
 
 	return merr.Err()
@@ -597,17 +587,7 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 
 func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 	t.mtx.RLock()
-	if !t.tsdbClientsNeedUpdate {
-		t.mtx.RUnlock()
-		return t.tsdbClients
-	}
-
-	t.mtx.RUnlock()
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	if !t.tsdbClientsNeedUpdate {
-		return t.tsdbClients
-	}
+	defer t.mtx.RUnlock()
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
@@ -617,25 +597,12 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 		}
 	}
 
-	t.tsdbClientsNeedUpdate = false
-	t.tsdbClients = res
-
-	return t.tsdbClients
+	return res
 }
 
 func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	t.mtx.RLock()
-	if !t.exemplarClientsNeedUpdate {
-		t.mtx.RUnlock()
-		return t.exemplarClients
-	}
-	t.mtx.RUnlock()
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-
-	if !t.exemplarClientsNeedUpdate {
-		return t.exemplarClients
-	}
+	defer t.mtx.RUnlock()
 
 	res := make(map[string]*exemplars.TSDB, len(t.tenants))
 	for k, tenant := range t.tenants {
@@ -644,10 +611,7 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 			res[k] = e
 		}
 	}
-
-	t.exemplarClientsNeedUpdate = false
-	t.exemplarClients = res
-	return t.exemplarClients
+	return res
 }
 
 func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats {
@@ -742,8 +706,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if err != nil {
 		t.mtx.Lock()
 		delete(t.tenants, tenantID)
-		t.tsdbClientsNeedUpdate = true
-		t.exemplarClientsNeedUpdate = true
 		t.mtx.Unlock()
 		return err
 	}
@@ -796,8 +758,6 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 
 	tenant = newTenant()
 	t.tenants[tenantID] = tenant
-	t.tsdbClientsNeedUpdate = true
-	t.exemplarClientsNeedUpdate = true
 	t.mtx.Unlock()
 
 	logger := log.With(t.logger, "tenant", tenantID)
