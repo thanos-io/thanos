@@ -136,6 +136,24 @@ func NewMultiTSDB(
 	return mt
 }
 
+// getTenant returns the tenant with the given tenantID.
+// @testing: This method is only for testing purposes.
+func (t *MultiTSDB) getTenant(tenantID string) *tenant {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.tenants[tenantID]
+}
+
+// tsdbLocalClientsCopied returns a copy of tsdbClients.
+// @testing: This method is only for testing purposes.
+func (t *MultiTSDB) tsdbLocalClientsCopied() []store.Client {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	copied := make([]store.Client, len(t.tsdbClients))
+	copy(copied, t.tsdbClients)
+	return copied
+}
+
 func (t *MultiTSDB) updateTSDBClients() {
 	t.tsdbClients = t.tsdbClients[:0]
 	for _, tenant := range t.tenants {
@@ -626,12 +644,14 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	return merr.Err()
 }
 
+// TSDBLocalClients should be used as read-only.
 func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.tsdbClients
 }
 
+// TSDBExemplars should be used as read-only.
 func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()

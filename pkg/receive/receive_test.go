@@ -210,7 +210,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 
 			for _, c := range tc.cfg {
 				for _, tenantId := range c.Tenants {
-					if m.tenants[tenantId] == nil {
+					if m.getTenant(tenantId) == nil {
 						err = appendSample(m, tenantId, time.Now())
 						require.NoError(t, err)
 					}
@@ -294,7 +294,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 
 		for _, c := range initialConfig {
 			for _, tenantId := range c.Tenants {
-				if m.tenants[tenantId] == nil {
+				if m.getTenant(tenantId) == nil {
 					err = appendSample(m, tenantId, time.Now())
 					require.NoError(t, err)
 				}
@@ -319,7 +319,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 
 		for _, c := range changedConfig {
 			for _, tenantId := range c.Tenants {
-				if m.tenants[tenantId] == nil {
+				if m.getTenant(tenantId) == nil {
 					err = appendSample(m, tenantId, time.Now())
 					require.NoError(t, err)
 				}
@@ -534,7 +534,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 
 			for _, c := range initialConfig {
 				for _, tenantId := range c.Tenants {
-					if m.tenants[tenantId] == nil {
+					if m.getTenant(tenantId) == nil {
 						err = appendSample(m, tenantId, time.Now())
 						require.NoError(t, err)
 					}
@@ -704,7 +704,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 
 			for _, c := range initialConfig {
 				for _, tenantId := range c.Tenants {
-					if m.tenants[tenantId] == nil {
+					if m.getTenant(tenantId) == nil {
 						err = appendSample(m, tenantId, time.Now())
 						require.NoError(t, err)
 					}
@@ -778,7 +778,7 @@ func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
 
 		for _, c := range cfg {
 			for _, tenantId := range c.Tenants {
-				if m.tenants[tenantId] == nil {
+				if m.getTenant(tenantId) == nil {
 					err = appendSample(m, tenantId, time.Now())
 					require.NoError(t, err)
 				}
