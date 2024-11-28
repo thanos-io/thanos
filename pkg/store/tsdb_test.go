@@ -486,11 +486,9 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 }
 
 func TestTSDBStoreSeries(t *testing.T) {
-	tb := testutil.NewTB(t)
-	// Make sure there are more samples, so we can check framing code.
-	storetestutil.RunSeriesInterestingCases(tb, 10e6, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchTSDBStoreSeries(t, samplesPerSeries, series)
-	})
+	t.Parallel()
+
+	benchTSDBStoreSeries(testutil.NewTB(t), 10_000, 1)
 }
 
 func BenchmarkTSDBStoreSeries(b *testing.B) {

@@ -56,6 +56,7 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
@@ -122,7 +123,7 @@ func registerQuery(app *extkingpin.App) {
 		Default(string(query.ExternalLabels), string(query.StoreType)).
 		Enums(string(query.ExternalLabels), string(query.StoreType))
 
-	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
+	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules. Flag may be specified multiple times as well as a comma separated list of labels.").
 		Strings()
 	queryPartitionLabels := cmd.Flag("query.partition-label", "Labels that partition the leaf queriers. This is used to scope down the labelsets of leaf queriers when using the distributed query mode. If set, these labels must form a partition of the leaf queriers. Partition labels must not intersect with replica labels. Every TSDB of a leaf querier must have these labels. This is useful when there are multiple external labels that are irrelevant for the partition as it allows the distributed engine to ignore them for some optimizations. If this is empty then all labels are used as partition labels.").Strings()
 
@@ -502,6 +503,7 @@ func runQuery(
 			dns.ResolverType(dnsSDResolver),
 		),
 		dnsSDInterval,
+		logger,
 	)
 
 	dnsEndpointProvider := dns.NewProvider(
@@ -538,6 +540,9 @@ func runQuery(
 		store.WithTSDBSelector(tsdbSelector),
 		store.WithProxyStoreDebugLogging(debugLogging),
 	}
+
+	// Parse and sanitize the provided replica labels flags.
+	queryReplicaLabels = strutil.ParseFlagLabels(queryReplicaLabels)
 
 	var (
 		endpoints = prepareEndpointSet(
@@ -604,7 +609,7 @@ func runQuery(
 					fileSDCache.Update(update)
 					endpoints.Update(ctxUpdate)
 
-					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...), true); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 					}
 
@@ -624,22 +629,22 @@ func runQuery(
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				resolveCtx, resolveCancel := context.WithTimeout(ctx, dnsSDInterval)
 				defer resolveCancel()
-				if err := dnsStoreProvider.Resolve(resolveCtx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+				if err := dnsStoreProvider.Resolve(resolveCtx, append(fileSDCache.Addresses(), storeAddrs...), true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 				}
-				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs); err != nil {
+				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
 				}
-				if err := dnsTargetProvider.Resolve(ctx, targetAddrs); err != nil {
+				if err := dnsTargetProvider.Resolve(ctx, targetAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for targetsAPIs", "err", err)
 				}
-				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs); err != nil {
+				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for metadataAPIs", "err", err)
 				}
-				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs); err != nil {
+				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for exemplarsAPI", "err", err)
 				}
-				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs); err != nil {
+				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses passed using endpoint flag", "err", err)
 
 				}
@@ -789,7 +794,7 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcServerConfig.tlsSrvCert, grpcServerConfig.tlsSrvKey, grpcServerConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcServerConfig.tlsSrvCert, grpcServerConfig.tlsSrvKey, grpcServerConfig.tlsSrvClientCA, grpcServerConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

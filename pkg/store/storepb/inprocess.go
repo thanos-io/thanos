@@ -5,8 +5,10 @@ package storepb
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"iter"
+	"runtime/debug"
 
 	"google.golang.org/grpc"
 )
@@ -92,6 +94,12 @@ func (s serverAsClient) LabelValues(ctx context.Context, in *LabelValuesRequest,
 
 func (s serverAsClient) Series(ctx context.Context, in *SeriesRequest, _ ...grpc.CallOption) (Store_SeriesClient, error) {
 	var srvIter iter.Seq2[*SeriesResponse, error] = func(yield func(*SeriesResponse, error) bool) {
+		defer func() {
+			if r := recover(); r != nil {
+				st := debug.Stack()
+				panic(fmt.Sprintf("panic %v in server iterator: %s", r, st))
+			}
+		}()
 		srv := newInProcessServer(ctx, yield)
 		err := s.srv.Series(in, srv)
 		if err != nil {

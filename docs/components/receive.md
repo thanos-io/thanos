@@ -113,6 +113,7 @@ config:
       insecure_skip_verify: false
     disable_compression: false
   chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -380,6 +381,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
@@ -423,6 +429,10 @@ Flags:
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
                                  none
+      --receive.grpc-service-config=<content>
+                                 gRPC service configuration file
+                                 or content in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains
@@ -508,6 +518,10 @@ Flags:
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
                                  disable TLS.
+      --remote-write.server-tls-min-version="1.3"
+                                 TLS version for the gRPC server, leave blank
+                                 to default to TLS 1.3, allow values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
@@ -542,6 +556,12 @@ Flags:
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.
                                  Does not do anything, enabled all the time.
+      --tsdb.block.expanded-postings-cache-size=0
+                                 [EXPERIMENTAL] If non-zero, enables expanded
+                                 postings cache for compacted blocks.
+      --tsdb.head.expanded-postings-cache-size=0
+                                 [EXPERIMENTAL] If non-zero, enables expanded
+                                 postings cache for the head block.
       --tsdb.max-exemplars=0     Enables support for ingesting exemplars and
                                  sets the maximum number of exemplars that will
                                  be stored per tenant. In case the exemplar

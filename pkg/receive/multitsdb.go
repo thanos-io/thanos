@@ -34,7 +34,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/exemplars"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/receive/expandedpostingscache"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -69,6 +71,9 @@ type MultiTSDB struct {
 	exemplarClientsNeedUpdate bool
 
 	metricNameFilterEnabled bool
+
+	headExpandedPostingsCacheSize  uint64
+	blockExpandedPostingsCacheSize uint64
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -78,6 +83,18 @@ type MultiTSDBOption func(mt *MultiTSDB)
 func WithMetricNameFilterEnabled() MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.metricNameFilterEnabled = true
+	}
+}
+
+func WithHeadExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.headExpandedPostingsCacheSize = size
+	}
+}
+
+func WithBlockExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.blockExpandedPostingsCacheSize = size
 	}
 }
 
@@ -587,10 +604,10 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	t.mtx.RUnlock()
 	t.mtx.Lock()
+	defer t.mtx.Unlock()
 	if !t.tsdbClientsNeedUpdate {
 		return t.tsdbClients
 	}
-	defer t.mtx.Unlock()
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
@@ -687,9 +704,27 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
+
+	var expandedPostingsCache expandedpostingscache.ExpandedPostingsCache
+	if t.headExpandedPostingsCacheSize > 0 || t.blockExpandedPostingsCacheSize > 0 {
+		var expandedPostingsCacheMetrics = expandedpostingscache.NewPostingCacheMetrics(extprom.WrapRegistererWithPrefix("thanos_", reg))
+
+		expandedPostingsCache = expandedpostingscache.NewBlocksPostingsForMatchersCache(expandedPostingsCacheMetrics, t.headExpandedPostingsCacheSize, t.blockExpandedPostingsCacheSize, 0)
+	}
+
 	opts := *t.tsdbOpts
 	opts.BlocksToDelete = tenant.blocksToDelete
 	opts.EnableDelayedCompaction = true
+
+	opts.BlockChunkQuerierFunc = func(b tsdb.BlockReader, mint, maxt int64) (storage.ChunkQuerier, error) {
+		if expandedPostingsCache != nil {
+			return expandedpostingscache.NewCachedBlockChunkQuerier(expandedPostingsCache, b, mint, maxt)
+		}
+		return tsdb.NewBlockChunkQuerier(b, mint, maxt)
+	}
+	if expandedPostingsCache != nil {
+		opts.SeriesLifecycleCallback = expandedPostingsCache
+	}
 	tenant.blocksToDeleteFn = tsdb.DefaultBlocksToDelete
 
 	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL

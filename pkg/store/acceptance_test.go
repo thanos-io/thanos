@@ -41,6 +41,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
+func TestMain(m *testing.M) {
+	custom.TolerantVerifyLeakMain(m)
+}
+
 type labelNameCallCase struct {
 	matchers []storepb.LabelMatcher
 	start    int64
@@ -873,7 +877,6 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 
 		extLset := labels.FromStrings("region", "eu-west")
 		appendFn := func(app storage.Appender) {
-
 			var (
 				ref storage.SeriesRef
 				err error
@@ -923,7 +926,8 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 }
 
 func TestBucketStore_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
+
 	ctx := context.Background()
 
 	startStore := func(lazyExpandedPostings bool) func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1018,7 +1022,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 }
 
 func TestPrometheusStore_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		p, err := e2eutil.NewPrometheus()
@@ -1051,7 +1055,7 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 }
 
 func TestTSDBStore_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		db, err := e2eutil.NewTSDB()
@@ -1069,7 +1073,6 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 	t.Skip("This is a known issue, we need to think how to fix it")
 
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 	ctx := context.Background()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1204,7 +1207,7 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 }
 
 func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
-	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
+	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {

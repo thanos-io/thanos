@@ -141,7 +141,10 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
-	multiTSDBOptions := []receive.MultiTSDBOption{}
+	multiTSDBOptions := []receive.MultiTSDBOption{
+		receive.WithHeadExpandedPostingsCacheSize(conf.headExpandedPostingsCacheSize),
+		receive.WithBlockExpandedPostingsCacheSize(conf.compactedBlocksExpandedPostingsCacheSize),
+	}
 	for _, feature := range *conf.featureList {
 		if feature == metricNamesFilter {
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
@@ -149,7 +152,7 @@ func runReceive(
 		}
 	}
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
 	if err != nil {
 		return err
 	}
@@ -170,6 +173,10 @@ func runReceive(
 	}
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
+	}
+
+	if conf.grpcServiceConfig != "" {
+		dialOpts = append(dialOpts, grpc.WithDefaultServiceConfig(conf.grpcServiceConfig))
 	}
 
 	var bkt objstore.Bucket
@@ -193,7 +200,7 @@ func runReceive(
 			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
-			bkt, err = client.NewBucket(logger, confContentYaml, comp.String())
+			bkt, err = client.NewBucket(logger, confContentYaml, comp.String(), nil)
 			if err != nil {
 				return err
 			}
@@ -331,7 +338,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -818,17 +825,18 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
-	replicationAddr    string
-	rwAddress          string
-	rwServerCert       string
-	rwServerKey        string
-	rwServerClientCA   string
-	rwClientCert       string
-	rwClientKey        string
-	rwClientSecure     bool
-	rwClientServerCA   string
-	rwClientServerName string
-	rwClientSkipVerify bool
+	replicationAddr       string
+	rwAddress             string
+	rwServerCert          string
+	rwServerKey           string
+	rwServerClientCA      string
+	rwClientCert          string
+	rwClientKey           string
+	rwClientSecure        bool
+	rwClientServerCA      string
+	rwClientServerName    string
+	rwClientSkipVerify    bool
+	rwServerTlsMinVersion string
 
 	dataDir   string
 	labelStrs []string
@@ -852,6 +860,7 @@ type receiveConfig struct {
 	maxBackoff          *model.Duration
 	compression         string
 	replicationProtocol string
+	grpcServiceConfig   string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -885,6 +894,9 @@ type receiveConfig struct {
 	asyncForwardWorkerCount uint
 
 	featureList *[]string
+
+	headExpandedPostingsCacheSize            uint64
+	compactedBlocksExpandedPostingsCacheSize uint64
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -900,6 +912,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS.").Default("").StringVar(&rc.rwServerKey)
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
+
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
 
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 
@@ -961,6 +975,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 
+	cmd.Flag("receive.grpc-service-config", "gRPC service configuration file or content in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").PlaceHolder("<content>").Default("").StringVar(&rc.grpcServiceConfig)
+
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
@@ -992,6 +1008,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").BoolVar(&rc.walCompression)
 
 	cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").BoolVar(&rc.noLockFile)
+
+	cmd.Flag("tsdb.head.expanded-postings-cache-size", "[EXPERIMENTAL] If non-zero, enables expanded postings cache for the head block.").Default("0").Uint64Var(&rc.headExpandedPostingsCacheSize)
+	cmd.Flag("tsdb.block.expanded-postings-cache-size", "[EXPERIMENTAL] If non-zero, enables expanded postings cache for compacted blocks.").Default("0").Uint64Var(&rc.compactedBlocksExpandedPostingsCacheSize)
 
 	cmd.Flag("tsdb.max-exemplars",
 		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+

@@ -28,7 +28,7 @@ func TestProviderUpdatesAddresses(t *testing.T) {
 	}
 	provider.resolver = &resolver
 
-	testutil.Ok(t, provider.Resolve(ctx, clusters))
+	testutil.Ok(t, provider.Resolve(ctx, clusters, true))
 	addresses := provider.Addresses()
 	sort.Strings(addresses)
 	testutil.Equals(t, []string{"dns-1:11211", "dns-2:8080"}, addresses)
@@ -38,7 +38,7 @@ func TestProviderUpdatesAddresses(t *testing.T) {
 		"memcached-cluster-2": {nodes: []node{{dns: "dns-2", ip: "ip-2", port: 8080}}},
 	}
 
-	testutil.Ok(t, provider.Resolve(ctx, clusters))
+	testutil.Ok(t, provider.Resolve(ctx, clusters, true))
 	addresses = provider.Addresses()
 	sort.Strings(addresses)
 	testutil.Equals(t, []string{"dns-1:11211", "dns-2:8080", "dns-3:11211"}, addresses)
@@ -56,7 +56,7 @@ func TestProviderDoesNotUpdateAddressIfFailed(t *testing.T) {
 	}
 	provider.resolver = &resolver
 
-	testutil.Ok(t, provider.Resolve(ctx, clusters))
+	testutil.Ok(t, provider.Resolve(ctx, clusters, true))
 	addresses := provider.Addresses()
 	sort.Strings(addresses)
 	testutil.Equals(t, []string{"dns-1:11211", "dns-2:8080"}, addresses)
@@ -64,7 +64,7 @@ func TestProviderDoesNotUpdateAddressIfFailed(t *testing.T) {
 	resolver.configs = nil
 	resolver.err = errors.New("oops")
 
-	testutil.NotOk(t, provider.Resolve(ctx, clusters))
+	testutil.NotOk(t, provider.Resolve(ctx, clusters, true))
 	addresses = provider.Addresses()
 	sort.Strings(addresses)
 	testutil.Equals(t, []string{"dns-1:11211", "dns-2:8080"}, addresses)

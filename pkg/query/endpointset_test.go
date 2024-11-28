@@ -199,6 +199,8 @@ func (e *testEndpoints) CloseOne(addr string) {
 }
 
 func TestTruncateExtLabels(t *testing.T) {
+	t.Parallel()
+
 	const testLength = 10
 
 	for _, tc := range []struct {
@@ -239,6 +241,8 @@ func TestTruncateExtLabels(t *testing.T) {
 }
 
 func TestEndpointSetUpdate(t *testing.T) {
+	t.Parallel()
+
 	const metricsMeta = `
 	# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
 	# TYPE thanos_store_nodes_grpc_connections gauge
@@ -372,6 +376,8 @@ func TestEndpointSetUpdate(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_DuplicateSpecs(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -396,6 +402,8 @@ func TestEndpointSetUpdate_DuplicateSpecs(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_EndpointGoingAway(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -425,6 +433,8 @@ func TestEndpointSetUpdate_EndpointGoingAway(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_EndpointComingOnline(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			err:          fmt.Errorf("endpoint unavailable"),
@@ -454,6 +464,8 @@ func TestEndpointSetUpdate_EndpointComingOnline(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_StrictEndpointMetadata(t *testing.T) {
+	t.Parallel()
+
 	info := sidecarInfo
 	info.Store.MinTime = 111
 	info.Store.MaxTime = 222
@@ -494,6 +506,8 @@ func TestEndpointSetUpdate_StrictEndpointMetadata(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name      string
 		endpoints []testEndpointMeta
@@ -561,6 +575,8 @@ func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
+	t.Parallel()
+
 	numResponses := 4
 	metas := makeInfoResponses(numResponses)
 	metas[1].infoDelay = 2 * time.Second
@@ -592,6 +608,8 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -986,6 +1004,8 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 }
 
 func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -1048,6 +1068,8 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 
 // TestEndpoint_Update_QuerierStrict tests what happens when the strict mode is enabled/disabled.
 func TestEndpoint_Update_QuerierStrict(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: &infopb.InfoResponse{
@@ -1187,6 +1209,8 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 }
 
 func TestEndpointSet_APIs_Discovery(t *testing.T) {
+	t.Parallel()
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -1436,6 +1460,8 @@ func (e *errThatMarshalsToEmptyDict) Error() string {
 
 // Test highlights that without wrapping the error, it is marshaled to empty dict {}, not its message.
 func TestEndpointStringError(t *testing.T) {
+	t.Parallel()
+
 	dictErr := &errThatMarshalsToEmptyDict{msg: "Error message"}
 	stringErr := &stringError{originalErr: dictErr}
 
@@ -1451,6 +1477,8 @@ func TestEndpointStringError(t *testing.T) {
 
 // Errors that usually marshal to empty dict should return the original error string.
 func TestUpdateEndpointStateLastError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		InputError      error
 		ExpectedLastErr string
@@ -1477,6 +1505,8 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 }
 
 func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
+	t.Parallel()
+
 	mockEndpointRef := &endpointRef{
 		addr: "mockedStore",
 		metadata: &endpointMetadata{

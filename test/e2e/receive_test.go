@@ -80,7 +80,7 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup Router Ingestor.
-		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExpandedPostingsCache().Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 		// Setup Prometheus
@@ -135,9 +135,9 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup Receives
-		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
-		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
-		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().Init()
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().WithExpandedPostingsCache().Init()
 
 		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
 
@@ -291,9 +291,9 @@ test_metric{a="2", b="2"} 1`)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup 3 ingestors.
-		i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().Init()
-		i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().Init()
-		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().Init()
+		i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().WithExpandedPostingsCache().Init()
 
 		h := receive.HashringConfig{
 			Endpoints: []receive.Endpoint{

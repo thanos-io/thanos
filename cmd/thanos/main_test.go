@@ -105,6 +105,16 @@ func (b *erroringBucket) Name() string {
 	return b.bkt.Name()
 }
 
+// IterWithAttributes allows to iterate over objects in the bucket with their attributes.
+func (b *erroringBucket) IterWithAttributes(ctx context.Context, dir string, f func(objstore.IterObjectAttributes) error, options ...objstore.IterOption) error {
+	return b.bkt.IterWithAttributes(ctx, dir, f, options...)
+}
+
+// SupportedIterOptions returns the supported iteration options.
+func (b *erroringBucket) SupportedIterOptions() []objstore.IterOptionType {
+	return b.bkt.SupportedIterOptions()
+}
+
 // Ensures that downsampleBucket() stops its work properly
 // after an error occurs with some blocks in the backlog.
 // Testing for https://github.com/thanos-io/thanos/issues/4960.

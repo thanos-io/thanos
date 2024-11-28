@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	commonmodel "github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -32,6 +33,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	hidden "github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -308,8 +310,11 @@ func runStore(
 	if err != nil {
 		return err
 	}
-
-	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String())
+	customBktConfig := exthttp.DefaultCustomBucketConfig()
+	if err := yaml.Unmarshal(confContentYaml, &customBktConfig); err != nil {
+		return errors.Wrap(err, "parsing config YAML file")
+	}
+	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String(), exthttp.CreateHedgedTransportWithConfig(customBktConfig))
 	if err != nil {
 		return err
 	}
@@ -516,7 +521,7 @@ func runStore(
 
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

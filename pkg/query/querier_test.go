@@ -44,6 +44,8 @@ type sample struct {
 }
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
+	t.Parallel()
+
 	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
 	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second)
 
@@ -72,6 +74,8 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 
 // Tests E2E how PromQL works with downsampled data.
 func TestQuerier_DownsampledData(t *testing.T) {
+	t.Parallel()
+
 	testProxy := &testStoreServer{
 		resps: []*storepb.SeriesResponse{
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store.
@@ -335,6 +339,8 @@ func (s series) Iterator() chunkenc.Iterator {
 //
 // This is because when promql displays data for a given range it looks back 5min before the requested time window.
 func TestQuerier_Select_AfterPromQL(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	for _, tcase := range []struct {
@@ -423,6 +429,8 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 }
 
 func TestQuerier_Select(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	for _, tcase := range []struct {
@@ -1056,6 +1064,8 @@ func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
 func (s *mockedSeriesIterator) Err() error { return nil }
 
 func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)

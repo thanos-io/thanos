@@ -32,6 +32,8 @@ import (
 )
 
 func TestHaltError(t *testing.T) {
+	t.Parallel()
+
 	err := errors.New("test")
 	testutil.Assert(t, !IsHaltError(err), "halt error")
 
@@ -46,6 +48,8 @@ func TestHaltError(t *testing.T) {
 }
 
 func TestHaltMultiError(t *testing.T) {
+	t.Parallel()
+
 	haltErr := halt(errors.New("halt error"))
 	nonHaltErr := errors.New("not a halt error")
 
@@ -59,6 +63,8 @@ func TestHaltMultiError(t *testing.T) {
 }
 
 func TestRetryMultiError(t *testing.T) {
+	t.Parallel()
+
 	retryErr := retry(errors.New("retry error"))
 	nonRetryErr := errors.New("not a retry error")
 
@@ -75,6 +81,8 @@ func TestRetryMultiError(t *testing.T) {
 }
 
 func TestRetryError(t *testing.T) {
+	t.Parallel()
+
 	err := errors.New("test")
 	testutil.Assert(t, !IsRetryError(err), "retry error")
 
@@ -92,6 +100,8 @@ func TestRetryError(t *testing.T) {
 }
 
 func TestGroupKey(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		input    metadata.Thanos
 		expected string
@@ -131,6 +141,8 @@ func TestGroupKey(t *testing.T) {
 }
 
 func TestGroupMaxMinTime(t *testing.T) {
+	t.Parallel()
+
 	g := &Group{
 		metasByMinTime: []*metadata.Meta{
 			{BlockMeta: tsdb.BlockMeta{MinTime: 0, MaxTime: 10}},
@@ -207,6 +219,8 @@ func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string
 }
 
 func TestRetentionProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
 
@@ -328,6 +342,8 @@ func TestRetentionProgressCalculate(t *testing.T) {
 }
 
 func TestCompactProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
 	}
@@ -433,6 +449,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 }
 
 func TestDownsampleProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
 
@@ -532,6 +550,8 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 }
 
 func TestNoMarkFilterAtomic(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.TODO()
 	logger := log.NewLogfmtLogger(io.Discard)
 
