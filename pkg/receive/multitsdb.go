@@ -136,22 +136,11 @@ func NewMultiTSDB(
 	return mt
 }
 
-// getTenant returns the tenant with the given tenantID.
-// @testing: This method is only for testing purposes.
-func (t *MultiTSDB) getTenant(tenantID string) *tenant {
+// testGetTenant returns the tenant with the given tenantID for testing purposes.
+func (t *MultiTSDB) testGetTenant(tenantID string) *tenant {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.tenants[tenantID]
-}
-
-// tsdbLocalClientsCopied returns a copy of tsdbClients.
-// @testing: This method is only for testing purposes.
-func (t *MultiTSDB) tsdbLocalClientsCopied() []store.Client {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	copied := make([]store.Client, len(t.tsdbClients))
-	copy(copied, t.tsdbClients)
-	return copied
 }
 
 func (t *MultiTSDB) updateTSDBClients() {

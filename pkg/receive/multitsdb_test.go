@@ -194,7 +194,7 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, m.Open())
 		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
 
-		tenant := m.getTenant(testTenant)
+		tenant := m.testGetTenant(testTenant)
 		db := tenant.readyStorage().Get()
 
 		testutil.Equals(t, 0, len(db.Blocks()))
@@ -843,7 +843,10 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 
 func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
 	proxy := store.NewProxyStore(nil, nil, func() []store.Client {
-		clients := m.tsdbLocalClientsCopied()
+		m.mtx.Lock()
+		defer m.mtx.Unlock()
+		clients := make([]store.Client, len(m.tsdbClients))
+		copy(clients, m.tsdbClients)
 		if len(clients) > 0 {
 			clients[0] = &slowClient{clients[0]}
 		}
