@@ -103,7 +103,7 @@ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
-## Experimental PromQL Engine
+## Thanos PromQL Engine (experimental)
 
 By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
 
@@ -112,6 +112,14 @@ To learn more, see [the introduction talk](https://youtu.be/pjkWzDVxWk4?t=3609) 
 This feature is still **experimental** given active development. All queries should be supported due to bulit-in fallback to old PromQL if something is not yet implemented.
 
 For new engine bugs/issues, please use https://github.com/thanos-community/promql-engine GitHub issues.
+
+### Distributed execution mode
+
+When using Thanos PromQL Engine the distributed execution mode can be enabled using `--query.mode=distributed`. When this mode is enabled, the Querier will break down each query into independent fragments and delegate them to components which implement the Query API.
+
+This mode is particularly useful in architectures where multiple independent Queriers are deployed in separate environments (different regions or different Kubernetes clusters) and are federated through a separate central Querier. A Querier running in the distributed mode will only talk to Queriers, or other components which implement the Query API. Endpoints which only act as Stores (e.g. Store Gateways or Rulers), and are directly connected to a distributed Querier, will not be included in the execution of a distributed query. This constraint should help with keeping the distributed query execution simple and efficient, but could be removed in the future if there are good use cases for it.
+
+For further details on the design and use cases of this feature, see the [official design document](https://thanos.io/tip/proposals-done/202301-distributed-query-execution.md/).
 
 ## Query API Overview
 
@@ -274,14 +282,6 @@ In case of nested Thanos Query components, it's important to note that tenancy e
 
 Further, note that there are no authentication mechanisms in Thanos, so anyone can set an arbitrary tenant in the HTTP header. It is recommended to use a proxy in front of the querier in case an authentication mechanism is needed. The Query UI also includes an option to set an arbitrary tenant, and should therefore not be exposed to end-users if users should not be able to see each others data.
 
-### Distributed execution mode
-
-The distributed execution mode can be enabled using `--query.mode=distributed`. When this mode is enabled, the Querier will break down each query into independent fragments and delegate them to components which implement the Query API.
-
-This mode is particularly useful in architectures where multiple independent Queriers are deployed in separate environments (different regions or different Kubernetes clusters) and are federated through a separate central Querier. A Querier running in the distributed mode will only talk to Queriers, or other components which implement the Query API. Endpoints which only act as Stores (e.g. Store Gateways or Rulers), and are directly connected to a distributed Querier, will not be included in the execution of a distributed query. This constraint should help with keeping the distributed query execution simple and efficient, but could be removed in the future if there are good use cases for it.
-
-For further details on the design and use cases of this feature, see the [official design document](https://thanos.io/tip/proposals-done/202301-distributed-query-execution.md/).
-
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
@@ -353,6 +353,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -423,6 +428,19 @@ Flags:
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
+      --query.partition-label=QUERY.PARTITION-LABEL ...
+                                 Labels that partition the leaf queriers. This
+                                 is used to scope down the labelsets of leaf
+                                 queriers when using the distributed query mode.
+                                 If set, these labels must form a partition
+                                 of the leaf queriers. Partition labels must
+                                 not intersect with replica labels. Every TSDB
+                                 of a leaf querier must have these labels.
+                                 This is useful when there are multiple external
+                                 labels that are irrelevant for the partition as
+                                 it allows the distributed engine to ignore them
+                                 for some optimizations. If this is empty then
+                                 all labels are used as partition labels.
       --query.promql-engine=prometheus
                                  Default PromQL engine to use.
       --query.replica-label=QUERY.REPLICA-LABEL ...
@@ -431,6 +449,8 @@ Flags:
                                  be able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+                                 Flag may be specified multiple times as well as
+                                 a comma separated list of labels.
       --query.telemetry.request-duration-seconds-quantiles=0.1... ...
                                  The quantiles for exporting metrics about the
                                  request duration quantiles.

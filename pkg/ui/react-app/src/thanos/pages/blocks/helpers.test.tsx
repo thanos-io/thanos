@@ -531,6 +531,9 @@ const blockPools = {
       ],
     ],
   },
+  '5': {
+    '1-0': [],
+  },
 };
 
 // Total filtered blocks = 1
@@ -634,8 +637,8 @@ describe('isOverlapping helper', () => {
 });
 
 describe('Block Pools', () => {
-  it('should have exactly 4 objects', () => {
-    expect(Object.keys(blockPools)).toHaveLength(4);
+  it('should have exactly 5 objects', () => {
+    expect(Object.keys(blockPools)).toHaveLength(5);
   });
 });
 

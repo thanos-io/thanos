@@ -61,6 +61,7 @@ type Syncer struct {
 	metrics                  *SyncerMetrics
 	duplicateBlocksFilter    block.DeduplicateFilter
 	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
+	syncMetasTimeout         time.Duration
 
 	g singleflight.Group
 }
@@ -101,15 +102,23 @@ func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) (*Syncer, error) {
-	return NewMetaSyncerWithMetrics(logger, NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks), bkt, fetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter)
+func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter, syncMetasTimeout time.Duration) (*Syncer, error) {
+	return NewMetaSyncerWithMetrics(logger,
+		NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks),
+		bkt,
+		fetcher,
+		duplicateBlocksFilter,
+		ignoreDeletionMarkFilter,
+		syncMetasTimeout,
+	)
 }
 
-func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter) (*Syncer, error) {
+func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, syncMetasTimeout time.Duration) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
+		syncMetasTimeout:         syncMetasTimeout,
 		logger:                   logger,
 		bkt:                      bkt,
 		fetcher:                  fetcher,
@@ -138,6 +147,12 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 
 // SyncMetas synchronizes local state of block metas with what we have in the bucket.
 func (s *Syncer) SyncMetas(ctx context.Context) error {
+	var cancel func() = func() {}
+	if s.syncMetasTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, s.syncMetasTimeout)
+	}
+	defer cancel()
+
 	type metasContainer struct {
 		metas   map[ulid.ULID]*metadata.Meta
 		partial map[ulid.ULID]error
@@ -894,7 +909,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 					_, _ = sb.WriteString(",")
 				}
 			}
-			rerr = fmt.Errorf("paniced while compacting %s: %v", sb.String(), p)
+			rerr = fmt.Errorf("panicked while compacting %s: %v", sb.String(), p)
 		}
 	}()
 

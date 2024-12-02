@@ -90,7 +90,7 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.
 }
 
 // duplicatedBlocks returns duplicated blocks that have exactly same range, sources and stats.
-// If block is unique it is not included in the resulted blocs.
+// If block is unique it is not included in the resulted blocks.
 func duplicatedBlocks(blocks []tsdb.BlockMeta) (res [][]tsdb.BlockMeta) {
 	var dups [][]tsdb.BlockMeta
 	for _, b := range blocks {

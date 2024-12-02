@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/common/model"
 
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/stretchr/testify/require"
@@ -1142,11 +1143,146 @@ func TestReceiveExtractsTenant(t *testing.T) {
 			}
 
 			compressed := snappy.Encode(buf, pBuf.Bytes())
-			return client.Store(context.Background(), compressed, 0)
+
+			_, err = client.Store(context.Background(), compressed, 0)
+			return err
 		}))
 
 		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "http-tenant")), e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "tenant-3")), e2emon.WaitMissingMetrics()))
 
+	})
+}
+
+func TestReceiveCpnp(t *testing.T) {
+	e, err := e2e.NewDockerEnvironment("receive-cpnp")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	h := receive.HashringConfig{
+		TenantMatcherType: "glob",
+		Tenants: []string{
+			"default*",
+		},
+		Endpoints: []receive.Endpoint{
+			{Address: i.InternalEndpoint("grpc"), CapNProtoAddress: i.InternalEndpoint("capnp")},
+		},
+	}
+
+	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(1, h).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	ts := time.Now()
+
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: model.MetricNameLabel, Value: "myself"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: timestamp.FromTime(ts)},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	v := instantQuery(t, context.Background(), q.Endpoint("http"), func() string { return "myself" }, func() time.Time { return ts }, promclient.QueryOptions{
+		Deduplicate: false,
+	}, 1)
+
+	v[0].Timestamp = 0
+
+	require.Equal(t, model.Vector{
+		{
+			Metric: model.Metric{
+				model.MetricNameLabel: "myself",
+				"receive":             "receive-ingestor",
+				"tenant_id":           "default-tenant",
+			},
+			Value: 1,
+		},
+	}, v)
+
+}
+
+func TestNewTenant(t *testing.T) {
+	e, err := e2e.NewDockerEnvironment("new-tenant")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// Setup 3 ingestors.
+	i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().Init()
+	i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().Init()
+	i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().Init()
+
+	h := receive.HashringConfig{
+		Endpoints: []receive.Endpoint{
+			{Address: i1.InternalEndpoint("grpc")},
+			{Address: i2.InternalEndpoint("grpc")},
+			{Address: i3.InternalEndpoint("grpc")},
+		},
+	}
+
+	// Setup 1 distributor with double replication
+	r1 := e2ethanos.NewReceiveBuilder(e, "r1").WithRouting(2, h).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	rp1 := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
+	prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, "http://"+rp1.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, e2e.StartAndWaitReady(rp1, prom1))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	expectedReplicationFactor := 2.0
+
+	queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return "count(up) by (prometheus, tenant_id)" }, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"prometheus": "prom1",
+				"tenant_id":  "tenant-1",
+			},
+			Value: model.SampleValue(expectedReplicationFactor),
+		},
+	})
+
+	rp2 := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
+	prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, "http://"+rp2.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, e2e.StartAndWaitReady(rp2, prom2))
+
+	queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return "count(up) by (prometheus, tenant_id)" }, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"prometheus": "prom1",
+				"tenant_id":  "tenant-1",
+			},
+			Value: model.SampleValue(expectedReplicationFactor),
+		},
+		&model.Sample{
+			Metric: model.Metric{
+				"prometheus": "prom2",
+				"tenant_id":  "tenant-2",
+			},
+			Value: model.SampleValue(expectedReplicationFactor),
+		},
 	})
 }

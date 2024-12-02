@@ -35,6 +35,7 @@ import (
 type Opts struct {
 	AutoDownsample        bool
 	ReplicaLabels         []string
+	PartitionLabels       []string
 	Timeout               time.Duration
 	EnablePartialResponse bool
 }
@@ -118,19 +119,17 @@ func (r *remoteEngine) MinT() int64 {
 			hashBuf               = make([]byte, 0, 128)
 			highestMintByLabelSet = make(map[uint64]int64)
 		)
-		for _, lset := range r.infosWithoutReplicaLabels() {
+		for _, lset := range r.adjustedInfos() {
 			key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
 			lsetMinT, ok := highestMintByLabelSet[key]
 			if !ok {
 				highestMintByLabelSet[key] = lset.MinTime
 				continue
 			}
-
 			if lset.MinTime > lsetMinT {
 				highestMintByLabelSet[key] = lset.MinTime
 			}
 		}
-
 		var mint int64 = math.MaxInt64
 		for _, m := range highestMintByLabelSet {
 			if m < mint {
@@ -152,15 +151,21 @@ func (r *remoteEngine) MaxT() int64 {
 
 func (r *remoteEngine) LabelSets() []labels.Labels {
 	r.labelSetsOnce.Do(func() {
-		r.labelSets = r.infosWithoutReplicaLabels().LabelSets()
+		r.labelSets = r.adjustedInfos().LabelSets()
 	})
 	return r.labelSets
 }
 
-func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
+// adjustedInfos strips out replica labels and scopes the remaining labels
+// onto the partition labels if they are set.
+func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
 	replicaLabelSet := make(map[string]struct{})
 	for _, lbl := range r.opts.ReplicaLabels {
 		replicaLabelSet[lbl] = struct{}{}
+	}
+	partitionLabelsSet := make(map[string]struct{})
+	for _, lbl := range r.opts.PartitionLabels {
+		partitionLabelsSet[lbl] = struct{}{}
 	}
 
 	// Strip replica labels from the result.
@@ -172,6 +177,9 @@ func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 			if _, ok := replicaLabelSet[lbl.Name]; ok {
 				continue
 			}
+			if _, ok := partitionLabelsSet[lbl.Name]; !ok && len(partitionLabelsSet) > 0 {
+				continue
+			}
 			builder.Add(lbl.Name, lbl.Value)
 		}
 		infos = append(infos, infopb.NewTSDBInfo(
@@ -180,7 +188,6 @@ func (r *remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 			labelpb.ZLabelsFromPromLabels(builder.Labels())),
 		)
 	}
-
 	return infos
 }
 

@@ -110,7 +110,7 @@ func GetQTypeName(addr string) (qtype, name string) {
 // Resolve stores a list of provided addresses or their DNS records if requested.
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
 // For non-SRV records, it will return an error if a port is not supplied.
-func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
+func (p *Provider) Resolve(ctx context.Context, addrs []string, flushOld bool) error {
 	resolvedAddrs := map[string][]string{}
 	errs := errutil.MultiError{}
 
@@ -129,10 +129,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 			errs.Add(err)
 			// The DNS resolution failed. Continue without modifying the old records.
 			p.resolverFailuresCount.Inc()
-			// Use cached values.
-			p.RLock()
-			resolved = p.resolved[addr]
-			p.RUnlock()
+			continue
 		}
 		resolvedAddrs[addr] = resolved
 	}
@@ -143,12 +140,16 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	defer p.Unlock()
 
 	p.resolverAddrs.ResetTx()
+	if flushOld && len(errs) == 0 {
+		p.resolved = map[string][]string{}
+	}
 	for name, addrs := range resolvedAddrs {
+		p.resolved[name] = addrs
+	}
+	for name, addrs := range p.resolved {
 		p.resolverAddrs.WithLabelValues(name).Set(float64(len(addrs)))
 	}
 	p.resolverAddrs.Submit()
-
-	p.resolved = resolvedAddrs
 
 	return errs.Err()
 }
@@ -163,6 +164,19 @@ func (p *Provider) Addresses() []string {
 		result = append(result, addrs...)
 	}
 	return result
+}
+
+// AddressesForHost returns the latest addresses present for the host in the Provider.
+func (p *Provider) AddressesForHost(host string) []string {
+	p.RLock()
+	defer p.RUnlock()
+
+	addrs := p.resolved[host]
+
+	res := make([]string, len(addrs))
+	copy(res, addrs)
+
+	return res
 }
 
 func (p *Provider) AddressesWithDNS() map[string][]string {

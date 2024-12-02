@@ -25,6 +25,8 @@ import (
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
+	t.Parallel()
+
 	client := NewClient(&warnClient{}, "", nil)
 	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
@@ -61,11 +63,14 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 }
 
 func TestRemoteEngine_LabelSets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name          string
-		tsdbInfos     []infopb.TSDBInfo
-		replicaLabels []string
-		expected      []labels.Labels
+		name            string
+		tsdbInfos       []infopb.TSDBInfo
+		replicaLabels   []string
+		expected        []labels.Labels
+		partitionLabels []string
 	}{
 		{
 			name:      "empty label sets",
@@ -103,13 +108,24 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 			replicaLabels: []string{"a", "b"},
 			expected:      []labels.Labels{labels.FromStrings("c", "2")},
 		},
+		{
+			name: "non-empty label sets with partition labels",
+			tsdbInfos: []infopb.TSDBInfo{
+				{
+					Labels: zLabelSetFromStrings("a", "1", "c", "2"),
+				},
+			},
+			partitionLabels: []string{"a"},
+			expected:        []labels.Labels{labels.FromStrings("a", "1")},
+		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := NewClient(nil, "", testCase.tsdbInfos)
 			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
-				ReplicaLabels: testCase.replicaLabels,
+				ReplicaLabels:   testCase.replicaLabels,
+				PartitionLabels: testCase.partitionLabels,
 			})
 
 			testutil.Equals(t, testCase.expected, engine.LabelSets())
@@ -118,6 +134,8 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 }
 
 func TestRemoteEngine_MinT(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tsdbInfos     []infopb.TSDBInfo

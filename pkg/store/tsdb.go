@@ -11,9 +11,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc"
@@ -21,17 +24,33 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-const RemoteReadFrameLimit = 1048576
+const (
+	RemoteReadFrameLimit      = 1048576
+	cuckooStoreFilterCapacity = 1000000
+	storeFilterUpdateInterval = 15 * time.Second
+)
 
 type TSDBReader interface {
 	storage.ChunkQueryable
 	StartTime() (int64, error)
+}
+
+// TSDBStoreOption is a functional option for TSDBStore.
+type TSDBStoreOption func(s *TSDBStore)
+
+// WithCuckooMetricNameStoreFilter returns a TSDBStoreOption that enables the Cuckoo filter for metric names.
+func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.storeFilter = filter.NewCuckooMetricNameStoreFilter(cuckooStoreFilterCapacity)
+		s.startStoreFilterUpdate = true
+	}
 }
 
 // TSDBStore implements the store API against a local TSDB instance.
@@ -44,8 +63,16 @@ type TSDBStore struct {
 	buffers          sync.Pool
 	maxBytesPerFrame int
 
-	extLset labels.Labels
-	mtx     sync.RWMutex
+	extLset                labels.Labels
+	startStoreFilterUpdate bool
+	storeFilter            filter.StoreFilter
+	mtx                    sync.RWMutex
+	close                  func()
+	storepb.UnimplementedStoreServer
+}
+
+func (s *TSDBStore) Close() {
+	s.close()
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -62,21 +89,68 @@ type ReadWriteTSDBStore struct {
 
 // NewTSDBStore creates a new TSDBStore.
 // NOTE: Given lset has to be sorted.
-func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
+func NewTSDBStore(
+	logger log.Logger,
+	db TSDBReader,
+	component component.StoreAPI,
+	extLset labels.Labels,
+	options ...TSDBStoreOption,
+) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	return &TSDBStore{
+
+	st := &TSDBStore{
 		logger:           logger,
 		db:               db,
 		component:        component,
 		extLset:          extLset,
 		maxBytesPerFrame: RemoteReadFrameLimit,
+		storeFilter:      filter.AllowAllStoreFilter{},
+		close:            func() {},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
 	}
+
+	for _, option := range options {
+		option(st)
+	}
+
+	if st.startStoreFilterUpdate {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		updateFilter := func(ctx context.Context) {
+			vals, err := st.LabelValues(ctx, &storepb.LabelValuesRequest{
+				Label: model.MetricNameLabel,
+				End:   math.MaxInt64,
+			})
+			if err != nil {
+				level.Error(logger).Log("msg", "failed to update metric names", "err", err)
+				return
+			}
+
+			st.storeFilter.ResetAndSet(vals.Values...)
+		}
+		st.close = cancel
+		updateFilter(ctx)
+
+		t := time.NewTicker(storeFilterUpdateInterval)
+
+		go func() {
+			for {
+				select {
+				case <-t.C:
+					updateFilter(ctx)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	return st
 }
 
 func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
@@ -93,38 +167,11 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-// Info returns store information about the Prometheus instance.
-func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	minTime, err := s.db.StartTime()
-	if err != nil {
-		return nil, errors.Wrap(err, "TSDB min Time")
-	}
-
-	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.getExtLset()),
-		StoreType: s.component.ToProto(),
-		MinTime:   minTime,
-		MaxTime:   math.MaxInt64,
-	}
-
-	// Until we deprecate the single labels in the reply, we just duplicate
-	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.ZLabelSet{}
-	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
-			Labels: res.Labels,
-		})
-	}
-	return res, nil
-}
-
 func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(s.getExtLset())
+	labels := labelpb.ZLabelSetsFromPromLabels(s.getExtLset())
 	labelSets := []labelpb.ZLabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{
-			Labels: labels,
-		})
+		labelSets = append(labelSets, labels...)
 	}
 
 	return labelSets
@@ -158,6 +205,10 @@ func (s *TSDBStore) TimeRange() (int64, int64) {
 	}
 
 	return minTime, math.MaxInt64
+}
+
+func (s *TSDBStore) Matches(matchers []*labels.Matcher) bool {
+	return s.storeFilter.Matches(matchers)
 }
 
 // CloseDelegator allows to delegate close (releasing resources used by request to the server).
@@ -220,7 +271,13 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb chunk querier series")
 	}
 
-	set := q.Select(srv.Context(), true, nil, matchers...)
+	hints := &storage.SelectHints{
+		Start:           r.MinTime,
+		End:             r.MaxTime,
+		Limit:           int(r.Limit),
+		DisableTrimming: true,
+	}
+	set := q.Select(srv.Context(), true, hints, matchers...)
 
 	shardMatcher := r.ShardInfo.Matcher(&s.buffers)
 	defer shardMatcher.Close()
@@ -332,7 +389,10 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
 
-	res, _, err := q.LabelNames(ctx, matchers...)
+	hints := &storage.LabelHints{
+		Limit: int(r.Limit),
+	}
+	res, _, err := q.LabelNames(ctx, hints, matchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -400,6 +460,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 			Start: r.Start,
 			End:   r.End,
 			Func:  "series",
+			Limit: int(r.Limit),
 		}
 		set := q.Select(ctx, false, hints, matchers...)
 
@@ -409,7 +470,10 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return &storepb.LabelValuesResponse{}, nil
 	}
 
-	res, _, err := q.LabelValues(ctx, r.Label, matchers...)
+	hints := &storage.LabelHints{
+		Limit: int(r.Limit),
+	}
+	res, _, err := q.LabelValues(ctx, r.Label, hints, matchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -45,5 +45,5 @@ rule_files:
 	promRules := NewPrometheus(u, promclient.NewDefaultClient(), func() labels.Labels {
 		return labels.FromStrings("replica", "test1")
 	})
-	testRulesAgainstExamples(t, filepath.Join(root, "examples/alerts"), promRules)
+	testRulesAgainstExamples(t, filepath.Join(root, "examples/alerts"), promRules, true)
 }

@@ -18,15 +18,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/util/metautils"
 )
 
-var parentKey struct{}
+type parentKey struct{}
+
+var key parentKey
 
 var (
 	testPairs = []string{"singlekey", "uno", "multikey", "one", "multikey", "two", "multikey", "three"}
-	parentCtx = context.WithValue(context.TODO(), parentKey, "parentValue")
+	parentCtx = context.WithValue(context.TODO(), key, "parentValue")
 )
 
 func assertRetainsParentContext(t *testing.T, ctx context.Context) {
-	x := ctx.Value(parentKey)
+	x := ctx.Value(key)
 	assert.EqualValues(t, "parentValue", x, "context must contain parentCtx")
 }
 
@@ -40,7 +42,7 @@ func TestNiceMD_Get(t *testing.T) {
 func TestNiceMD_Del(t *testing.T) {
 	nmd := metautils.NiceMD(metadata.Pairs(testPairs...))
 	assert.Equal(t, "uno", nmd.Get("singlekey"), "for present single-key value it should return it")
-	nmd.Del("singlekey").Del("doesnt exist")
+	nmd.Del("singlekey").Del("doesn't exist")
 	assert.Empty(t, nmd.Get("singlekey"), "after deletion singlekey shouldn't exist")
 }
 

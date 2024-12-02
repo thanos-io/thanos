@@ -352,6 +352,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
@@ -458,6 +463,9 @@ Flags:
                                  Label names to be ignored when restoring alerts
                                  from the remote storage. This is only used in
                                  stateless mode.
+      --rule-concurrent-evaluation=1
+                                 How many rules can be evaluated concurrently.
+                                 Default is 1.
       --rule-file=rules/ ...     Rule files that should be used by rule
                                  manager. Can be in glob format (repeated).
                                  Note that rules are not automatically detected,

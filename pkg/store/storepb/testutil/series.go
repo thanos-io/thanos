@@ -364,7 +364,7 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					// Huge responses can produce unreadable diffs - make it more human readable.
 					if len(c.ExpectedSeries) > 4 {
 						for j := range c.ExpectedSeries {
-							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
+							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels)
 
 							// Check chunks when it is not a skip chunk query
 							if !c.Req.SkipChunks {
@@ -377,7 +377,10 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 							}
 						}
 					} else {
-						testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)
+						testutil.Equals(t, true, len(c.ExpectedSeries) == len(srv.SeriesSet))
+						for i := range c.ExpectedSeries {
+							testutil.Equals(t, c.ExpectedSeries[i], srv.SeriesSet[i])
+						}
 					}
 
 					var actualHints []hintspb.SeriesResponseHints

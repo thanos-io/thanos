@@ -22,6 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	memcacheDiscovery "github.com/thanos-io/thanos/pkg/discovery/memcache"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/extprom"
 )
 
@@ -202,6 +203,28 @@ func (c *memcachedClient) dialViaCircuitBreaker(network, address string, timeout
 	return conn.(net.Conn), nil
 }
 
+func (c *memcachedClient) Set(item *memcache.Item) error {
+	// Skip hitting memcached at all if the item is bigger than the max allowed size.
+	if c.maxItemSize > 0 && len(item.Value) > c.maxItemSize {
+		c.skipped.Inc()
+		return nil
+	}
+
+	err := c.Client.Set(item)
+	if err == nil {
+		return nil
+	}
+
+	// Inject the server address in order to have more information about which memcached
+	// backend server failed. This is a best effort.
+	addr, addrErr := c.serverList.PickServer(item.Key)
+	if addrErr != nil {
+		return err
+	}
+
+	return errors.Wrapf(err, "server=%s", addr)
+}
+
 func (c *memcachedClient) updateLoop(updateInterval time.Duration) {
 	defer c.wait.Done()
 	ticker := time.NewTicker(updateInterval)
@@ -228,7 +251,7 @@ func (c *memcachedClient) updateMemcacheServers() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := c.provider.Resolve(ctx, c.addresses); err != nil {
+		if err := c.provider.Resolve(ctx, c.addresses, true); err != nil {
 			return err
 		}
 		servers = c.provider.Addresses()

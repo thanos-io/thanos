@@ -8,7 +8,6 @@ package main
 
 import (
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +28,7 @@ type grpcConfig struct {
 	tlsSrvCert       string
 	tlsSrvKey        string
 	tlsSrvClientCA   string
+	tlsMinVersion    string
 	gracePeriod      time.Duration
 	maxConnectionAge time.Duration
 }
@@ -46,6 +46,9 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-server-tls-client-ca",
 		"TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").
 		Default("").StringVar(&gc.tlsSrvClientCA)
+	cmd.Flag("grpc-server-tls-min-version",
+		"TLS supported minimum version for gRPC server. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
+		Default("1.3").StringVar(&gc.tlsMinVersion)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
@@ -266,23 +269,23 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 }
 
 func parseFlagLabels(s []string) (labels.Labels, error) {
-	var lset labels.Labels
+	var lset labels.ScratchBuilder
 	for _, l := range s {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
-			return nil, errors.Errorf("unrecognized label %q", l)
+			return labels.EmptyLabels(), errors.Errorf("unrecognized label %q", l)
 		}
 		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
-			return nil, errors.Errorf("unsupported format for label %s", l)
+			return labels.EmptyLabels(), errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {
-			return nil, errors.Wrap(err, "unquote label value")
+			return labels.EmptyLabels(), errors.Wrap(err, "unquote label value")
 		}
-		lset = append(lset, labels.Label{Name: parts[0], Value: val})
+		lset.Add(parts[0], val)
 	}
-	sort.Sort(lset)
-	return lset, nil
+	lset.Sort()
+	return lset.Labels(), nil
 }
 
 type goMemLimitConfig struct {

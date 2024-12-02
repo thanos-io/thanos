@@ -4,7 +4,6 @@
 package query
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -119,21 +118,6 @@ func selectedStore(wrapped storepb.StoreServer, matchers []storepb.LabelMatcher,
 		mint:        mint,
 		maxt:        maxt,
 	}
-}
-
-func (s *selectStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	resp, err := s.StoreServer.Info(ctx, r)
-	if err != nil {
-		return nil, err
-	}
-	if resp.MinTime < s.mint {
-		resp.MinTime = s.mint
-	}
-	if resp.MaxTime > s.maxt {
-		resp.MaxTime = s.maxt
-	}
-	// TODO(bwplotka): Match labelsets and expose only those?
-	return resp, nil
 }
 
 func (s *selectStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {

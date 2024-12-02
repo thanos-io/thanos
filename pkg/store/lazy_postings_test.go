@@ -25,6 +25,8 @@ import (
 )
 
 func TestKeysToFetchFromPostingGroups(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name             string
 		pgs              []*postingGroup
@@ -253,6 +255,8 @@ func (h *mockIndexHeaderReader) LabelValues(name string) ([]string, error) { ret
 func (h *mockIndexHeaderReader) LabelNames() ([]string, error) { return nil, nil }
 
 func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dir := t.TempDir()
 	bkt, err := filesystem.NewBucket(dir)

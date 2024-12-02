@@ -42,6 +42,11 @@ validators:
     type: 'ignore'
   - regex: 'twitter\.com'
     type: 'ignore'
-  # 500 when requested my mdox in GH actions.
-  - regex: 'outshift\.cisco\.com'
+  - regex: 'outshift\.cisco\.com\/blog\/multi-cluster-monitoring'
+    type: 'ignore'
+  # Expired certificate
+  - regex: 'bestpractices\.coreinfrastructure\.org\/projects\/3048'
+    type: 'ignore'
+  # Frequent DNS issues. 
+  - regex: 'build\.thebeat\.co'
     type: 'ignore'

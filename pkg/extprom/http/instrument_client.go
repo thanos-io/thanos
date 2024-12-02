@@ -27,6 +27,8 @@ type ClientMetrics struct {
 // e.g. 1 ClientMetrics should be used for all the clients that talk to Alertmanager.
 func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 	var m ClientMetrics
+	const maxBucketNumber = 256
+	const bucketFactor = 1.1
 
 	m.inFlightGauge = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Subsystem: "http_client",
@@ -46,6 +48,9 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 			Name:      "dns_duration_seconds",
 			Help:      "Trace dns latency histogram.",
 			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
+
+			NativeHistogramBucketFactor:    bucketFactor,
+			NativeHistogramMaxBucketNumber: maxBucketNumber,
 		},
 		[]string{"event"},
 	)
@@ -56,6 +61,9 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 			Name:      "tls_duration_seconds",
 			Help:      "Trace tls latency histogram.",
 			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
+
+			NativeHistogramBucketFactor:    bucketFactor,
+			NativeHistogramMaxBucketNumber: maxBucketNumber,
 		},
 		[]string{"event"},
 	)
@@ -66,6 +74,9 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 			Name:      "request_duration_seconds",
 			Help:      "A histogram of request latencies.",
 			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
+
+			NativeHistogramBucketFactor:    bucketFactor,
+			NativeHistogramMaxBucketNumber: maxBucketNumber,
 		},
 		[]string{"code", "method"},
 	)

@@ -23,17 +23,17 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
-	"go.uber.org/goleak"
 
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/testiters"
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 func TestDownsampleAndReadResultingData(t *testing.T) {
@@ -1437,7 +1437,7 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 			name: "series with stale marker",
 			chunks: [][]sample{
 				{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
-				{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}},                // No reset, just downsampling addded sample at the end.
+				{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}},                // No reset, just downsampling added sample at the end.
 				{{900, 5}, {1000, 10}, {1100, 15}},                                     // Actual reset.
 				{{1200, 20}, {1250, math.Float64frombits(value.StaleNaN)}, {1300, 40}}, // No special last sample, no reset.
 				{{1400, 30}, {1500, 30}, {1600, 50}},                                   // No special last sample, reset.

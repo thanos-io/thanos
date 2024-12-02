@@ -40,12 +40,12 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"github.com/thanos-io/promql-engine/execution/parse"
-	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
@@ -54,6 +54,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -97,16 +98,17 @@ type ruleConfig struct {
 
 	rwConfig *extflag.PathOrContent
 
-	resendDelay       time.Duration
-	evalInterval      time.Duration
-	outageTolerance   time.Duration
-	forGracePeriod    time.Duration
-	ruleFiles         []string
-	objStoreConfig    *extflag.PathOrContent
-	dataDir           string
-	lset              labels.Labels
-	ignoredLabelNames []string
-	storeRateLimits   store.SeriesSelectLimits
+	resendDelay        time.Duration
+	evalInterval       time.Duration
+	outageTolerance    time.Duration
+	forGracePeriod     time.Duration
+	ruleFiles          []string
+	objStoreConfig     *extflag.PathOrContent
+	dataDir            string
+	lset               labels.Labels
+	ignoredLabelNames  []string
+	storeRateLimits    store.SeriesSelectLimits
+	ruleConcurrentEval int64
 
 	extendedFunctionsEnabled bool
 }
@@ -155,6 +157,7 @@ func registerRule(app *extkingpin.App) {
 		Default("10m").DurationVar(&conf.forGracePeriod)
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
+	cmd.Flag("rule-concurrent-evaluation", "How many rules can be evaluated concurrently. Default is 1.").Default("1").Int64Var(&conf.ruleConcurrentEval)
 
 	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
@@ -292,7 +295,7 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	m.ruleEvalWarnings = factory.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "thanos_rule_evaluation_with_warnings_total",
-			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
+			Help: "The total number of rule evaluation that were successful but had non PromQL warnings which can indicate partial error.",
 		}, []string{"strategy"},
 	)
 	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
@@ -450,7 +453,7 @@ func runRule(
 				return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
 					resolveCtx, resolveCancel := context.WithTimeout(ctx, 5*time.Second)
 					defer resolveCancel()
-					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints); err != nil {
+					if err := dnsEndpointProvider.Resolve(resolveCtx, grpcEndpoints, true); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses passed using grpc query config", "err", err)
 					}
 					return nil
@@ -484,7 +487,7 @@ func runRule(
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
 		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
 			return 0, nil
-		}, conf.dataDir, 1*time.Minute, nil)
+		}, conf.dataDir, 1*time.Minute, nil, false)
 		if err := remoteStore.ApplyConfig(&config.Config{
 			GlobalConfig: config.GlobalConfig{
 				ExternalLabels: labelsTSDBToProm(conf.lset),
@@ -624,22 +627,28 @@ func runRule(
 			alertQ.Push(res)
 		}
 
+		managerOpts := rules.ManagerOptions{
+			NotifyFunc:      notifyFunc,
+			Logger:          logger,
+			Appendable:      appendable,
+			ExternalURL:     nil,
+			Queryable:       queryable,
+			ResendDelay:     conf.resendDelay,
+			OutageTolerance: conf.outageTolerance,
+			ForGracePeriod:  conf.forGracePeriod,
+		}
+		if conf.ruleConcurrentEval > 1 {
+			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
+			managerOpts.ConcurrentEvalsEnabled = true
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		logger = log.With(logger, "component", "rules")
 		ruleMgr = thanosrules.NewManager(
 			tracing.ContextWithTracer(ctx, tracer),
 			reg,
 			conf.dataDir,
-			rules.ManagerOptions{
-				NotifyFunc:      notifyFunc,
-				Logger:          logger,
-				Appendable:      appendable,
-				ExternalURL:     nil,
-				Queryable:       queryable,
-				ResendDelay:     conf.resendDelay,
-				OutageTolerance: conf.outageTolerance,
-				ForGracePeriod:  conf.forGracePeriod,
-			},
+			managerOpts,
 			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
@@ -722,7 +731,7 @@ func runRule(
 	)
 
 	// Start gRPC server.
-	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA, conf.grpc.tlsMinVersion)
 	if err != nil {
 		return errors.Wrap(err, "setup gRPC server")
 	}
@@ -834,7 +843,7 @@ func runRule(
 	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Rule.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Rule.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -887,13 +896,7 @@ func removeLockfileIfAny(logger log.Logger, dataDir string) error {
 }
 
 func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
-	for _, l := range lset {
-		res = append(res, labels.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
-	return res
+	return lset.Copy()
 }
 
 func queryFuncCreator(
@@ -940,6 +943,8 @@ func queryFuncCreator(
 						level.Error(logger).Log("err", err, "query", qs)
 						continue
 					}
+
+					warns = filterOutPromQLWarnings(warns, logger, qs)
 					if len(warns) > 0 {
 						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
 						// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
@@ -971,12 +976,13 @@ func queryFuncCreator(
 						continue
 					}
 
-					if len(result.Warnings) > 0 {
+					warnings := make([]string, 0, len(result.Warnings))
+					for _, warn := range result.Warnings {
+						warnings = append(warnings, warn.Error())
+					}
+					warnings = filterOutPromQLWarnings(warnings, logger, qs)
+					if len(warnings) > 0 {
 						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
-						warnings := make([]string, 0, len(result.Warnings))
-						for _, w := range result.Warnings {
-							warnings = append(warnings, w.Error())
-						}
 						level.Warn(logger).Log("warnings", strings.Join(warnings, ", "), "query", qs)
 					}
 
@@ -1081,4 +1087,17 @@ func validateTemplate(tmplStr string) error {
 		return fmt.Errorf("failed to execute the template: %w", err)
 	}
 	return nil
+}
+
+// Filter out PromQL related warnings from warning response and keep store related warnings only.
+func filterOutPromQLWarnings(warns []string, logger log.Logger, query string) []string {
+	storeWarnings := make([]string, 0, len(warns))
+	for _, warn := range warns {
+		if extannotations.IsPromQLAnnotation(warn) {
+			level.Warn(logger).Log("warning", warn, "query", query)
+			continue
+		}
+		storeWarnings = append(storeWarnings, warn)
+	}
+	return storeWarnings
 }

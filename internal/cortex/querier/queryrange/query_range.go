@@ -274,6 +274,9 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 	var (
 		analyzes          = make([]*Analysis, 0, len(responses))
 		warnings []string = nil
+
+		// TODO(yi): simplify the series counter merge logic.
+		seriesStatsCounters = make([]*SeriesStatsCounter, 0, len(responses))
 	)
 	for i := range promResponses {
 		if promResponses[i].Data.GetAnalysis() != nil {
@@ -282,15 +285,9 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 		if len(promResponses[i].Warnings) > 0 {
 			warnings = append(warnings, promResponses[i].Warnings...)
 		}
-	}
-
-	seriesStatsCounters := make([]*SeriesStatsCounter, 0, len(responses))
-	for i := range promResponses {
-		if promResponses[i].Data.GetSeriesStatsCounter() == nil {
-			continue
+		if promResponses[i].Data.GetSeriesStatsCounter() != nil {
+			seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
 		}
-
-		seriesStatsCounters = append(seriesStatsCounters, promResponses[i].Data.GetSeriesStatsCounter())
 	}
 
 	response := PrometheusResponse{
@@ -352,6 +349,7 @@ func (prometheusCodec) DecodeRequest(_ context.Context, r *http.Request, forward
 	result.Query = r.FormValue("query")
 	result.Stats = r.FormValue("stats")
 	result.Path = r.URL.Path
+	result.Stats = r.FormValue("stats")
 
 	// Include the specified headers from http request in prometheusRequest.
 	for _, header := range forwardHeaders {
@@ -485,12 +483,25 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 		httpHeader[QueryBytesFetchedHeaderName] = []string{strconv.FormatInt(res.(*PrometheusResponse).Data.SeriesStatsCounter.Bytes, 10)}
 	}
 	resp := http.Response{
-		Header:        httpHeader,
+		Header:        mergeHeaders(a.Headers),
 		Body:          io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode:    http.StatusOK,
 		ContentLength: int64(len(b)),
 	}
 	return &resp, nil
+}
+
+// PrometheusResponseHeader helps preserve the Header from the original Prometheus response, coming from the Tripperware.
+func mergeHeaders(headers []*PrometheusResponseHeader) http.Header {
+	h := make(http.Header, len(headers)+1)
+	for _, header := range headers {
+		if strings.EqualFold("Content-Type", header.Name) {
+			continue
+		}
+		h[header.Name] = header.Values
+	}
+	h["Content-Type"] = []string{"application/json"}
+	return h
 }
 
 // UnmarshalJSON implements json.Unmarshaler and is used for unmarshalling
@@ -746,6 +757,8 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 func StatsMerge(resps []Response) *PrometheusResponseStats {
 	output := map[int64]*PrometheusResponseQueryableSamplesStatsPerStep{}
 	hasStats := false
+	peakSamples := int32(0)
+	totalSamples := int64(0)
 	for _, resp := range resps {
 		stats := resp.GetStats()
 		if stats == nil {
@@ -760,6 +773,11 @@ func StatsMerge(resps []Response) *PrometheusResponseStats {
 		for _, s := range stats.Samples.TotalQueryableSamplesPerStep {
 			output[s.GetTimestampMs()] = s
 		}
+
+		if stats.Samples.PeakSamples > peakSamples {
+			peakSamples = stats.Samples.PeakSamples
+		}
+		totalSamples += stats.Samples.TotalQueryableSamples
 	}
 
 	if !hasStats {
@@ -773,10 +791,12 @@ func StatsMerge(resps []Response) *PrometheusResponseStats {
 
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
-	result := &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}}
+	result := &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{
+		PeakSamples:           peakSamples,
+		TotalQueryableSamples: totalSamples,
+	}}
 	for _, key := range keys {
 		result.Samples.TotalQueryableSamplesPerStep = append(result.Samples.TotalQueryableSamplesPerStep, output[key])
-		result.Samples.TotalQueryableSamples += output[key].Value
 	}
 
 	return result

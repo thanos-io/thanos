@@ -44,11 +44,11 @@ func (b *base) Unwrap() error {
 // Whenever error is printed with %+v format verb, stacktrace info gets dumped to the output.
 func (b *base) Format(s fmt.State, verb rune) {
 	if verb == 'v' && s.Flag('+') {
-		s.Write([]byte(formatErrorChain(b)))
+		_, _ = s.Write([]byte(formatErrorChain(b)))
 		return
 	}
 
-	s.Write([]byte(b.Error()))
+	_, _ = s.Write([]byte(b.Error()))
 }
 
 // Newf formats according to a format specifier and returns a new error with a stacktrace
@@ -118,7 +118,7 @@ func formatErrorChain(err error) string {
 // The functions `Is`, `As` & `Unwrap` provides a thin wrapper around the builtin errors
 // package in go. Just for sake of completeness and correct autocompletion behaviors from
 // IDEs they have been wrapped using functions instead of using variable to reference them
-// as first class functions (eg: var Is = errros.Is ).
+// as first class functions (eg: var Is = errors.Is ).
 
 // Is is a wrapper of built-in errors.Is. It reports whether any error in err's
 // chain matches target. The chain consists of err itself followed by the sequence

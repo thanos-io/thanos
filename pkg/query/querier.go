@@ -58,9 +58,30 @@ type QueryableCreator func(
 	seriesStatsReporter seriesStatsReporter,
 ) storage.Queryable
 
+type Options struct {
+	GroupReplicaPartialResponseStrategy bool
+	DeduplicationFunc                   string
+}
+
 // NewQueryableCreator creates QueryableCreator.
 // NOTE(bwplotka): Proxy assumes to be replica_aware, see thanos.store.info.StoreInfo.replica_aware field.
-func newQueryableCreator(
+func NewQueryableCreator(
+	logger log.Logger,
+	reg prometheus.Registerer,
+	proxy storepb.StoreServer,
+	maxConcurrentSelects int,
+	selectTimeout time.Duration,
+) QueryableCreator {
+	return NewQueryableCreatorWithOptions(
+		logger,
+		reg,
+		proxy,
+		maxConcurrentSelects,
+		selectTimeout,
+		Options{},
+	)
+}
+func NewQueryableCreatorWithOptions(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	proxy storepb.StoreServer,
@@ -101,46 +122,6 @@ func newQueryableCreator(
 	}
 }
 
-type Options struct {
-	GroupReplicaPartialResponseStrategy bool
-	EnableDedupMerge                    bool
-}
-
-func NewQueryableCreator(
-	logger log.Logger,
-	reg prometheus.Registerer,
-	proxy storepb.StoreServer,
-	maxConcurrentSelects int,
-	selectTimeout time.Duration,
-) QueryableCreator {
-	return NewQueryableCreatorWithOptions(
-		logger,
-		reg,
-		proxy,
-		maxConcurrentSelects,
-		selectTimeout,
-		Options{},
-	)
-}
-
-func NewQueryableCreatorWithOptions(
-	logger log.Logger,
-	reg prometheus.Registerer,
-	proxy storepb.StoreServer,
-	maxConcurrentSelects int,
-	selectTimeout time.Duration,
-	opts Options,
-) QueryableCreator {
-	return newQueryableCreator(
-		logger,
-		reg,
-		proxy,
-		maxConcurrentSelects,
-		selectTimeout,
-		opts,
-	)
-}
-
 type queryable struct {
 	logger               log.Logger
 	replicaLabels        []string
@@ -166,6 +147,7 @@ func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
 type querier struct {
 	logger                  log.Logger
 	mint, maxt              int64
+	deduplicationFunc       string
 	replicaLabels           []string
 	storeDebugMatchers      [][]*labels.Matcher
 	proxy                   storepb.StoreServer
@@ -177,7 +159,6 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
-	enableDedupMerge        bool
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -241,6 +222,7 @@ func newQuerierWithOpts(
 
 		mint:                    mint,
 		maxt:                    maxt,
+		deduplicationFunc:       opts.DeduplicationFunc,
 		replicaLabels:           replicaLabels,
 		storeDebugMatchers:      storeDebugMatchers,
 		proxy:                   proxy,
@@ -250,7 +232,6 @@ func newQuerierWithOpts(
 		skipChunks:              skipChunks,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
-		enableDedupMerge:        opts.EnableDedupMerge,
 	}
 }
 
@@ -401,6 +382,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	req := storepb.SeriesRequest{
 		MinTime:                 hints.Start,
 		MaxTime:                 hints.End,
+		Limit:                   int64(hints.Limit),
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              aggrs,
@@ -439,14 +421,11 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns,
 	)
 	f := hints.Func
-	if q.enableDedupMerge {
-		f = dedup.UseMergedSeries
-	}
-	return dedup.NewSeriesSet(set, f), resp.seriesSetStats, nil
+	return dedup.NewSeriesSet(set, f, q.deduplicationFunc), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.
-func (q *querier) LabelValues(ctx context.Context, name string, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
+func (q *querier) LabelValues(ctx context.Context, name string, hints *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "querier_label_values")
 	defer span.Finish()
 
@@ -457,12 +436,18 @@ func (q *querier) LabelValues(ctx context.Context, name string, matchers ...*lab
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
+
+	if hints == nil {
+		hints = &storage.LabelHints{}
+	}
+
 	req := &storepb.LabelValuesRequest{
 		Label:                   name,
 		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
+		Limit:                   int64(hints.Limit),
 	}
 
 	if q.isDedupEnabled() {
@@ -484,7 +469,7 @@ func (q *querier) LabelValues(ctx context.Context, name string, matchers ...*lab
 
 // LabelNames returns all the unique label names present in the block in sorted order constrained
 // by the given matchers.
-func (q *querier) LabelNames(ctx context.Context, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
+func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "querier_label_names")
 	defer span.Finish()
 
@@ -496,11 +481,16 @@ func (q *querier) LabelNames(ctx context.Context, matchers ...*labels.Matcher) (
 		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
 
+	if hints == nil {
+		hints = &storage.LabelHints{}
+	}
+
 	req := &storepb.LabelNamesRequest{
 		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
+		Limit:                   int64(hints.Limit),
 	}
 
 	if q.isDedupEnabled() {

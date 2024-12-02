@@ -270,7 +270,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	t.Run("query frontend splitting works for labels names API", func(t *testing.T) {
 		// LabelNames and LabelValues API should still work via query frontend.
-		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -289,7 +289,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -310,7 +310,7 @@ func TestQueryFrontend(t *testing.T) {
 	})
 
 	t.Run("query frontend splitting works for labels values API", func(t *testing.T) {
-		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -329,7 +329,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -357,6 +357,7 @@ func TestQueryFrontend(t *testing.T) {
 			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(predefTimestamp.Add(-time.Hour)),
 			timestamp.FromTime(predefTimestamp.Add(time.Hour)),
+			0,
 			func(res []map[string]string) bool {
 				if len(res) != 1 {
 					return false
@@ -395,6 +396,7 @@ func TestQueryFrontend(t *testing.T) {
 			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)),
 			timestamp.FromTime(predefTimestamp.Add(time.Hour)),
+			0,
 			func(res []map[string]string) bool {
 				if len(res) != 1 {
 					return false
@@ -762,7 +764,7 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	// make sure that we don't break cortex cache code.
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "cortex_cache_fetched_keys_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_added_new_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_added_new_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_added_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_misses_total"))
 

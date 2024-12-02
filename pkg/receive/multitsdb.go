@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,8 +20,6 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
-	gmetadata "google.golang.org/grpc/metadata"
-
 	"google.golang.org/grpc"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -64,6 +61,18 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
+
+	metricNameFilterEnabled bool
+}
+
+// MultiTSDBOption is a functional option for MultiTSDB.
+type MultiTSDBOption func(mt *MultiTSDB)
+
+// WithMetricNameFilterEnabled enables metric name filtering on TSDB clients.
+func WithMetricNameFilterEnabled() MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.metricNameFilterEnabled = true
+	}
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -78,12 +87,13 @@ func NewMultiTSDB(
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
+	options ...MultiTSDBOption,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
 
-	return &MultiTSDB{
+	mt := &MultiTSDB{
 		dataDir:               dataDir,
 		logger:                log.With(l, "component", "multi-tsdb"),
 		reg:                   reg,
@@ -96,69 +106,39 @@ func NewMultiTSDB(
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
 	}
+
+	for _, option := range options {
+		option(mt)
+	}
+
+	return mt
+}
+
+func (t *MultiTSDB) GetTenants() []string {
+	t.mtx.RLock()
+	tenants := make([]string, 0, len(t.tenants))
+	for tname := range t.tenants {
+		tenants = append(tenants, tname)
+	}
+	defer t.mtx.RUnlock()
+	return tenants
 }
 
 type localClient struct {
 	store *store.TSDBStore
+
+	client storepb.StoreClient
 }
 
-type seriesClientMapper struct {
-	ctx    context.Context
-	series []*storepb.Series
-
-	initiated bool
-
-	store *store.TSDBStore
-	req   storepb.SeriesRequest
-}
-
-func (m *seriesClientMapper) Recv() (*storepb.SeriesResponse, error) {
-	if !m.initiated {
-		series, err := m.store.SeriesLocal(m.ctx, &m.req)
-		if err != nil {
-			return nil, err
-		}
-		m.series = series
-		m.initiated = true
+func newLocalClient(store *store.TSDBStore) *localClient {
+	return &localClient{
+		store:  store,
+		client: storepb.ServerAsClient(store),
 	}
-	if len(m.series) == 0 {
-		return nil, io.EOF
-	}
-	s := m.series[0]
-	m.series = m.series[1:]
-	return storepb.NewSeriesResponse(s), nil
-}
-
-func (m *seriesClientMapper) Header() (gmetadata.MD, error) {
-	return nil, nil
-}
-
-func (m *seriesClientMapper) Trailer() gmetadata.MD {
-	return nil
-}
-
-func (m *seriesClientMapper) CloseSend() error {
-	return nil
-}
-
-func (m *seriesClientMapper) Context() context.Context {
-	return m.ctx
-}
-
-func (m *seriesClientMapper) RecvMsg(_ interface{}) error {
-	return nil
-}
-
-func (m *seriesClientMapper) SendMsg(_ interface{}) error {
-	return nil
-}
-
-func (l *localClient) Info(ctx context.Context, in *storepb.InfoRequest, opts ...grpc.CallOption) (*storepb.InfoResponse, error) {
-	return l.store.Info(ctx, in)
 }
 
 func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &seriesClientMapper{ctx: ctx, store: l.store, req: *in}, nil
+	return l.client.Series(ctx, in, opts...)
 }
 
 func (l *localClient) LabelNames(ctx context.Context, in *storepb.LabelNamesRequest, opts ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
@@ -169,18 +149,16 @@ func (l *localClient) LabelValues(ctx context.Context, in *storepb.LabelValuesRe
 	return l.store.LabelValues(ctx, in)
 }
 
-func newLocalClient(store *store.TSDBStore) *localClient {
-	return &localClient{
-		store: store,
-	}
-}
-
 func (l *localClient) GroupKey() string {
 	return ""
 }
 
 func (l *localClient) ReplicaKey() string {
 	return ""
+}
+
+func (l *localClient) Matches(matchers []*labels.Matcher) bool {
+	return l.store.Matches(matchers)
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -274,17 +252,11 @@ func (t *tenant) readyStorage() *ReadyStorage {
 	return t.readyS
 }
 
-func (t *tenant) store() *store.TSDBStore {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	return t.storeTSDB
-}
-
 func (t *tenant) client() store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	tsdbStore := t.store()
+	tsdbStore := t.storeTSDB
 	if tsdbStore == nil {
 		return nil
 	}
@@ -312,6 +284,9 @@ func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *ship
 }
 
 func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB) {
+	if storeTSDB == nil && t.storeTSDB != nil {
+		t.storeTSDB.Close()
+	}
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
@@ -696,6 +671,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
 	opts.BlocksToDelete = tenant.blocksToDelete
+	opts.EnableDelayedCompaction = true
 	tenant.blocksToDeleteFn = tsdb.DefaultBlocksToDelete
 
 	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL
@@ -731,7 +707,11 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+	options := []store.TSDBStoreOption{}
+	if t.metricNameFilterEnabled {
+		options = append(options, store.WithCuckooMetricNameStoreFilter())
+	}
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

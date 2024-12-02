@@ -74,6 +74,8 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
+  chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -117,6 +119,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not

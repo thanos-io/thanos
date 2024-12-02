@@ -26,6 +26,24 @@ If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the si
 
 This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
 
+### Replication protocols
+
+By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'N Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
+
+In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+
+```json
+[
+    {
+        "endpoints": [
+          {"address": "node-1:10901", "capnproto_address": "node-1:19391"},
+          {"address": "node-2:10901", "capnproto_address": "node-2:19391"},
+          {"address": "node-3:10901", "capnproto_address": "node-3:19391"}
+        ]
+    }
+]
+```
+
 ### Hashring management and autoscaling in Kubernetes
 
 The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-controller) project aims to automate hashring management when running Thanos in Kubernetes. In combination with the Ketama hashring algorithm, this controller can also be used to keep hashrings up to date when Receivers are scaled automatically using an HPA or [Keda](https://keda.sh/).
@@ -94,6 +112,8 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
+  chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -307,6 +327,26 @@ This number of workers is controlled by `--receive.forward.async-workers=`.
 
 Please see the metric `thanos_receive_forward_delay_seconds` to see if you need to increase the number of forwarding workers.
 
+## Quorum
+
+The following formula is used for calculating quorum:
+
+```go mdox-exec="sed -n '1012,1022p' pkg/receive/handler.go"
+// writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
+func (h *Handler) writeQuorum() int {
+	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
+	// would need to succeed all the time. Another way to think about it is when migrating
+	// from a Sidecar based setup with 2 Prometheus nodes to a Receiver setup, we want to
+	// keep the same guarantees.
+	if h.options.ReplicationFactor == 2 {
+		return 1
+	}
+	return int((h.options.ReplicationFactor / 2) + 1)
+}
+```
+
+So, if the replication factor is 2 then at least one write must succeed. With RF=3, two writes must succeed, and so on.
+
 ## Flags
 
 ```$ mdox-exec="thanos receive --help"
@@ -320,6 +360,9 @@ Flags:
                                  detected maximum container or system memory.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --enable-feature= ...      Comma separated experimental feature names
+                                 to enable. The current list of features is
+                                 metric-names-filter.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -338,6 +381,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
@@ -369,6 +417,8 @@ Flags:
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --receive.capnproto-address="0.0.0.0:19391"
+                                 Address for the Cap'n Proto server.
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
@@ -415,6 +465,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.replication-protocol=protobuf
+                                 The protocol to use for replicating
+                                 remote-write requests. One of protobuf,
+                                 capnproto
       --receive.split-tenant-label-name=""
                                  Label name through which the request will
                                  be split into multiple tenants. This takes
@@ -460,6 +514,10 @@ Flags:
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
                                  disable TLS.
+      --remote-write.server-tls-min-version="1.3"
+                                 TLS version for the gRPC server, leave blank
+                                 to default to TLS 1.3, allow values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
@@ -520,13 +578,12 @@ Flags:
                                  section in the Receive documentation:
                                  https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
       --tsdb.too-far-in-future.time-window=0s
-                                 [EXPERIMENTAL] Configures the allowed time
-                                 window for ingesting samples too far in the
-                                 future. Disabled (0s) by defaultPlease note
-                                 enable this flag will reject samples in the
-                                 future of receive local NTP time + configured
-                                 duration due to clock skew in remote write
-                                 clients.
+                                 Configures the allowed time window for
+                                 ingesting samples too far in the future.
+                                 Disabled (0s) by defaultPlease note enable
+                                 this flag will reject samples in the future of
+                                 receive local NTP time + configured duration
+                                 due to clock skew in remote write clients.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --version                  Show application version.
 

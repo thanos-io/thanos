@@ -61,7 +61,7 @@ func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
 
 // HistogramProtoToHistogram extracts a (normal integer) Histogram from the
 // provided proto message. The caller has to make sure that the proto message
-// represents an interger histogram and not a float histogram.
+// represents an integer histogram and not a float histogram.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L626-L645
 func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 	if hp.IsFloatHistogram() {

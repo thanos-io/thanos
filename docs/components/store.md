@@ -33,6 +33,8 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
+  chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -110,6 +112,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -373,6 +380,12 @@ The **required** settings are:
 
 - `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md#dns-service-discovery) provider. If your cluster supports auto-discovery, you should use the flag `auto_discovery` instead and only point to *one of* the memcached servers. This typically means that there should be only one address specified that resolves to any of the alive memcached servers. Use this for Amazon ElastiCache and other similar services.
 
+**NOTE**: The Memcached client uses a jump hash algorithm to shard cached entries across a cluster of Memcached servers. For this reason, you should make sure memcached servers are not behind any kind of load balancer and their address is configured so that servers are added/removed to the end of the list whenever a scale up/down occurs. For example, if you’re running Memcached in Kubernetes, you may:
+
+1. Deploy your Memcached cluster using a [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
+2. Create a [headless](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services) service for Memcached StatefulSet
+3. Configure the Thanos's memcached `addresses` using the `dnssrvnoa+` [DNS service discovery](../service-discovery.md#dns-service-discovery)
+
 While the remaining settings are **optional**:
 
 - `timeout`: the socket read/write timeout.
@@ -380,7 +393,7 @@ While the remaining settings are **optional**:
 - `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
 - `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
 - `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
-- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are split into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
@@ -563,6 +576,33 @@ In the `peers` section it is possible to use the prefix form to automatically lo
 Note that there must be no trailing slash in the `peers` configuration i.e. one of the strings must be identical to `self_url` and others should have the same form. Without this, loading data from peers may fail.
 
 If timeout is set to zero then there is no timeout for fetching and fetching's lifetime is equal to the lifetime to the original request's lifetime. It is recommended to keep it higher than zero. It is generally preferred to keep this value higher because the fetching operation potentially includes loading of data from remote object storage.
+
+## Hedged Requests
+
+Thanos Store Gateway supports `hedged requests` to enhance performance and reliability, particularly in high-latency environments. This feature addresses `long-tail latency issues` that can occur between the Thanos Store Gateway and an external cache, reducing the impact of slower response times on overall performance.
+
+The configuration options for hedged requests allow for tuning based on latency tolerance and cost considerations, as some providers may charge per request.
+
+In the `bucket.yml` file, you can specify the following fields under `hedging_config`:
+
+- `enabled`: bool to enable hedged requests.
+- `up_to`: maximum number of hedged requests allowed for each initial request.
+  - **Purpose**: controls the redundancy level of hedged requests to improve response times.
+  - **Cost vs. Benefit**: increasing up_to can reduce latency but may increase costs, as some providers charge per request. Higher values provide diminishing returns on latency beyond a certain level.
+- `quantile`: latency threshold, specified as a quantile (e.g., percentile), which determines when additional hedged requests should be sent.
+  - **Purpose**: controls when hedged requests are triggered based on response time distribution.
+  - **Cost vs. Benefit**: lower quantile (e.g., 0.7) initiates hedged requests sooner, potentially raising costs while lowering latency variance. A higher quantile (e.g., 0.95) will initiate hedged requests later, reducing cost by limiting redundancy.
+
+By default, `hedging_config` is set as follows:
+
+```yaml
+hedging_config:
+  enabled: false
+  up_to: 3
+  quantile: 0.9
+```
+
+This configuration sends up to three additional requests if the initial request response time exceeds the 90th percentile.
 
 ## Index Header
 

@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -39,6 +40,8 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	logger := log.NewLogfmtLogger(os.Stderr)
@@ -416,6 +419,8 @@ func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarD
 }
 
 func TestMultiTSDBPrune(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		bucket          objstore.Bucket
@@ -462,10 +467,14 @@ func TestMultiTSDBPrune(t *testing.T) {
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+
+			g := sync.WaitGroup{}
+			defer func() { cancel(); g.Wait() }()
 
 			if test.bucket != nil {
+				g.Add(1)
 				go func() {
+					defer g.Done()
 					testutil.Ok(t, syncTSDBs(ctx, m, 10*time.Millisecond))
 				}()
 			}
@@ -507,6 +516,8 @@ func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error 
 }
 
 func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -531,7 +542,50 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 	testutil.Equals(t, 1, len(m.TSDBLocalClients()))
 }
 
+func TestMultiTSDBAddNewTenant(t *testing.T) {
+	t.Parallel()
+	const iterations = 10
+	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
+	for i := 0; i < iterations; i++ {
+		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
+			dir := t.TempDir()
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				objstore.NewInMemBucket(),
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			concurrency := 50
+			var wg sync.WaitGroup
+			for i := 0; i < concurrency; i++ {
+				wg.Add(1)
+				// simulate remote write with new tenant concurrently
+				go func(i int) {
+					defer wg.Done()
+					testutil.Ok(t, appendSample(m, fmt.Sprintf("tenant-%d", i), time.UnixMilli(int64(10))))
+				}(i)
+				// simulate read request concurrently
+				go func() {
+					m.TSDBLocalClients()
+				}()
+			}
+			wg.Wait()
+			testutil.Equals(t, concurrency, len(m.TSDBLocalClients()))
+		})
+	}
+}
+
 func TestAlignedHeadFlush(t *testing.T) {
+	t.Parallel()
+
 	hourInSeconds := int64(1 * 60 * 60)
 
 	tests := []struct {
@@ -613,6 +667,8 @@ func TestAlignedHeadFlush(t *testing.T) {
 }
 
 func TestMultiTSDBStats(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tenants       []string
@@ -671,6 +727,8 @@ func TestMultiTSDBStats(t *testing.T) {
 
 // Regression test for https://github.com/thanos-io/thanos/issues/6047.
 func TestMultiTSDBWithNilStore(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -712,6 +770,8 @@ func (s *slowClient) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 }
 
 func TestProxyLabelValues(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	m := NewMultiTSDB(
 		dir, nil, prometheus.NewRegistry(), &tsdb.Options{
@@ -844,6 +904,8 @@ func BenchmarkMultiTSDB(b *testing.B) {
 }
 
 func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
+	t.Parallel()
+
 	tenant := &tenant{
 		mtx: &sync.RWMutex{},
 	}

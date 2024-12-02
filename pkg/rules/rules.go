@@ -70,7 +70,9 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 		}
 	}
 
-	resp.groups = filterRules(resp.groups, matcherSets)
+	resp.groups = filterRulesByMatchers(resp.groups, matcherSets)
+	resp.groups = filterRulesByNamesAndFile(resp.groups, req.RuleName, req.RuleGroup, req.File)
+
 	// TODO(bwplotka): Move to SortInterface with equal method and heap.
 	resp.groups = dedupGroups(resp.groups)
 	for _, g := range resp.groups {
@@ -80,8 +82,57 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 	return &rulespb.RuleGroups{Groups: resp.groups}, resp.warnings, nil
 }
 
-// filterRules filters rules in a group according to given matcherSets.
-func filterRules(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matcher) []*rulespb.RuleGroup {
+// filters rules by group name, rule name or file.
+func filterRulesByNamesAndFile(ruleGroups []*rulespb.RuleGroup, ruleName []string, ruleGroup []string, file []string) []*rulespb.RuleGroup {
+	if len(ruleName) == 0 && len(ruleGroup) == 0 && len(file) == 0 {
+		return ruleGroups
+	}
+
+	queryFormToSet := func(values []string) map[string]struct{} {
+		set := make(map[string]struct{}, len(values))
+		for _, v := range values {
+			set[v] = struct{}{}
+		}
+		return set
+	}
+
+	rnSet := queryFormToSet(ruleName)
+	rgSet := queryFormToSet(ruleGroup)
+	fSet := queryFormToSet(file)
+
+	rgs := make([]*rulespb.RuleGroup, 0, len(ruleGroups))
+	for _, grp := range ruleGroups {
+		if len(rgSet) > 0 {
+			if _, ok := rgSet[grp.Name]; !ok {
+				continue
+			}
+		}
+
+		if len(fSet) > 0 {
+			if _, ok := fSet[grp.File]; !ok {
+				continue
+			}
+		}
+
+		if len(rnSet) > 0 {
+			ruleCount := 0
+			for _, r := range grp.Rules {
+				if _, ok := rnSet[r.GetName()]; ok {
+					grp.Rules[ruleCount] = r
+					ruleCount++
+				}
+			}
+			grp.Rules = grp.Rules[:ruleCount]
+		}
+		if len(grp.Rules) > 0 {
+			rgs = append(rgs, grp)
+		}
+	}
+	return rgs
+}
+
+// filterRulesbyMatchers filters rules in a group according to given matcherSets.
+func filterRulesByMatchers(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matcher) []*rulespb.RuleGroup {
 	if len(matcherSets) == 0 {
 		return ruleGroups
 	}

@@ -42,7 +42,7 @@ const (
 	PartialResponseStrategy_ABORT PartialResponseStrategy = 1
 	/// A group has one or more replicas. A replica has one or more endpoints.
 	/// If a group has one replica, the replica can only tolerate one endpoint failure.
-	/// If a group has more than one replicas, the group can tolerate any number of endpoint failures wihtin one replica. It doens't
+	/// If a group has more than one replicas, the group can tolerate any number of endpoint failures within one replica. It doesn't
 	///   tolerate endpoint failures across replicas.
 	PartialResponseStrategy_GROUP_REPLICA PartialResponseStrategy = 2
 )

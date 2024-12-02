@@ -16,6 +16,8 @@ import (
 )
 
 func TestRmLabelsCornerCases(t *testing.T) {
+	t.Parallel()
+
 	testutil.Equals(t, rmLabels(labelsFromStrings("aa", "bb"), map[string]struct{}{
 		"aa": {},
 	}), labels.Labels{})
@@ -25,6 +27,8 @@ func TestRmLabelsCornerCases(t *testing.T) {
 }
 
 func TestProxyResponseTreeSort(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		title string
 		input []respSet
@@ -35,6 +39,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 			input: []respSet{
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
@@ -43,6 +48,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 				},
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
@@ -62,6 +68,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 			input: []respSet{
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
@@ -71,6 +78,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 				},
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
@@ -91,6 +99,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 			input: []respSet{
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
@@ -100,6 +109,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 				},
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
@@ -120,6 +130,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 			input: []respSet{
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
@@ -129,6 +140,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 				},
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "1", "c", "3")),
@@ -149,6 +161,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 			input: []respSet{
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
@@ -158,6 +171,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 				},
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
@@ -178,6 +192,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 			input: []respSet{
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
@@ -188,6 +203,7 @@ func TestProxyResponseTreeSort(t *testing.T) {
 				},
 				&eagerRespSet{
 					closeSeries: func() {},
+					cl:          nopClientSendCloser{},
 					wg:          &sync.WaitGroup{},
 					bufferedResponses: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("cluster", "beam-platform", "instance", "10.70.13.3:15692", "prometheus", "telemetry/observe-prometheus", "receive", "true", "tenant_id", "default-tenant")),
@@ -219,7 +235,15 @@ func TestProxyResponseTreeSort(t *testing.T) {
 	}
 }
 
+type nopClientSendCloser struct {
+	storepb.Store_SeriesClient
+}
+
+func (c nopClientSendCloser) CloseSend() error { return nil }
+
 func TestSortWithoutLabels(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		input       []*storepb.SeriesResponse
 		exp         []*storepb.SeriesResponse
@@ -341,6 +365,7 @@ func BenchmarkKWayMerge(b *testing.B) {
 		for j := 0; j < 1000; j++ {
 			respSets = append(respSets, &eagerRespSet{
 				closeSeries: func() {},
+				cl:          nopClientSendCloser{},
 				wg:          &sync.WaitGroup{},
 				bufferedResponses: []*storepb.SeriesResponse{
 					storeSeriesResponse(b, labelsFromStrings("a", "1", "b", fmt.Sprintf("replica-%d", j), "c", "3")),

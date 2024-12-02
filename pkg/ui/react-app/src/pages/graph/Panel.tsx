@@ -425,6 +425,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     }
   };
 
+  handleTimeRangeSelection = (startTime: number, endTime: number) => {
+    this.setOptions({ range: endTime - startTime, endTime: endTime });
+  };
+
   getExplainOutput = (): void => {
     //We need to pass the same parameters as query endpoints, to the explain endpoints.
     const endTime = this.getEndTime().valueOf() / 1000;
@@ -742,6 +746,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                       data={this.state.data}
                       stacked={options.stacked}
                       useLocalTime={this.props.useLocalTime}
+                      handleTimeRangeSelection={this.handleTimeRangeSelection}
                       lastQueryParams={this.state.lastQueryParams}
                     />
                   </>
