@@ -401,6 +401,10 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			testutil.Assert(t, len(meta.Thanos.SegmentFiles) > 0, "compacted blocks have segment files set")
 			// Only one chunk will be generated in that block, so we won't set chunk size.
 			testutil.Assert(t, meta.Thanos.IndexStats.SeriesMaxSize > 0, "compacted blocks have index stats series max size set")
+			testutil.Assert(t, meta.Thanos.IndexStats.SeriesP90Size > 0, "compacted blocks have index stats series P90 size set")
+			testutil.Assert(t, meta.Thanos.IndexStats.SeriesP99Size > 0, "compacted blocks have index stats series P99 size set")
+			testutil.Assert(t, meta.Thanos.IndexStats.SeriesP999Size > 0, "compacted blocks have index stats series P999 size set")
+			testutil.Assert(t, meta.Thanos.IndexStats.SeriesP9999Size > 0, "compacted blocks have index stats series P9999 size set")
 		}
 	})
 }

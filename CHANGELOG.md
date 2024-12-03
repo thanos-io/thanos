@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8000](https://github.com/thanos-io/thanos/pull/8000) Query: Bump promql-engine, pass partial response through options
 - [#7353](https://github.com/thanos-io/thanos/pull/7353) [#8045](https://github.com/thanos-io/thanos/pull/8045) Receiver/StoreGateway: Add `--matcher-cache-size` option to enable caching for regex matchers in series calls.
 - [#8017](https://github.com/thanos-io/thanos/pull/8017) Store Gateway: Use native histogram for binary reader load and download duration and fixed download duration metric. #8017
+- [#7957](https://github.com/thanos-io/thanos/pull/7957) Compact, Store Gateway: Compactor will set series p90, p99, p999 and p9999 size in `meta.json` file. Lazy expanded postings will choose estimated series size based on `estimated-series-size-stat` flag.
 
 ### Changed
 

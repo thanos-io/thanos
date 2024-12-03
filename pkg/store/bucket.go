@@ -74,6 +74,16 @@ const (
 	ChunksTouched
 )
 
+type BlockSeriesSizeStat string
+
+const (
+	BlockSeriesSizeMax   BlockSeriesSizeStat = "max"
+	BlockSeriesSizeP90   BlockSeriesSizeStat = "p90"
+	BlockSeriesSizeP99   BlockSeriesSizeStat = "p99"
+	BlockSeriesSizeP999  BlockSeriesSizeStat = "p999"
+	BlockSeriesSizeP9999 BlockSeriesSizeStat = "p9999"
+)
+
 const (
 	// MaxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
 	// for precalculating the number of samples that we may have to retrieve and decode for any given query
@@ -446,8 +456,14 @@ type BucketStore struct {
 
 	sortingStrategy sortingStrategy
 
+	// blockEstimatedMaxSeriesFunc is a function which estimates max series size of a block for series fetch purpose.
+	// We want to use max series size as metric to avoid series re-fetch.
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
+	// blockEstimatedSeriesSizeFunc is a function which estimates series size of a block based on configured strategy.
+	// It can be either max, P90, P99, P999, etc series size of the block. It can be used for the purpose of lazy posting
+	// series size estimation when there is no strict requirement to use max series size of the block.
+	blockEstimatedSeriesSizeFunc BlockEstimator
 
 	indexHeaderLazyDownloadStrategy indexheader.LazyDownloadIndexHeaderFunc
 
@@ -568,6 +584,12 @@ func WithSeriesBatchSize(seriesBatchSize int) BucketStoreOption {
 func WithBlockEstimatedMaxSeriesFunc(f BlockEstimator) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.blockEstimatedMaxSeriesFunc = f
+	}
+}
+
+func WithBlockEstimatedSeriesSizeFunc(f BlockEstimator) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.blockEstimatedSeriesSizeFunc = f
 	}
 }
 
@@ -881,6 +903,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		indexHeaderReader,
 		s.partitioner,
 		s.blockEstimatedMaxSeriesFunc,
+		s.blockEstimatedSeriesSizeFunc,
 		s.blockEstimatedMaxChunkFunc,
 	)
 	if err != nil {
@@ -2434,6 +2457,10 @@ type bucketBlock struct {
 
 	estimatedMaxChunkSize  int
 	estimatedMaxSeriesSize int
+
+	// estimatedSeriesSize is an estimated series size used in lazy postings. It can be a different metric to
+	// estimatedMaxSeriesSize as when fetching series we need to use series max size to avoid re-fetch.
+	estimatedSeriesSize int
 }
 
 func newBucketBlock(
@@ -2447,11 +2474,16 @@ func newBucketBlock(
 	indexHeadReader indexheader.Reader,
 	p Partitioner,
 	maxSeriesSizeFunc BlockEstimator,
+	seriesSizeFunc BlockEstimator,
 	maxChunkSizeFunc BlockEstimator,
 ) (b *bucketBlock, err error) {
 	maxSeriesSize := EstimatedMaxSeriesSize
 	if maxSeriesSizeFunc != nil {
 		maxSeriesSize = int(maxSeriesSizeFunc(*meta))
+	}
+	seriesSize := maxSeriesSize
+	if seriesSizeFunc != nil {
+		seriesSize = int(seriesSizeFunc(*meta))
 	}
 	maxChunkSize := EstimatedMaxChunkSize
 	if maxChunkSizeFunc != nil {
@@ -2473,6 +2505,7 @@ func newBucketBlock(
 		extLset:                extLset,
 		relabelLabels:          relabelLabels,
 		estimatedMaxSeriesSize: maxSeriesSize,
+		estimatedSeriesSize:    seriesSize,
 		estimatedMaxChunkSize:  maxChunkSize,
 	}
 

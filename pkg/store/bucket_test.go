@@ -225,7 +225,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 			},
 		},
 	}
-	b, _ := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
+	b, _ := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil, nil)
 	ms := []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
 	}
@@ -285,7 +285,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
+	b, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -1194,7 +1194,14 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 		Labels:     labels.FromStrings("ext1", "1").Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: 0},
 		Source:     metadata.TestSource,
-		IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
+		IndexStats: metadata.IndexStats{
+			SeriesMaxSize:   stats.SeriesMaxSize,
+			SeriesP90Size:   stats.SeriesP90Size,
+			SeriesP99Size:   stats.SeriesP99Size,
+			SeriesP999Size:  stats.SeriesP999Size,
+			SeriesP9999Size: stats.SeriesP9999Size,
+			ChunkMaxSize:    stats.ChunkMaxSize,
+		},
 	}, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(ctx, logger, bkt, bdir, metadata.NoneFunc))
@@ -1504,8 +1511,12 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 			Downsample: metadata.ThanosDownsample{Resolution: 0},
 			Source:     metadata.TestSource,
 			IndexStats: metadata.IndexStats{
-				SeriesMaxSize: stats.SeriesMaxSize,
-				ChunkMaxSize:  stats.ChunkMaxSize,
+				SeriesMaxSize:   stats.SeriesMaxSize,
+				SeriesP90Size:   stats.SeriesP90Size,
+				SeriesP99Size:   stats.SeriesP99Size,
+				SeriesP999Size:  stats.SeriesP999Size,
+				SeriesP9999Size: stats.SeriesP9999Size,
+				ChunkMaxSize:    stats.ChunkMaxSize,
 			},
 		}
 
@@ -2777,7 +2788,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
+	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil, nil)
 	testutil.Ok(b, err)
 
 	b.ResetTimer()
@@ -2866,7 +2877,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
+	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil, nil)
 	testutil.Ok(b, err)
 	return blk, blockMeta
 }
@@ -3554,6 +3565,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 			nil,
 			r,
 			NewGapBasedPartitioner(PartitionerMaxGapSize),
+			nil,
 			nil,
 			nil,
 		)

@@ -970,7 +970,14 @@ func TestBucketStore_Acceptance(t *testing.T) {
 					Labels:     labels.NewBuilder(extLset).Set("replica", replica).Labels().Map(),
 					Downsample: metadata.ThanosDownsample{Resolution: 0},
 					Source:     metadata.TestSource,
-					IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
+					IndexStats: metadata.IndexStats{
+						SeriesMaxSize:   stats.SeriesMaxSize,
+						SeriesP90Size:   stats.SeriesP90Size,
+						SeriesP99Size:   stats.SeriesP99Size,
+						SeriesP999Size:  stats.SeriesP999Size,
+						SeriesP9999Size: stats.SeriesP9999Size,
+						ChunkMaxSize:    stats.ChunkMaxSize,
+					},
 				}, nil)
 				testutil.Ok(tt, err)
 
@@ -1115,7 +1122,14 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 					Labels:     extLset.Map(),
 					Downsample: metadata.ThanosDownsample{Resolution: 0},
 					Source:     metadata.TestSource,
-					IndexStats: metadata.IndexStats{SeriesMaxSize: stats.SeriesMaxSize, ChunkMaxSize: stats.ChunkMaxSize},
+					IndexStats: metadata.IndexStats{
+						SeriesMaxSize:   stats.SeriesMaxSize,
+						SeriesP90Size:   stats.SeriesP90Size,
+						SeriesP99Size:   stats.SeriesP99Size,
+						SeriesP999Size:  stats.SeriesP999Size,
+						SeriesP9999Size: stats.SeriesP9999Size,
+						ChunkMaxSize:    stats.ChunkMaxSize,
+					},
 				}, nil)
 				testutil.Ok(tt, err)
 
