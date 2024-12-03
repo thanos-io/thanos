@@ -100,8 +100,12 @@ type Thanos struct {
 }
 
 type IndexStats struct {
-	SeriesMaxSize int64 `json:"series_max_size,omitempty"`
-	ChunkMaxSize  int64 `json:"chunk_max_size,omitempty"`
+	SeriesMaxSize   int64 `json:"series_max_size,omitempty"`
+	SeriesP90Size   int64 `json:"series_p90_size,omitempty"`
+	SeriesP99Size   int64 `json:"series_p99_size,omitempty"`
+	SeriesP999Size  int64 `json:"series_p999_size,omitempty"`
+	SeriesP9999Size int64 `json:"series_p99999_size,omitempty"`
+	ChunkMaxSize    int64 `json:"chunk_max_size,omitempty"`
 }
 
 func (m *Thanos) ParseExtensions(v any) (any, error) {
