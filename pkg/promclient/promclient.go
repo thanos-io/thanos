@@ -787,7 +787,9 @@ func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*la
 	q.Add("match[]", storepb.PromMatchersToString(matchers...))
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	q.Add("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
 	u.RawQuery = q.Encode()
 
 	var m struct {
@@ -809,7 +811,9 @@ func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers [
 	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	q.Add("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
 	u.RawQuery = q.Encode()
 
 	var m struct {
@@ -830,7 +834,9 @@ func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label str
 	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	q.Add("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
 	u.RawQuery = q.Encode()
 
 	var m struct {
@@ -898,7 +904,6 @@ func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric
 	if metric != "" {
 		q.Add("metric", metric)
 	}
-	// We only set limit when it is >= 0.
 	if limit >= 0 {
 		q.Add("limit", strconv.Itoa(limit))
 	}
