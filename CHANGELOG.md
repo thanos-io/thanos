@@ -30,6 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7893](https://github.com/thanos-io/thanos/pull/7893) Sidecar: Fix retrieval of external labels for Prometheus v3.0.0.
 - [#7903](https://github.com/thanos-io/thanos/pull/7903) Query: Fix panic on regex store matchers.
 - [#7915](https://github.com/thanos-io/thanos/pull/7915) Store: Close block series client at the end to not reuse chunk buffer
+- [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants, see [issue-7892](https://github.com/thanos-io/thanos/issues/7892).
 
 ### Added
 
