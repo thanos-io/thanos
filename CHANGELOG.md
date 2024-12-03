@@ -8,6 +8,20 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 03.12.2024
+
+### Fixed
+
+- [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
+- [#7945](https://github.com/thanos-io/thanos/pull/7945) Receive: Capnproto - use segment from existing message.
+- [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants at once.
+
+### Added
+
+### Changed
+
+### Removed
+
 ## [v0.37.0](https://github.com/thanos-io/thanos/tree/release-0.37) - 25.11.2024
 
 ### Fixed
@@ -19,7 +33,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7658](https://github.com/thanos-io/thanos/pull/7658) Store: Fix panic because too small buffer in pool.
 - [#7643](https://github.com/thanos-io/thanos/pull/7643) Receive: fix thanos_receive_write_{timeseries,samples} stats
 - [#7644](https://github.com/thanos-io/thanos/pull/7644) fix(ui): add null check to find overlapping blocks logic
-- [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
 - [#7814](https://github.com/thanos-io/thanos/pull/7814) Store: label_values: if matchers contain **name**=="something", do not add <labelname> != "" to fetch less postings.
 - [#7679](https://github.com/thanos-io/thanos/pull/7679) Query: respect store.limit.* flags when evaluating queries
 - [#7821](https://github.com/thanos-io/thanos/pull/7821) Query/Receive: Fix coroutine leak introduced in https://github.com/thanos-io/thanos/pull/7796.
