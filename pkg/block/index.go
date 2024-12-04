@@ -229,7 +229,8 @@ func newSketch() *sketch {
 
 func (s *sketch) Add(v int64) {
 	s.cnt++
-	s.s.Add(float64(v))
+	// Impossible to happen since v should > 0.
+	_ = s.s.Add(float64(v))
 }
 
 func (s *sketch) Avg() int64 {

@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#7907](https://github.com/thanos-io/thanos/pull/7907) Receive: Add `--receive.grpc-service-config` flag to configure gRPC service config for the receivers.
+- [#7957](https://github.com/thanos-io/thanos/pull/7957) Compact, Store Gateway: Compactor will set series p90, p99, p999 and p9999 size in `meta.json` file. Lazy expanded postings will choose estimated series size based on `estimated-series-size-stat` flag.
 
 ### Changed
 
