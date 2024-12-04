@@ -6,6 +6,8 @@ package writecapnp
 import (
 	"capnproto.org/go/capnp/v3"
 
+	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -46,7 +48,7 @@ func Build(tenant string, tsreq []prompb.TimeSeries) (WriteRequest, error) {
 
 func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error {
 	if err := wr.SetTenant(tenant); err != nil {
-		return err
+		return errors.Wrap(err, "set tenant")
 	}
 
 	series, err := wr.NewTimeSeries(int32(len(tsreq)))
@@ -59,27 +61,30 @@ func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error 
 
 		lblsc, err := tsc.NewLabels(int32(len(ts.Labels)))
 		if err != nil {
-			return err
+			return errors.Wrap(err, "new labels")
 		}
 		if err := marshalLabels(lblsc, ts.Labels, builder); err != nil {
-			return err
+			return errors.Wrap(err, "marshal labels")
 		}
 		if err := marshalSamples(tsc, ts.Samples); err != nil {
-			return err
+			return errors.Wrap(err, "marshal samples")
 		}
 		if err := marshalHistograms(tsc, ts.Histograms); err != nil {
-			return err
+			return errors.Wrap(err, "marshal histograms")
 		}
 		if err := marshalExemplars(tsc, ts.Exemplars, builder); err != nil {
-			return err
+			return errors.Wrap(err, "marshal exemplars")
 		}
 	}
 
 	symbols, err := wr.NewSymbols()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "new symbols")
 	}
-	return marshalSymbols(builder, symbols)
+	if err := marshalSymbols(builder, symbols); err != nil {
+		return errors.Wrap(err, "marshal symbols")
+	}
+	return nil
 }
 
 func marshalSymbols(builder *symbolsBuilder, symbols Symbols) error {

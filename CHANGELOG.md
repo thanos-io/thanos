@@ -8,6 +8,22 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 03.12.2024
+
+### Fixed
+
+- [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
+- [#7945](https://github.com/thanos-io/thanos/pull/7945) Receive: Capnproto - use segment from existing message.
+- [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants, see [issue-7892](https://github.com/thanos-io/thanos/issues/7892).
+- [#7954](https://github.com/thanos-io/thanos/pull/7954) Sidecar: Ensure limit param is positive for compatibility with older Prometheus.
+- [#7953](https://github.com/thanos-io/thanos/pull/7953) Query: Update promql-engine for subquery avg fix.
+
+### Added
+
+### Changed
+
+### Removed
+
 ## [v0.37.0](https://github.com/thanos-io/thanos/tree/release-0.37) - 25.11.2024
 
 ### Fixed

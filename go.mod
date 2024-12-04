@@ -62,7 +62,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
 	github.com/thanos-io/objstore v0.0.0-20241111205755-d1dd89d41f97
-	github.com/thanos-io/promql-engine v0.0.0-20241106100125-097e6e9f425a
+	github.com/thanos-io/promql-engine v0.0.0-20241203103240-2f49f80c7c68
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -112,7 +112,7 @@ require (
 )
 
 require (
-	capnproto.org/go/capnp/v3 v3.0.1-alpha.2.0.20240830165715-46ccd63a72af
+	capnproto.org/go/capnp/v3 v3.0.0-alpha.30
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
@@ -133,7 +133,6 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
 	github.com/cilium/ebpf v0.11.0 // indirect
-	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381 // indirect
 	github.com/containerd/cgroups/v3 v3.0.3 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/elastic/go-licenser v0.3.1 // indirect
@@ -167,6 +166,7 @@ require (
 	k8s.io/client-go v0.31.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8 // indirect
+	zenhack.net/go/util v0.0.0-20230414204917-531d38494cf5 // indirect
 )
 
 require (
