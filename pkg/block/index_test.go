@@ -5,6 +5,7 @@ package block
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"math"
 	"os"
 	"path/filepath"
@@ -95,4 +96,23 @@ func TestGatherIndexHealthStatsReturnsOutOfOrderChunksErr(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, stats.OutOfOrderChunks)
 	testutil.NotOk(t, stats.OutOfOrderChunksErr())
+}
+
+func TestSketch(t *testing.T) {
+	s := newSketch()
+	// Empty.
+	require.Equal(t, int64(0), s.cnt)
+	require.Equal(t, int64(0), s.Max())
+	require.Equal(t, int64(0), s.Min())
+	require.Equal(t, int64(0), s.Avg())
+	require.Equal(t, int64(0), s.Quantile(0.9))
+
+	s.Add(1)
+	s.Add(2)
+	s.Add(3)
+	require.Equal(t, int64(3), s.cnt)
+	require.Equal(t, int64(3), s.Max())
+	require.Equal(t, int64(1), s.Min())
+	require.Equal(t, int64(2), s.Avg())
+	require.Equal(t, int64(2), s.Quantile(0.9))
 }
