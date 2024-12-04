@@ -467,10 +467,6 @@ Here is an example of what effect client-side caching could have:
 
 <img src="../img/rueidis-client-side.png" class="img-fluid" alt="Example of client-side in action - reduced network usage by a lot"/>
 
-- `pool_size`: maximum number of socket connections.
-- `min_idle_conns`: specifies the minimum number of idle connections which is useful when establishing new connection is slow.
-- `idle_timeout`: amount of time after which client closes idle connections. Should be less than server's timeout.
-- `max_conn_age`: connection age at which client retires (closes) the connection.
 - `max_get_multi_concurrency`: specifies the maximum number of concurrent GetMulti() operations.
 - `get_multi_batch_size`: specifies the maximum size per batch for mget.
 - `max_set_multi_concurrency`: specifies the maximum number of concurrent SetMulti() operations.

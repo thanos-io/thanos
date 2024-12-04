@@ -8,7 +8,19 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 03.12.2024
+## Unreleased
+
+### Fixed
+
+### Added
+
+- [#7907](https://github.com/thanos-io/thanos/pull/7907) Receive: Add `--receive.grpc-service-config` flag to configure gRPC service config for the receivers.
+
+### Changed
+
+### Removed
+
+## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 04.12.2024
 
 ### Fixed
 
@@ -35,6 +47,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7658](https://github.com/thanos-io/thanos/pull/7658) Store: Fix panic because too small buffer in pool.
 - [#7643](https://github.com/thanos-io/thanos/pull/7643) Receive: fix thanos_receive_write_{timeseries,samples} stats
 - [#7644](https://github.com/thanos-io/thanos/pull/7644) fix(ui): add null check to find overlapping blocks logic
+- [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
 - [#7814](https://github.com/thanos-io/thanos/pull/7814) Store: label_values: if matchers contain **name**=="something", do not add <labelname> != "" to fetch less postings.
 - [#7679](https://github.com/thanos-io/thanos/pull/7679) Query: respect store.limit.* flags when evaluating queries
 - [#7821](https://github.com/thanos-io/thanos/pull/7821) Query/Receive: Fix coroutine leak introduced in https://github.com/thanos-io/thanos/pull/7796.
@@ -45,6 +58,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7893](https://github.com/thanos-io/thanos/pull/7893) Sidecar: Fix retrieval of external labels for Prometheus v3.0.0.
 - [#7903](https://github.com/thanos-io/thanos/pull/7903) Query: Fix panic on regex store matchers.
 - [#7915](https://github.com/thanos-io/thanos/pull/7915) Store: Close block series client at the end to not reuse chunk buffer
+- [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants, see [issue-7892](https://github.com/thanos-io/thanos/issues/7892).
 
 ### Added
 
