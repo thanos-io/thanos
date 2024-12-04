@@ -15,6 +15,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
 - [#7945](https://github.com/thanos-io/thanos/pull/7945) Receive: Capnproto - use segment from existing message.
 - [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants at once.
+- [#7954](https://github.com/thanos-io/thanos/pull/7954) Sidecar: Ensure limit param is positive for compatibility with older Prometheus.
+- [#7953](https://github.com/thanos-io/thanos/pull/7953) Query: Update promql-engine for subquery avg fix.
 
 ### Added
 
