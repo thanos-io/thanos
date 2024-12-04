@@ -104,7 +104,7 @@ type IndexStats struct {
 	SeriesP90Size   int64 `json:"series_p90_size,omitempty"`
 	SeriesP99Size   int64 `json:"series_p99_size,omitempty"`
 	SeriesP999Size  int64 `json:"series_p999_size,omitempty"`
-	SeriesP9999Size int64 `json:"series_p99999_size,omitempty"`
+	SeriesP9999Size int64 `json:"series_p9999_size,omitempty"`
 	ChunkMaxSize    int64 `json:"chunk_max_size,omitempty"`
 }
 
