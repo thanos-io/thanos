@@ -15,8 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extprom"
-
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -24,10 +23,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/objstore"
 
-	"github.com/efficientgo/core/testutil"
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
