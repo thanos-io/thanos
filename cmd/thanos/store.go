@@ -101,6 +101,7 @@ type storeConfig struct {
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
 	lazyExpandedPostingsEnabled bool
+	PostingGroupMaxKeys         int
 
 	indexHeaderLazyDownloadStrategy string
 }
@@ -203,6 +204,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
+
+	cmd.Flag("store.posting-group-max-keys", "Mark posting group as lazy if it fetches more keys than the configured number. Only valid if lazy expanded posting is enabled. 0 disables the limit.").
+		Default("0").IntVar(&sc.PostingGroupMaxKeys)
 
 	cmd.Flag("store.index-header-lazy-download-strategy", "Strategy of how to download index headers lazily. Supported values: eager, lazy. If eager, always download index header during initial load. If lazy, download index header during query time.").
 		Default(string(indexheader.EagerDownloadStrategy)).
@@ -429,6 +433,7 @@ func runStore(
 			return conf.estimatedMaxChunkSize
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
+		store.WithPostingGroupMaxKeys(conf.PostingGroupMaxKeys),
 		store.WithIndexHeaderLazyDownloadStrategy(
 			indexheader.IndexHeaderLazyDownloadStrategy(conf.indexHeaderLazyDownloadStrategy).StrategyToDownloadFunc(),
 		),
