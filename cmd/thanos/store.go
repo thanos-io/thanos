@@ -310,11 +310,14 @@ func runStore(
 	if err != nil {
 		return err
 	}
-	customBktConfig := exthttp.DefaultCustomBucketConfig()
-	if err := yaml.Unmarshal(confContentYaml, &customBktConfig); err != nil {
+	var customConfig struct {
+		customBktConfig exthttp.CustomBucketConfig `yaml:"custom_config"`
+	}
+	customConfig.customBktConfig = exthttp.DefaultCustomBucketConfig()
+	if err := yaml.Unmarshal(confContentYaml, &customConfig); err != nil {
 		return errors.Wrap(err, "parsing config YAML file")
 	}
-	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String(), exthttp.CreateHedgedTransportWithConfig(customBktConfig))
+	bkt, err := client.NewBucket(logger, confContentYaml, conf.component.String(), exthttp.CreateHedgedTransportWithConfig(customConfig.customBktConfig))
 	if err != nil {
 		return err
 	}
