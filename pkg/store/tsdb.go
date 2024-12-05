@@ -53,7 +53,7 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
-func WithMatcherCacheInstance(cache *storepb.MatchersCache) TSDBStoreOption {
+func WithMatcherCacheInstance(cache storepb.MatchersCache) TSDBStoreOption {
 	return func(s *TSDBStore) {
 		s.matcherCache = cache
 	}
@@ -68,7 +68,7 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	buffers          sync.Pool
 	maxBytesPerFrame int
-	matcherCache     *storepb.MatchersCache
+	matcherCache     storepb.MatchersCache
 
 	extLset                labels.Labels
 	startStoreFilterUpdate bool
@@ -119,6 +119,7 @@ func NewTSDBStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
+		matcherCache: storepb.NewNoopMatcherCache(),
 	}
 
 	for _, option := range options {

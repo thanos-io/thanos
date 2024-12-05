@@ -15,7 +15,33 @@ const DefaultCacheSize = 200
 
 type NewItemFunc func(matcher LabelMatcher) (*labels.Matcher, error)
 
-type MatchersCache struct {
+type MatchersCache interface {
+	// GetOrSet retrieves a matcher from cache or creates and stores it if not present.
+	// If the matcher is not in cache, it uses the provided newItem function to create it.
+	GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error)
+}
+
+// Ensure implementations satisfy the interface
+var (
+	_ MatchersCache = (*LruMatchersCache)(nil)
+	_ MatchersCache = (*NoopMatcherCache)(nil)
+)
+
+// NoopMatcherCache is a no-op implementation of MatchersCache that doesn't cache anything.
+type NoopMatcherCache struct{}
+
+// NewNoopMatcherCache creates a new no-op matcher cache.
+func NewNoopMatcherCache() MatchersCache {
+	return &NoopMatcherCache{}
+}
+
+// GetOrSet implements MatchersCache by always creating a new matcher without caching.
+func (n *NoopMatcherCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
+	return newItem(key)
+}
+
+// LruMatchersCache implements MatchersCache with an LRU cache and metrics.
+type LruMatchersCache struct {
 	reg     prometheus.Registerer
 	cache   *lru.Cache[LabelMatcher, *labels.Matcher]
 	metrics *matcherCacheMetrics
@@ -23,22 +49,22 @@ type MatchersCache struct {
 	sf      singleflight.Group
 }
 
-type MatcherCacheOption func(*MatchersCache)
+type MatcherCacheOption func(*LruMatchersCache)
 
 func WithPromRegistry(reg prometheus.Registerer) MatcherCacheOption {
-	return func(c *MatchersCache) {
+	return func(c *LruMatchersCache) {
 		c.reg = reg
 	}
 }
 
 func WithSize(size int) MatcherCacheOption {
-	return func(c *MatchersCache) {
+	return func(c *LruMatchersCache) {
 		c.size = size
 	}
 }
 
-func NewMatchersCache(opts ...MatcherCacheOption) (*MatchersCache, error) {
-	cache := &MatchersCache{
+func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
+	cache := &LruMatchersCache{
 		reg:  prometheus.NewRegistry(),
 		size: DefaultCacheSize,
 	}
@@ -57,7 +83,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*MatchersCache, error) {
 	return cache, nil
 }
 
-func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
+func (c *LruMatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	c.metrics.requestsTotal.Inc()
 	if item, ok := c.cache.Get(key); ok {
 		c.metrics.hitsTotal.Inc()
@@ -85,7 +111,7 @@ func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels
 	return v.(*labels.Matcher), nil
 }
 
-func (c *MatchersCache) onEvict(_ LabelMatcher, _ *labels.Matcher) {
+func (c *LruMatchersCache) onEvict(_ LabelMatcher, _ *labels.Matcher) {
 	c.metrics.evicted.Inc()
 	c.metrics.numItems.Set(float64(c.cache.Len()))
 }

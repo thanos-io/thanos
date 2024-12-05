@@ -397,8 +397,8 @@ func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 
 // MatchersToPromMatchersCached returns Prometheus matchers from proto matchers.
 // Works analogously to MatchersToPromMatchers but uses cache to avoid unnecessary allocations and conversions.
-// NOTE: It allocates memory.
-func MatchersToPromMatchersCached(cache *MatchersCache, ms ...LabelMatcher) ([]*labels.Matcher, error) {
+// NOTE: It (can) allocate memory.
+func MatchersToPromMatchersCached(cache MatchersCache, ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
 		pm, err := cache.GetOrSet(m, MatcherToPromMatcher)
