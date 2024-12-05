@@ -5,19 +5,18 @@ package block
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
-
-	"github.com/efficientgo/core/testutil"
+	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
