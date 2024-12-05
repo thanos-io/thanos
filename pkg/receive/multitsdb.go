@@ -64,7 +64,7 @@ type MultiTSDB struct {
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
-	cache *storepb.MatchersCache
+	matcherCache storepb.MatchersCache
 
 	tsdbClients     []store.Client
 	exemplarClients map[string]*exemplars.TSDB
@@ -97,9 +97,9 @@ func WithBlockExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
 	}
 }
 
-func WithMatchersCache(cache *storepb.MatchersCache) MultiTSDBOption {
+func WithMatchersCache(cache storepb.MatchersCache) MultiTSDBOption {
 	return func(s *MultiTSDB) {
-		s.cache = cache
+		s.matcherCache = cache
 	}
 }
 
@@ -135,6 +135,7 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
+		matcherCache:          storepb.NewNoopMatcherCache(),
 	}
 
 	for _, option := range options {
@@ -767,8 +768,8 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
 	}
-	if t.cache != nil {
-		options = append(options, store.WithMatcherCacheInstance(t.cache))
+	if t.matcherCache != nil {
+		options = append(options, store.WithMatcherCacheInstance(t.matcherCache))
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
