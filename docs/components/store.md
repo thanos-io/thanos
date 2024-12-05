@@ -250,6 +250,11 @@ Flags:
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
+      --store.posting-group-max-keys=0
+                                 Mark posting group as lazy if it fetches more
+                                 keys than the configured number. Only valid if
+                                 lazy expanded posting is enabled. 0 disables
+                                 the limit.
       --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
