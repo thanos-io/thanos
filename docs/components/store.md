@@ -94,6 +94,12 @@ Flags:
                                  --no-cache-index-header option is specified.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --estimated-series-size-stat=max
+                                 Statistic to use to estimate block series size.
+                                 This is currently used for lazy expanded
+                                 posting series size estimation. Available
+                                 options are max, p90, p99, p999 and p9999.
+                                 Default value is max
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

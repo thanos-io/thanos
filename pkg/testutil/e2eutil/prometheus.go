@@ -651,7 +651,14 @@ func createBlock(
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,
 		Files:      files,
-		IndexStats: metadata.IndexStats{SeriesMaxSize: seriesSize},
+		// For simplicity, use series size for all series size fields.
+		IndexStats: metadata.IndexStats{
+			SeriesMaxSize:   seriesSize,
+			SeriesP90Size:   seriesSize,
+			SeriesP99Size:   seriesSize,
+			SeriesP999Size:  seriesSize,
+			SeriesP9999Size: seriesSize,
+		},
 	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}
