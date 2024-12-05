@@ -84,3 +84,32 @@ func TestMatchersCache(t *testing.T) {
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
 }
+
+func BenchmarkMatchersCache(b *testing.B) {
+	cache, err := storepb.NewMatchersCache(storepb.WithSize(100))
+	if err != nil {
+		b.Fatalf("failed to create cache: %v", err)
+	}
+
+	matchers := []storepb.LabelMatcher{
+		{Type: storepb.LabelMatcher_EQ, Name: "key1", Value: "val1"},
+		{Type: storepb.LabelMatcher_EQ, Name: "key2", Value: "val2"},
+		{Type: storepb.LabelMatcher_EQ, Name: "key3", Value: "val3"},
+		{Type: storepb.LabelMatcher_EQ, Name: "key4", Value: "val4"},
+		{Type: storepb.LabelMatcher_RE, Name: "key5", Value: "^(val5|val6|val7|val8|val9).*$"},
+	}
+
+	newItem := func(matcher storepb.LabelMatcher) (*labels.Matcher, error) {
+		return storepb.MatcherToPromMatcher(matcher)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		matcher := matchers[i%len(matchers)]
+		_, err := cache.GetOrSet(matcher, newItem)
+		if err != nil {
+			b.Fatalf("failed to get or set cache item: %v", err)
+		}
+	}
+}
