@@ -21,7 +21,7 @@ type MatchersCache interface {
 	GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error)
 }
 
-// Ensure implementations satisfy the interface
+// Ensure implementations satisfy the interface.
 var (
 	_ MatchersCache = (*LruMatchersCache)(nil)
 	_ MatchersCache = (*NoopMatcherCache)(nil)
