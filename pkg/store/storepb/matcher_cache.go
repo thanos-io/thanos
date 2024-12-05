@@ -17,7 +17,7 @@ type NewItemFunc func(matcher LabelMatcher) (*labels.Matcher, error)
 
 type MatchersCache struct {
 	reg     prometheus.Registerer
-	cache   *lru.TwoQueueCache[LabelMatcher, *labels.Matcher]
+	cache   *lru.Cache[LabelMatcher, *labels.Matcher]
 	metrics *matcherCacheMetrics
 	size    int
 	sf      singleflight.Group
@@ -48,7 +48,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*MatchersCache, error) {
 	}
 	cache.metrics = newMatcherCacheMetrics(cache.reg)
 
-	lruCache, err := lru.New2Q[LabelMatcher, *labels.Matcher](cache.size)
+	lruCache, err := lru.NewWithEvict[LabelMatcher, *labels.Matcher](cache.size, cache.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -85,10 +85,17 @@ func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels
 	return v.(*labels.Matcher), nil
 }
 
+func (c *MatchersCache) onEvict(_ LabelMatcher, _ *labels.Matcher) {
+	c.metrics.evicted.Inc()
+	c.metrics.numItems.Set(float64(c.cache.Len()))
+}
+
 type matcherCacheMetrics struct {
 	requestsTotal prometheus.Counter
 	hitsTotal     prometheus.Counter
 	numItems      prometheus.Gauge
+	maxItems      prometheus.Gauge
+	evicted       prometheus.Counter
 }
 
 func newMatcherCacheMetrics(reg prometheus.Registerer) *matcherCacheMetrics {
@@ -104,6 +111,14 @@ func newMatcherCacheMetrics(reg prometheus.Registerer) *matcherCacheMetrics {
 		numItems: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_matchers_cache_items",
 			Help: "Total number of cached items",
+		}),
+		maxItems: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_matchers_cache_max_items",
+			Help: "Maximum number of items that can be cached",
+		}),
+		evicted: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_matchers_cache_evicted_total",
+			Help: "Total number of items evicted from the cache",
 		}),
 	}
 }
