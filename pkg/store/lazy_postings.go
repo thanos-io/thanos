@@ -178,7 +178,7 @@ func optimizePostingsFetchByDownloadedBytes(
 		} else {
 			// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
 			if postingGroupMaxKeys > 0 && pg.existentKeys > postingGroupMaxKeys {
-				markPostingGroupLazy(pg, "too_many_keys", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
+				markPostingGroupLazy(pg, "keys_limit", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
 				i++
 				continue
 			}
