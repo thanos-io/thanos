@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
+	"golang.org/x/sync/singleflight"
 )
 
 const DefaultCacheSize = 200
@@ -19,6 +20,7 @@ type MatchersCache struct {
 	cache   *lru.TwoQueueCache[LabelMatcher, *labels.Matcher]
 	metrics *matcherCacheMetrics
 	size    int
+	sf      singleflight.Group
 }
 
 type MatcherCacheOption func(*MatchersCache)
@@ -62,14 +64,25 @@ func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels
 		return item, nil
 	}
 
-	item, err := newItem(key)
+	v, err, _ := c.sf.Do(key.String(), func() (interface{}, error) {
+		if item, ok := c.cache.Get(key); ok {
+			c.metrics.hitsTotal.Inc()
+			return item, nil
+		}
+
+		item, err := newItem(key)
+		if err != nil {
+			return nil, err
+		}
+		c.cache.Add(key, item)
+		c.metrics.numItems.Set(float64(c.cache.Len()))
+		return item, nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
-	c.cache.Add(key, item)
-	c.metrics.numItems.Set(float64(c.cache.Len()))
-
-	return item, nil
+	return v.(*labels.Matcher), nil
 }
 
 type matcherCacheMetrics struct {

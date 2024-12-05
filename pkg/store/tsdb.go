@@ -53,6 +53,12 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
+func WithMatcherCacheInstance(cache *storepb.MatchersCache) TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.matcherCache = cache
+	}
+}
+
 // TSDBStore implements the store API against a local TSDB instance.
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
@@ -86,20 +92,6 @@ func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*gr
 type ReadWriteTSDBStore struct {
 	storepb.StoreServer
 	storepb.WriteableStoreServer
-}
-
-type tsdbStoreOpts struct {
-	cache *storepb.MatchersCache
-}
-
-var defaultTsdbStoreOpts = tsdbStoreOpts{}
-
-type TSDBStoreOption func(*tsdbStoreOpts)
-
-func WithMatcherCacheInstance(cache *storepb.MatchersCache) TSDBStoreOption {
-	return func(o *tsdbStoreOpts) {
-		o.cache = cache
-	}
 }
 
 // NewTSDBStore creates a new TSDBStore.
