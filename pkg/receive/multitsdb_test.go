@@ -776,7 +776,6 @@ func TestProxyLabelValues(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
-		nil,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
