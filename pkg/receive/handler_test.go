@@ -6,6 +6,7 @@ package receive
 import (
 	"bytes"
 	"context"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"math"
@@ -23,8 +24,6 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	goerrors "errors"
 
 	"github.com/alecthomas/units"
 	"github.com/efficientgo/core/testutil"
@@ -1102,7 +1101,6 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		nil,
 		false,
 		metadata.NoneFunc,
-		nil,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
 	handler.writer = NewWriter(logger, m, &WriterOptions{})
