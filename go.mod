@@ -55,8 +55,8 @@ require (
 	github.com/prometheus/alertmanager v0.27.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
-	github.com/prometheus/common v0.60.0
-	github.com/prometheus/exporter-toolkit v0.12.0
+	github.com/prometheus/common v0.60.1
+	github.com/prometheus/exporter-toolkit v0.13.1
 	// Prometheus maps version 2.x.y to tags v0.x.y.
 	github.com/prometheus/prometheus v0.55.1-0.20241102120812-a6fd22b9d2c8
 	github.com/sony/gobreaker v0.5.0
