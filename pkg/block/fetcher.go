@@ -232,7 +232,8 @@ func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReade
 }
 
 func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
-	const concurrency = 64
+	const concurrency = 1
+	failureSimulationsRemaning := 2
 
 	partialBlocks = make(map[ulid.ULID]bool)
 	var (
@@ -247,7 +248,20 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 				// For 1y and 100 block sources this generates ~1.5-3k HEAD RPM. AWS handles 330k RPM per prefix.
 				// TODO(bwplotka): Consider filtering by consistency delay here (can't do until compactor healthyOverride work).
 				metaFile := path.Join(uid.String(), MetaFilename)
-				ok, err := f.bkt.Exists(gCtx, metaFile)
+
+				var ok bool
+				var err error
+
+				if failureSimulationsRemaning > 0 {
+					mu.Lock()
+					failureSimulationsRemaning = failureSimulationsRemaning - 1
+					mu.Unlock()
+					ok = false
+					err = errors.New("Simulated")
+				} else {
+					ok, err = f.bkt.Exists(gCtx, metaFile)
+				}
+
 				if err != nil {
 					return errors.Wrapf(err, "meta.json file exists: %v", uid)
 				}
