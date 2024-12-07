@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"path"
@@ -61,6 +62,60 @@ func ULIDs(is ...int) []ulid.ULID {
 	}
 
 	return ret
+}
+
+type FailingBucketReader struct {
+	innerBucketReader objstore.BucketReader
+}
+
+func (b FailingBucketReader) Iter(ctx context.Context, dir string, f func(name string) error, options ...objstore.IterOption) error {
+	return b.innerBucketReader.Iter(ctx, dir, f, options...)
+}
+
+func (b FailingBucketReader) IterWithAttributes(ctx context.Context, dir string, f func(attrs objstore.IterObjectAttributes) error, options ...objstore.IterOption) error {
+	return b.innerBucketReader.IterWithAttributes(ctx, dir, f, options...)
+}
+
+// SupportedIterOptions returns a list of supported IterOptions by the underlying provider.
+func (b FailingBucketReader) SupportedIterOptions() []objstore.IterOptionType {
+	return b.innerBucketReader.SupportedIterOptions()
+}
+
+// Get returns a reader for the given object name.
+func (b FailingBucketReader) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	return b.innerBucketReader.Get(ctx, name)
+}
+
+// GetRange returns a new range reader for the given object name and range.
+func (b FailingBucketReader) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	return b.innerBucketReader.GetRange(ctx, name, off, length)
+}
+
+// Exists checks if the given object exists in the bucket.
+func (b FailingBucketReader) Exists(ctx context.Context, name string) (bool, error) {
+	return false, errors.New("simulated exists failure")
+	return b.innerBucketReader.Exists(ctx, name)
+}
+
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+func (b FailingBucketReader) IsObjNotFoundErr(err error) bool {
+	return b.innerBucketReader.IsObjNotFoundErr(err)
+}
+
+// IsAccessDeniedErr returns true if access to object is denied.
+func (b FailingBucketReader) IsAccessDeniedErr(err error) bool {
+	return b.innerBucketReader.IsAccessDeniedErr(err)
+}
+
+// Attributes returns information about the specified object.
+func (b FailingBucketReader) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	return b.innerBucketReader.Attributes(ctx, name)
+}
+
+func wrapBucketWithFailureLayer(bucketReader objstore.BucketReader) objstore.BucketReader {
+	failingBucket := FailingBucketReader{}
+	failingBucket.innerBucketReader = bucketReader
+	return failingBucket
 }
 
 func TestMetaFetcher_Fetch(t *testing.T) {
