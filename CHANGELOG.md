@@ -12,7 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#7514](https://github.com/thanos-io/thanos/pull/7518) *: Fix channel deadlock in meta sync fetcher
+- [#7933](https://github.com/thanos-io/thanos/pull/7933) *: Fix channel deadlock in meta sync fetcher
 
 ### Added
 
