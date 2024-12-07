@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"os"
@@ -18,6 +17,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
