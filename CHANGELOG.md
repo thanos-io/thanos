@@ -12,6 +12,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#7514](https://github.com/thanos-io/thanos/pull/7518) *: Fix channel deadlock in meta sync fetcher
+
 ### Added
 
 - [#7907](https://github.com/thanos-io/thanos/pull/7907) Receive: Add `--receive.grpc-service-config` flag to configure gRPC service config for the receivers.
