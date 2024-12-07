@@ -1224,7 +1224,8 @@ func Test_ConcurrentLister_channel_deadlock(t *testing.T) {
 	outputChannel := make(chan ulid.ULID)
 	defer close(outputChannel)
 
-	timeout, _ := context.WithTimeout(context.Background(), time.Second*5)
+	timeout, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 
 	_, err := lister.GetActiveAndPartialBlockIDs(timeout, outputChannel)
 
