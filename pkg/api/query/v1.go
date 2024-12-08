@@ -46,6 +46,7 @@ import (
 	"github.com/prometheus/prometheus/util/stats"
 	promqlapi "github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
+	thanosmodel "github.com/thanos-io/promql-engine/execution/model"
 	"github.com/thanos-io/promql-engine/logicalplan"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -319,11 +320,12 @@ type queryData struct {
 type queryTelemetry struct {
 	// TODO(saswatamcode): Replace with engine.TrackedTelemetry once it has exported fields.
 	// TODO(saswatamcode): Add aggregate fields to enrich data.
-	OperatorName string           `json:"name,omitempty"`
-	Execution    string           `json:"executionTime,omitempty"`
-	PeakSamples  int64            `json:"peakSamples,omitempty"`
-	TotalSamples int64            `json:"totalSamples,omitempty"`
-	Children     []queryTelemetry `json:"children,omitempty"`
+	OperatorName string                    `json:"name,omitempty"`
+	Execution    string                    `json:"executionTime,omitempty"`
+	PeakSamples  int64                     `json:"peakSamples,omitempty"`
+	TotalSamples int64                     `json:"totalSamples,omitempty"`
+	FanoutData   map[string]map[string]any `json:"fanout_data,omitempty"`
+	Children     []queryTelemetry          `json:"children,omitempty"`
 }
 
 func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.ApiError) {
@@ -477,14 +479,8 @@ func (qapi *QueryAPI) getQueryExplain(query promql.Query) (*engine.ExplainOutput
 
 }
 
-func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query) (queryTelemetry, error) {
-	if r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1" {
-		if eq, ok := query.(engine.ExplainableQuery); ok {
-			return processAnalysis(eq.Analyze()), nil
-		}
-		return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos'")
-	}
-	return queryTelemetry{}, nil
+func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
+	return r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1"
 }
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
@@ -493,6 +489,9 @@ func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken().String()
 	analysis.PeakSamples = a.PeakSamples()
 	analysis.TotalSamples = a.TotalSamples()
+	if fm := a.OperatorTelemetry.FanoutMetadata(); fm != nil {
+		analysis.FanoutData = fm.GetMetadata()
+	}
 	for _, c := range a.Children {
 		analysis.Children = append(analysis.Children, processAnalysis(c))
 	}
@@ -651,7 +650,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
-	engine, _, apiErr := qapi.parseEngineParam(r)
+	engineParam, _, apiErr := qapi.parseEngineParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
@@ -671,13 +670,18 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
+	analysis := qapi.parseQueryAnalyzeParam(r)
+	if analysis {
+		ctx = thanosmodel.AddMetadataStorage(ctx)
+	}
+
 	var (
 		qry         promql.Query
 		seriesStats []storepb.SeriesStatsCounter
 	)
 	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
 		var err error
-		qry, err = engine.NewInstantQuery(
+		qry, err = engineParam.NewInstantQuery(
 			ctx,
 			qapi.queryableCreate(
 				enableDedup,
@@ -696,11 +700,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return err
 	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-	}
-
-	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if err != nil {
-		return nil, nil, apiErr, func() {}
 	}
 
 	if err := tracing.DoInSpanWithErr(ctx, "query_gate_ismyturn", qapi.gate.Start); err != nil {
@@ -736,11 +735,17 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
+
+	var telemetry queryTelemetry
+	if eq, ok := qry.(engine.ExplainableQuery); ok {
+		telemetry = processAnalysis(eq.Analyze())
+	}
+
 	return &queryData{
 		ResultType:    res.Value.Type(),
 		Result:        res.Value,
 		Stats:         qs,
-		QueryAnalysis: analysis,
+		QueryAnalysis: telemetry,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
@@ -949,7 +954,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	engine, _, apiErr := qapi.parseEngineParam(r)
+	engineParam, _, apiErr := qapi.parseEngineParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
@@ -969,6 +974,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
+	analysis := qapi.parseQueryAnalyzeParam(r)
+	if analysis {
+		ctx = thanosmodel.AddMetadataStorage(ctx)
+	}
+
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
@@ -978,7 +988,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	)
 	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
 		var err error
-		qry, err = engine.NewRangeQuery(
+		qry, err = engineParam.NewRangeQuery(
 			ctx,
 			qapi.queryableCreate(
 				enableDedup,
@@ -999,10 +1009,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return err
 	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
-	}
-	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if err != nil {
-		return nil, nil, apiErr, func() {}
 	}
 
 	if err := tracing.DoInSpanWithErr(ctx, "query_gate_ismyturn", qapi.gate.Start); err != nil {
@@ -1036,11 +1042,17 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
+
+	var telemetry queryTelemetry
+	if eq, ok := qry.(engine.ExplainableQuery); ok {
+		telemetry = processAnalysis(eq.Analyze())
+	}
+
 	return &queryData{
 		ResultType:    res.Value.Type(),
 		Result:        res.Value,
 		Stats:         qs,
-		QueryAnalysis: analysis,
+		QueryAnalysis: telemetry,
 	}, res.Warnings.AsErrors(), nil, qry.Close
 }
 
