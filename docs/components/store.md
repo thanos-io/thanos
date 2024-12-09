@@ -256,8 +256,12 @@ Flags:
                                  fetch. With R set to 100, a posting group which
                                  fetches 100K keys will be marked as lazy if
                                  the current query only fetches 1000 series.
-                                 This config is only valid if lazy expanded
-                                 posting is enabled. 0 disables the limit.
+                                 thanos_bucket_store_lazy_expanded_posting_groups_total
+                                 shows lazy expanded postings groups with
+                                 reasons and you can tune this config
+                                 accordingly. This config is only valid if lazy
+                                 expanded posting is enabled. 0 disables the
+                                 limit.
       --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
