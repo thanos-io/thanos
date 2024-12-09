@@ -505,7 +505,7 @@ func (s *promMetadata) UpdateTimestamps(ctx context.Context) error {
 		return err
 	}
 
-	s.mint = min(s.limitMinTime.PrometheusTimestamp(), mint)
+	s.mint = max(s.limitMinTime.PrometheusTimestamp(), mint)
 	s.maxt = math.MaxInt64
 
 	return nil
