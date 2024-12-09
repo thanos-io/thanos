@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package storepb_test
+package storecache_test
 
 import (
 	"testing"
@@ -9,11 +9,12 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 func TestMatchersCache(t *testing.T) {
-	cache, err := storepb.NewMatchersCache(storepb.WithSize(2))
+	cache, err := storecache.NewMatchersCache(storecache.WithSize(2))
 	testutil.Ok(t, err)
 
 	matcher := storepb.LabelMatcher{
@@ -86,7 +87,7 @@ func TestMatchersCache(t *testing.T) {
 }
 
 func BenchmarkMatchersCache(b *testing.B) {
-	cache, err := storepb.NewMatchersCache(storepb.WithSize(100))
+	cache, err := storecache.NewMatchersCache(storecache.WithSize(100))
 	if err != nil {
 		b.Fatalf("failed to create cache: %v", err)
 	}

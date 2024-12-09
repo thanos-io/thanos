@@ -25,6 +25,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
@@ -89,7 +90,7 @@ type ProxyStore struct {
 	retrievalStrategy RetrievalStrategy
 	debugLogging      bool
 	tsdbSelector      *TSDBSelector
-	matcherCache      storepb.MatchersCache
+	matcherCache      storecache.MatchersCache
 	enableDedup       bool
 }
 
@@ -139,7 +140,7 @@ func WithoutDedup() ProxyStoreOption {
 }
 
 // WithMatcherCache sets the matcher cache instance for the proxy.
-func WithMatcherCache(cache storepb.MatchersCache) ProxyStoreOption {
+func WithMatcherCache(cache storecache.MatchersCache) ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.matcherCache = cache
 	}
@@ -176,7 +177,7 @@ func NewProxyStore(
 		retrievalStrategy: retrievalStrategy,
 		tsdbSelector:      DefaultSelector,
 		enableDedup:       true,
-		matcherCache:      storepb.NewNoopMatcherCache(),
+		matcherCache:      storecache.NewNoopMatcherCache(),
 	}
 
 	for _, option := range options {

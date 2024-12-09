@@ -39,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive/expandedpostingscache"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -64,7 +65,7 @@ type MultiTSDB struct {
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
-	matcherCache storepb.MatchersCache
+	matcherCache storecache.MatchersCache
 
 	tsdbClients     []store.Client
 	exemplarClients map[string]*exemplars.TSDB
@@ -97,7 +98,7 @@ func WithBlockExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
 	}
 }
 
-func WithMatchersCache(cache storepb.MatchersCache) MultiTSDBOption {
+func WithMatchersCache(cache storecache.MatchersCache) MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.matcherCache = cache
 	}
@@ -135,7 +136,7 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
-		matcherCache:          storepb.NewNoopMatcherCache(),
+		matcherCache:          storecache.NewNoopMatcherCache(),
 	}
 
 	for _, option := range options {
