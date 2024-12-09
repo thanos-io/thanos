@@ -425,8 +425,8 @@ type BucketStore struct {
 
 	enableChunkHashCalculation bool
 
-	enabledLazyExpandedPostings bool
-	postingGroupMaxKeys         int
+	enabledLazyExpandedPostings   bool
+	postingGroupMaxKeySeriesRatio float64
 
 	sortingStrategy sortingStrategy
 
@@ -559,10 +559,10 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	}
 }
 
-// WithPostingGroupMaxKeys configures a threshold to mark a posting group as lazy if it has more add keys.
-func WithPostingGroupMaxKeys(postingGroupMaxKeys int) BucketStoreOption {
+// WithPostingGroupMaxKeySeriesRatio configures a threshold to mark a posting group as lazy if it has more add keys.
+func WithPostingGroupMaxKeySeriesRatio(postingGroupMaxKeySeriesRatio float64) BucketStoreOption {
 	return func(s *BucketStore) {
-		s.postingGroupMaxKeys = postingGroupMaxKeys
+		s.postingGroupMaxKeySeriesRatio = postingGroupMaxKeySeriesRatio
 	}
 }
 
@@ -1018,7 +1018,7 @@ type blockSeriesClient struct {
 
 	lazyExpandedPostingEnabled bool
 	// Mark posting group as lazy if it adds too many keys. 0 to disable.
-	postingGroupMaxKeys                           int
+	postingGroupMaxKeySeriesRatio                 float64
 	lazyExpandedPostingsCount                     prometheus.Counter
 	lazyExpandedPostingGroupByReason              *prometheus.CounterVec
 	lazyExpandedPostingSizeBytes                  prometheus.Counter
@@ -1063,7 +1063,7 @@ func newBlockSeriesClient(
 	chunkFetchDurationSum *prometheus.HistogramVec,
 	extLsetToRemove map[string]struct{},
 	lazyExpandedPostingEnabled bool,
-	postingGroupMaxKeys int,
+	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingsCount prometheus.Counter,
 	lazyExpandedPostingByReason *prometheus.CounterVec,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
@@ -1100,7 +1100,7 @@ func newBlockSeriesClient(
 		chunkFetchDurationSum:  chunkFetchDurationSum,
 
 		lazyExpandedPostingEnabled:                    lazyExpandedPostingEnabled,
-		postingGroupMaxKeys:                           postingGroupMaxKeys,
+		postingGroupMaxKeySeriesRatio:                 postingGroupMaxKeySeriesRatio,
 		lazyExpandedPostingsCount:                     lazyExpandedPostingsCount,
 		lazyExpandedPostingGroupByReason:              lazyExpandedPostingByReason,
 		lazyExpandedPostingSizeBytes:                  lazyExpandedPostingSizeBytes,
@@ -1154,7 +1154,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
-	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.postingGroupMaxKeys, b.lazyExpandedPostingSizeBytes, b.lazyExpandedPostingGroupByReason, b.tenant)
+	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.postingGroupMaxKeySeriesRatio, b.lazyExpandedPostingSizeBytes, b.lazyExpandedPostingGroupByReason, b.tenant)
 	if err != nil {
 		return errors.Wrap(err, "expanded matching posting")
 	}
@@ -1587,7 +1587,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				s.metrics.chunkFetchDurationSum,
 				extLsetToRemove,
 				s.enabledLazyExpandedPostings,
-				s.postingGroupMaxKeys,
+				s.postingGroupMaxKeySeriesRatio,
 				s.metrics.lazyExpandedPostingsCount,
 				s.metrics.lazyExpandedPostingGroupsByReason,
 				s.metrics.lazyExpandedPostingSizeBytes,
@@ -1903,7 +1903,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					nil,
 					extLsetToRemove,
 					s.enabledLazyExpandedPostings,
-					s.postingGroupMaxKeys,
+					s.postingGroupMaxKeySeriesRatio,
 					s.metrics.lazyExpandedPostingsCount,
 					s.metrics.lazyExpandedPostingGroupsByReason,
 					s.metrics.lazyExpandedPostingSizeBytes,
@@ -2131,7 +2131,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					nil,
 					nil,
 					s.enabledLazyExpandedPostings,
-					s.postingGroupMaxKeys,
+					s.postingGroupMaxKeySeriesRatio,
 					s.metrics.lazyExpandedPostingsCount,
 					s.metrics.lazyExpandedPostingGroupsByReason,
 					s.metrics.lazyExpandedPostingSizeBytes,
@@ -2595,7 +2595,7 @@ func (r *bucketIndexReader) ExpandedPostings(
 	ms sortedMatchers,
 	bytesLimiter BytesLimiter,
 	lazyExpandedPostingEnabled bool,
-	postingGroupMaxKeys int,
+	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
 	tenant string,
@@ -2651,7 +2651,7 @@ func (r *bucketIndexReader) ExpandedPostings(
 		postingGroups = append(postingGroups, newPostingGroup(true, name, []string{value}, nil))
 	}
 
-	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, addAllPostings, lazyExpandedPostingEnabled, postingGroupMaxKeys, lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason, tenant)
+	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, addAllPostings, lazyExpandedPostingEnabled, postingGroupMaxKeySeriesRatio, lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason, tenant)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch and expand postings")
 	}

@@ -67,41 +67,41 @@ const (
 )
 
 type storeConfig struct {
-	indexCacheConfigs           extflag.PathOrContent
-	objStoreConfig              extflag.PathOrContent
-	dataDir                     string
-	cacheIndexHeader            bool
-	grpcConfig                  grpcConfig
-	httpConfig                  httpConfig
-	indexCacheSizeBytes         units.Base2Bytes
-	chunkPoolSize               units.Base2Bytes
-	estimatedMaxSeriesSize      uint64
-	estimatedMaxChunkSize       uint64
-	seriesBatchSize             int
-	storeRateLimits             store.SeriesSelectLimits
-	maxDownloadedBytes          units.Base2Bytes
-	maxConcurrency              int
-	component                   component.StoreAPI
-	debugLogging                bool
-	syncInterval                time.Duration
-	blockListStrategy           string
-	blockSyncConcurrency        int
-	blockMetaFetchConcurrency   int
-	filterConf                  *store.FilterConfig
-	selectorRelabelConf         extflag.PathOrContent
-	advertiseCompatibilityLabel bool
-	consistencyDelay            commonmodel.Duration
-	ignoreDeletionMarksDelay    commonmodel.Duration
-	disableWeb                  bool
-	webConfig                   webConfig
-	label                       string
-	postingOffsetsInMemSampling int
-	cachingBucketConfig         extflag.PathOrContent
-	reqLogConfig                *extflag.PathOrContent
-	lazyIndexReaderEnabled      bool
-	lazyIndexReaderIdleTimeout  time.Duration
-	lazyExpandedPostingsEnabled bool
-	PostingGroupMaxKeys         int
+	indexCacheConfigs             extflag.PathOrContent
+	objStoreConfig                extflag.PathOrContent
+	dataDir                       string
+	cacheIndexHeader              bool
+	grpcConfig                    grpcConfig
+	httpConfig                    httpConfig
+	indexCacheSizeBytes           units.Base2Bytes
+	chunkPoolSize                 units.Base2Bytes
+	estimatedMaxSeriesSize        uint64
+	estimatedMaxChunkSize         uint64
+	seriesBatchSize               int
+	storeRateLimits               store.SeriesSelectLimits
+	maxDownloadedBytes            units.Base2Bytes
+	maxConcurrency                int
+	component                     component.StoreAPI
+	debugLogging                  bool
+	syncInterval                  time.Duration
+	blockListStrategy             string
+	blockSyncConcurrency          int
+	blockMetaFetchConcurrency     int
+	filterConf                    *store.FilterConfig
+	selectorRelabelConf           extflag.PathOrContent
+	advertiseCompatibilityLabel   bool
+	consistencyDelay              commonmodel.Duration
+	ignoreDeletionMarksDelay      commonmodel.Duration
+	disableWeb                    bool
+	webConfig                     webConfig
+	label                         string
+	postingOffsetsInMemSampling   int
+	cachingBucketConfig           extflag.PathOrContent
+	reqLogConfig                  *extflag.PathOrContent
+	lazyIndexReaderEnabled        bool
+	lazyIndexReaderIdleTimeout    time.Duration
+	lazyExpandedPostingsEnabled   bool
+	postingGroupMaxKeySeriesRatio float64
 
 	indexHeaderLazyDownloadStrategy string
 }
@@ -205,8 +205,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
 
-	cmd.Flag("store.posting-group-max-keys", "Mark posting group as lazy if it fetches more keys than the configured number. Only valid if lazy expanded posting is enabled. 0 disables the limit.").
-		Default("0").IntVar(&sc.PostingGroupMaxKeys)
+	cmd.Flag("store.posting-group-max-key-series-ratio", "Mark posting group as lazy if it fetches more keys than R * max series the query should fetch. With R set to 100, a posting group which fetches 100K keys will be marked as lazy if the current query only fetches 1000 series. This config is only valid if lazy expanded posting is enabled. 0 disables the limit.").
+		Default("100").Float64Var(&sc.postingGroupMaxKeySeriesRatio)
 
 	cmd.Flag("store.index-header-lazy-download-strategy", "Strategy of how to download index headers lazily. Supported values: eager, lazy. If eager, always download index header during initial load. If lazy, download index header during query time.").
 		Default(string(indexheader.EagerDownloadStrategy)).
@@ -433,7 +433,7 @@ func runStore(
 			return conf.estimatedMaxChunkSize
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
-		store.WithPostingGroupMaxKeys(conf.PostingGroupMaxKeys),
+		store.WithPostingGroupMaxKeySeriesRatio(conf.postingGroupMaxKeySeriesRatio),
 		store.WithIndexHeaderLazyDownloadStrategy(
 			indexheader.IndexHeaderLazyDownloadStrategy(conf.indexHeaderLazyDownloadStrategy).StrategyToDownloadFunc(),
 		),

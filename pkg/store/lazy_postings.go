@@ -44,7 +44,7 @@ func optimizePostingsFetchByDownloadedBytes(
 	postingGroups []*postingGroup,
 	seriesMaxSize int64,
 	seriesMatchRatio float64,
-	postingGroupMaxKeys int,
+	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
 ) ([]*postingGroup, bool, error) {
@@ -153,6 +153,7 @@ func optimizePostingsFetchByDownloadedBytes(
 
 	// Assume only seriesMatchRatio postings will be matched every posting group.
 	seriesMatched := postingGroups[i].cardinality - int64(math.Ceil(float64(negativeCardinalities)*seriesMatchRatio))
+	maxSeriesMatched := seriesMatched
 	i++ // Start from next posting group as we always need to fetch at least one posting group with add keys.
 	for i < len(postingGroups) {
 		pg := postingGroups[i]
@@ -177,7 +178,7 @@ func optimizePostingsFetchByDownloadedBytes(
 			underfetchedSeriesSize = underfetchedSeries * seriesMaxSize
 		} else {
 			// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
-			if postingGroupMaxKeys > 0 && pg.existentKeys > postingGroupMaxKeys {
+			if postingGroupMaxKeySeriesRatio > 0 && float64(pg.existentKeys)/float64(maxSeriesMatched) > postingGroupMaxKeySeriesRatio {
 				markPostingGroupLazy(pg, "keys_limit", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
 				i++
 				continue
@@ -212,7 +213,7 @@ func fetchLazyExpandedPostings(
 	bytesLimiter BytesLimiter,
 	addAllPostings bool,
 	lazyExpandedPostingEnabled bool,
-	postingGroupMaxKeys int,
+	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
 	tenant string,
@@ -236,7 +237,7 @@ func fetchLazyExpandedPostings(
 			postingGroups,
 			int64(r.block.estimatedMaxSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
-			postingGroupMaxKeys,
+			postingGroupMaxKeySeriesRatio,
 			lazyExpandedPostingSizeBytes,
 			lazyExpandedPostingGroupsByReason,
 		)

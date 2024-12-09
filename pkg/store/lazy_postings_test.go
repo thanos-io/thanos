@@ -308,16 +308,16 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		},
 	}
 	for _, tc := range []struct {
-		name                  string
-		inputPostings         map[string]map[string]index.Range
-		inputError            error
-		postingGroups         []*postingGroup
-		seriesMaxSize         int64
-		seriesMatchRatio      float64
-		minAddKeysToMarkLazy  int
-		expectedPostingGroups []*postingGroup
-		expectedEmptyPosting  bool
-		expectedError         string
+		name                          string
+		inputPostings                 map[string]map[string]index.Range
+		inputError                    error
+		postingGroups                 []*postingGroup
+		seriesMaxSize                 int64
+		seriesMatchRatio              float64
+		postingGroupMaxKeySeriesRatio float64
+		expectedPostingGroups         []*postingGroup
+		expectedEmptyPosting          bool
+		expectedError                 string
 	}{
 		{
 			name: "empty posting group",
@@ -465,11 +465,11 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
-				{name: "bar", addKeys: []string{"baz", "foo"}},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}},
 			},
-			minAddKeysToMarkLazy: 1,
+			postingGroupMaxKeySeriesRatio: 2,
 			expectedPostingGroups: []*postingGroup{
-				{name: "bar", addKeys: []string{"baz", "foo"}, cardinality: 1, existentKeys: 1},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}, cardinality: 1, existentKeys: 1},
 				{name: "foo", addKeys: []string{"bar"}, cardinality: 1, existentKeys: 1},
 			},
 		},
@@ -477,36 +477,54 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			name: "two posting groups with add keys, first posting group not marked as lazy even though exceeding 2 keys due to we always mark first posting group as non lazy",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 108}},
-				"bar": {"foo": index.Range{Start: 108, End: 116}, "baz": index.Range{Start: 116, End: 124}},
+				"bar": {"foo": index.Range{Start: 108, End: 116}, "bar": index.Range{Start: 116, End: 124}, "baz": index.Range{Start: 124, End: 132}},
 			},
 			seriesMaxSize:    1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
-				{name: "bar", addKeys: []string{"baz", "foo"}},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}},
 			},
-			minAddKeysToMarkLazy: 1,
+			postingGroupMaxKeySeriesRatio: 2,
 			expectedPostingGroups: []*postingGroup{
-				{name: "bar", addKeys: []string{"baz", "foo"}, cardinality: 2, existentKeys: 2},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}, cardinality: 3, existentKeys: 3},
 				{name: "foo", addKeys: []string{"bar"}, cardinality: 26, existentKeys: 1},
 			},
 		},
 		{
-			name: "two posting groups with add keys, one posting group marked as lazy due to exceeding minAddKeysToMarkLazy",
+			name: "two posting groups with add keys, one posting group with too many keys not marked as lazy due to postingGroupMaxKeySeriesRatio not set",
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
-				"bar": {"foo": index.Range{Start: 8, End: 16}, "baz": index.Range{Start: 16, End: 24}},
+				"bar": {"foo": index.Range{Start: 8, End: 16}, "bar": index.Range{Start: 16, End: 24}, "baz": index.Range{Start: 24, End: 32}},
 			},
 			seriesMaxSize:    1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
-				{name: "bar", addKeys: []string{"baz", "foo"}},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}},
 			},
-			minAddKeysToMarkLazy: 1,
+			postingGroupMaxKeySeriesRatio: 0,
 			expectedPostingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}, cardinality: 1, existentKeys: 1},
-				{name: "bar", addKeys: []string{"baz", "foo"}, cardinality: 2, existentKeys: 2, lazy: true},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}, cardinality: 3, existentKeys: 3},
+			},
+		},
+		{
+			name: "two posting groups with add keys, one posting group marked as lazy due to exceeding postingGroupMaxKeySeriesRatio",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 8}},
+				"bar": {"foo": index.Range{Start: 8, End: 16}, "bar": index.Range{Start: 16, End: 24}, "baz": index.Range{Start: 24, End: 32}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.5,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}},
+			},
+			postingGroupMaxKeySeriesRatio: 2,
+			expectedPostingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}, cardinality: 1, existentKeys: 1},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}, cardinality: 3, existentKeys: 3, lazy: true},
 			},
 		},
 		{
@@ -620,20 +638,20 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			name: "three posting groups with add keys, middle posting group marked as lazy due to too many add keys",
 			inputPostings: map[string]map[string]index.Range{
 				"foo":     {"bar": index.Range{End: 8}},
-				"bar":     {"baz": index.Range{Start: 8, End: 16}, "foo": index.Range{Start: 16, End: 24}},
-				"cluster": {"us": index.Range{Start: 24, End: 100}},
+				"bar":     {"bar": index.Range{Start: 8, End: 16}, "baz": index.Range{Start: 16, End: 24}, "foo": index.Range{Start: 24, End: 32}},
+				"cluster": {"us": index.Range{Start: 32, End: 108}},
 			},
-			seriesMaxSize:        1000,
-			seriesMatchRatio:     0.5,
-			minAddKeysToMarkLazy: 1,
+			seriesMaxSize:                 1000,
+			seriesMatchRatio:              0.5,
+			postingGroupMaxKeySeriesRatio: 2,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
-				{name: "bar", addKeys: []string{"baz", "foo"}},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}},
 				{name: "cluster", addKeys: []string{"us"}},
 			},
 			expectedPostingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}, cardinality: 1, existentKeys: 1},
-				{name: "bar", addKeys: []string{"baz", "foo"}, cardinality: 2, existentKeys: 2, lazy: true},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}, cardinality: 3, existentKeys: 3, lazy: true},
 				{name: "cluster", addKeys: []string{"us"}, cardinality: 18, existentKeys: 1},
 			},
 		},
@@ -641,20 +659,20 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			name: "three posting groups with add keys, bar not marked as lazy even though too many add keys due to first positive posting group sorted by cardinality",
 			inputPostings: map[string]map[string]index.Range{
 				"foo":     {"bar": index.Range{End: 8}},
-				"bar":     {"baz": index.Range{Start: 8, End: 16}, "foo": index.Range{Start: 16, End: 24}},
-				"cluster": {"us": index.Range{Start: 24, End: 100}},
+				"bar":     {"bar": index.Range{Start: 8, End: 16}, "baz": index.Range{Start: 16, End: 24}, "foo": index.Range{Start: 24, End: 32}},
+				"cluster": {"us": index.Range{Start: 32, End: 108}},
 			},
-			seriesMaxSize:        1000,
-			seriesMatchRatio:     0.5,
-			minAddKeysToMarkLazy: 1,
+			seriesMaxSize:                 1000,
+			seriesMatchRatio:              0.5,
+			postingGroupMaxKeySeriesRatio: 2,
 			postingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
-				{name: "bar", addKeys: []string{"baz", "foo"}},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}},
 				{name: "cluster", addKeys: []string{"us"}},
 			},
 			expectedPostingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}, cardinality: 1, existentKeys: 1},
-				{name: "bar", addKeys: []string{"baz", "foo"}, cardinality: 2, existentKeys: 2},
+				{name: "bar", addKeys: []string{"bar", "baz", "foo"}, cardinality: 3, existentKeys: 3},
 				{name: "cluster", addKeys: []string{"us"}, cardinality: 18, existentKeys: 1},
 			},
 		},
@@ -710,7 +728,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			ir := newBucketIndexReader(block, logger)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
 			dummyCounterVec := promauto.With(registry).NewCounterVec(prometheus.CounterOpts{Name: "test_counter_vec"}, []string{"reason"})
-			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, tc.minAddKeysToMarkLazy, dummyCounter, dummyCounterVec)
+			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, tc.postingGroupMaxKeySeriesRatio, dummyCounter, dummyCounterVec)
 			if err != nil {
 				testutil.Equals(t, tc.expectedError, err.Error())
 				return
