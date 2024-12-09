@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -385,8 +386,8 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 // NOTE: It allocates memory.
 func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
-	for _, m := range ms {
-		pm, err := MatcherToPromMatcher(m)
+	for i := range ms {
+		pm, err := MatcherToPromMatcher(&ms[i])
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +397,11 @@ func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 }
 
 // MatcherToPromMatcher converts a Thanos label matcher to Prometheus label matcher.
-func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
+func MatcherToPromMatcher(mi ConversionLabelMatcher) (*labels.Matcher, error) {
+	var m, ok = mi.(*LabelMatcher)
+	if !ok {
+		return nil, errors.Errorf("unexpected matcher type %T", mi)
+	}
 	var t labels.MatchType
 
 	switch m.Type {
@@ -442,6 +447,37 @@ func PromMatchersToString(ms ...*labels.Matcher) string {
 
 func (m *LabelMatcher) PromString() string {
 	return fmt.Sprintf("%s%s%q", m.Name, m.Type.PromString(), m.Value)
+}
+
+func (m *LabelMatcher) GetName() string {
+	return m.Name
+}
+
+func (m *LabelMatcher) GetValue() string {
+	return m.Value
+}
+
+func (m *LabelMatcher) GetType() prompb.LabelMatcher_Type {
+	switch m.Type {
+	case LabelMatcher_EQ:
+		return prompb.LabelMatcher_EQ
+	case LabelMatcher_NEQ:
+		return prompb.LabelMatcher_NEQ
+	case LabelMatcher_RE:
+		return prompb.LabelMatcher_RE
+	case LabelMatcher_NRE:
+		return prompb.LabelMatcher_NRE
+	default:
+		return prompb.LabelMatcher_EQ
+	}
+}
+
+// ConversionLabelMatcher is a common interface for the Prometheus and Thanos label matchers.
+type ConversionLabelMatcher interface {
+	String() string
+	GetName() string
+	GetType() prompb.LabelMatcher_Type
+	GetValue() string
 }
 
 func (x LabelMatcher_Type) PromString() string {
