@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -53,7 +54,7 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
-func WithMatcherCacheInstance(cache storepb.MatchersCache) TSDBStoreOption {
+func WithMatcherCacheInstance(cache storecache.MatchersCache) TSDBStoreOption {
 	return func(s *TSDBStore) {
 		s.matcherCache = cache
 	}
@@ -68,7 +69,7 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	buffers          sync.Pool
 	maxBytesPerFrame int
-	matcherCache     storepb.MatchersCache
+	matcherCache     storecache.MatchersCache
 
 	extLset                labels.Labels
 	startStoreFilterUpdate bool
@@ -119,7 +120,7 @@ func NewTSDBStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
-		matcherCache: storepb.NewNoopMatcherCache(),
+		matcherCache: storecache.NewNoopMatcherCache(),
 	}
 
 	for _, option := range options {

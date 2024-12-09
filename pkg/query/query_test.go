@@ -17,6 +17,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
@@ -55,7 +56,7 @@ func TestQuerier_Proxy(t *testing.T) {
 	files, err := filepath.Glob("testdata/promql/**/*.test")
 	testutil.Ok(t, err)
 	testutil.Equals(t, 10, len(files), "%v", files)
-	cache, err := storepb.NewMatchersCache()
+	cache, err := storecache.NewMatchersCache()
 	testutil.Ok(t, err)
 
 	logger := log.NewLogfmtLogger(os.Stderr)
