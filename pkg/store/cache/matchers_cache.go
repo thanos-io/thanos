@@ -1,24 +1,23 @@
-// Copyright (c) The Thanos Authors.
-// Licensed under the Apache License 2.0.
-
-package storepb
+package storecache
 
 import (
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"golang.org/x/sync/singleflight"
+
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 const DefaultCacheSize = 200
 
-type NewItemFunc func(matcher LabelMatcher) (*labels.Matcher, error)
+type NewItemFunc func(matcher storepb.LabelMatcher) (*labels.Matcher, error)
 
 type MatchersCache interface {
 	// GetOrSet retrieves a matcher from cache or creates and stores it if not present.
 	// If the matcher is not in cache, it uses the provided newItem function to create it.
-	GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error)
+	GetOrSet(key storepb.LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error)
 }
 
 // Ensure implementations satisfy the interface.
@@ -36,14 +35,14 @@ func NewNoopMatcherCache() MatchersCache {
 }
 
 // GetOrSet implements MatchersCache by always creating a new matcher without caching.
-func (n *NoopMatcherCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
+func (n *NoopMatcherCache) GetOrSet(key storepb.LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	return newItem(key)
 }
 
 // LruMatchersCache implements MatchersCache with an LRU cache and metrics.
 type LruMatchersCache struct {
 	reg     prometheus.Registerer
-	cache   *lru.Cache[LabelMatcher, *labels.Matcher]
+	cache   *lru.Cache[storepb.LabelMatcher, *labels.Matcher]
 	metrics *matcherCacheMetrics
 	size    int
 	sf      singleflight.Group
@@ -74,7 +73,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	}
 	cache.metrics = newMatcherCacheMetrics(cache.reg)
 
-	lruCache, err := lru.NewWithEvict[LabelMatcher, *labels.Matcher](cache.size, cache.onEvict)
+	lruCache, err := lru.NewWithEvict[storepb.LabelMatcher, *labels.Matcher](cache.size, cache.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +82,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	return cache, nil
 }
 
-func (c *LruMatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
+func (c *LruMatchersCache) GetOrSet(key storepb.LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	c.metrics.requestsTotal.Inc()
 	if item, ok := c.cache.Get(key); ok {
 		c.metrics.hitsTotal.Inc()
@@ -111,7 +110,7 @@ func (c *LruMatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*lab
 	return v.(*labels.Matcher), nil
 }
 
-func (c *LruMatchersCache) onEvict(_ LabelMatcher, _ *labels.Matcher) {
+func (c *LruMatchersCache) onEvict(_ storepb.LabelMatcher, _ *labels.Matcher) {
 	c.metrics.evicted.Inc()
 	c.metrics.numItems.Set(float64(c.cache.Len()))
 }
@@ -147,4 +146,19 @@ func newMatcherCacheMetrics(reg prometheus.Registerer) *matcherCacheMetrics {
 			Help: "Total number of items evicted from the cache",
 		}),
 	}
+}
+
+// MatchersToPromMatchersCached returns Prometheus matchers from proto matchers.
+// Works analogously to MatchersToPromMatchers but uses cache to avoid unnecessary allocations and conversions.
+// NOTE: It (can) allocate memory.
+func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
+	res := make([]*labels.Matcher, 0, len(ms))
+	for _, m := range ms {
+		pm, err := cache.GetOrSet(m, storepb.MatcherToPromMatcher)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, pm)
+	}
+	return res, nil
 }

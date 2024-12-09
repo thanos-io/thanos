@@ -50,8 +50,8 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -226,9 +226,9 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var cache = storepb.NewNoopMatcherCache()
+	var cache = storecache.NewNoopMatcherCache()
 	if conf.matcherCacheSize > 0 {
-		cache, err = storepb.NewMatchersCache(storepb.WithSize(conf.matcherCacheSize), storepb.WithPromRegistry(reg))
+		cache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
 		if err != nil {
 			return errors.Wrap(err, "failed to create matchers cache")
 		}
