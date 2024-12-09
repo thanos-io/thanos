@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
-
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
@@ -24,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -416,7 +415,6 @@ func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, A
 		nil,
 		false,
 		metadata.NoneFunc,
-		nil,
 	)
 	t.Cleanup(func() { testutil.Ok(t, m.Close()) })
 
@@ -482,7 +480,6 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		nil,
 		false,
 		metadata.NoneFunc,
-		nil,
 	)
 	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
 

@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/stretchr/testify/require"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
-
+	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -821,7 +819,6 @@ func initializeMultiTSDB(dir string) *MultiTSDB {
 		bucket,
 		false,
 		metadata.NoneFunc,
-		nil,
 	)
 
 	return m

@@ -26,8 +26,10 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-
 	"github.com/thanos-io/objstore"
+	"go.uber.org/atomic"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -39,7 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive/expandedpostingscache"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/cache"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
