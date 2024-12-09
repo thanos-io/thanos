@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -2086,7 +2087,7 @@ func BenchmarkProxySeries(b *testing.B) {
 func BenchmarkProxySeriesRegex(b *testing.B) {
 	tb := testutil.NewTB(b)
 
-	cache, err := storepb.NewMatchersCache(storepb.WithSize(200))
+	cache, err := storecache.NewMatchersCache(storecache.WithSize(200))
 	testutil.Ok(b, err)
 
 	q := NewProxyStore(nil,
@@ -2174,7 +2175,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		responseTimeout:   5 * time.Second,
 		retrievalStrategy: EagerRetrieval,
 		tsdbSelector:      DefaultSelector,
-		matcherCache:      storepb.NewNoopMatcherCache(),
+		matcherCache:      storecache.NewNoopMatcherCache(),
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -2311,7 +2312,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					responseTimeout:   50 * time.Millisecond,
 					retrievalStrategy: respStrategy,
 					tsdbSelector:      DefaultSelector,
-					matcherCache:      storepb.NewNoopMatcherCache(),
+					matcherCache:      storecache.NewNoopMatcherCache(),
 				}
 
 				ctx, cancel := context.WithCancel(context.Background())
@@ -2349,7 +2350,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					responseTimeout:   50 * time.Millisecond,
 					retrievalStrategy: respStrategy,
 					tsdbSelector:      DefaultSelector,
-					matcherCache:      storepb.NewNoopMatcherCache(),
+					matcherCache:      storecache.NewNoopMatcherCache(),
 				}
 
 				ctx := context.Background()
