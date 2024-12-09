@@ -67,40 +67,41 @@ const (
 )
 
 type storeConfig struct {
-	indexCacheConfigs           extflag.PathOrContent
-	objStoreConfig              extflag.PathOrContent
-	dataDir                     string
-	cacheIndexHeader            bool
-	grpcConfig                  grpcConfig
-	httpConfig                  httpConfig
-	indexCacheSizeBytes         units.Base2Bytes
-	chunkPoolSize               units.Base2Bytes
-	estimatedMaxSeriesSize      uint64
-	estimatedMaxChunkSize       uint64
-	seriesBatchSize             int
-	storeRateLimits             store.SeriesSelectLimits
-	maxDownloadedBytes          units.Base2Bytes
-	maxConcurrency              int
-	component                   component.StoreAPI
-	debugLogging                bool
-	syncInterval                time.Duration
-	blockListStrategy           string
-	blockSyncConcurrency        int
-	blockMetaFetchConcurrency   int
-	filterConf                  *store.FilterConfig
-	selectorRelabelConf         extflag.PathOrContent
-	advertiseCompatibilityLabel bool
-	consistencyDelay            commonmodel.Duration
-	ignoreDeletionMarksDelay    commonmodel.Duration
-	disableWeb                  bool
-	webConfig                   webConfig
-	label                       string
-	postingOffsetsInMemSampling int
-	cachingBucketConfig         extflag.PathOrContent
-	reqLogConfig                *extflag.PathOrContent
-	lazyIndexReaderEnabled      bool
-	lazyIndexReaderIdleTimeout  time.Duration
-	lazyExpandedPostingsEnabled bool
+	indexCacheConfigs             extflag.PathOrContent
+	objStoreConfig                extflag.PathOrContent
+	dataDir                       string
+	cacheIndexHeader              bool
+	grpcConfig                    grpcConfig
+	httpConfig                    httpConfig
+	indexCacheSizeBytes           units.Base2Bytes
+	chunkPoolSize                 units.Base2Bytes
+	estimatedMaxSeriesSize        uint64
+	estimatedMaxChunkSize         uint64
+	seriesBatchSize               int
+	storeRateLimits               store.SeriesSelectLimits
+	maxDownloadedBytes            units.Base2Bytes
+	maxConcurrency                int
+	component                     component.StoreAPI
+	debugLogging                  bool
+	syncInterval                  time.Duration
+	blockListStrategy             string
+	blockSyncConcurrency          int
+	blockMetaFetchConcurrency     int
+	filterConf                    *store.FilterConfig
+	selectorRelabelConf           extflag.PathOrContent
+	advertiseCompatibilityLabel   bool
+	consistencyDelay              commonmodel.Duration
+	ignoreDeletionMarksDelay      commonmodel.Duration
+	disableWeb                    bool
+	webConfig                     webConfig
+	label                         string
+	postingOffsetsInMemSampling   int
+	cachingBucketConfig           extflag.PathOrContent
+	reqLogConfig                  *extflag.PathOrContent
+	lazyIndexReaderEnabled        bool
+	lazyIndexReaderIdleTimeout    time.Duration
+	lazyExpandedPostingsEnabled   bool
+	postingGroupMaxKeySeriesRatio float64
 
 	indexHeaderLazyDownloadStrategy string
 }
@@ -203,6 +204,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
+
+	cmd.Flag("store.posting-group-max-key-series-ratio", "Mark posting group as lazy if it fetches more keys than R * max series the query should fetch. With R set to 100, a posting group which fetches 100K keys will be marked as lazy if the current query only fetches 1000 series. thanos_bucket_store_lazy_expanded_posting_groups_total shows lazy expanded postings groups with reasons and you can tune this config accordingly. This config is only valid if lazy expanded posting is enabled. 0 disables the limit.").
+		Default("100").Float64Var(&sc.postingGroupMaxKeySeriesRatio)
 
 	cmd.Flag("store.index-header-lazy-download-strategy", "Strategy of how to download index headers lazily. Supported values: eager, lazy. If eager, always download index header during initial load. If lazy, download index header during query time.").
 		Default(string(indexheader.EagerDownloadStrategy)).
@@ -429,6 +433,7 @@ func runStore(
 			return conf.estimatedMaxChunkSize
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
+		store.WithPostingGroupMaxKeySeriesRatio(conf.postingGroupMaxKeySeriesRatio),
 		store.WithIndexHeaderLazyDownloadStrategy(
 			indexheader.IndexHeaderLazyDownloadStrategy(conf.indexHeaderLazyDownloadStrategy).StrategyToDownloadFunc(),
 		),
