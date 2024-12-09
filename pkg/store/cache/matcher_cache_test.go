@@ -17,26 +17,26 @@ func TestMatchersCache(t *testing.T) {
 	cache, err := storecache.NewMatchersCache(storecache.WithSize(2))
 	testutil.Ok(t, err)
 
-	matcher := storepb.LabelMatcher{
+	matcher := &storepb.LabelMatcher{
 		Type:  storepb.LabelMatcher_EQ,
 		Name:  "key",
 		Value: "val",
 	}
 
-	matcher2 := storepb.LabelMatcher{
+	matcher2 := &storepb.LabelMatcher{
 		Type:  storepb.LabelMatcher_RE,
 		Name:  "key2",
 		Value: "val2|val3",
 	}
 
-	matcher3 := storepb.LabelMatcher{
+	matcher3 := &storepb.LabelMatcher{
 		Type:  storepb.LabelMatcher_EQ,
 		Name:  "key3",
 		Value: "val3",
 	}
 
 	var cacheHit bool
-	newItem := func(matcher storepb.LabelMatcher) (*labels.Matcher, error) {
+	newItem := func(matcher storepb.ConversionLabelMatcher) (*labels.Matcher, error) {
 		cacheHit = false
 		return storepb.MatcherToPromMatcher(matcher)
 	}
@@ -92,7 +92,7 @@ func BenchmarkMatchersCache(b *testing.B) {
 		b.Fatalf("failed to create cache: %v", err)
 	}
 
-	matchers := []storepb.LabelMatcher{
+	matchers := []*storepb.LabelMatcher{
 		{Type: storepb.LabelMatcher_EQ, Name: "key1", Value: "val1"},
 		{Type: storepb.LabelMatcher_EQ, Name: "key2", Value: "val2"},
 		{Type: storepb.LabelMatcher_EQ, Name: "key3", Value: "val3"},
@@ -100,7 +100,7 @@ func BenchmarkMatchersCache(b *testing.B) {
 		{Type: storepb.LabelMatcher_RE, Name: "key5", Value: "^(val5|val6|val7|val8|val9).*$"},
 	}
 
-	newItem := func(matcher storepb.LabelMatcher) (*labels.Matcher, error) {
+	newItem := func(matcher storepb.ConversionLabelMatcher) (*labels.Matcher, error) {
 		return storepb.MatcherToPromMatcher(matcher)
 	}
 
