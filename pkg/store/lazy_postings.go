@@ -178,7 +178,8 @@ func optimizePostingsFetchByDownloadedBytes(
 			underfetchedSeriesSize = underfetchedSeries * seriesMaxSize
 		} else {
 			// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
-			if postingGroupMaxKeySeriesRatio > 0 && float64(pg.existentKeys)/float64(maxSeriesMatched) > postingGroupMaxKeySeriesRatio {
+			if postingGroupMaxKeySeriesRatio > 0 && maxSeriesMatched > 0 &&
+				float64(pg.existentKeys)/float64(maxSeriesMatched) > postingGroupMaxKeySeriesRatio {
 				markPostingGroupLazy(pg, "keys_limit", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
 				i++
 				continue

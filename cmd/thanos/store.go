@@ -205,7 +205,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
 
-	cmd.Flag("store.posting-group-max-key-series-ratio", "Mark posting group as lazy if it fetches more keys than R * max series the query should fetch. With R set to 100, a posting group which fetches 100K keys will be marked as lazy if the current query only fetches 1000 series. This config is only valid if lazy expanded posting is enabled. 0 disables the limit.").
+	cmd.Flag("store.posting-group-max-key-series-ratio", "Mark posting group as lazy if it fetches more keys than R * max series the query should fetch. With R set to 100, a posting group which fetches 100K keys will be marked as lazy if the current query only fetches 1000 series. thanos_bucket_store_lazy_expanded_posting_groups_total shows lazy expanded postings groups with reasons and you can tune this config accordingly. This config is only valid if lazy expanded posting is enabled. 0 disables the limit.").
 		Default("100").Float64Var(&sc.postingGroupMaxKeySeriesRatio)
 
 	cmd.Flag("store.index-header-lazy-download-strategy", "Strategy of how to download index headers lazily. Supported values: eager, lazy. If eager, always download index header during initial load. If lazy, download index header during query time.").
