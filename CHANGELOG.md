@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#7907](https://github.com/thanos-io/thanos/pull/7907) Receive: Add `--receive.grpc-service-config` flag to configure gRPC service config for the receivers.
+- [#7353](https://github.com/thanos-io/thanos/pull/7353) Receiver: cache matchers for series calls.
 
 ### Changed
 
@@ -146,6 +147,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 ### Changed
+
+- [#7353](https://github.com/thanos-io/thanos/pull/7353) Receive: cache matchers for series calls.
 
 ### Removed
 

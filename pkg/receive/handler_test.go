@@ -6,6 +6,7 @@ package receive
 import (
 	"bytes"
 	"context"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"math"
@@ -23,8 +24,6 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	goerrors "errors"
 
 	"github.com/alecthomas/units"
 	"github.com/efficientgo/core/testutil"
