@@ -210,22 +210,3 @@ func ParseLimitConfigContent(limitsConfig fileContent) (*RootLimitsConfig, error
 	}
 	return parsedConfig, nil
 }
-
-type nopConfigContent struct{}
-
-var _ fileContent = (*nopConfigContent)(nil)
-
-// Content returns no content and no error.
-func (n nopConfigContent) Content() ([]byte, error) {
-	return nil, nil
-}
-
-// Path returns an empty path.
-func (n nopConfigContent) Path() string {
-	return ""
-}
-
-// NewNopConfig creates a no-op config content (no configuration).
-func NewNopConfig() nopConfigContent {
-	return nopConfigContent{}
-}

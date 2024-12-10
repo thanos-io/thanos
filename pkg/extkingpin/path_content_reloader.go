@@ -21,6 +21,25 @@ type fileContent interface {
 	Path() string
 }
 
+type NopConfigContent struct{}
+
+var _ fileContent = (*NopConfigContent)(nil)
+
+// Content returns no content and no error.
+func (n NopConfigContent) Content() ([]byte, error) {
+	return nil, nil
+}
+
+// Path returns an empty path.
+func (n NopConfigContent) Path() string {
+	return ""
+}
+
+// NewNopConfig creates a no-op config content (no configuration).
+func NewNopConfig() NopConfigContent {
+	return NopConfigContent{}
+}
+
 // PathContentReloader runs the reloadFunc when it detects that the contents of fileContent have changed.
 func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), debounceTime time.Duration) error {
 	filePath, err := filepath.Abs(fileContent.Path())
