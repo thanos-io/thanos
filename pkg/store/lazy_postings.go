@@ -39,7 +39,15 @@ func (p *lazyExpandedPostings) lazyExpanded() bool {
 	return p != nil && len(p.matchers) > 0
 }
 
-func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups []*postingGroup, seriesMaxSize int64, seriesMatchRatio float64, lazyExpandedPostingSizeBytes prometheus.Counter) ([]*postingGroup, bool, error) {
+func optimizePostingsFetchByDownloadedBytes(
+	r *bucketIndexReader,
+	postingGroups []*postingGroup,
+	seriesMaxSize int64,
+	seriesMatchRatio float64,
+	postingGroupMaxKeySeriesRatio float64,
+	lazyExpandedPostingSizeBytes prometheus.Counter,
+	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
+) ([]*postingGroup, bool, error) {
 	if len(postingGroups) <= 1 {
 		return postingGroups, false, nil
 	}
@@ -55,6 +63,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			return nil, false, errors.Wrapf(err, "postings offsets for %s", pg.name)
 		}
 
+		existentKeys := 0
 		for _, rng := range rngs {
 			if rng == indexheader.NotFoundRange {
 				continue
@@ -63,14 +72,16 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 				level.Error(r.logger).Log("msg", "invalid index range, fallback to non lazy posting optimization")
 				return postingGroups, false, nil
 			}
+			existentKeys++
 			// Each range starts from the #entries field which is 4 bytes.
 			// Need to subtract it when calculating number of postings.
 			// https://github.com/prometheus/prometheus/blob/v2.46.0/tsdb/docs/format/index.md.
 			pg.cardinality += (rng.End - rng.Start - 4) / 4
 		}
+		pg.existentKeys = existentKeys
 		// If the posting group adds keys, 0 cardinality means the posting doesn't exist.
 		// If the posting group removes keys, no posting ranges found is fine as it is a noop.
-		if len(pg.addKeys) > 0 && pg.cardinality == 0 {
+		if len(pg.addKeys) > 0 && pg.existentKeys == 0 {
 			return nil, true, nil
 		}
 	}
@@ -142,6 +153,7 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 
 	// Assume only seriesMatchRatio postings will be matched every posting group.
 	seriesMatched := postingGroups[i].cardinality - int64(math.Ceil(float64(negativeCardinalities)*seriesMatchRatio))
+	maxSeriesMatched := seriesMatched
 	i++ // Start from next posting group as we always need to fetch at least one posting group with add keys.
 	for i < len(postingGroups) {
 		pg := postingGroups[i]
@@ -165,6 +177,13 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 			seriesMatched -= underfetchedSeries
 			underfetchedSeriesSize = underfetchedSeries * seriesMaxSize
 		} else {
+			// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
+			if postingGroupMaxKeySeriesRatio > 0 && maxSeriesMatched > 0 &&
+				float64(pg.existentKeys)/float64(maxSeriesMatched) > postingGroupMaxKeySeriesRatio {
+				markPostingGroupLazy(pg, "keys_limit", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
+				i++
+				continue
+			}
 			underfetchedSeriesSize = seriesMaxSize * int64(math.Ceil(float64(seriesMatched)*(1-seriesMatchRatio)))
 			seriesMatched = int64(math.Ceil(float64(seriesMatched) * seriesMatchRatio))
 		}
@@ -176,11 +195,16 @@ func optimizePostingsFetchByDownloadedBytes(r *bucketIndexReader, postingGroups 
 		i++
 	}
 	for i < len(postingGroups) {
-		postingGroups[i].lazy = true
-		lazyExpandedPostingSizeBytes.Add(float64(4 * postingGroups[i].cardinality))
+		markPostingGroupLazy(postingGroups[i], "postings_size", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
 		i++
 	}
 	return postingGroups, false, nil
+}
+
+func markPostingGroupLazy(pg *postingGroup, reason string, lazyExpandedPostingSizeBytes prometheus.Counter, lazyExpandedPostingGroupsByReason *prometheus.CounterVec) {
+	pg.lazy = true
+	lazyExpandedPostingSizeBytes.Add(float64(4 * pg.cardinality))
+	lazyExpandedPostingGroupsByReason.WithLabelValues(reason).Inc()
 }
 
 func fetchLazyExpandedPostings(
@@ -190,7 +214,9 @@ func fetchLazyExpandedPostings(
 	bytesLimiter BytesLimiter,
 	addAllPostings bool,
 	lazyExpandedPostingEnabled bool,
+	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
+	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
 	tenant string,
 ) (*lazyExpandedPostings, error) {
 	var (
@@ -212,7 +238,9 @@ func fetchLazyExpandedPostings(
 			postingGroups,
 			int64(r.block.estimatedMaxSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
+			postingGroupMaxKeySeriesRatio,
 			lazyExpandedPostingSizeBytes,
+			lazyExpandedPostingGroupsByReason,
 		)
 		if err != nil {
 			return nil, err
@@ -243,27 +271,25 @@ func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label
 	for i < len(postingGroups) {
 		pg := postingGroups[i]
 		if pg.lazy {
-			break
+			if len(lazyMatchers) == 0 {
+				lazyMatchers = make([]*labels.Matcher, 0)
+			}
+			lazyMatchers = append(lazyMatchers, postingGroups[i].matchers...)
+		} else {
+			// Postings returned by fetchPostings will be in the same order as keys
+			// so it's important that we iterate them in the same order later.
+			// We don't have any other way of pairing keys and fetched postings.
+			for _, key := range pg.addKeys {
+				keys = append(keys, labels.Label{Name: pg.name, Value: key})
+			}
+			for _, key := range pg.removeKeys {
+				keys = append(keys, labels.Label{Name: pg.name, Value: key})
+			}
 		}
 
-		// Postings returned by fetchPostings will be in the same order as keys
-		// so it's important that we iterate them in the same order later.
-		// We don't have any other way of pairing keys and fetched postings.
-		for _, key := range pg.addKeys {
-			keys = append(keys, labels.Label{Name: pg.name, Value: key})
-		}
-		for _, key := range pg.removeKeys {
-			keys = append(keys, labels.Label{Name: pg.name, Value: key})
-		}
 		i++
 	}
-	if i < len(postingGroups) {
-		lazyMatchers = make([]*labels.Matcher, 0)
-		for i < len(postingGroups) {
-			lazyMatchers = append(lazyMatchers, postingGroups[i].matchers...)
-			i++
-		}
-	}
+
 	return keys, lazyMatchers
 }
 
