@@ -765,7 +765,10 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
-	maxBufferedResponses := len(localWrites)
+	var maxBufferedResponses int
+	for er := range localWrites {
+		maxBufferedResponses += len(localWrites[er])
+	}
 	for er := range remoteWrites {
 		maxBufferedResponses += len(remoteWrites[er])
 	}
