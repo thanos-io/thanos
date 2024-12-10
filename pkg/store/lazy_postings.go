@@ -305,6 +305,18 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 		return nil, nil, errors.Wrap(err, "get postings")
 	}
 
+	result := mergeFetchedPostings(ctx, fetchedPostings, postingGroups)
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	ps, err := ExpandPostingsWithContext(ctx, result)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "expand")
+	}
+	return ps, lazyMatchers, nil
+}
+
+func mergeFetchedPostings(ctx context.Context, fetchedPostings []index.Postings, postingGroups []*postingGroup) index.Postings {
 	// Get "add" and "remove" postings from groups. We iterate over postingGroups and their keys
 	// again, and this is exactly the same order as before (when building the groups), so we can simply
 	// use one incrementing index to fetch postings from returned slice.
@@ -313,7 +325,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 	var groupAdds, groupRemovals []index.Postings
 	for _, g := range postingGroups {
 		if g.lazy {
-			break
+			continue
 		}
 		// We cannot add empty set to groupAdds, since they are intersected.
 		if len(g.addKeys) > 0 {
@@ -333,13 +345,5 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 	}
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(ctx, groupRemovals...))
-
-	if err := ctx.Err(); err != nil {
-		return nil, nil, err
-	}
-	ps, err := ExpandPostingsWithContext(ctx, result)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "expand")
-	}
-	return ps, lazyMatchers, nil
+	return result
 }

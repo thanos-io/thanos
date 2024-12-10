@@ -16,8 +16,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/objstore/providers/filesystem"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -742,6 +744,97 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				}
 			}
 			testutil.Equals(t, float64(4*c), promtest.ToFloat64(dummyCounter))
+		})
+	}
+}
+
+func TestMergeFetchedPostings(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name               string
+		fetchedPostings    []index.Postings
+		postingGroups      []*postingGroup
+		expectedSeriesRefs []storage.SeriesRef
+	}{
+		{
+			name: "empty fetched postings and posting groups",
+		},
+		{
+			name:            "single posting group with 1 add key",
+			fetchedPostings: []index.Postings{index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5})},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{1, 2, 3, 4, 5},
+		},
+		{
+			name: "single posting group with multiple add keys, merge",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5}),
+				index.NewListPostings([]storage.SeriesRef{6, 7, 8, 9}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar", "baz"}},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
+		{
+			name: "multiple posting groups with add key, intersect",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5}),
+				index.NewListPostings([]storage.SeriesRef{1, 2, 4}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{1, 2, 4},
+		},
+		{
+			name: "posting group with remove keys",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5}),
+				index.NewListPostings([]storage.SeriesRef{1, 2, 4}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", removeKeys: []string{"foo"}, addAll: true},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{3, 5},
+		},
+		{
+			name: "multiple posting groups with add key and ignore lazy posting groups",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}, lazy: true},
+				{name: "baz", addKeys: []string{"foo"}, lazy: true},
+				{name: "job", addKeys: []string{"foo"}, lazy: true},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{1, 2, 3, 4, 5},
+		},
+		{
+			name: "multiple posting groups with add key and non consecutive lazy posting groups",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5}),
+				index.NewListPostings([]storage.SeriesRef{1, 2, 4}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}, lazy: true},
+				{name: "baz", addKeys: []string{"foo"}},
+				{name: "job", addKeys: []string{"foo"}, lazy: true},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{1, 2, 4},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := mergeFetchedPostings(ctx, tc.fetchedPostings, tc.postingGroups)
+			res, err := index.ExpandPostings(p)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedSeriesRefs, res)
 		})
 	}
 }
