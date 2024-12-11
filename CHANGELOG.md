@@ -21,19 +21,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 03.12.2024
-
-### Fixed
-
-### Added
-
-- [#7907](https://github.com/thanos-io/thanos/pull/7907) Receive: Add `--receive.grpc-service-config` flag to configure gRPC service config for the receivers.
-- [#7961](https://github.com/thanos-io/thanos/pull/7961) Store Gateway: Add `--store.posting-group-max-keys` flag to mark posting group as lazy if it exceeds number of keys limit. Added `thanos_bucket_store_lazy_expanded_posting_groups_total` for total number of lazy posting groups and corresponding reasons.
-
-### Changed
-
-### Removed
-
 ## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 04.12.2024
 
 ### Fixed
