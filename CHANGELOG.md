@@ -8,7 +8,20 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 03.12.2024
+## [v0.37.2](https://github.com/thanos-io/thanos/tree/release-0.37) - 11.12.2024
+
+### Fixed
+
+- [#7970](https://github.com/thanos-io/thanos/pull/7970) Sidecar: Respect min-time setting.
+- [#7962](https://github.com/thanos-io/thanos/pull/7962) Store: Fix potential deadlock in hedging request.
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 04.12.2024
 
 ### Fixed
 
