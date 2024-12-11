@@ -11,6 +11,8 @@ thanos store \
 The content of `bucket.yml`:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""
@@ -34,6 +36,7 @@ config:
       insecure_skip_verify: false
     disable_compression: false
   chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -48,10 +51,10 @@ Store node giving access to blocks in a bucket provider. Now supported GCS, S3,
 Azure, Swift, Tencent COS and Aliyun OSS.
 
 Flags:
-      --auto-gomemlimit.ratio=0.9
+      --auto-gomemlimit.ratio=0.9  
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
-      --block-discovery-strategy="concurrent"
+      --block-discovery-strategy="concurrent"  
                                  One of concurrent, recursive. When set to
                                  concurrent, stores will concurrently issue
                                  one call per directory to discover active
@@ -60,14 +63,14 @@ Flags:
                                  recursively traversing into each directory.
                                  This avoids N+1 calls at the expense of having
                                  slower bucket iterations.
-      --block-meta-fetch-concurrency=32
+      --block-meta-fetch-concurrency=32  
                                  Number of goroutines to use when fetching block
                                  metadata from object storage.
-      --block-sync-concurrency=20
+      --block-sync-concurrency=20  
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
-      --bucket-web-label=BUCKET-WEB-LABEL
+      --bucket-web-label=BUCKET-WEB-LABEL  
                                  External block label to use as group title in
                                  the bucket web UI
       --cache-index-header       Cache TSDB index-headers on disk to reduce
@@ -93,39 +96,39 @@ Flags:
                                  --no-cache-index-header option is specified.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
-      --grpc-address="0.0.0.0:10901"
+      --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --grpc-server-max-connection-age=60m
+      --grpc-server-max-connection-age=60m  
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""
+      --grpc-server-tls-client-ca=""  
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version="1.3"  
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
-      --ignore-deletion-marks-delay=24h
+      --ignore-deletion-marks-delay=24h  
                                  Duration after which the blocks marked for
                                  deletion will be filtered out while fetching
                                  blocks. The idea of ignore-deletion-marks-delay
@@ -149,54 +152,54 @@ Flags:
       --index-cache-size=250MB   Maximum size of items held in the in-memory
                                  index cache. Ignored if --index-cache.config or
                                  --index-cache.config-file option is specified.
-      --index-cache.config=<content>
+      --index-cache.config=<content>  
                                  Alternative to 'index-cache.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains index cache
                                  configuration. See format details:
                                  https://thanos.io/tip/components/store.md/#index-cache
-      --index-cache.config-file=<file-path>
+      --index-cache.config-file=<file-path>  
                                  Path to YAML file that contains index
                                  cache configuration. See format details:
                                  https://thanos.io/tip/components/store.md/#index-cache
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --max-time=9999-12-31T23:59:59Z
+      --max-time=9999-12-31T23:59:59Z  
                                  End of time range limit to serve. Thanos Store
                                  will serve only blocks, which happened earlier
                                  than this value. Option can be a constant time
                                  in RFC3339 format or time duration relative
                                  to current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
-      --min-time=0000-01-01T00:00:00Z
+      --min-time=0000-01-01T00:00:00Z  
                                  Start of time range limit to serve. Thanos
                                  Store will serve only metrics, which happened
                                  later than this value. Option can be a constant
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --request.logging-config=<content>
+      --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --request.logging-config-file=<file-path>
+      --request.logging-config-file=<file-path>  
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --selector.relabel-config=<content>
+      --selector.relabel-config=<content>  
                                  Alternative to 'selector.relabel-config-file'
                                  flag (mutually exclusive). Content of YAML
                                  file with relabeling configuration that allows
@@ -204,59 +207,59 @@ Flags:
                                  external labels. It follows thanos sharding
                                  relabel-config syntax. For format details see:
                                  https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --selector.relabel-config-file=<file-path>
+      --selector.relabel-config-file=<file-path>  
                                  Path to YAML file with relabeling
                                  configuration that allows selecting blocks
                                  to act on based on their external labels.
                                  It follows thanos sharding relabel-config
                                  syntax. For format details see:
                                  https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --store.enable-index-header-lazy-reader
+      --store.enable-index-header-lazy-reader  
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by
                                  a query.
-      --store.enable-lazy-expanded-postings
+      --store.enable-lazy-expanded-postings  
                                  If true, Store Gateway will estimate postings
                                  size and try to lazily expand postings if
                                  it downloads less data than expanding all
                                  postings.
-      --store.grpc.downloaded-bytes-limit=0
+      --store.grpc.downloaded-bytes-limit=0  
                                  Maximum amount of downloaded (either
                                  fetched or touched) bytes in a single
                                  Series/LabelNames/LabelValues call. The Series
                                  call fails if this limit is exceeded. 0 means
                                  no limit.
-      --store.grpc.series-max-concurrency=20
+      --store.grpc.series-max-concurrency=20  
                                  Maximum number of concurrent Series calls.
-      --store.grpc.series-sample-limit=0
+      --store.grpc.series-sample-limit=0  
                                  DEPRECATED: use store.limits.request-samples.
-      --store.grpc.touched-series-limit=0
+      --store.grpc.touched-series-limit=0  
                                  DEPRECATED: use store.limits.request-series.
-      --store.index-header-lazy-download-strategy=eager
+      --store.index-header-lazy-download-strategy=eager  
                                  Strategy of how to download index headers
                                  lazily. Supported values: eager, lazy.
                                  If eager, always download index header during
                                  initial load. If lazy, download index header
                                  during query time.
-      --store.limits.request-samples=0
+      --store.limits.request-samples=0  
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
                                  chunk contains a maximum of 120 samples.
-      --store.limits.request-series=0
+      --store.limits.request-series=0  
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
       --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
                                  with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                  Path to YAML file with tracing
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -332,6 +335,8 @@ The `in-memory` index cache is enabled by default and its max size can be config
 Alternatively, the `in-memory` index cache can also be configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=storecache.InMemoryIndexCacheConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: IN-MEMORY
 config:
   max_size: 0
@@ -352,6 +357,8 @@ All the settings are **optional**:
 The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.MemcachedClientConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: MEMCACHED
 config:
   addresses: []
@@ -411,6 +418,8 @@ While the remaining settings are **optional**:
 The `redis` index cache allows to use [Redis](https://redis.io) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.RedisClientConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: REDIS
 config:
   addr: ""
