@@ -75,7 +75,6 @@ config:
       insecure_skip_verify: false
     disable_compression: false
   chunk_size_bytes: 0
-  max_retries: 0
 prefix: ""
 ```
 

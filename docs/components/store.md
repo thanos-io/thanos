@@ -34,7 +34,6 @@ config:
       insecure_skip_verify: false
     disable_compression: false
   chunk_size_bytes: 0
-  max_retries: 0
 prefix: ""
 ```
 
@@ -250,18 +249,6 @@ Flags:
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --store.posting-group-max-key-series-ratio=100
-                                 Mark posting group as lazy if it fetches more
-                                 keys than R * max series the query should
-                                 fetch. With R set to 100, a posting group which
-                                 fetches 100K keys will be marked as lazy if
-                                 the current query only fetches 1000 series.
-                                 thanos_bucket_store_lazy_expanded_posting_groups_total
-                                 shows lazy expanded postings groups with
-                                 reasons and you can tune this config
-                                 accordingly. This config is only valid if lazy
-                                 expanded posting is enabled. 0 disables the
-                                 limit.
       --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
@@ -479,6 +466,10 @@ Here is an example of what effect client-side caching could have:
 
 <img src="../img/rueidis-client-side.png" class="img-fluid" alt="Example of client-side in action - reduced network usage by a lot"/>
 
+- `pool_size`: maximum number of socket connections.
+- `min_idle_conns`: specifies the minimum number of idle connections which is useful when establishing new connection is slow.
+- `idle_timeout`: amount of time after which client closes idle connections. Should be less than server's timeout.
+- `max_conn_age`: connection age at which client retires (closes) the connection.
 - `max_get_multi_concurrency`: specifies the maximum number of concurrent GetMulti() operations.
 - `get_multi_batch_size`: specifies the maximum size per batch for mget.
 - `max_set_multi_concurrency`: specifies the maximum number of concurrent SetMulti() operations.
@@ -584,33 +575,6 @@ In the `peers` section it is possible to use the prefix form to automatically lo
 Note that there must be no trailing slash in the `peers` configuration i.e. one of the strings must be identical to `self_url` and others should have the same form. Without this, loading data from peers may fail.
 
 If timeout is set to zero then there is no timeout for fetching and fetching's lifetime is equal to the lifetime to the original request's lifetime. It is recommended to keep it higher than zero. It is generally preferred to keep this value higher because the fetching operation potentially includes loading of data from remote object storage.
-
-## Hedged Requests
-
-Thanos Store Gateway supports `hedged requests` to enhance performance and reliability, particularly in high-latency environments. This feature addresses `long-tail latency issues` that can occur between the Thanos Store Gateway and an external cache, reducing the impact of slower response times on overall performance.
-
-The configuration options for hedged requests allow for tuning based on latency tolerance and cost considerations, as some providers may charge per request.
-
-In the `bucket.yml` file, you can specify the following fields under `hedging_config`:
-
-- `enabled`: bool to enable hedged requests.
-- `up_to`: maximum number of hedged requests allowed for each initial request.
-  - **Purpose**: controls the redundancy level of hedged requests to improve response times.
-  - **Cost vs. Benefit**: increasing up_to can reduce latency but may increase costs, as some providers charge per request. Higher values provide diminishing returns on latency beyond a certain level.
-- `quantile`: latency threshold, specified as a quantile (e.g., percentile), which determines when additional hedged requests should be sent.
-  - **Purpose**: controls when hedged requests are triggered based on response time distribution.
-  - **Cost vs. Benefit**: lower quantile (e.g., 0.7) initiates hedged requests sooner, potentially raising costs while lowering latency variance. A higher quantile (e.g., 0.95) will initiate hedged requests later, reducing cost by limiting redundancy.
-
-By default, `hedging_config` is set as follows:
-
-```yaml
-hedging_config:
-  enabled: false
-  up_to: 3
-  quantile: 0.9
-```
-
-This configuration sends up to three additional requests if the initial request response time exceeds the 90th percentile.
 
 ## Index Header
 
