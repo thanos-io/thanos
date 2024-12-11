@@ -42,7 +42,7 @@ func (p *lazyExpandedPostings) lazyExpanded() bool {
 func optimizePostingsFetchByDownloadedBytes(
 	r *bucketIndexReader,
 	postingGroups []*postingGroup,
-	seriesMaxSize int64,
+	seriesSize int64,
 	seriesMatchRatio float64,
 	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
@@ -175,7 +175,7 @@ func optimizePostingsFetchByDownloadedBytes(
 				underfetchedSeries = int64(math.Ceil(float64(pg.cardinality) * seriesMatchRatio))
 			}
 			seriesMatched -= underfetchedSeries
-			underfetchedSeriesSize = underfetchedSeries * seriesMaxSize
+			underfetchedSeriesSize = underfetchedSeries * seriesSize
 		} else {
 			// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
 			if postingGroupMaxKeySeriesRatio > 0 && maxSeriesMatched > 0 &&
@@ -184,7 +184,7 @@ func optimizePostingsFetchByDownloadedBytes(
 				i++
 				continue
 			}
-			underfetchedSeriesSize = seriesMaxSize * int64(math.Ceil(float64(seriesMatched)*(1-seriesMatchRatio)))
+			underfetchedSeriesSize = seriesSize * int64(math.Ceil(float64(seriesMatched)*(1-seriesMatchRatio)))
 			seriesMatched = int64(math.Ceil(float64(seriesMatched) * seriesMatchRatio))
 		}
 
@@ -227,16 +227,16 @@ func fetchLazyExpandedPostings(
 			There are several cases that we skip postings fetch optimization:
 			- Lazy expanded posting disabled.
 			- Add all postings. This means we don't have a posting group with any add keys.
-		    - Block estimated max series size not set which means we don't have a way to estimate series bytes downloaded.
-			- `SeriesMaxSize` not set for this block then we have no way to estimate series size.
+		    - Block estimated series size not set which means we don't have a way to estimate series bytes downloaded.
+			- `SeriesSize` not set for this block then we have no way to estimate series size.
 			- Only one effective posting group available. We need to at least download postings from 1 posting group so no need to optimize.
 	*/
 	if lazyExpandedPostingEnabled && !addAllPostings &&
-		r.block.estimatedMaxSeriesSize > 0 && len(postingGroups) > 1 {
+		r.block.estimatedSeriesSize > 0 && len(postingGroups) > 1 {
 		postingGroups, emptyPostingGroup, err = optimizePostingsFetchByDownloadedBytes(
 			r,
 			postingGroups,
-			int64(r.block.estimatedMaxSeriesSize),
+			int64(r.block.estimatedSeriesSize),
 			0.5, // TODO(yeya24): Expose this as a flag.
 			postingGroupMaxKeySeriesRatio,
 			lazyExpandedPostingSizeBytes,

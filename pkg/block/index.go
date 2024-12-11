@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DataDog/sketches-go/ddsketch"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
@@ -85,9 +86,13 @@ type HealthStats struct {
 	ChunkAvgSize int64
 	ChunkMaxSize int64
 
-	SeriesMinSize int64
-	SeriesAvgSize int64
-	SeriesMaxSize int64
+	SeriesMinSize   int64
+	SeriesAvgSize   int64
+	SeriesMaxSize   int64
+	SeriesP9999Size int64
+	SeriesP999Size  int64
+	SeriesP99Size   int64
+	SeriesP90Size   int64
 
 	SingleSampleSeries int64
 	SingleSampleChunks int64
@@ -209,6 +214,60 @@ func (n *minMaxSumInt64) Avg() int64 {
 	return n.sum / n.cnt
 }
 
+// sketch is a wrapper for DDSketch which allows to calculate quantile values with a relative accuracy.
+type sketch struct {
+	cnt int64
+	s   *ddsketch.DDSketch
+}
+
+func newSketch() *sketch {
+	// Always valid if accuracy is within (0, 1).
+	// Hardcode 0.1 relative accuracy as we only need int precision.
+	dd, _ := ddsketch.NewDefaultDDSketch(0.1)
+	return &sketch{s: dd}
+}
+
+func (s *sketch) Add(v int64) {
+	s.cnt++
+	// Impossible to happen since v should > 0.
+	_ = s.s.Add(float64(v))
+}
+
+func (s *sketch) Avg() int64 {
+	if s.cnt == 0 {
+		return 0
+	}
+	// Impossible to happen if sketch is not empty.
+	return int64(s.s.GetSum()) / s.cnt
+}
+
+func (s *sketch) Max() int64 {
+	if s.cnt == 0 {
+		return 0
+	}
+	// Impossible to happen if sketch is not empty.
+	v, _ := s.s.GetMaxValue()
+	return int64(v)
+}
+
+func (s *sketch) Min() int64 {
+	if s.cnt == 0 {
+		return 0
+	}
+	// Impossible to happen if sketch is not empty.
+	v, _ := s.s.GetMinValue()
+	return int64(v)
+}
+
+func (s *sketch) Quantile(quantile float64) int64 {
+	if s.cnt == 0 {
+		return 0
+	}
+	// Impossible to happen if quantile is valid and sketch is not empty.
+	v, _ := s.s.GetValueAtQuantile(quantile)
+	return int64(v)
+}
+
 // GatherIndexHealthStats returns useful counters as well as outsider chunks (chunks outside of block time range) that
 // helps to assess index health.
 // It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
@@ -237,7 +296,7 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 		seriesChunks                                = newMinMaxSumInt64()
 		chunkDuration                               = newMinMaxSumInt64()
 		chunkSize                                   = newMinMaxSumInt64()
-		seriesSize                                  = newMinMaxSumInt64()
+		seriesSize                                  = newSketch()
 	)
 
 	lnames, err := r.LabelNames(ctx)
@@ -391,9 +450,13 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 	stats.ChunkAvgSize = chunkSize.Avg()
 	stats.ChunkMinSize = chunkSize.min
 
-	stats.SeriesMaxSize = seriesSize.max
+	stats.SeriesMaxSize = seriesSize.Max()
 	stats.SeriesAvgSize = seriesSize.Avg()
-	stats.SeriesMinSize = seriesSize.min
+	stats.SeriesMinSize = seriesSize.Min()
+	stats.SeriesP90Size = seriesSize.Quantile(0.90)
+	stats.SeriesP99Size = seriesSize.Quantile(0.99)
+	stats.SeriesP999Size = seriesSize.Quantile(0.999)
+	stats.SeriesP9999Size = seriesSize.Quantile(0.9999)
 
 	stats.ChunkMaxDuration = time.Duration(chunkDuration.max) * time.Millisecond
 	stats.ChunkAvgDuration = time.Duration(chunkDuration.Avg()) * time.Millisecond

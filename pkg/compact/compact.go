@@ -1303,6 +1303,10 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 		if stats.SeriesMaxSize > 0 {
 			thanosMeta.IndexStats.SeriesMaxSize = stats.SeriesMaxSize
+			thanosMeta.IndexStats.SeriesP90Size = stats.SeriesP90Size
+			thanosMeta.IndexStats.SeriesP99Size = stats.SeriesP99Size
+			thanosMeta.IndexStats.SeriesP999Size = stats.SeriesP999Size
+			thanosMeta.IndexStats.SeriesP9999Size = stats.SeriesP9999Size
 		}
 		newMeta, err = metadata.InjectThanos(cg.logger, bdir, thanosMeta, nil)
 		if err != nil {
