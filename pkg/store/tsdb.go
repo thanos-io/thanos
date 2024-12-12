@@ -244,6 +244,23 @@ func (s *TSDBStore) SeriesLocal(ctx context.Context, r *storepb.SeriesRequest) (
 	return rs.series, nil
 }
 
+func (s *TSDBStore) MatchersToPromMatchers(ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
+	var tms []*labels.Matcher
+	var err error
+	if s.matcherConverter == nil {
+		tms, err = storepb.MatchersToPromMatchers(ms...)
+		if err != nil {
+			return nil, err
+		}
+		return tms, nil
+	}
+	tms, err = s.matcherConverter.MatchersToPromMatchers(ms...)
+	if err != nil {
+		return nil, err
+	}
+	return tms, nil
+}
+
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
@@ -254,7 +271,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		srv = fs
 	}
 
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	matchers, err := s.MatchersToPromMatchers(r.Matchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -382,7 +399,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	matchers, err := s.MatchersToPromMatchers(r.Matchers...)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -445,7 +462,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		}
 	}
 
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	matchers, err := s.MatchersToPromMatchers(r.Matchers...)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
