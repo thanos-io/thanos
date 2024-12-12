@@ -427,26 +427,21 @@ type MatcherConverter struct {
 }
 
 type matcherConverterMetrics struct {
+	cacheTotalCount prometheus.Counter
 	cacheHitCount   prometheus.Counter
-	cacheMissCount  prometheus.Counter
-	cacheWriteCount prometheus.Counter
 	cacheSizeGauge  prometheus.Gauge
 }
 
 func newMatcherConverterMetrics(reg prometheus.Registerer) *matcherConverterMetrics {
 	var m matcherConverterMetrics
 
+	m.cacheTotalCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_store_matcher_converter_cache_total",
+		Help: "Total number of cache access.",
+	})
 	m.cacheHitCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_store_matcher_converter_cache_hit_total",
-		Help: "Total number of cache hit.",
-	})
-	m.cacheMissCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_store_matcher_converter_cache_miss_total",
-		Help: "Total number of cache miss.",
-	})
-	m.cacheWriteCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_store_matcher_converter_cache_write_total",
-		Help: "Total number of cache write.",
+		Help: "Total number of cache hits.",
 	})
 	m.cacheSizeGauge = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_store_matcher_converter_cache_size",
@@ -477,6 +472,7 @@ func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels
 			res = append(res, pm)
 			continue
 		}
+		c.metrics.cacheTotalCount.Inc()
 		if pm, ok := c.cache.Get(m); ok {
 			// cache hit
 			c.metrics.cacheHitCount.Inc()
@@ -484,13 +480,11 @@ func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels
 			continue
 		}
 		// cache miss
-		c.metrics.cacheMissCount.Inc()
 		pm, err := MatcherToPromMatcher(m)
 		if err != nil {
 			return nil, err
 		}
 		c.cache.Add(m, pm)
-		c.metrics.cacheWriteCount.Inc()
 		res = append(res, pm)
 	}
 	c.metrics.cacheSizeGauge.Set(float64(c.cache.Len()))

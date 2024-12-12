@@ -740,7 +740,7 @@ func TestMatcherConverter_MatchersToPromMatchers(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			cacheHitsBefore := getMetricValue(converter.metrics.cacheHitCount)
-			cacheMissesBefore := getMetricValue(converter.metrics.cacheMissCount)
+			cacheTotalBefore := getMetricValue(converter.metrics.cacheTotalCount)
 
 			promMatchers, err := converter.MatchersToPromMatchers(c.inputMatchers...)
 
@@ -759,13 +759,13 @@ func TestMatcherConverter_MatchersToPromMatchers(t *testing.T) {
 
 			if c.expectCacheAction == CacheHit {
 				require.Equal(t, cacheHitsBefore+1, getMetricValue(converter.metrics.cacheHitCount))
-				require.Equal(t, cacheMissesBefore, getMetricValue(converter.metrics.cacheMissCount))
+				require.Equal(t, cacheTotalBefore+1, getMetricValue(converter.metrics.cacheTotalCount))
 			} else if c.expectCacheAction == CacheMiss {
 				require.Equal(t, cacheHitsBefore, getMetricValue(converter.metrics.cacheHitCount))
-				require.Equal(t, cacheMissesBefore+1, getMetricValue(converter.metrics.cacheMissCount))
+				require.Equal(t, cacheTotalBefore+1, getMetricValue(converter.metrics.cacheTotalCount))
 			} else {
 				require.Equal(t, cacheHitsBefore, getMetricValue(converter.metrics.cacheHitCount))
-				require.Equal(t, cacheMissesBefore, getMetricValue(converter.metrics.cacheMissCount))
+				require.Equal(t, cacheTotalBefore, getMetricValue(converter.metrics.cacheTotalCount))
 			}
 		})
 	}
