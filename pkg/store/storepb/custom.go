@@ -468,6 +468,15 @@ func NewMatcherConverter(cacheCapacity int, reg prometheus.Registerer) (*Matcher
 func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
+		if m.Type == LabelMatcher_EQ || m.Type == LabelMatcher_NEQ {
+			// EQ and NEQ are very cheap, so we don't cache them.
+			pm, err := MatcherToPromMatcher(m)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, pm)
+			continue
+		}
 		if pm, ok := c.cache.Get(m); ok {
 			// cache hit
 			c.metrics.cacheHitCount.Inc()
