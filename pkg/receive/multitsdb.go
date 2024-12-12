@@ -63,6 +63,7 @@ type MultiTSDB struct {
 	hashringConfigs       []HashringConfig
 
 	metricNameFilterEnabled bool
+	matcherConverter        *storepb.MatcherConverter
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -72,6 +73,12 @@ type MultiTSDBOption func(mt *MultiTSDB)
 func WithMetricNameFilterEnabled() MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.metricNameFilterEnabled = true
+	}
+}
+
+func WithMatcherConverter(mc *storepb.MatcherConverter) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.matcherConverter = mc
 	}
 }
 
@@ -710,6 +717,9 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	options := []store.TSDBStoreOption{}
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
+	}
+	if t.matcherConverter != nil {
+		options = append(options, store.WithTSDBStoreMatcherConverter(t.matcherConverter))
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")

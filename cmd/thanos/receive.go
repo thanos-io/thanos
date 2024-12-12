@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
@@ -143,12 +144,24 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
+	var matcherConverter *storepb.MatcherConverter
+	if conf.matcherConverterCacheCapacity > 0 {
+		var err error
+		matcherConverter, err = storepb.NewMatcherConverter(conf.matcherConverterCacheCapacity, reg)
+		if err != nil {
+			level.Error(logger).Log("msg", "failed to create matcher converter", "err", err)
+		}
+	}
+
 	multiTSDBOptions := []receive.MultiTSDBOption{}
 	for _, feature := range *conf.featureList {
 		if feature == metricNamesFilter {
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
 			level.Info(logger).Log("msg", "metric name filter feature enabled")
 		}
+	}
+	if matcherConverter != nil {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithMatcherConverter(matcherConverter))
 	}
 
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
@@ -358,7 +371,9 @@ func runReceive(
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
 			store.WithoutDedup(),
-			store.WithMatcherConverter(conf.matcherConverterCacheCapacity, reg),
+		}
+		if matcherConverter != nil {
+			options = append(options, store.WithProxyStoreMatcherConverter(matcherConverter))
 		}
 
 		proxy := store.NewProxyStore(
@@ -1099,8 +1114,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("10000").Uint64Var(&rc.topMetricsMinimumCardinality)
 	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
-	cmd.Flag("receive.store-matcher-converter-cache-capacity", "The number of label matchers to cache in the matcher converter for the Store API.").
-		Default("1000").IntVar(&rc.matcherConverterCacheCapacity)
+	cmd.Flag("receive.store-matcher-converter-cache-capacity", "The number of label matchers to cache in the matcher converter for the Store API. Set to 0 to disable to cache. Default is 0.").
+		Default("0").IntVar(&rc.matcherConverterCacheCapacity)
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
 

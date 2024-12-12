@@ -163,15 +163,9 @@ func WithoutDedup() ProxyStoreOption {
 	}
 }
 
-func WithMatcherConverter(cacheCapacity int, reg prometheus.Registerer) ProxyStoreOption {
+func WithProxyStoreMatcherConverter(mc *storepb.MatcherConverter) ProxyStoreOption {
 	return func(s *ProxyStore) {
-		matcherConverter, err := storepb.NewMatcherConverter(cacheCapacity, reg)
-		if err != nil {
-			level.Error(s.logger).Log("msg", "failed to create matcher converter", "err", err)
-			return
-		}
-		level.Info(s.logger).Log("msg", "created matcher converter", "cache_capacity", cacheCapacity)
-		s.matcherConverter = matcherConverter
+		s.matcherConverter = mc
 	}
 }
 

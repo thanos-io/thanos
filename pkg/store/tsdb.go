@@ -53,6 +53,12 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
+func WithTSDBStoreMatcherConverter(mc *storepb.MatcherConverter) TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.matcherConverter = mc
+	}
+}
+
 // TSDBStore implements the store API against a local TSDB instance.
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
@@ -69,6 +75,7 @@ type TSDBStore struct {
 	mtx                    sync.RWMutex
 	close                  func()
 	storepb.UnimplementedStoreServer
+	matcherConverter *storepb.MatcherConverter
 }
 
 func (s *TSDBStore) Close() {
