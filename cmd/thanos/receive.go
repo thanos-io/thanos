@@ -358,6 +358,7 @@ func runReceive(
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
 			store.WithoutDedup(),
+			store.WithMatcherConverter(conf.matcherConverterCacheCapacity, reg),
 		}
 
 		proxy := store.NewProxyStore(
@@ -932,9 +933,10 @@ type receiveConfig struct {
 
 	asyncForwardWorkerCount uint
 
-	numTopMetricsPerTenant       int
-	topMetricsMinimumCardinality uint64
-	topMetricsUpdateInterval     time.Duration
+	numTopMetricsPerTenant        int
+	topMetricsMinimumCardinality  uint64
+	topMetricsUpdateInterval      time.Duration
+	matcherConverterCacheCapacity int
 
 	featureList *[]string
 }
@@ -1097,6 +1099,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("10000").Uint64Var(&rc.topMetricsMinimumCardinality)
 	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
+	cmd.Flag("receive.store-matcher-converter-cache-capacity", "The number of label matchers to cache in the matcher converter for the Store API.").
+		Default("1000").IntVar(&rc.matcherConverterCacheCapacity)
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
 

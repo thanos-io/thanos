@@ -7,11 +7,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gogo/protobuf/types"
+	cache "github.com/hashicorp/golang-lru/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
@@ -381,31 +384,107 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 	return res, nil
 }
 
+func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
+	var t labels.MatchType
+
+	switch m.Type {
+	case LabelMatcher_EQ:
+		t = labels.MatchEqual
+	case LabelMatcher_NEQ:
+		t = labels.MatchNotEqual
+	case LabelMatcher_RE:
+		t = labels.MatchRegexp
+	case LabelMatcher_NRE:
+		t = labels.MatchNotRegexp
+	default:
+		return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
+	}
+	pm, err := labels.NewMatcher(t, m.Name, m.Value)
+	if err != nil {
+		return nil, err
+	}
+	return pm, nil
+}
+
 // MatchersToPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
 func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
-		var t labels.MatchType
-
-		switch m.Type {
-		case LabelMatcher_EQ:
-			t = labels.MatchEqual
-		case LabelMatcher_NEQ:
-			t = labels.MatchNotEqual
-		case LabelMatcher_RE:
-			t = labels.MatchRegexp
-		case LabelMatcher_NRE:
-			t = labels.MatchNotRegexp
-		default:
-			return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
-		}
-		m, err := labels.NewMatcher(t, m.Name, m.Value)
+		m, err := MatcherToPromMatcher(m)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, m)
 	}
+	return res, nil
+}
+
+type MatcherConverter struct {
+	cache         *cache.TwoQueueCache[LabelMatcher, *labels.Matcher]
+	cacheCapacity int
+	metrics       *matcherConverterMetrics
+}
+
+type matcherConverterMetrics struct {
+	cacheHitCount   prometheus.Counter
+	cacheMissCount  prometheus.Counter
+	cacheWriteCount prometheus.Counter
+	cacheSizeGauge  prometheus.Gauge
+}
+
+func newMatcherConverterMetrics(reg prometheus.Registerer) *matcherConverterMetrics {
+	var m matcherConverterMetrics
+
+	m.cacheHitCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_store_matcher_converter_cache_hit_total",
+		Help: "Total number of cache hit.",
+	})
+	m.cacheMissCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_store_matcher_converter_cache_miss_total",
+		Help: "Total number of cache miss.",
+	})
+	m.cacheWriteCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_store_matcher_converter_cache_write_total",
+		Help: "Total number of cache write.",
+	})
+	m.cacheSizeGauge = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_store_matcher_converter_cache_size",
+		Help: "Current size of the cache.",
+	})
+
+	return &m
+}
+
+func NewMatcherConverter(cacheCapacity int, reg prometheus.Registerer) (*MatcherConverter, error) {
+	c, err := cache.New2Q[LabelMatcher, *labels.Matcher](cacheCapacity)
+	if err != nil {
+		return nil, err
+	}
+	metrics := newMatcherConverterMetrics(reg)
+	return &MatcherConverter{cache: c, cacheCapacity: cacheCapacity, metrics: metrics}, nil
+}
+
+func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
+	res := make([]*labels.Matcher, 0, len(ms))
+	for _, m := range ms {
+		if pm, ok := c.cache.Get(m); ok {
+			// cache hit
+			c.metrics.cacheHitCount.Inc()
+			res = append(res, pm)
+			continue
+		}
+		// cache miss
+		c.metrics.cacheMissCount.Inc()
+		pm, err := MatcherToPromMatcher(m)
+		if err != nil {
+			return nil, err
+		}
+		c.cache.Add(m, pm)
+		c.metrics.cacheWriteCount.Inc()
+		res = append(res, pm)
+	}
+	c.metrics.cacheSizeGauge.Set(float64(c.cache.Len()))
 	return res, nil
 }
 

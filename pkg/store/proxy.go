@@ -99,6 +99,7 @@ type ProxyStore struct {
 	tsdbSelector      *TSDBSelector
 	quorumChunkDedup  bool
 	enableDedup       bool
+	matcherConverter  *storepb.MatcherConverter
 }
 
 type proxyStoreMetrics struct {
@@ -159,6 +160,18 @@ func WithTSDBSelector(selector *TSDBSelector) ProxyStoreOption {
 func WithoutDedup() ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.enableDedup = false
+	}
+}
+
+func WithMatcherConverter(cacheCapacity int, reg prometheus.Registerer) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		matcherConverter, err := storepb.NewMatcherConverter(cacheCapacity, reg)
+		if err != nil {
+			level.Error(s.logger).Log("msg", "failed to create matcher converter", "err", err)
+			return
+		}
+		level.Info(s.logger).Log("msg", "created matcher converter", "cache_capacity", cacheCapacity)
+		s.matcherConverter = matcherConverter
 	}
 }
 
