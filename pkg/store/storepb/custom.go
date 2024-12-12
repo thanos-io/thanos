@@ -7,8 +7,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +14,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	cache "github.com/hashicorp/golang-lru/v2"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
 
