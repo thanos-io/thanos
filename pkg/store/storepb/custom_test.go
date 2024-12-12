@@ -770,3 +770,40 @@ func TestMatcherConverter_MatchersToPromMatchers(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkMatcherConverter_REWithAndWithoutCache(b *testing.B) {
+	reg := prometheus.NewRegistry()
+	converter, err := NewMatcherConverter(100, reg)
+	require.NoError(b, err)
+
+	nonTrivialRegexes := []LabelMatcher{
+		{Name: "job", Type: LabelMatcher_RE, Value: "^[a-zA-Z0-9_]+$"},
+		{Name: "env", Type: LabelMatcher_RE, Value: `prod|staging|dev`},
+		{Name: "error", Type: LabelMatcher_RE, Value: "^5\\d{2}$"},
+		{Name: "path", Type: LabelMatcher_RE, Value: "^/api/v[0-9]+/.*$"},
+		{Name: "version", Type: LabelMatcher_RE, Value: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+	}
+
+	b.Run("Without Cache", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, lm := range nonTrivialRegexes {
+				_, err := MatcherToPromMatcher(lm)
+				require.NoError(b, err)
+			}
+		}
+	})
+
+	b.Run("With Cache", func(b *testing.B) {
+		for _, lm := range nonTrivialRegexes {
+			_, err := converter.MatchersToPromMatchers(lm)
+			require.NoError(b, err)
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, lm := range nonTrivialRegexes {
+				_, err := converter.MatchersToPromMatchers(lm)
+				require.NoError(b, err)
+			}
+		}
+	})
+}
