@@ -251,10 +251,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.getExtLset())
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.getExtLset())
 
 	if !match {
 		return nil
@@ -382,10 +379,7 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.getExtLset())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.getExtLset())
 
 	if !match {
 		return &storepb.LabelNamesResponse{Names: nil}, nil
@@ -448,10 +442,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.getExtLset())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.getExtLset())
 	if !match {
 		return &storepb.LabelValuesResponse{}, nil
 	}

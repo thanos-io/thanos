@@ -307,10 +307,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.selectorLabels)
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.selectorLabels)
 	if !match {
 		return nil
 	}
@@ -510,10 +507,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.selectorLabels)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.selectorLabels)
 	if !match {
 		return &storepb.LabelNamesResponse{}, nil
 	}
@@ -617,10 +611,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.selectorLabels)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.selectorLabels)
 	if !match {
 		return &storepb.LabelValuesResponse{}, nil
 	}

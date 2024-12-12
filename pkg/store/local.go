@@ -134,10 +134,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, s.extLabels)
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, s.extLabels)
 	if !match {
 		return nil
 	}

@@ -129,10 +129,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, extLset)
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, extLset)
 	if !match {
 		return nil
 	}
@@ -492,9 +489,9 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(tms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
+func matchesExternalLabels(tms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher) {
 	if externalLabels.IsEmpty() {
-		return true, tms, nil
+		return true, tms
 	}
 
 	var newMatchers []*labels.Matcher
@@ -511,10 +508,10 @@ func matchesExternalLabels(tms []*labels.Matcher, externalLabels labels.Labels) 
 		if !tm.Matches(extValue) {
 			// External label does not match. This should not happen - it should be filtered out on query node,
 			// but let's do that anyway here.
-			return false, nil, nil
+			return false, nil
 		}
 	}
-	return true, newMatchers, nil
+	return true, newMatchers
 }
 
 // encodeChunk translates the sample pairs into a chunk.
@@ -540,10 +537,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, extLset)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, extLset)
 	if !match {
 		return &storepb.LabelNamesResponse{Names: nil}, nil
 	}
@@ -607,10 +601,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers, err := matchesExternalLabels(matchers, extLset)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	match, matchers := matchesExternalLabels(matchers, extLset)
 	if !match {
 		return &storepb.LabelValuesResponse{}, nil
 	}
