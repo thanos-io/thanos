@@ -130,7 +130,11 @@ func ScanGRPCCurlProtoStreamMessages(data []byte, atEOF bool) (advance int, toke
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLabels)
+	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	match, matchers, err := matchesExternalLabels(matchers, s.extLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

@@ -247,7 +247,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		srv = fs
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	match, matchers, err := matchesExternalLabels(matchers, s.getExtLset())
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -374,7 +378,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	match, matchers, err := matchesExternalLabels(matchers, s.getExtLset())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -436,7 +444,11 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		}
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	match, matchers, err := matchesExternalLabels(matchers, s.getExtLset())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
