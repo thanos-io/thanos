@@ -76,6 +76,7 @@ func WithMetricNameFilterEnabled() MultiTSDBOption {
 	}
 }
 
+// WithMatcherConverter enables caching matcher converter consumed by children TSDB Stores.
 func WithMatcherConverter(mc *storepb.MatcherConverter) MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.matcherConverter = mc
@@ -718,6 +719,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
 	}
+	// Pass matcher converter to children TSDB Stores.
 	if t.matcherConverter != nil {
 		options = append(options, store.WithTSDBStoreMatcherConverter(t.matcherConverter))
 	}

@@ -144,20 +144,22 @@ func runReceive(
 
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
+	multiTSDBOptions := []receive.MultiTSDBOption{}
+	for _, feature := range *conf.featureList {
+		if feature == metricNamesFilter {
+			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
+			level.Info(logger).Log("msg", "metric name filter feature enabled")
+		}
+	}
+
+	// Create a matcher converter if specified by command line to cache expensive regex matcher conversions.
+	// Proxy store and TSDB stores of all tenants share a single cache.
 	var matcherConverter *storepb.MatcherConverter
 	if conf.matcherConverterCacheCapacity > 0 {
 		var err error
 		matcherConverter, err = storepb.NewMatcherConverter(conf.matcherConverterCacheCapacity, reg)
 		if err != nil {
 			level.Error(logger).Log("msg", "failed to create matcher converter", "err", err)
-		}
-	}
-
-	multiTSDBOptions := []receive.MultiTSDBOption{}
-	for _, feature := range *conf.featureList {
-		if feature == metricNamesFilter {
-			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
-			level.Info(logger).Log("msg", "metric name filter feature enabled")
 		}
 	}
 	if matcherConverter != nil {

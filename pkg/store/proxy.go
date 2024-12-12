@@ -163,6 +163,7 @@ func WithoutDedup() ProxyStoreOption {
 	}
 }
 
+// WithProxyStoreMatcherConverter returns a ProxyStoreOption that enables caching matcher converter for ProxyStore.
 func WithProxyStoreMatcherConverter(mc *storepb.MatcherConverter) ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.matcherConverter = mc
@@ -272,6 +273,7 @@ func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
 	return infos
 }
 
+// MatchersToPromMatchers converts storepb label matchers to prometheus label matchers. It goes to cache if matcherConverter is set.
 func (s *ProxyStore) MatchersToPromMatchers(ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
 	var tms []*labels.Matcher
 	var err error

@@ -53,6 +53,7 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
+// WithTSDBStoreMatcherConverter returns a TSDBStoreOption that enables caching matcher converter for TSDBStore.
 func WithTSDBStoreMatcherConverter(mc *storepb.MatcherConverter) TSDBStoreOption {
 	return func(s *TSDBStore) {
 		s.matcherConverter = mc
@@ -244,6 +245,7 @@ func (s *TSDBStore) SeriesLocal(ctx context.Context, r *storepb.SeriesRequest) (
 	return rs.series, nil
 }
 
+// MatchersToPromMatchers converts storepb label matchers to prometheus label matchers. It goes to cache if matcherConverter is set.
 func (s *TSDBStore) MatchersToPromMatchers(ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
 	var tms []*labels.Matcher
 	var err error

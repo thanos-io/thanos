@@ -451,6 +451,7 @@ func newMatcherConverterMetrics(reg prometheus.Registerer) *matcherConverterMetr
 	return &m
 }
 
+// NewMatcherConverter creates a new MatcherConverter with given capacity.
 func NewMatcherConverter(cacheCapacity int, reg prometheus.Registerer) (*MatcherConverter, error) {
 	c, err := cache.New2Q[LabelMatcher, *labels.Matcher](cacheCapacity)
 	if err != nil {
@@ -460,6 +461,7 @@ func NewMatcherConverter(cacheCapacity int, reg prometheus.Registerer) (*Matcher
 	return &MatcherConverter{cache: c, cacheCapacity: cacheCapacity, metrics: metrics}, nil
 }
 
+// MatchersToPromMatchers converts proto label matchers to Prometheus label matchers. It caches regex conversions.
 func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
