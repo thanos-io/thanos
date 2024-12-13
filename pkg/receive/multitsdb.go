@@ -119,6 +119,16 @@ func NewMultiTSDB(
 	return mt
 }
 
+func (t *MultiTSDB) GetTenants() []string {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	tenants := make([]string, 0, len(t.tenants))
+	for tname := range t.tenants {
+		tenants = append(tenants, tname)
+	}
+	return tenants
+}
+
 // testGetTenant returns the tenant with the given tenantID for testing purposes.
 func (t *MultiTSDB) testGetTenant(tenantID string) *tenant {
 	t.mtx.RLock()
