@@ -1624,9 +1624,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				var resp respSet
 				if s.sortingStrategy == sortingStrategyStore {
 					resp = newEagerRespSet(
+						gctx,
 						span,
 						10*time.Minute,
 						blk.meta.ULID.String(),
+						"",
 						[]labels.Labels{blk.extLset},
 						onClose,
 						blockClient,
@@ -1637,9 +1639,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 					)
 				} else {
 					resp = newLazyRespSet(
+						gctx,
 						span,
 						10*time.Minute,
 						blk.meta.ULID.String(),
+						"",
 						[]labels.Labels{blk.extLset},
 						onClose,
 						blockClient,
