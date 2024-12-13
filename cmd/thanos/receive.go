@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -350,6 +351,23 @@ func runReceive(
 				w.WriteHeader(http.StatusTooEarly)
 			} else {
 				w.WriteHeader(http.StatusOK)
+			}
+		}))
+		srv.Handle("/-/matchers", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			if matcherConverter != nil {
+				labelMatchers := matcherConverter.Keys()
+				// Convert the slice to JSON
+				jsonData, err := json.Marshal(labelMatchers)
+				if err != nil {
+					http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+					return
+				}
+
+				// Set the Content-Type header and write the response
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write(jsonData)
 			}
 		}))
 		g.Add(func() error {

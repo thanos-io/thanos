@@ -493,6 +493,11 @@ func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels
 	return res, nil
 }
 
+// Get all keys from the cache for debugging.
+func (c *MatcherConverter) Keys() []LabelMatcher {
+	return c.cache.Keys()
+}
+
 // MatchersToString converts label matchers to string format.
 // String should be parsable as a valid PromQL query metric selector.
 func MatchersToString(ms ...LabelMatcher) string {
