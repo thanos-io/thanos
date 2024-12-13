@@ -384,7 +384,7 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 	return res, nil
 }
 
-func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
+func matcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
 	var t labels.MatchType
 
 	switch m.Type {
@@ -411,7 +411,7 @@ func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
 func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
-		m, err := MatcherToPromMatcher(m)
+		m, err := matcherToPromMatcher(m)
 		if err != nil {
 			return nil, err
 		}
@@ -465,9 +465,9 @@ func NewMatcherConverter(cacheCapacity int, reg prometheus.Registerer) (*Matcher
 func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
-		if m.Type == LabelMatcher_EQ || m.Type == LabelMatcher_NEQ {
+		if m.Type != LabelMatcher_RE && m.Type != LabelMatcher_NRE {
 			// EQ and NEQ are very cheap, so we don't cache them.
-			pm, err := MatcherToPromMatcher(m)
+			pm, err := matcherToPromMatcher(m)
 			if err != nil {
 				return nil, err
 			}
@@ -482,7 +482,7 @@ func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels
 			continue
 		}
 		// cache miss
-		pm, err := MatcherToPromMatcher(m)
+		pm, err := matcherToPromMatcher(m)
 		if err != nil {
 			return nil, err
 		}

@@ -786,24 +786,21 @@ func BenchmarkMatcherConverter_REWithAndWithoutCache(b *testing.B) {
 
 	b.Run("Without Cache", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			for _, lm := range nonTrivialRegexes {
-				_, err := MatcherToPromMatcher(lm)
-				require.NoError(b, err)
-			}
+			_, err := MatchersToPromMatchers(nonTrivialRegexes...)
+			require.NoError(b, err)
 		}
 	})
 
 	b.Run("With Cache", func(b *testing.B) {
+		// cache warm-up
 		for _, lm := range nonTrivialRegexes {
 			_, err := converter.MatchersToPromMatchers(lm)
 			require.NoError(b, err)
 		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for _, lm := range nonTrivialRegexes {
-				_, err := converter.MatchersToPromMatchers(lm)
-				require.NoError(b, err)
-			}
+			_, err := converter.MatchersToPromMatchers(nonTrivialRegexes...)
+			require.NoError(b, err)
 		}
 	})
 }
