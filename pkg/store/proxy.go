@@ -273,24 +273,6 @@ func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
 	return infos
 }
 
-// MatchersToPromMatchers converts storepb label matchers to prometheus label matchers. It goes to cache if matcherConverter is set.
-func (s *ProxyStore) MatchersToPromMatchers(ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
-	var tms []*labels.Matcher
-	var err error
-	if s.matcherConverter == nil {
-		tms, err = storepb.MatchersToPromMatchers(ms...)
-		if err != nil {
-			return nil, err
-		}
-		return tms, nil
-	}
-	tms, err = s.matcherConverter.MatchersToPromMatchers(ms...)
-	if err != nil {
-		return nil, err
-	}
-	return tms, nil
-}
-
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// triggered by tracing span to reduce cognitive load.
@@ -299,11 +281,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
 
-	matchers, err := s.MatchersToPromMatchers(originalRequest.Matchers...)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherConverter)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers := matchesExternalLabels(matchers, s.selectorLabels)
 	if !match {
 		return nil
 	}
@@ -499,11 +480,10 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	if s.debugLogging {
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
-	matchers, err := s.MatchersToPromMatchers(originalRequest.Matchers...)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherConverter)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers := matchesExternalLabels(matchers, s.selectorLabels)
 	if !match {
 		return &storepb.LabelNamesResponse{}, nil
 	}
@@ -603,11 +583,10 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
 	}
 
-	matchers, err := s.MatchersToPromMatchers(originalRequest.Matchers...)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherConverter)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers := matchesExternalLabels(matchers, s.selectorLabels)
 	if !match {
 		return &storepb.LabelValuesResponse{}, nil
 	}

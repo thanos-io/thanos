@@ -125,11 +125,10 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 
 	extLset := p.externalLabelsFn()
 
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, nil)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers := matchesExternalLabels(matchers, extLset)
 	if !match {
 		return nil
 	}
@@ -489,9 +488,20 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(tms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher) {
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels, mc *storepb.MatcherConverter) (bool, []*labels.Matcher, error) {
+	var tms []*labels.Matcher
+	var err error
+	if mc != nil {
+		tms, err = mc.MatchersToPromMatchers(ms...)
+	} else {
+		tms, err = storepb.MatchersToPromMatchers(ms...)
+	}
+	if err != nil {
+		return false, nil, err
+	}
+
 	if externalLabels.IsEmpty() {
-		return true, tms
+		return true, tms, nil
 	}
 
 	var newMatchers []*labels.Matcher
@@ -508,10 +518,10 @@ func matchesExternalLabels(tms []*labels.Matcher, externalLabels labels.Labels) 
 		if !tm.Matches(extValue) {
 			// External label does not match. This should not happen - it should be filtered out on query node,
 			// but let's do that anyway here.
-			return false, nil
+			return false, nil, nil
 		}
 	}
-	return true, newMatchers
+	return true, newMatchers, nil
 }
 
 // encodeChunk translates the sample pairs into a chunk.
@@ -533,11 +543,10 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
 	extLset := p.externalLabelsFn()
 
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, nil)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers := matchesExternalLabels(matchers, extLset)
 	if !match {
 		return &storepb.LabelNamesResponse{Names: nil}, nil
 	}
@@ -597,11 +606,10 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	extLset := p.externalLabelsFn()
 
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, nil)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	match, matchers := matchesExternalLabels(matchers, extLset)
 	if !match {
 		return &storepb.LabelValuesResponse{}, nil
 	}
