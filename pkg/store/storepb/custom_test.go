@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -671,4 +674,133 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func getMetricValue(m prometheus.Collector) float64 {
+	metric := &dto.Metric{}
+	if err := m.(prometheus.Metric).Write(metric); err != nil {
+		return 0
+	}
+	return metric.GetCounter().GetValue()
+}
+
+type CacheAction_Type int32
+
+const (
+	CacheHit  CacheAction_Type = 0
+	CacheMiss CacheAction_Type = 1
+	NoCache   CacheAction_Type = 2
+)
+
+func TestMatcherConverter_MatchersToPromMatchers(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	converter, err := NewMatcherConverter(2, reg)
+	require.NoError(t, err)
+
+	cases := []struct {
+		name              string
+		inputMatchers     []LabelMatcher
+		expectCacheAction CacheAction_Type
+		expectMatchers    []*labels.Matcher
+		expectError       bool
+	}{
+		{
+			name: "Single EQ matcher, no cache",
+			inputMatchers: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+			},
+			// EQ matchers are not cached
+			expectCacheAction: NoCache,
+		},
+		{
+			name: "Single RE matcher, cache miss",
+			inputMatchers: []LabelMatcher{
+				{Name: "job", Type: LabelMatcher_RE, Value: "test"},
+			},
+			expectCacheAction: CacheMiss,
+		},
+		{
+			name: "Single RE matcher, cache hit",
+			inputMatchers: []LabelMatcher{
+				{Name: "job", Type: LabelMatcher_RE, Value: "test"},
+			},
+			expectCacheAction: CacheHit,
+		},
+		{
+			name: "Multiple matchers, mixed cache",
+			inputMatchers: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+				{Name: "job", Type: LabelMatcher_RE, Value: "test"},
+			},
+			// Only RE is cached, so cache hit expected for RE matcher
+			expectCacheAction: CacheHit,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cacheHitsBefore := getMetricValue(converter.metrics.cacheHitCount)
+			cacheTotalBefore := getMetricValue(converter.metrics.cacheTotalCount)
+
+			promMatchers, err := converter.MatchersToPromMatchers(c.inputMatchers...)
+
+			if c.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, promMatchers, len(c.inputMatchers))
+
+			for i, m := range promMatchers {
+				require.Equal(t, c.inputMatchers[i].Name, m.Name)
+				require.Equal(t, c.inputMatchers[i].Value, m.Value)
+			}
+
+			if c.expectCacheAction == CacheHit {
+				require.Equal(t, cacheHitsBefore+1, getMetricValue(converter.metrics.cacheHitCount))
+				require.Equal(t, cacheTotalBefore+1, getMetricValue(converter.metrics.cacheTotalCount))
+			} else if c.expectCacheAction == CacheMiss {
+				require.Equal(t, cacheHitsBefore, getMetricValue(converter.metrics.cacheHitCount))
+				require.Equal(t, cacheTotalBefore+1, getMetricValue(converter.metrics.cacheTotalCount))
+			} else {
+				require.Equal(t, cacheHitsBefore, getMetricValue(converter.metrics.cacheHitCount))
+				require.Equal(t, cacheTotalBefore, getMetricValue(converter.metrics.cacheTotalCount))
+			}
+		})
+	}
+}
+
+func BenchmarkMatcherConverter_REWithAndWithoutCache(b *testing.B) {
+	reg := prometheus.NewRegistry()
+	converter, err := NewMatcherConverter(100, reg)
+	require.NoError(b, err)
+
+	nonTrivialRegexes := []LabelMatcher{
+		{Name: "job", Type: LabelMatcher_RE, Value: "^[a-zA-Z0-9_]+$"},
+		{Name: "env", Type: LabelMatcher_RE, Value: `prod|staging|dev`},
+		{Name: "error", Type: LabelMatcher_RE, Value: "^5\\d{2}$"},
+		{Name: "path", Type: LabelMatcher_RE, Value: "^/api/v[0-9]+/.*$"},
+		{Name: "version", Type: LabelMatcher_RE, Value: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+	}
+
+	b.Run("Without Cache", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_, err := MatchersToPromMatchers(nonTrivialRegexes...)
+			require.NoError(b, err)
+		}
+	})
+
+	b.Run("With Cache", func(b *testing.B) {
+		// cache warm-up
+		for _, lm := range nonTrivialRegexes {
+			_, err := converter.MatchersToPromMatchers(lm)
+			require.NoError(b, err)
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, err := converter.MatchersToPromMatchers(nonTrivialRegexes...)
+			require.NoError(b, err)
+		}
+	})
 }

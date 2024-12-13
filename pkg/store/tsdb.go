@@ -53,6 +53,13 @@ func WithCuckooMetricNameStoreFilter() TSDBStoreOption {
 	}
 }
 
+// WithTSDBStoreMatcherConverter returns a TSDBStoreOption that enables caching matcher converter for TSDBStore.
+func WithTSDBStoreMatcherConverter(mc *storepb.MatcherConverter) TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.matcherConverter = mc
+	}
+}
+
 // TSDBStore implements the store API against a local TSDB instance.
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
@@ -69,6 +76,7 @@ type TSDBStore struct {
 	mtx                    sync.RWMutex
 	close                  func()
 	storepb.UnimplementedStoreServer
+	matcherConverter *storepb.MatcherConverter
 }
 
 func (s *TSDBStore) Close() {
@@ -247,7 +255,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		srv = fs
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherConverter)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -374,7 +382,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherConverter)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -436,7 +444,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		}
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherConverter)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

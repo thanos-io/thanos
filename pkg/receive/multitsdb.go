@@ -66,6 +66,7 @@ type MultiTSDB struct {
 	exemplarClients map[string]*exemplars.TSDB
 
 	metricNameFilterEnabled bool
+	matcherConverter        *storepb.MatcherConverter
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -75,6 +76,13 @@ type MultiTSDBOption func(mt *MultiTSDB)
 func WithMetricNameFilterEnabled() MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.metricNameFilterEnabled = true
+	}
+}
+
+// WithMatcherConverter enables caching matcher converter consumed by children TSDB Stores.
+func WithMatcherConverter(mc *storepb.MatcherConverter) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.matcherConverter = mc
 	}
 }
 
@@ -741,6 +749,10 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	options := []store.TSDBStoreOption{}
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
+	}
+	// Pass matcher converter to children TSDB Stores.
+	if t.matcherConverter != nil {
+		options = append(options, store.WithTSDBStoreMatcherConverter(t.matcherConverter))
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil

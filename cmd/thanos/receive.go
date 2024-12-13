@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
@@ -149,6 +151,20 @@ func runReceive(
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
 			level.Info(logger).Log("msg", "metric name filter feature enabled")
 		}
+	}
+
+	// Create a matcher converter if specified by command line to cache expensive regex matcher conversions.
+	// Proxy store and TSDB stores of all tenants share a single cache.
+	var matcherConverter *storepb.MatcherConverter
+	if conf.matcherConverterCacheCapacity > 0 {
+		var err error
+		matcherConverter, err = storepb.NewMatcherConverter(conf.matcherConverterCacheCapacity, reg)
+		if err != nil {
+			level.Error(logger).Log("msg", "failed to create matcher converter", "err", err)
+		}
+	}
+	if matcherConverter != nil {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithMatcherConverter(matcherConverter))
 	}
 
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
@@ -337,6 +353,25 @@ func runReceive(
 				w.WriteHeader(http.StatusOK)
 			}
 		}))
+		srv.Handle("/-/matchers", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			if matcherConverter != nil {
+				labelMatchers := matcherConverter.Keys()
+				// Convert the slice to JSON
+				jsonData, err := json.Marshal(labelMatchers)
+				if err != nil {
+					http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+					return
+				}
+
+				// Set the Content-Type header and write the response
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write(jsonData); err != nil {
+					level.Error(logger).Log("msg", "failed to write matchers json", "err", err)
+				}
+			}
+		}))
 		g.Add(func() error {
 			statusProber.Healthy()
 			return srv.ListenAndServe()
@@ -358,6 +393,9 @@ func runReceive(
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
 			store.WithoutDedup(),
+		}
+		if matcherConverter != nil {
+			options = append(options, store.WithProxyStoreMatcherConverter(matcherConverter))
 		}
 
 		proxy := store.NewProxyStore(
@@ -932,9 +970,10 @@ type receiveConfig struct {
 
 	asyncForwardWorkerCount uint
 
-	numTopMetricsPerTenant       int
-	topMetricsMinimumCardinality uint64
-	topMetricsUpdateInterval     time.Duration
+	numTopMetricsPerTenant        int
+	topMetricsMinimumCardinality  uint64
+	topMetricsUpdateInterval      time.Duration
+	matcherConverterCacheCapacity int
 
 	featureList *[]string
 }
@@ -1097,6 +1136,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("10000").Uint64Var(&rc.topMetricsMinimumCardinality)
 	cmd.Flag("receive.top-metrics-update-interval", "The interval at which the top metrics are updated.").
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
+	cmd.Flag("receive.store-matcher-converter-cache-capacity", "The number of label matchers to cache in the matcher converter for the Store API. Set to 0 to disable to cache. Default is 0.").
+		Default("0").IntVar(&rc.matcherConverterCacheCapacity)
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
 
