@@ -367,7 +367,9 @@ func runReceive(
 				// Set the Content-Type header and write the response
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				w.Write(jsonData)
+				if _, err := w.Write(jsonData); err != nil {
+					level.Error(logger).Log("msg", "failed to write matchers json", "err", err)
+				}
 			}
 		}))
 		g.Add(func() error {
