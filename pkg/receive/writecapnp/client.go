@@ -69,22 +69,9 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 	if err := r.connect(ctx); err != nil {
 		return nil, err
 	}
-	arena := capnp.SingleSegment(nil)
-	defer arena.Release()
 
 	result, release := r.writer.Write(ctx, func(params Writer_write_Params) error {
-		_, seg, err := capnp.NewMessage(arena)
-		if err != nil {
-			return err
-		}
-		wr, err := NewRootWriteRequest(seg)
-		if err != nil {
-			return err
-		}
-		if err := params.SetWr(wr); err != nil {
-			return err
-		}
-		wr, err = params.Wr()
+		wr, err := params.NewWr()
 		if err != nil {
 			return err
 		}

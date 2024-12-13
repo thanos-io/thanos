@@ -48,11 +48,11 @@ func (hrt *hedgingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	}
 	duration := float64(time.Since(start).Milliseconds())
 	hrt.mu.Lock()
+	defer hrt.mu.Unlock()
 	err = hrt.TDigest.Add(duration)
 	if err != nil {
 		return nil, err
 	}
-	hrt.mu.Unlock()
 	return resp, err
 }
 

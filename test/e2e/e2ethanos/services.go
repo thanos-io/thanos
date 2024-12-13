@@ -546,20 +546,21 @@ type ReceiveBuilder struct {
 
 	f e2e.FutureRunnable
 
-	maxExemplars        int
-	capnp               bool
-	ingestion           bool
-	limit               int
-	tenantsLimits       receive.TenantsWriteLimitsConfig
-	metaMonitoring      string
-	metaMonitoringQuery string
-	hashringConfigs     []receive.HashringConfig
-	relabelConfigs      []*relabel.Config
-	replication         int
-	image               string
-	nativeHistograms    bool
-	labels              []string
-	tenantSplitLabel    string
+	maxExemplars          int
+	capnp                 bool
+	ingestion             bool
+	expandedPostingsCache bool
+	limit                 int
+	tenantsLimits         receive.TenantsWriteLimitsConfig
+	metaMonitoring        string
+	metaMonitoringQuery   string
+	hashringConfigs       []receive.HashringConfig
+	relabelConfigs        []*relabel.Config
+	replication           int
+	image                 string
+	nativeHistograms      bool
+	labels                []string
+	tenantSplitLabel      string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -587,6 +588,11 @@ func (r *ReceiveBuilder) WithExemplarsInMemStorage(maxExemplars int) *ReceiveBui
 
 func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
 	r.ingestion = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithExpandedPostingsCache() *ReceiveBuilder {
+	r.expandedPostingsCache = true
 	return r
 }
 
@@ -667,6 +673,11 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 	hashring := r.hashringConfigs
 	if len(hashring) > 0 && r.ingestion {
 		args["--receive.local-endpoint"] = r.InternalEndpoint("grpc")
+	}
+
+	if r.expandedPostingsCache {
+		args["--tsdb.head.expanded-postings-cache-size"] = "1000"
+		args["--tsdb.block.expanded-postings-cache-size"] = "1000"
 	}
 
 	if r.limit != 0 && r.metaMonitoring != "" {

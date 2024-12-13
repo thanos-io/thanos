@@ -12,6 +12,48 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+### Added
+
+- [#7907](https://github.com/thanos-io/thanos/pull/7907) Receive: Add `--receive.grpc-service-config` flag to configure gRPC service config for the receivers.
+- [#7961](https://github.com/thanos-io/thanos/pull/7961) Store Gateway: Add `--store.posting-group-max-keys` flag to mark posting group as lazy if it exceeds number of keys limit. Added `thanos_bucket_store_lazy_expanded_posting_groups_total` for total number of lazy posting groups and corresponding reasons.
+
+### Changed
+
+### Removed
+
+## [v0.37.2](https://github.com/thanos-io/thanos/tree/release-0.37) - 11.12.2024
+
+### Fixed
+
+- [#7970](https://github.com/thanos-io/thanos/pull/7970) Sidecar: Respect min-time setting.
+- [#7962](https://github.com/thanos-io/thanos/pull/7962) Store: Fix potential deadlock in hedging request.
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 04.12.2024
+
+### Fixed
+
+- [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
+- [#7945](https://github.com/thanos-io/thanos/pull/7945) Receive: Capnproto - use segment from existing message.
+- [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants, see [issue-7892](https://github.com/thanos-io/thanos/issues/7892).
+- [#7954](https://github.com/thanos-io/thanos/pull/7954) Sidecar: Ensure limit param is positive for compatibility with older Prometheus.
+- [#7953](https://github.com/thanos-io/thanos/pull/7953) Query: Update promql-engine for subquery avg fix.
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.37.0](https://github.com/thanos-io/thanos/tree/release-0.37) - 25.11.2024
+
+### Fixed
+
 - [#7511](https://github.com/thanos-io/thanos/pull/7511) Query Frontend: fix doubled gzip compression for response body.
 - [#7592](https://github.com/thanos-io/thanos/pull/7592) Ruler: Only increment `thanos_rule_evaluation_with_warnings_total` metric for non PromQL warnings.
 - [#7614](https://github.com/thanos-io/thanos/pull/7614) *: fix debug log formatting.
@@ -19,17 +61,21 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7658](https://github.com/thanos-io/thanos/pull/7658) Store: Fix panic because too small buffer in pool.
 - [#7643](https://github.com/thanos-io/thanos/pull/7643) Receive: fix thanos_receive_write_{timeseries,samples} stats
 - [#7644](https://github.com/thanos-io/thanos/pull/7644) fix(ui): add null check to find overlapping blocks logic
+- [#7674](https://github.com/thanos-io/thanos/pull/7674) Query-frontend: Fix connection to Redis cluster with TLS.
 - [#7814](https://github.com/thanos-io/thanos/pull/7814) Store: label_values: if matchers contain **name**=="something", do not add <labelname> != "" to fetch less postings.
 - [#7679](https://github.com/thanos-io/thanos/pull/7679) Query: respect store.limit.* flags when evaluating queries
-- [#7821](https://github.com/thanos-io/thanos/pull/7679) Query/Receive: Fix coroutine leak introduced in https://github.com/thanos-io/thanos/pull/7796.
+- [#7821](https://github.com/thanos-io/thanos/pull/7821) Query/Receive: Fix coroutine leak introduced in https://github.com/thanos-io/thanos/pull/7796.
 - [#7843](https://github.com/thanos-io/thanos/pull/7843) Query Frontend: fix slow query logging for non-query endpoints.
 - [#7852](https://github.com/thanos-io/thanos/pull/7852) Query Frontend: pass "stats" parameter forward to queriers and fix Prometheus stats merging.
 - [#7832](https://github.com/thanos-io/thanos/pull/7832) Query Frontend: Fix cache keys for dynamic split intervals.
 - [#7885](https://github.com/thanos-io/thanos/pull/7885) Store: Return chunks to the pool after completing a Series call.
 - [#7893](https://github.com/thanos-io/thanos/pull/7893) Sidecar: Fix retrieval of external labels for Prometheus v3.0.0.
 - [#7903](https://github.com/thanos-io/thanos/pull/7903) Query: Fix panic on regex store matchers.
+- [#7915](https://github.com/thanos-io/thanos/pull/7915) Store: Close block series client at the end to not reuse chunk buffer
+- [#7941](https://github.com/thanos-io/thanos/pull/7941) Receive: Fix race condition when adding multiple new tenants, see [issue-7892](https://github.com/thanos-io/thanos/issues/7892).
 
 ### Added
+
 - [#7763](https://github.com/thanos-io/thanos/pull/7763) Ruler: use native histograms for client latency metrics.
 - [#7609](https://github.com/thanos-io/thanos/pull/7609) API: Add limit param to metadata APIs (series, label names, label values).
 - [#7429](https://github.com/thanos-io/thanos/pull/7429): Reloader: introduce `TolerateEnvVarExpansionErrors` to allow suppressing errors when expanding environment variables in the configuration file. When set, this will ensure that the reloader won't consider the operation to fail when an unset environment variable is encountered. Note that all unset environment variables are left as is, whereas all set environment variables are expanded as usual.
@@ -40,16 +86,27 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7855](https://github.com/thanos-io/thanos/pull/7855) Compcat/Query: Add support for comma separated replica labels.
 - [#7654](https://github.com/thanos-io/thanos/pull/7654) *: Add '--grpc-server-tls-min-version' flag to allow user to specify TLS version, otherwise default to TLS 1.3
 - [#7854](https://github.com/thanos-io/thanos/pull/7854) Query Frontend: Add `--query-frontend.force-query-stats` flag to force collection of query statistics from upstream queriers.
+- [#7860](https://github.com/thanos-io/thanos/pull/7860) Store: Support hedged requests
+- [#7924](https://github.com/thanos-io/thanos/pull/7924) *: Upgrade promql-engine to `v0.0.0-20241106100125-097e6e9f425a` and objstore to `v0.0.0-20241111205755-d1dd89d41f97`
+- [#7835](https://github.com/thanos-io/thanos/pull/7835) Ruler: Add ability to do concurrent rule evaluations
+- [#7722](https://github.com/thanos-io/thanos/pull/7722) Query: Add partition labels flag to partition leaf querier in distributed mode
 
 ### Changed
 
 - [#7494](https://github.com/thanos-io/thanos/pull/7494) Ruler: remove trailing period from SRV records returned by discovery `dnsnosrva` lookups
 - [#7567](https://github.com/thanos-io/thanos/pull/7565) Query: Use thanos resolver for endpoint groups.
-- [#7704](https://github.com/thanos-io/thanos/pull/7704) *: *breaking :warning:* remove Store gRPC Info function. This has been deprecated for 3 years, its time to remove it.
 - [#7741](https://github.com/thanos-io/thanos/pull/7741) Deps: Bump Objstore to `v0.0.0-20240913074259-63feed0da069`
-- [#7813](https://github.com/thanos-io/thanos/pull/7813) Receiver: enable initial TSDB compaction time randomization
+- [#7813](https://github.com/thanos-io/thanos/pull/7813) Receive: enable initial TSDB compaction time randomization
+- [#7820](https://github.com/thanos-io/thanos/pull/7820) Sidecar: Use prometheus metrics for min timestamp
+- [#7886](https://github.com/thanos-io/thanos/pull/7886) Discovery: Preserve results from other resolve calls
+- [#7745](https://github.com/thanos-io/thanos/pull/7745) *: Build with Prometheus stringlabels tags
+- [#7669](https://github.com/thanos-io/thanos/pull/7669) Receive: Change quorum calculation for rf=2
 
 ### Removed
+
+- [#7704](https://github.com/thanos-io/thanos/pull/7704) *: *breaking :warning:* remove Store gRPC Info function. This has been deprecated for 3 years, its time to remove it.
+- [#7793](https://github.com/thanos-io/thanos/pull/7793) Receive: Disable dedup proxy in multi-tsdb
+- [#7678](https://github.com/thanos-io/thanos/pull/7678) Query: Skip formatting strings if debug logging is disabled
 
 ## [v0.36.1](https://github.com/thanos-io/thanos/tree/release-0.36)
 
