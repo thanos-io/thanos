@@ -6,12 +6,13 @@ package store
 import (
 	"sort"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+
+	"go.uber.org/atomic"
 )
 
 // seriesStatsAggregator aggregates results from fanned-out queries into a histogram given their
