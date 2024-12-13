@@ -126,7 +126,7 @@ func (r *remoteEngine) MinT() int64 {
 				highestMintByLabelSet[key] = lset.MinTime
 				continue
 			}
-			if lset.MinTime > lsetMinT {
+			if lset.MinTime < lsetMinT {
 				highestMintByLabelSet[key] = lset.MinTime
 			}
 		}

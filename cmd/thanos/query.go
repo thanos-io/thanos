@@ -376,7 +376,7 @@ func registerQuery(app *extkingpin.App) {
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
-// store nodes, merging and duplicating the data to satisfy user query.
+// store nodes, merging and deduplicating the data to satisfy user query.
 func runQuery(
 	g *run.Group,
 	logger log.Logger,
