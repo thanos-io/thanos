@@ -268,7 +268,19 @@ func runReceive(
 			return errors.Wrap(err, "parse limit configuration")
 		}
 	}
-	limiter, err := receive.NewLimiter(conf.writeLimitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"), conf.limitsConfigReloadTimer)
+	if conf.maxPendingGrpcWriteRequests > 0 {
+		level.Info(logger).Log("msg", "set max pending gRPC write request in limiter", "max_pending_requests", conf.maxPendingGrpcWriteRequests)
+	}
+	limiter, err := receive.NewLimiterWithOptions(
+		conf.writeLimitsConfig,
+		reg,
+		receiveMode,
+		log.With(logger, "component", "receive-limiter"),
+		conf.limitsConfigReloadTimer,
+		receive.LimiterOptions{
+			MaxPendingRequests: int32(conf.maxPendingGrpcWriteRequests),
+		},
+	)
 	if err != nil {
 		return errors.Wrap(err, "creating limiter")
 	}
@@ -408,7 +420,20 @@ func runReceive(
 			store.LazyRetrieval,
 			options...,
 		)
-		mts := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)
+		if conf.maxPendingGrpcReadRequests > 0 {
+			level.Info(logger).Log(
+				"msg", "set max pending gRPC read request in instrumented store server",
+				"max_pending_requests", conf.maxPendingGrpcReadRequests,
+			)
+		}
+		mts := store.NewLimitedStoreServerWithOptions(
+			store.NewInstrumentedStoreServer(reg, proxy),
+			reg,
+			conf.storeRateLimits,
+			store.LimitsOptions{
+				MaxPendingSeriesRequests: int32(conf.maxPendingGrpcReadRequests),
+			},
+		)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
 			WriteableStoreServer: webHandler,
@@ -974,6 +999,8 @@ type receiveConfig struct {
 	topMetricsMinimumCardinality  uint64
 	topMetricsUpdateInterval      time.Duration
 	matcherConverterCacheCapacity int
+	maxPendingGrpcReadRequests    int
+	maxPendingGrpcWriteRequests   int
 
 	featureList *[]string
 }
@@ -1138,6 +1165,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("5m").DurationVar(&rc.topMetricsUpdateInterval)
 	cmd.Flag("receive.store-matcher-converter-cache-capacity", "The number of label matchers to cache in the matcher converter for the Store API. Set to 0 to disable to cache. Default is 0.").
 		Default("0").IntVar(&rc.matcherConverterCacheCapacity)
+	cmd.Flag("receive.max-pending-grcp-read-requests", "Throttle gRPC read requests when this number of requests are pending. Value 0 disables this feature.").
+		Default("0").IntVar(&rc.maxPendingGrpcReadRequests)
+	cmd.Flag("receive.max-pending-grcp-write-requests", "Throttle gRPC write requests when this number of requests are pending. Value 0 disables this feature.").
+		Default("0").IntVar(&rc.maxPendingGrpcWriteRequests)
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
 
