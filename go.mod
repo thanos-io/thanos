@@ -114,6 +114,70 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
+	go.opentelemetry.io/contrib/samplers/jaegerremote v0.23.0
+	go.opentelemetry.io/otel/exporters/jaeger v1.16.0
+)
+
+require (
+	capnproto.org/go/capnp/v3 v3.0.0-alpha.30
+	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
+	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/mitchellh/go-ps v1.0.0
+	github.com/onsi/gomega v1.34.0
+	github.com/prometheus-community/prom-label-proxy v0.8.1-0.20240127162815-c1195f9aabc0
+	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771
+	go.opentelemetry.io/collector/pdata v1.14.1
+	go.opentelemetry.io/contrib/propagators/autoprop v0.54.0
+	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
+	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
+)
+
+require github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect
+
+require (
+	cloud.google.com/go/auth v0.9.3 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.4 // indirect
+	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
+	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
+	github.com/cilium/ebpf v0.11.0 // indirect
+	github.com/containerd/cgroups/v3 v3.0.3 // indirect
+	github.com/docker/go-units v0.5.0 // indirect
+	github.com/elastic/go-licenser v0.3.1 // indirect
+	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/go-openapi/runtime v0.27.1 // indirect
+	github.com/goccy/go-json v0.10.3 // indirect
+	github.com/godbus/dbus/v5 v5.0.4 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/google/s2a-go v0.1.8 // indirect
+	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
+	github.com/jcchavezs/porto v0.1.0 // indirect
+	github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353 // indirect
+	github.com/mdlayher/socket v0.4.1 // indirect
+	github.com/mdlayher/vsock v1.2.1 // indirect
+	github.com/metalmatze/signal v0.0.0-20210307161603-1c9aa721a97a // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/onsi/ginkgo v1.16.5 // indirect
+	github.com/opencontainers/runtime-spec v1.0.2 // indirect
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
+	github.com/sercand/kuberesolver/v4 v4.0.0 // indirect
+	github.com/zhangyunhao116/umap v0.0.0-20221211160557-cb7705fafa39 // indirect
+	go.opentelemetry.io/collector/semconv v0.108.1 // indirect
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
+	go.opentelemetry.io/contrib/propagators/ot v1.29.0 // indirect
+	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
+	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240827150818-7e3bb234dfed // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
+	k8s.io/apimachinery v0.31.1 // indirect
+	k8s.io/client-go v0.31.0 // indirect
+	k8s.io/klog/v2 v2.130.1 // indirect
+	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8 // indirect
+	zenhack.net/go/util v0.0.0-20230414204917-531d38494cf5 // indirect
+)
+
+require (
+	cloud.google.com/go/compute/metadata v0.5.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.32.3 // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
