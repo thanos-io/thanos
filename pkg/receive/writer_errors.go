@@ -65,7 +65,9 @@ func (a *writeErrorTracker) addSampleError(err error, tLogger log.Logger, lset l
 		level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", v, "timestamp", t)
 	case errors.Is(err, storage.ErrTooOldSample):
 		a.numSamplesTooOld++
-		level.Debug(tLogger).Log("msg", "Sample is too old", "lset", lset, "value", v, "timestamp", t)
+		// we could pass in current head max time, but in case that is not updated, maxTime would be < current time
+		// so we can just point to the metric that shows the current head max time
+		level.Debug(tLogger).Log("msg", "Sample is too old", "lset", lset, "value", v, "timestamp", t, "for current latest, check prometheus_tsdb_head_max_time metric")
 	default:
 		level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
 	}
