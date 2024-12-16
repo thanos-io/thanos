@@ -387,7 +387,7 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for i := range ms {
-		pm, err := MatcherToPromMatcher(&ms[i])
+		pm, err := MatcherToPromMatcher(ms[i])
 		if err != nil {
 			return nil, err
 		}
@@ -397,11 +397,7 @@ func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 }
 
 // MatcherToPromMatcher converts a Thanos label matcher to Prometheus label matcher.
-func MatcherToPromMatcher(mi ConversionLabelMatcher) (*labels.Matcher, error) {
-	var m, ok = mi.(*LabelMatcher)
-	if !ok {
-		return nil, errors.Errorf("unexpected matcher type %T", mi)
-	}
+func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
 	var t labels.MatchType
 
 	switch m.Type {
@@ -470,14 +466,6 @@ func (m *LabelMatcher) GetType() prompb.LabelMatcher_Type {
 	default:
 		return prompb.LabelMatcher_EQ
 	}
-}
-
-// ConversionLabelMatcher is a common interface for the Prometheus and Thanos label matchers.
-type ConversionLabelMatcher interface {
-	String() string
-	GetName() string
-	GetType() prompb.LabelMatcher_Type
-	GetValue() string
 }
 
 func (x LabelMatcher_Type) PromString() string {

@@ -36,9 +36,9 @@ func TestMatchersCache(t *testing.T) {
 	}
 
 	var cacheHit bool
-	newItem := func(matcher storepb.ConversionLabelMatcher) (*labels.Matcher, error) {
+	newItem := func(matcher storecache.ConversionLabelMatcher) (*labels.Matcher, error) {
 		cacheHit = false
-		return storepb.MatcherToPromMatcher(matcher)
+		return storecache.MatcherToPromMatcher(matcher)
 	}
 	expected := labels.MustNewMatcher(labels.MatchEqual, "key", "val")
 	expected2 := labels.MustNewMatcher(labels.MatchRegexp, "key2", "val2|val3")
@@ -100,15 +100,11 @@ func BenchmarkMatchersCache(b *testing.B) {
 		{Type: storepb.LabelMatcher_RE, Name: "key5", Value: "^(val5|val6|val7|val8|val9).*$"},
 	}
 
-	newItem := func(matcher storepb.ConversionLabelMatcher) (*labels.Matcher, error) {
-		return storepb.MatcherToPromMatcher(matcher)
-	}
-
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		matcher := matchers[i%len(matchers)]
-		_, err := cache.GetOrSet(matcher, newItem)
+		_, err := cache.GetOrSet(matcher, storecache.MatcherToPromMatcher)
 		if err != nil {
 			b.Fatalf("failed to get or set cache item: %v", err)
 		}
