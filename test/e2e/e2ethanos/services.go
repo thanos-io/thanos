@@ -67,6 +67,11 @@ func DefaultPrometheusImage() string {
 	return "quay.io/prometheus/prometheus:v2.41.0"
 }
 
+// DefaultOtelImage sets default Otel image used in e2e service.
+func DefaultOtelImage() string {
+	return "otel/opentelemetry-collector-contrib:0.98.0"
+}
+
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
 func DefaultAlertmanagerImage() string {
 	return "quay.io/prometheus/alertmanager:v0.20.0"
@@ -127,6 +132,30 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		Image:     promImage,
 		Command:   e2e.NewCommandWithoutEntrypoint("prometheus", args...),
 		Readiness: probe,
+	})), "http")
+}
+
+func NewOtel(e e2e.Environment, name, otelConfig, otelImage string) *e2eobs.Observable {
+	f := e.Runnable(name).WithPorts(map[string]int{"http": 9090}).Future()
+	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create otel dir"))}
+	}
+
+	if err := os.WriteFile(filepath.Join(f.Dir(), "otel.yaml"), []byte(otelConfig), 0600); err != nil {
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating otel config"))}
+	}
+
+	//probe := e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200)
+	args := e2e.BuildArgs(map[string]string{
+		"--config": filepath.Join(f.InternalDir(), "otel.yaml"),
+		//"--log.level":                       infoLogLevel,
+		//"--web.listen-address":              ":9090",
+	})
+
+	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
+		Image:   otelImage,
+		Command: e2e.NewCommandWithoutEntrypoint("/otelcol-contrib", args...),
+		//Readiness: probe,
 	})), "http")
 }
 
@@ -530,6 +559,8 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 	return args, nil
 }
+
+func OTLPEndpoint(addr string) string { return fmt.Sprintf("http://%s", addr) }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
@@ -1254,6 +1285,53 @@ rule_files:
 -  "%s"
 `, config, ruleFile)
 	}
+
+	return config
+}
+
+// DefaultOtelConfig returns Otel config that sets Otel to:
+// * expose 2 external labels, source and replica.
+// * optionally scrape self. This will produce up == 0 metric which we can assert on.
+// * optionally remote write endpoint to write into.
+func DefaultOtelConfig(remoteWriteEndpoint string) string {
+	config := fmt.Sprintf(`
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otel-collector
+          scrape_interval: 5s
+          static_configs:
+            - targets: [localhost:8888]
+exporters:
+  otlphttp/thanos:
+    endpoint: "%s"
+    tls:
+      insecure: true
+  debug:
+    verbosity: detailed
+extensions:
+  health_check:
+  pprof:
+service:
+  telemetry:
+    logs:
+      level: "debug"
+  extensions: [pprof, health_check]
+  pipelines:
+    metrics:
+      receivers:
+        - prometheus
+        - otlp
+      exporters:
+        - otlphttp/thanos
+`, remoteWriteEndpoint)
 
 	return config
 }
