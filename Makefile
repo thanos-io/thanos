@@ -340,7 +340,11 @@ test-e2e: docker-e2e $(GOTESPLIT)
 	# NOTE(GiedriusS):
 	# * If you want to limit CPU time available in e2e tests then pass E2E_DOCKER_CPUS environment variable. For example, E2E_DOCKER_CPUS=0.05 limits CPU time available
 	#   to spawned Docker containers to 0.05 cores.
-	@$(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
+	@if [ -n "$(SINGLE_E2E_TEST)" ]; then \
+        $(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e -- -run $(SINGLE_E2E_TEST) ${GOTEST_OPTS}; \
+    else \
+        $(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}; \
+    fi
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
