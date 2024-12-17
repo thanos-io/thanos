@@ -7,10 +7,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"path"
 	"sort"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
