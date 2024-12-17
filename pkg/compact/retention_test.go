@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,8 +20,6 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
-
-	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -278,6 +277,66 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 
 			testutil.Equals(t, got, tt.want)
 			testutil.Equals(t, gotMarkedBlocksCount, promtest.ToFloat64(blocksMarkedForDeletion))
+		})
+	}
+}
+
+func TestParseRetentionPolicyByTenant(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name             string
+		retentionTenants []string
+		expected         map[string]compact.RetentionPolicy
+		expectedErr      bool
+	}{
+		{
+			"empty",
+			[]string{},
+			map[string]compact.RetentionPolicy{},
+			false,
+		},
+		{
+			"valid",
+			[]string{"tenant-1:2021-01-01", "tenant-2:3d"},
+			map[string]compact.RetentionPolicy{
+				"tenant-1": {
+					CutoffDate:        time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),
+					RetentionDuration: time.Duration(0),
+				},
+				"tenant-2": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 3 * 24 * time.Hour,
+				},
+			},
+			false,
+		},
+		{
+			"invalid tenant",
+			[]string{"tenant1:2021-01-01", "tenant#2:1d"},
+			nil,
+			true,
+		},
+		{
+			"invalid date",
+			[]string{"tenant1:2021-010-01", "tenant2:1d"},
+			nil,
+			true,
+		},
+		{
+			"invalid duration",
+			[]string{"tenant1:2021-01-01", "tenant2:1w"},
+			nil,
+			true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := compact.ParesRetentionPolicyByTenant(log.NewNopLogger(), tt.retentionTenants)
+			if (err != nil) != tt.expectedErr {
+				t.Errorf("ParseRetentionPolicyByTenant() error = %v, wantErr %v", err, tt.expectedErr)
+				return
+			}
+			testutil.Equals(t, got, tt.expected)
 		})
 	}
 }
