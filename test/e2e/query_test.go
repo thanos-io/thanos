@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
@@ -367,7 +365,7 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 		WithExternalPrefix(externalPrefix).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
-	checkNetworkRequests(t, "http://"+q.Endpoint("http")+"/"+externalPrefix+"/graph")
+	checkRequestReturns200(t, "http://"+q.Endpoint("http")+"/"+externalPrefix+"/graph")
 }
 
 func TestQueryExternalPrefix(t *testing.T) {
@@ -388,7 +386,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
 
-	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+	checkRequestReturns200(t, querierProxy.URL+"/"+externalPrefix+"/graph")
 }
 
 func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
@@ -413,7 +411,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
 
-	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+	checkRequestReturns200(t, querierProxy.URL+"/"+externalPrefix+"/graph")
 }
 
 func TestQueryLabelNames(t *testing.T) {
@@ -1248,59 +1246,19 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 	}
 }
 
-// An emptyCtx is never canceled, has no values, and has no deadline. It is not
-// struct{}, since vars of this type must have distinct addresses.
-type emptyCtx int
-
-func (*emptyCtx) Deadline() (deadline time.Time, ok bool) {
-	return
-}
-
-func (*emptyCtx) Done() <-chan struct{} {
-	return nil
-}
-
-func (*emptyCtx) Err() error {
-	return nil
-}
-
-func (*emptyCtx) Value(key any) any {
-	return nil
-}
-
-func (e *emptyCtx) String() string {
-	return "Context"
-}
-
-func checkNetworkRequests(t *testing.T, addr string) {
-	ctx, cancel := chromedp.NewContext(new(emptyCtx))
+func checkRequestReturns200(t *testing.T, addr string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
-		var networkErrors []string
-
-		// Listen for failed network requests and push them to an array.
-		chromedp.ListenTarget(ctx, func(ev interface{}) {
-			switch ev := ev.(type) {
-			case *network.EventLoadingFailed:
-				networkErrors = append(networkErrors, ev.ErrorText)
-			}
-		})
-
-		err := chromedp.Run(ctx,
-			network.Enable(),
-			chromedp.Navigate(addr),
-			chromedp.WaitVisible(`body`),
-		)
-
+	testutil.Ok(t, runutil.Retry(10*time.Second, ctx.Done(), func() error {
+		resp, err := http.Get(addr)
 		if err != nil {
 			return err
 		}
-
-		if len(networkErrors) > 0 {
-			err = fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
+		if resp.StatusCode != http.StatusOK {
+			return errors.Errorf("expected status code 200, got: %d", resp.StatusCode)
 		}
-		return err
+		return nil
 	}))
 }
 

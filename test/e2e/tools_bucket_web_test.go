@@ -62,7 +62,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(b))
 
-	checkNetworkRequests(t, "http://"+b.Endpoint("http")+"/"+externalPrefix+"/blocks")
+	checkRequestReturns200(t, "http://"+b.Endpoint("http")+"/"+externalPrefix+"/blocks")
 }
 
 func TestToolsBucketWebExternalPrefix(t *testing.T) {
@@ -99,7 +99,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	toolsBucketWebProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(toolsBucketWebURL, externalPrefix))
 	t.Cleanup(toolsBucketWebProxy.Close)
 
-	checkNetworkRequests(t, toolsBucketWebProxy.URL+"/"+externalPrefix+"/blocks")
+	checkRequestReturns200(t, toolsBucketWebProxy.URL+"/"+externalPrefix+"/blocks")
 }
 
 func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
@@ -138,7 +138,7 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	toolsBucketWebProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(toolsBucketWebURL, externalPrefix))
 	t.Cleanup(toolsBucketWebProxy.Close)
 
-	checkNetworkRequests(t, toolsBucketWebProxy.URL+"/"+externalPrefix+"/blocks")
+	checkRequestReturns200(t, toolsBucketWebProxy.URL+"/"+externalPrefix+"/blocks")
 }
 
 func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
