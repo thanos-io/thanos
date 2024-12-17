@@ -162,18 +162,21 @@ func (g *GRPCAPI) getQueryForEngine(ctx context.Context, request *querypb.QueryR
 	} else {
 		ts = time.Unix(request.TimeSeconds, 0)
 	}
+	opts := &engine.QueryOpts{
+		LookbackDeltaParam:     lookbackDelta,
+		EnablePartialResponses: request.EnablePartialResponse,
+	}
 	switch engineParam {
 	case querypb.EngineType_prometheus:
 		queryEngine := g.engineFactory.GetPrometheusEngine()
-		return queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, ts)
+		return queryEngine.MakeInstantQuery(ctx, queryable, opts, request.Query, ts)
 	case querypb.EngineType_thanos:
 		queryEngine := g.engineFactory.GetThanosEngine()
 		plan, err := logicalplan.Unmarshal(request.QueryPlan.GetJson())
 		if err != nil {
-			return queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, ts)
+			return queryEngine.MakeInstantQuery(ctx, queryable, opts, request.Query, ts)
 		}
-
-		return queryEngine.NewInstantQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, ts)
+		return queryEngine.MakeInstantQueryFromPlan(ctx, queryable, opts, plan, ts)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
@@ -314,18 +317,22 @@ func (g *GRPCAPI) getRangeQueryForEngine(
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
+	opts := &engine.QueryOpts{
+		LookbackDeltaParam:     lookbackDelta,
+		EnablePartialResponses: request.EnablePartialResponse,
+	}
 
 	switch engineParam {
 	case querypb.EngineType_prometheus:
 		queryEngine := g.engineFactory.GetPrometheusEngine()
-		return queryEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, startTime, endTime, interval)
+		return queryEngine.MakeRangeQuery(ctx, queryable, opts, request.Query, startTime, endTime, interval)
 	case querypb.EngineType_thanos:
 		thanosEngine := g.engineFactory.GetThanosEngine()
 		plan, err := logicalplan.Unmarshal(request.QueryPlan.GetJson())
 		if err != nil {
-			return thanosEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), request.Query, startTime, endTime, interval)
+			return thanosEngine.MakeRangeQuery(ctx, queryable, opts, request.Query, startTime, endTime, interval)
 		}
-		return thanosEngine.NewRangeQueryFromPlan(ctx, queryable, promql.NewPrometheusQueryOpts(false, lookbackDelta), plan, startTime, endTime, interval)
+		return thanosEngine.MakeRangeQueryFromPlan(ctx, queryable, opts, plan, startTime, endTime, interval)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid engine parameter")
 	}
