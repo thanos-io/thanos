@@ -22,6 +22,8 @@ import (
 )
 
 const (
+	// tenantRetentionRegex is the regex pattern for parsing tenant retention.
+	// valid format is `<tenant>:(<yyyy-mm-dd>|<duration>d)` where <duration> > 0.
 	tenantRetentionRegex = `^([\w-]+):((\d{4}-\d{2}-\d{2})|(\d+d))$`
 )
 
@@ -80,14 +82,18 @@ func ParesRetentionPolicyByTenant(logger log.Logger, retentionTenants []string) 
 		if _, ok := retentionByTenant[tenant]; ok {
 			return nil, errors.Errorf("duplicate retention policy for tenant: %s", tenant)
 		}
-		if cutoffDate, err := time.Parse(time.DateOnly, matches[3]); err != nil && matches[3] != "" {
-			return nil, errors.Wrapf(invalidFormat, "error parsing cutoff date: %v", err)
-		} else if matches[3] != "" {
+		if cutoffDate, err := time.Parse(time.DateOnly, matches[3]); matches[3] != "" {
+			if err != nil {
+				return nil, errors.Wrapf(invalidFormat, "error parsing cutoff date: %v", err)
+			}
 			policy.CutoffDate = cutoffDate
 		}
-		if duration, err := model.ParseDuration(matches[4]); err != nil && matches[4] != "" {
-			return nil, errors.Wrapf(invalidFormat, "error parsing duration: %v", err)
-		} else if matches[4] != "" {
+		if duration, err := model.ParseDuration(matches[4]); matches[4] != "" {
+			if err != nil {
+				return nil, errors.Wrapf(invalidFormat, "error parsing duration: %v", err)
+			} else if duration == 0 {
+				return nil, errors.Wrapf(invalidFormat, "duration must be greater than 0")
+			}
 			policy.RetentionDuration = time.Duration(duration)
 		}
 		level.Info(logger).Log("msg", "retention policy for tenant is enabled", "tenant", tenant, "retention policy", fmt.Sprintf("%v", policy))
