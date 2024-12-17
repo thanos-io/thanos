@@ -138,9 +138,6 @@ func NewMultiTSDB(
 	}
 
 	for _, option := range options {
-		if option == nil {
-			continue
-		}
 		option(mt)
 	}
 
