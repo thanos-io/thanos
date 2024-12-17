@@ -11,6 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/atomic"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -108,11 +110,14 @@ func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 type SeriesSelectLimits struct {
 	SeriesPerRequest  uint64
 	SamplesPerRequest uint64
+	PendingRequests   int32
 }
 
 func (l *SeriesSelectLimits) RegisterFlags(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.limits.request-series", "The maximum series allowed for a single Series request. The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.SeriesPerRequest)
 	cmd.Flag("store.limits.request-samples", "The maximum samples allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains a maximum of 120 samples.").Default("0").Uint64Var(&l.SamplesPerRequest)
+	cmd.Flag("store.limits.pending-requests", "Reject gRPC series requests right away when this number of requests are pending. Value 0 disables this feature.").
+		Default("0").Int32Var(&l.PendingRequests)
 }
 
 var _ storepb.StoreServer = &limitedStoreServer{}
@@ -123,6 +128,13 @@ type limitedStoreServer struct {
 	newSeriesLimiter      SeriesLimiterFactory
 	newSamplesLimiter     ChunksLimiterFactory
 	failedRequestsCounter *prometheus.CounterVec
+
+	// This is a read-only field once it's set.
+	// Value 0 disables the feature.
+	maxPendingRequests        int32
+	pendingRequests           atomic.Int32
+	maxPendingRequestLimitHit prometheus.Counter
+	pendingRequestsGauge      prometheus.Gauge
 }
 
 // NewLimitedStoreServer creates a new limitedStoreServer.
@@ -135,10 +147,25 @@ func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer,
 			Name: "thanos_store_selects_dropped_total",
 			Help: "Number of select queries that were dropped due to configured limits.",
 		}, []string{"reason"}),
+		pendingRequestsGauge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_store_server_pending_series_requests",
+			Help: "Number of pending series requests",
+		}),
+		maxPendingRequestLimitHit: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_server_hit_max_pending_series_requests_total",
+			Help: "Number of pending series requests that hit the max pending request limit",
+		}),
+		maxPendingRequests: selectLimits.PendingRequests,
 	}
 }
 
 func (s *limitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	if s.maxPendingRequests > 0 && s.pendingRequests.Load() >= s.maxPendingRequests {
+		return status.Error(codes.ResourceExhausted, "too many pending series requests")
+	}
+	s.pendingRequestsGauge.Set(float64(s.pendingRequests.Add(1)))
+	defer s.pendingRequests.Add(-1)
+
 	seriesLimiter := s.newSeriesLimiter(s.failedRequestsCounter.WithLabelValues("series"))
 	chunksLimiter := s.newSamplesLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
 	limitedSrv := newLimitedServer(srv, seriesLimiter, chunksLimiter)

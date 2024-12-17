@@ -36,7 +36,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -142,9 +141,6 @@ type Handler struct {
 	writeTimeseriesTotal *prometheus.HistogramVec
 	writeE2eLatency      *prometheus.HistogramVec
 
-	pendingWriteRequests        prometheus.Gauge
-	pendingWriteRequestsCounter atomic.Int32
-
 	Limiter *Limiter
 }
 
@@ -234,12 +230,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The end-to-end latency of write requests.",
 				Buckets:   []float64{1, 5, 10, 20, 30, 40, 50, 60, 90, 120, 300, 600, 900, 1200, 1800, 3600},
 			}, []string{"code", "tenant", "rollup"},
-		),
-		pendingWriteRequests: promauto.With(registerer).NewGauge(
-			prometheus.GaugeOpts{
-				Name: "thanos_receive_pending_write_requests",
-				Help: "The number of pending write requests.",
-			},
 		),
 	}
 
@@ -1083,11 +1073,14 @@ func quorumReached(successes []int, successThreshold int) bool {
 
 // RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
+	if h.Limiter.ShouldRejectNewRequest() {
+		return nil, status.Error(codes.ResourceExhausted, "too many pending write requests")
+	}
+	// NB: ShouldRejectNewRequest() increments the number of pending requests only when it returns false.
+	defer h.Limiter.DecrementPendingRequests()
+
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
-
-	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
-	defer h.pendingWriteRequestsCounter.Add(-1)
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
