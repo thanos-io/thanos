@@ -112,7 +112,7 @@ func NewLimiterWithOptions(
 	r ReceiverMode,
 	logger log.Logger,
 	configReloadTimer time.Duration,
-	config LimiterOptions) (*Limiter, error) {
+	opts LimiterOptions) (*Limiter, error) {
 	limiter := &Limiter{
 		writeGate:          gate.NewNoop(),
 		requestLimiter:     &noopRequestLimiter{},
@@ -120,7 +120,7 @@ func NewLimiterWithOptions(
 		logger:             logger,
 		receiverMode:       r,
 		configReloadTimer:  configReloadTimer,
-		maxPendingRequests: config.MaxPendingRequests,
+		maxPendingRequests: opts.MaxPendingRequests,
 	}
 
 	if reg != nil {

@@ -110,11 +110,14 @@ func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 type SeriesSelectLimits struct {
 	SeriesPerRequest  uint64
 	SamplesPerRequest uint64
+	PendingRequests   int32
 }
 
 func (l *SeriesSelectLimits) RegisterFlags(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.limits.request-series", "The maximum series allowed for a single Series request. The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.SeriesPerRequest)
 	cmd.Flag("store.limits.request-samples", "The maximum samples allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains a maximum of 120 samples.").Default("0").Uint64Var(&l.SamplesPerRequest)
+	cmd.Flag("store.limits.pending-requests", "Reject gRPC series requests right away when this number of requests are pending. Value 0 disables this feature.").
+		Default("0").Int32Var(&l.PendingRequests)
 }
 
 var _ storepb.StoreServer = &limitedStoreServer{}
@@ -134,22 +137,8 @@ type limitedStoreServer struct {
 	pendingRequestsGauge      prometheus.Gauge
 }
 
-type LimitsOptions struct {
-	// Value 0 disables the feature.
-	MaxPendingSeriesRequests int32
-}
-
 // NewLimitedStoreServer creates a new limitedStoreServer.
 func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, selectLimits SeriesSelectLimits) storepb.StoreServer {
-	return NewLimitedStoreServerWithOptions(store, reg, selectLimits, LimitsOptions{})
-}
-
-func NewLimitedStoreServerWithOptions(
-	store storepb.StoreServer,
-	reg prometheus.Registerer,
-	selectLimits SeriesSelectLimits,
-	opts LimitsOptions,
-) storepb.StoreServer {
 	return &limitedStoreServer{
 		StoreServer:       store,
 		newSeriesLimiter:  NewSeriesLimiterFactory(selectLimits.SeriesPerRequest),
@@ -166,7 +155,7 @@ func NewLimitedStoreServerWithOptions(
 			Name: "thanos_store_server_hit_max_pending_series_requests_total",
 			Help: "Number of pending series requests that hit the max pending request limit",
 		}),
-		maxPendingRequests: opts.MaxPendingSeriesRequests,
+		maxPendingRequests: selectLimits.PendingRequests,
 	}
 }
 
