@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
+	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	equery "github.com/thanos-io/promql-engine/query"
 
@@ -32,7 +33,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
 	engineFactory := &QueryEngineFactory{
-		thanosEngine: &engineStub{},
+		thanos: &engineStub{},
 	}
 	api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
 
@@ -97,7 +98,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 
 	for _, test := range tests {
 		engineFactory := &QueryEngineFactory{
-			prometheusEngine: test.engine,
+			prometheus: test.engine,
 		}
 		api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
 		t.Run("range_query", func(t *testing.T) {
@@ -153,19 +154,19 @@ type engineStub struct {
 	warns annotations.Annotations
 }
 
-func (e engineStub) NewInstantQuery(_ context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
+func (e engineStub) MakeInstantQuery(_ context.Context, q storage.Queryable, opts *engine.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
-func (e engineStub) NewRangeQuery(_ context.Context, q storage.Queryable, opts promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
+func (e engineStub) MakeRangeQuery(_ context.Context, q storage.Queryable, opts *engine.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
-func (e engineStub) NewInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error) {
+func (e engineStub) MakeInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
-func (e engineStub) NewRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, root logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error) {
+func (e engineStub) MakeRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, root logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error) {
 	return &queryStub{err: e.err, warns: e.warns}, nil
 }
 
