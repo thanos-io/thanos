@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"path"
 	"sort"
@@ -109,8 +110,9 @@ type blockFilterFunc func(b *metadata.Meta) bool
 
 // TODO: Add filters field.
 type replicationScheme struct {
-	fromBkt objstore.InstrumentedBucketReader
-	toBkt   objstore.Bucket
+	fromBkt     objstore.InstrumentedBucketReader
+	toBkt       objstore.Bucket
+	concurrency int
 
 	blockFilter blockFilterFunc
 	fetcher     thanosblock.MetadataFetcher
@@ -152,6 +154,7 @@ func newReplicationScheme(
 	fetcher thanosblock.MetadataFetcher,
 	from objstore.InstrumentedBucketReader,
 	to objstore.Bucket,
+	concurrency int,
 	reg prometheus.Registerer,
 ) *replicationScheme {
 	if logger == nil {
@@ -164,6 +167,7 @@ func newReplicationScheme(
 		fetcher:     fetcher,
 		fromBkt:     from,
 		toBkt:       to,
+		concurrency: concurrency,
 		metrics:     metrics,
 		reg:         reg,
 	}
@@ -194,13 +198,21 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
 	})
 
-	for _, b := range availableBlocks {
-		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
-			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
-		}
+	var g errgroup.Group
+	if rs.concurrency > 0 {
+		g.SetLimit(rs.concurrency)
+	}
+	for i := range availableBlocks {
+		b := availableBlocks[i]
+		g.Go(func() error {
+			if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
+				return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
+			}
+			return nil
+		})
 	}
 
-	return nil
+	return g.Wait()
 }
 
 // ensureBlockIsReplicated ensures that a block present in the origin bucket is

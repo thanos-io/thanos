@@ -70,6 +70,7 @@ func RunReplicate(
 	labelSelector labels.Selector,
 	resolutions []compact.ResolutionLevel,
 	compactions []int,
+	concurrency int,
 	fromObjStoreConfig *extflag.PathOrContent,
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
@@ -188,7 +189,7 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", runID.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
+		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, concurrency, reg).execute(ctx); err != nil {
 			return errors.Wrap(err, "replication execute")
 		}
 
