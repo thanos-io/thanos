@@ -1248,32 +1248,20 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 	}
 }
 
-// An emptyCtx is never canceled, has no values, and has no deadline. It is not
-// struct{}, since vars of this type must have distinct addresses.
-type emptyCtx int
+var chromedpAllocator context.Context
 
-func (*emptyCtx) Deadline() (deadline time.Time, ok bool) {
-	return
-}
-
-func (*emptyCtx) Done() <-chan struct{} {
-	return nil
-}
-
-func (*emptyCtx) Err() error {
-	return nil
-}
-
-func (*emptyCtx) Value(key any) any {
-	return nil
-}
-
-func (e *emptyCtx) String() string {
-	return "Context"
+func TestMain(m *testing.M) {
+	execAlloc, execCancel := chromedp.NewExecAllocator(
+		context.Background(),
+	)
+	chromedpAllocator = execAlloc
+	rc := m.Run()
+	execCancel()
+	os.Exit(rc)
 }
 
 func checkNetworkRequests(t *testing.T, addr string) {
-	ctx, cancel := chromedp.NewContext(new(emptyCtx))
+	ctx, cancel := chromedp.NewContext(chromedpAllocator)
 	t.Cleanup(cancel)
 
 	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
