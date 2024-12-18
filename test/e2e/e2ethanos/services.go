@@ -254,9 +254,10 @@ type QuerierBuilder struct {
 	endpoints               []string
 	strictEndpoints         []string
 
-	engine           apiv1.PromqlEngineType
-	queryMode        string
-	enableXFunctions bool
+	engine                                  apiv1.PromqlEngineType
+	queryMode                               string
+	queryDistributedWithOverlappingInterval bool
+	enableXFunctions                        bool
 
 	replicaLabels []string
 	tracingConfig string
@@ -374,6 +375,10 @@ func (q *QuerierBuilder) WithEngine(engine apiv1.PromqlEngineType) *QuerierBuild
 
 func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	q.queryMode = mode
+	return q
+}
+func (q *QuerierBuilder) WithDistributedOverlap(overlap bool) *QuerierBuilder {
+	q.queryDistributedWithOverlappingInterval = overlap
 	return q
 }
 
@@ -512,6 +517,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.queryMode != "" {
 		args = append(args, "--query.mode="+q.queryMode)
+	}
+	if q.queryDistributedWithOverlappingInterval {
+		args = append(args, "--query.distributed-with-overlapping-interval")
 	}
 	if q.engine != "" {
 		args = append(args, "--query.promql-engine="+string(q.engine))

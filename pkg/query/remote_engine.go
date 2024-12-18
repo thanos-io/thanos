@@ -33,11 +33,12 @@ import (
 
 // Opts are the options for a PromQL query.
 type Opts struct {
-	AutoDownsample        bool
-	ReplicaLabels         []string
-	PartitionLabels       []string
-	Timeout               time.Duration
-	EnablePartialResponse bool
+	AutoDownsample                          bool
+	ReplicaLabels                           []string
+	PartitionLabels                         []string
+	Timeout                                 time.Duration
+	EnablePartialResponse                   bool
+	QueryDistributedWithOverlappingInterval bool
 }
 
 // Client is a query client that executes PromQL queries.
@@ -114,6 +115,7 @@ func NewRemoteEngine(logger log.Logger, queryClient Client, opts Opts) *remoteEn
 // a block due to retention before other replicas did the same.
 // See https://github.com/thanos-io/promql-engine/issues/187.
 func (r *remoteEngine) MinT() int64 {
+
 	r.mintOnce.Do(func() {
 		var (
 			hashBuf               = make([]byte, 0, 128)
@@ -126,7 +128,11 @@ func (r *remoteEngine) MinT() int64 {
 				highestMintByLabelSet[key] = lset.MinTime
 				continue
 			}
-			if lset.MinTime > lsetMinT {
+			// If we are querying with overlapping intervals, we want to find the first available timestamp
+			// otherwise we want to find the last available timestamp.
+			if r.opts.QueryDistributedWithOverlappingInterval && lset.MinTime < lsetMinT {
+				highestMintByLabelSet[key] = lset.MinTime
+			} else if !r.opts.QueryDistributedWithOverlappingInterval && lset.MinTime > lsetMinT {
 				highestMintByLabelSet[key] = lset.MinTime
 			}
 		}
