@@ -66,7 +66,7 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics, metadata, err := h.convertToPrometheusFormat(ctx, req.Metrics())
+	metrics, _, err := h.convertToPrometheusFormat(ctx, req.Metrics())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -96,9 +96,9 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	//TODO: (nicolastakashi) Handle metadata in the future.
 	wreq := tprompb.WriteRequest{
 		Timeseries: metrics,
-		Metadata:   metadata,
 	}
 
 	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
