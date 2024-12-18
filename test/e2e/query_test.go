@@ -1261,21 +1261,36 @@ func TestMain(m *testing.M) {
 }
 
 func checkNetworkRequests(t *testing.T, addr string) {
-	ctx, cancel := chromedp.NewContext(chromedpAllocator)
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-gpu", true),
+	)
+	allocCtx, cancel := chromedp.NewExecAllocator(chromedpAllocator, opts...)
+	defer cancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
 	t.Cleanup(cancel)
+
+	// make sure browser is already started
+	err := chromedp.Run(ctx)
+	testutil.Ok(t, err)
 
 	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
 		var networkErrors []string
 
+		var newCtx context.Context
+		newCtx, newCancel := chromedp.NewContext(ctx)
+		t.Cleanup(newCancel)
 		// Listen for failed network requests and push them to an array.
-		chromedp.ListenTarget(ctx, func(ev interface{}) {
+		chromedp.ListenTarget(newCtx, func(ev interface{}) {
 			switch ev := ev.(type) {
 			case *network.EventLoadingFailed:
 				networkErrors = append(networkErrors, ev.ErrorText)
 			}
 		})
 
-		err := chromedp.Run(ctx,
+		err := chromedp.Run(newCtx,
 			network.Enable(),
 			chromedp.Navigate(addr),
 			chromedp.WaitVisible(`body`),
