@@ -59,7 +59,7 @@ func TestPrometheusConverter_addGaugeNumberDataPoints(t *testing.T) {
 			metric := tt.metric()
 			converter := NewPrometheusConverter()
 
-			converter.addGaugeNumberDataPoints(
+			_ = converter.addGaugeNumberDataPoints(
 				context.Background(),
 				metric.Gauge().DataPoints(),
 				pcommon.NewResource(),
@@ -236,7 +236,7 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 			metric := tt.metric()
 			converter := NewPrometheusConverter()
 
-			converter.addSumNumberDataPoints(
+			_ = converter.addSumNumberDataPoints(
 				context.Background(),
 				metric.Sum().DataPoints(),
 				pcommon.NewResource(),

@@ -59,7 +59,7 @@ var unitMap = map[string]string{
 }
 
 // The map that translates the "per" unit
-// Example: s => per second (singular)
+// Example: s => per second (singular).
 var perUnitMap = map[string]string{
 	"s":  "second",
 	"m":  "minute",
