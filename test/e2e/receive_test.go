@@ -145,8 +145,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		println("test")
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"otelcol_process_uptime_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
@@ -155,7 +154,7 @@ func TestReceive(t *testing.T) {
 			{
 				"job":          "otel-collector",
 				"receive":      "receive-ingestor",
-				"service_name": "otelcol-contrib",
+				"service_name": "otel-collector",
 				"tenant_id":    "default-tenant",
 			},
 		})
