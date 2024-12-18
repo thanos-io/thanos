@@ -11,10 +11,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
-	"github.com/prometheus/prometheus/storage/remote/otlptranslator/prometheusremotewrite"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/receive/otlptranslator"
 	tprompb "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -68,27 +66,18 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	promTimeSeries, err := h.convertToPrometheusFormat(ctx, req.Metrics())
+	metrics, metadata, err := h.convertToPrometheusFormat(ctx, req.Metrics())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	prwMetrics := make([]tprompb.TimeSeries, 0, len(promTimeSeries))
 	totalSamples := 0
-	var tpromTs tprompb.TimeSeries
-
-	for _, ts := range promTimeSeries {
-		tpromTs = tprompb.TimeSeries{
-			Labels:    makeLabels(ts.Labels),
-			Samples:   makeSamples(ts.Samples),
-			Exemplars: makeExemplars(ts.Exemplars),
-		}
+	for _, ts := range metrics {
 		totalSamples += len(ts.Samples)
-		prwMetrics = append(prwMetrics, tpromTs)
 	}
 
-	if !requestLimiter.AllowSeries(tenant, int64(len(prwMetrics))) {
+	if !requestLimiter.AllowSeries(tenant, int64(len(metrics))) {
 		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -108,9 +97,8 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wreq := tprompb.WriteRequest{
-		Timeseries: prwMetrics,
-		// TODO Handle metadata, requires thanos receiver support ingesting metadata
-		//Metadata: otlptranslator.OtelMetricsToMetadata(),
+		Timeseries: metrics,
+		Metadata:   metadata,
 	}
 
 	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
@@ -160,15 +148,15 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetric.Metrics) ([]prompb.TimeSeries, error) {
-	promConverter := prometheusremotewrite.NewPrometheusConverter()
-	settings := prometheusremotewrite.Settings{
+func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetric.Metrics) ([]tprompb.TimeSeries, []tprompb.MetricMetadata, error) {
+	converter := otlptranslator.NewPrometheusConverter()
+	settings := otlptranslator.Settings{
 		AddMetricSuffixes:         true,
 		DisableTargetInfo:         h.options.OtlpDisableTargetInfo,
 		PromoteResourceAttributes: h.options.OtlpResourceAttributes,
 	}
 
-	annots, err := promConverter.FromMetrics(ctx, pmetrics, settings)
+	annots, err := converter.FromMetrics(ctx, pmetrics, settings)
 	ws, _ := annots.AsStrings("", 0, 0)
 	if len(ws) > 0 {
 		level.Warn(h.logger).Log("msg", "Warnings translating OTLP metrics to Prometheus write request", "warnings", ws)
@@ -176,39 +164,8 @@ func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetri
 
 	if err != nil {
 		level.Error(h.logger).Log("msg", "Error translating OTLP metrics to Prometheus write request", "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 
-	return promConverter.TimeSeries(), nil
-}
-
-func makeLabels(in []prompb.Label) []labelpb.ZLabel {
-	out := make([]labelpb.ZLabel, 0, len(in))
-	for _, l := range in {
-		out = append(out, labelpb.ZLabel{Name: l.Name, Value: l.Value})
-	}
-	return out
-}
-
-func makeSamples(in []prompb.Sample) []tprompb.Sample {
-	out := make([]tprompb.Sample, 0, len(in))
-	for _, s := range in {
-		out = append(out, tprompb.Sample{
-			Value:     s.Value,
-			Timestamp: s.Timestamp,
-		})
-	}
-	return out
-}
-
-func makeExemplars(in []prompb.Exemplar) []tprompb.Exemplar {
-	out := make([]tprompb.Exemplar, 0, len(in))
-	for _, e := range in {
-		out = append(out, tprompb.Exemplar{
-			Labels:    makeLabels(e.Labels),
-			Value:     e.Value,
-			Timestamp: e.Timestamp,
-		})
-	}
-	return out
+	return converter.TimeSeries(), converter.Metadata(), nil
 }
