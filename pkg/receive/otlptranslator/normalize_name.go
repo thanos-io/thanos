@@ -286,7 +286,7 @@ func cleanUpUnit(unit string) string {
 }
 
 // Retrieve the Prometheus "basic" unit corresponding to the specified "basic" unit
-// Returns the specified unit if not found in unitMap
+// Returns the specified unit if not found in unitMap.
 func unitMapGetOrDefault(unit string) string {
 	if promUnit, ok := unitMap[unit]; ok {
 		return promUnit
@@ -295,7 +295,7 @@ func unitMapGetOrDefault(unit string) string {
 }
 
 // Retrieve the Prometheus "per" unit corresponding to the specified "per" unit
-// Returns the specified unit if not found in perUnitMap
+// Returns the specified unit if not found in perUnitMap.
 func perUnitMapGetOrDefault(perUnit string) string {
 	if promPerUnit, ok := perUnitMap[perUnit]; ok {
 		return promPerUnit
@@ -303,7 +303,7 @@ func perUnitMapGetOrDefault(perUnit string) string {
 	return perUnit
 }
 
-// Remove the specified value from the slice
+// Remove the specified value from the slice.
 func removeItem(slice []string, value string) []string {
 	newSlice := make([]string, 0, len(slice))
 	for _, sliceEntry := range slice {
