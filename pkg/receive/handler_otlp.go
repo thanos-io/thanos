@@ -164,8 +164,8 @@ func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetri
 	promConverter := prometheusremotewrite.NewPrometheusConverter()
 	settings := prometheusremotewrite.Settings{
 		AddMetricSuffixes:         true,
-		DisableTargetInfo:         true,                                          // this must to be configured
-		PromoteResourceAttributes: []string{"service.name", "service.namespace"}, // this must to be configured
+		DisableTargetInfo:         h.options.OtlpDisableTargetInfo,
+		PromoteResourceAttributes: h.options.OtlpResourceAttributes,
 	}
 
 	annots, err := promConverter.FromMetrics(ctx, pmetrics, settings)

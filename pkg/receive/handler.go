@@ -116,6 +116,8 @@ type Options struct {
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
 	ReplicationProtocol     ReplicationProtocol
+	OtlpDisableTargetInfo   bool
+	OtlpResourceAttributes  []string
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
