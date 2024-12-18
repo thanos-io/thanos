@@ -1,6 +1,6 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
-//
+
 // Provenance-includes-location: https://github.com/golang/go/blob/f2d118fd5f7e872804a5825ce29797f81a28b0fa/src/strings/strings.go
 // Provenance-includes-license: BSD-3-Clause
 // Provenance-includes-copyright: Copyright The Go Authors.
