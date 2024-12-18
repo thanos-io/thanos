@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -385,28 +386,33 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 // NOTE: It allocates memory.
 func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
-	for _, m := range ms {
-		var t labels.MatchType
-
-		switch m.Type {
-		case LabelMatcher_EQ:
-			t = labels.MatchEqual
-		case LabelMatcher_NEQ:
-			t = labels.MatchNotEqual
-		case LabelMatcher_RE:
-			t = labels.MatchRegexp
-		case LabelMatcher_NRE:
-			t = labels.MatchNotRegexp
-		default:
-			return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
-		}
-		m, err := labels.NewMatcher(t, m.Name, m.Value)
+	for i := range ms {
+		pm, err := MatcherToPromMatcher(ms[i])
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, m)
+		res = append(res, pm)
 	}
 	return res, nil
+}
+
+// MatcherToPromMatcher converts a Thanos label matcher to Prometheus label matcher.
+func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
+	var t labels.MatchType
+
+	switch m.Type {
+	case LabelMatcher_EQ:
+		t = labels.MatchEqual
+	case LabelMatcher_NEQ:
+		t = labels.MatchNotEqual
+	case LabelMatcher_RE:
+		t = labels.MatchRegexp
+	case LabelMatcher_NRE:
+		t = labels.MatchNotRegexp
+	default:
+		return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
+	}
+	return labels.NewMatcher(t, m.Name, m.Value)
 }
 
 // MatchersToString converts label matchers to string format.
@@ -437,6 +443,29 @@ func PromMatchersToString(ms ...*labels.Matcher) string {
 
 func (m *LabelMatcher) PromString() string {
 	return fmt.Sprintf("%s%s%q", m.Name, m.Type.PromString(), m.Value)
+}
+
+func (m *LabelMatcher) GetName() string {
+	return m.Name
+}
+
+func (m *LabelMatcher) GetValue() string {
+	return m.Value
+}
+
+func (m *LabelMatcher) GetType() prompb.LabelMatcher_Type {
+	switch m.Type {
+	case LabelMatcher_EQ:
+		return prompb.LabelMatcher_EQ
+	case LabelMatcher_NEQ:
+		return prompb.LabelMatcher_NEQ
+	case LabelMatcher_RE:
+		return prompb.LabelMatcher_RE
+	case LabelMatcher_NRE:
+		return prompb.LabelMatcher_NRE
+	default:
+		return prompb.LabelMatcher_EQ
+	}
 }
 
 func (x LabelMatcher_Type) PromString() string {
