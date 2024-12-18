@@ -1,6 +1,6 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
-//
+
 // Provenance-includes-location: https://github.com/prometheus/prometheus/blob/318d6bc4bfe2d81af88697940740a378b503335a/storage/remote/otlptranslator/prometheusremotewrite/context.go#L18
 // Provenance-includes-license: Apache-2.0
 // Provenance-includes-copyright: Copyright The Prometheus Authors.

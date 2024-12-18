@@ -1,6 +1,6 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
-//
+
 // limitations under the License.
 // Provenance-includes-location: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/debbf30360b8d3a0ded8db09c4419d2a9c99b94a/pkg/translator/prometheusremotewrite/helper_test.go
 // Provenance-includes-license: Apache-2.0
