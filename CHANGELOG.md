@@ -166,8 +166,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
-- [#7353](https://github.com/thanos-io/thanos/pull/7353) Receive: cache matchers for series calls.
-
 ### Removed
 
 ## [v0.35.0](https://github.com/thanos-io/thanos/tree/release-0.35) - 02.05.2024
