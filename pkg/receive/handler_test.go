@@ -1820,6 +1820,57 @@ func TestDistributeSeries(t *testing.T) {
 	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
 }
 
+func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
+	const tenantIDLabelName = "thanos_tenant_id"
+
+	appendable := &fakeAppendable{
+		appender: newFakeAppender(nil, nil, nil),
+	}
+
+	h := NewHandler(nil, &Options{
+		Endpoint:             "localhost",
+		SplitTenantLabelName: tenantIDLabelName,
+		ReceiverMode:         RouterIngestor,
+		ReplicationFactor:    1,
+		ForwardTimeout:       1 * time.Second,
+		Writer: NewWriter(
+			log.NewNopLogger(),
+			newFakeTenantAppendable(appendable),
+			&WriterOptions{},
+		),
+	})
+
+	// initialize hashring with a single local endpoint matching the handler endpoint to force
+	// using local write
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: h.options.Endpoint,
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	response, err := h.RemoteWrite(context.Background(), &storepb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(
+					labels.FromStrings("a", "b", tenantIDLabelName, "bar"),
+				),
+			},
+			{
+				Labels: labelpb.ZLabelsFromPromLabels(
+					labels.FromStrings("b", "a", tenantIDLabelName, "foo"),
+				),
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	require.Equal(t, map[string]struct{}{"bar": {}, "foo": {}}, hr.seenTenants)
+}
+
 func TestHandlerFlippingHashrings(t *testing.T) {
 	t.Parallel()
 

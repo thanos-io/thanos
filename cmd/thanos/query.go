@@ -128,6 +128,9 @@ func registerQuery(app *extkingpin.App) {
 		Strings()
 	queryPartitionLabels := cmd.Flag("query.partition-label", "Labels that partition the leaf queriers. This is used to scope down the labelsets of leaf queriers when using the distributed query mode. If set, these labels must form a partition of the leaf queriers. Partition labels must not intersect with replica labels. Every TSDB of a leaf querier must have these labels. This is useful when there are multiple external labels that are irrelevant for the partition as it allows the distributed engine to ignore them for some optimizations. If this is empty then all labels are used as partition labels.").Strings()
 
+	// currently, we choose the highest MinT of an engine when querying multiple engines. This flag allows to change this behavior to choose the lowest MinT.
+	queryDistributedWithOverlappingInterval := cmd.Flag("query.distributed-with-overlapping-interval", "Allow for distributed queries using an engines lowest MinT.").Hidden().Default("false").Bool()
+
 	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
 	defaultMetadataTimeRange := cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
@@ -372,12 +375,13 @@ func registerQuery(app *extkingpin.App) {
 			*tenantCertField,
 			*enforceTenancy,
 			*tenantLabel,
+			*queryDistributedWithOverlappingInterval,
 		)
 	})
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
-// store nodes, merging and duplicating the data to satisfy user query.
+// store nodes, merging and deduplicating the data to satisfy user query.
 func runQuery(
 	g *run.Group,
 	logger log.Logger,
@@ -454,6 +458,7 @@ func runQuery(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	queryDistributedWithOverlappingInterval bool,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -694,11 +699,12 @@ func runQuery(
 		level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
 		defaultEngine = string(apiv1.PromqlEngineThanos)
 		remoteEngineEndpoints = query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
-			AutoDownsample:        enableAutodownsampling,
-			ReplicaLabels:         queryReplicaLabels,
-			PartitionLabels:       queryPartitionLabels,
-			Timeout:               queryTimeout,
-			EnablePartialResponse: enableQueryPartialResponse,
+			AutoDownsample:                          enableAutodownsampling,
+			ReplicaLabels:                           queryReplicaLabels,
+			PartitionLabels:                         queryPartitionLabels,
+			Timeout:                                 queryTimeout,
+			EnablePartialResponse:                   enableQueryPartialResponse,
+			QueryDistributedWithOverlappingInterval: queryDistributedWithOverlappingInterval,
 		})
 	}
 

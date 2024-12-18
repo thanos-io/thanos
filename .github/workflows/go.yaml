@@ -147,7 +147,7 @@ jobs:
       matrix:
         parallelism: [8]
         index: [0, 1, 2, 3, 4, 5, 6, 7]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Thanos end-to-end tests
     env:
       GOBIN: /tmp/.bin
