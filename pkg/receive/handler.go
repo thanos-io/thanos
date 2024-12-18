@@ -275,6 +275,18 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	)
 
+	h.router.Post(
+		"/v1/metrics",
+		instrf(
+			"otlp",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveOTLPHTTP),
+				),
+			),
+		),
+	)
+
 	statusAPI := statusapi.New(statusapi.Options{
 		GetStats: h.getStats,
 		Registry: h.options.Registry,
