@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/thanos-io/promql-engine/api"
+	"github.com/thanos-io/promql-engine/engine"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -663,18 +664,23 @@ func runQuery(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	engineOpts := promql.EngineOpts{
-		Logger: logger,
-		Reg:    reg,
-		// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-		MaxSamples:    math.MaxInt32,
-		Timeout:       queryTimeout,
-		LookbackDelta: lookbackDelta,
-		NoStepSubqueryIntervalFn: func(int64) int64 {
-			return defaultEvaluationInterval.Milliseconds()
+	engineOpts := engine.Opts{
+		EngineOpts: promql.EngineOpts{
+			Logger: logger,
+			Reg:    reg,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return defaultEvaluationInterval.Milliseconds()
+			},
+			EnableNegativeOffset: true,
+			EnableAtModifier:     true,
 		},
-		EnableNegativeOffset: true,
-		EnableAtModifier:     true,
+		EnablePartialResponses: enableQueryPartialResponse,
+		EnableXFunctions:       extendedFunctionsEnabled,
+		EnableAnalysis:         true,
 	}
 
 	// An active query tracker will be added only if the user specifies a non-default path.
@@ -696,13 +702,9 @@ func runQuery(
 		})
 	}
 
-	engineFactory := apiv1.NewQueryEngineFactory(
-		engineOpts,
-		remoteEngineEndpoints,
-		extendedFunctionsEnabled,
-	)
+	engineFactory := apiv1.NewQueryEngineFactory(engineOpts, remoteEngineEndpoints)
 
-	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
+	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts.EngineOpts, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
 	{
