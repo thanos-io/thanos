@@ -117,6 +117,12 @@ export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ resp
                         <td>
                           <GraphExpressionLink title="record" text={r.name} expr={r.name} />
                           <GraphExpressionLink title="expr" text={r.query} expr={r.query} />
+                          <strong>labels:</strong>
+                          {Object.entries(r.labels).map(([key, value]) => (
+                            <div className="ml-4" key={key}>
+                              {key}: {value}
+                            </div>
+                          ))}
                         </td>
                       )}
                       <td>
