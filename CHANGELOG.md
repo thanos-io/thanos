@@ -104,6 +104,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7886](https://github.com/thanos-io/thanos/pull/7886) Discovery: Preserve results from other resolve calls
 - [#7745](https://github.com/thanos-io/thanos/pull/7745) *: Build with Prometheus stringlabels tags
 - [#7669](https://github.com/thanos-io/thanos/pull/7669) Receive: Change quorum calculation for rf=2
+- [#7813](https://github.com/thanos-io/thanos/pull/7813) Receiver: enable initial TSDB compaction time randomization
 
 ### Removed
 
@@ -939,11 +940,11 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 ### Changed
 
--
+- 
 
 ### Removed
 
--
+- 
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
