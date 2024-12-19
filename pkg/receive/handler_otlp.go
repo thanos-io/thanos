@@ -164,7 +164,7 @@ func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetri
 
 	if err != nil {
 		level.Error(h.logger).Log("msg", "Error translating OTLP metrics to Prometheus write request", "err", err)
-		return nil, nil, err
+		return nil, nil, err.Err()
 	}
 
 	return converter.TimeSeries(), converter.Metadata(), nil

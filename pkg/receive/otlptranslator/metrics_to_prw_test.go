@@ -62,7 +62,7 @@ func TestFromMetrics(t *testing.T) {
 				payload.Metrics(),
 				Settings{KeepIdentifyingResourceAttributes: keepIdentifyingResourceAttributes},
 			)
-			require.NoError(t, err)
+			require.NoError(t, err.Err())
 			require.Empty(t, annots)
 
 			if diff := cmp.Diff(expMetadata, converter.Metadata()); diff != "" {
@@ -103,7 +103,7 @@ func TestFromMetrics(t *testing.T) {
 		payload := createExportRequest(5, 128, 128, 2, 0)
 
 		annots, err := converter.FromMetrics(ctx, payload.Metrics(), Settings{})
-		require.ErrorIs(t, err, context.Canceled)
+		require.ErrorIs(t, err.Err(), context.Canceled)
 		require.Empty(t, annots)
 	})
 
@@ -115,7 +115,7 @@ func TestFromMetrics(t *testing.T) {
 		payload := createExportRequest(5, 128, 128, 2, 0)
 
 		annots, err := converter.FromMetrics(ctx, payload.Metrics(), Settings{})
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err.Err(), context.DeadlineExceeded)
 		require.Empty(t, annots)
 	})
 
@@ -143,7 +143,7 @@ func TestFromMetrics(t *testing.T) {
 
 		converter := NewPrometheusConverter()
 		annots, err := converter.FromMetrics(context.Background(), request.Metrics(), Settings{})
-		require.NoError(t, err)
+		require.NoError(t, err.Err())
 		require.NotEmpty(t, annots)
 		ws, infos := annots.AsStrings("", 0, 0)
 		require.Empty(t, infos)
@@ -177,7 +177,7 @@ func BenchmarkPrometheusConverter_FromMetrics(b *testing.B) {
 											for range b.N {
 												converter := NewPrometheusConverter()
 												annots, err := converter.FromMetrics(context.Background(), payload.Metrics(), Settings{})
-												require.NoError(b, err)
+												require.NoError(b, err.Err())
 												require.Empty(b, annots)
 												require.NotNil(b, converter.TimeSeries())
 												require.NotNil(b, converter.Metadata())

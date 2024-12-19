@@ -15,9 +15,9 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.uber.org/multierr"
 
 	"github.com/prometheus/prometheus/util/annotations"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -49,7 +49,7 @@ func NewPrometheusConverter() *PrometheusConverter {
 }
 
 // FromMetrics converts pmetric.Metrics to Prometheus remote write format.
-func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metrics, settings Settings) (annots annotations.Annotations, errs error) {
+func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metrics, settings Settings) (annots annotations.Annotations, errs errutil.MultiError) {
 	c.everyN = everyNTimes{n: 128}
 	resourceMetricsSlice := md.ResourceMetrics()
 
@@ -75,7 +75,7 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 			// TODO: decide if instrumentation library information should be exported as labels
 			for k := 0; k < metricSlice.Len(); k++ {
 				if err := c.everyN.checkContext(ctx); err != nil {
-					errs = multierr.Append(errs, err)
+					errs.Add(err)
 					return
 				}
 
@@ -83,7 +83,7 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 				mostRecentTimestamp = max(mostRecentTimestamp, mostRecentTimestampInMetric(metric))
 
 				if !isValidAggregationTemporality(metric) {
-					errs = multierr.Append(errs, fmt.Errorf("invalid temporality and type combination for metric %q", metric.Name()))
+					errs.Add(fmt.Errorf("invalid temporality for metric %q", metric.Name()))
 					continue
 				}
 
@@ -101,11 +101,11 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 				case pmetric.MetricTypeGauge:
 					dataPoints := metric.Gauge().DataPoints()
 					if dataPoints.Len() == 0 {
-						errs = multierr.Append(errs, fmt.Errorf("empty data points. %s is dropped", metric.Name()))
+						errs.Add(fmt.Errorf("empty data points. %s is dropped", metric.Name()))
 						break
 					}
 					if err := c.addGaugeNumberDataPoints(ctx, dataPoints, resource, settings, promName); err != nil {
-						errs = multierr.Append(errs, err)
+						errs.Add(err)
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							return
 						}
@@ -113,11 +113,11 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 				case pmetric.MetricTypeSum:
 					dataPoints := metric.Sum().DataPoints()
 					if dataPoints.Len() == 0 {
-						errs = multierr.Append(errs, fmt.Errorf("empty data points. %s is dropped", metric.Name()))
+						errs.Add(fmt.Errorf("empty data points. %s is dropped", metric.Name()))
 						break
 					}
 					if err := c.addSumNumberDataPoints(ctx, dataPoints, resource, metric, settings, promName); err != nil {
-						errs = multierr.Append(errs, err)
+						errs.Add(err)
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							return
 						}
@@ -125,11 +125,11 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 				case pmetric.MetricTypeHistogram:
 					dataPoints := metric.Histogram().DataPoints()
 					if dataPoints.Len() == 0 {
-						errs = multierr.Append(errs, fmt.Errorf("empty data points. %s is dropped", metric.Name()))
+						errs.Add(fmt.Errorf("empty data points. %s is dropped", metric.Name()))
 						break
 					}
 					if err := c.addHistogramDataPoints(ctx, dataPoints, resource, settings, promName); err != nil {
-						errs = multierr.Append(errs, err)
+						errs.Add(err)
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							return
 						}
@@ -137,7 +137,7 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 				case pmetric.MetricTypeExponentialHistogram:
 					dataPoints := metric.ExponentialHistogram().DataPoints()
 					if dataPoints.Len() == 0 {
-						errs = multierr.Append(errs, fmt.Errorf("empty data points. %s is dropped", metric.Name()))
+						errs.Add(fmt.Errorf("empty data points. %s is dropped", metric.Name()))
 						break
 					}
 					ws, err := c.addExponentialHistogramDataPoints(
@@ -149,7 +149,7 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 					)
 					annots.Merge(ws)
 					if err != nil {
-						errs = multierr.Append(errs, err)
+						errs.Add(err)
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							return
 						}
@@ -157,17 +157,17 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 				case pmetric.MetricTypeSummary:
 					dataPoints := metric.Summary().DataPoints()
 					if dataPoints.Len() == 0 {
-						errs = multierr.Append(errs, fmt.Errorf("empty data points. %s is dropped", metric.Name()))
+						errs.Add(fmt.Errorf("empty data points. %s is dropped", metric.Name()))
 						break
 					}
 					if err := c.addSummaryDataPoints(ctx, dataPoints, resource, settings, promName); err != nil {
-						errs = multierr.Append(errs, err)
+						errs.Add(err)
 						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 							return
 						}
 					}
 				default:
-					errs = multierr.Append(errs, errors.New("unsupported metric type"))
+					errs.Add(errors.New("unsupported metric type"))
 				}
 			}
 		}
