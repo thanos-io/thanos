@@ -4,6 +4,7 @@
 package store
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/alecthomas/units"
@@ -160,8 +161,15 @@ func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer,
 }
 
 func (s *limitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	if s.maxPendingRequests > 0 && s.pendingRequests.Load() >= s.maxPendingRequests {
-		return status.Error(codes.ResourceExhausted, "too many pending series requests")
+	if s.maxPendingRequests > 0 {
+		if pendingRequests := s.pendingRequests.Load(); pendingRequests >= s.maxPendingRequests {
+			s.maxPendingRequestLimitHit.Inc()
+			s.pendingRequestsGauge.Set(float64(pendingRequests))
+			return status.Error(
+				codes.ResourceExhausted,
+				fmt.Sprintf("too many pending series requests: %d >= %d", s.pendingRequests.Load(), s.maxPendingRequests),
+			)
+		}
 	}
 	s.pendingRequestsGauge.Set(float64(s.pendingRequests.Add(1)))
 	defer s.pendingRequests.Add(-1)
