@@ -21,7 +21,7 @@ import (
 
 func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	span, ctx := tracing.StartSpan(r.Context(), "receiveOTLPHTTP")
+	span, ctx := tracing.StartSpan(r.Context(), "receive_otlp_http")
 	span.SetTag("receiver.mode", string(h.receiverMode))
 	defer span.Finish()
 
