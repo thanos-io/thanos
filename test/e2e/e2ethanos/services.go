@@ -69,7 +69,7 @@ func DefaultPrometheusImage() string {
 
 // DefaultOtelImage sets default Otel image used in e2e service.
 func DefaultOtelImage() string {
-	return "otel/opentelemetry-collector-contrib:0.98.0"
+	return "otel/opentelemetry-collector-contrib:v0.116.0"
 }
 
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
