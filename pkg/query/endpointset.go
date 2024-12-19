@@ -211,8 +211,7 @@ type EndpointSet struct {
 
 	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
 	// accessible and we close gRPC client for it, unless it is strict.
-	endpointSpec             func() map[string]*GRPCEndpointSpec
-	dialOpts                 []grpc.DialOption
+	endpointSpecs            func() map[string]*GRPCEndpointSpec
 	endpointInfoTimeout      time.Duration
 	unhealthyEndpointTimeout time.Duration
 
@@ -235,7 +234,6 @@ func NewEndpointSet(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	endpointSpecs func() []*GRPCEndpointSpec,
-	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
 	endpointMetricLabels ...string,
@@ -254,19 +252,17 @@ func NewEndpointSet(
 	}
 
 	return &EndpointSet{
-		now:             now,
-		logger:          log.With(logger, "component", "endpointset"),
-		endpointsMetric: endpointsMetric,
-
-		dialOpts:                 dialOpts,
+		now:                      now,
+		logger:                   log.With(logger, "component", "endpointset"),
+		endpointsMetric:          endpointsMetric,
 		endpointInfoTimeout:      endpointInfoTimeout,
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
-		endpointSpec: func() map[string]*GRPCEndpointSpec {
-			specs := make(map[string]*GRPCEndpointSpec)
+		endpointSpecs: func() map[string]*GRPCEndpointSpec {
+			res := make(map[string]*GRPCEndpointSpec)
 			for _, s := range endpointSpecs() {
-				specs[s.addr] = s
+				res[s.addr] = s
 			}
-			return specs
+			return res
 		},
 		endpoints: make(map[string]*endpointRef),
 	}
@@ -288,7 +284,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		mu sync.Mutex
 	)
 
-	for _, spec := range e.endpointSpec() {
+	for _, spec := range e.endpointSpecs() {
 		spec := spec
 
 		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
@@ -571,11 +567,7 @@ type endpointRef struct {
 // newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(spec *GRPCEndpointSpec) (*endpointRef, error) {
-	var dialOpts []grpc.DialOption
-
-	dialOpts = append(dialOpts, e.dialOpts...)
-	dialOpts = append(dialOpts, spec.dialOpts...)
-	conn, err := grpc.NewClient(spec.Addr(), dialOpts...)
+	conn, err := grpc.NewClient(spec.Addr(), spec.dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
 	}
