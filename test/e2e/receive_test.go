@@ -152,10 +152,9 @@ func TestReceive(t *testing.T) {
 			Deduplicate: false,
 		}, []model.Metric{
 			{
-				"job":          "otel-collector",
-				"receive":      "receive-ingestor",
-				"service_name": "otel-collector",
-				"tenant_id":    "default-tenant",
+				"job":       "otel-collector",
+				"receive":   "receive-ingestor",
+				"tenant_id": "default-tenant",
 			},
 		})
 	})
