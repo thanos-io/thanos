@@ -69,7 +69,7 @@ func DefaultPrometheusImage() string {
 
 // DefaultOtelImage sets default Otel image used in e2e service.
 func DefaultOtelImage() string {
-	return "otel/opentelemetry-collector-contrib:v0.116.0"
+	return "otel/opentelemetry-collector-contrib:0.116.1"
 }
 
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
@@ -1311,7 +1311,7 @@ receivers:
             - targets: [localhost:8888]
 exporters:
   otlphttp/thanos:
-    endpoint: "%s"
+    metrics_endpoint: "%s/api/v1/otlp"
     tls:
       insecure: true
   debug:
