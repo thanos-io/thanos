@@ -59,6 +59,13 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestLimiter := h.Limiter.RequestLimiter()
+	if r.ContentLength >= 0 {
+		if !requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
+			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+	}
+
 	req, err := remote.DecodeOTLPWriteRequest(r)
 	if err != nil {
 		level.Error(h.logger).Log("msg", "Error decoding remote write request", "err", err.Error())
