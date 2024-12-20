@@ -42,7 +42,7 @@ func TestOTLPWriteHandler(t *testing.T) {
 	}()
 
 	for _, handler := range handlers {
-		req := httptest.NewRequest("POST", "/api/v1/receive", bytes.NewReader(buf))
+		req := httptest.NewRequest("POST", "/v1/metrics", bytes.NewReader(buf))
 
 		req.Header.Set("Content-Type", "application/x-protobuf")
 		req.Header.Set(handler.options.ReplicaHeader, "0")
