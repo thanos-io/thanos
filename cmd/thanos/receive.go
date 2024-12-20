@@ -1070,8 +1070,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.limits-config-reload-timer", "Minimum amount of time to pass for the limit configuration to be reloaded. Helps to avoid excessive reloads.").
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
 
-	cmd.Flag("receive.otlp-disable-target-info", "Disable target information in OTLP metrics.").Default("false").BoolVar(&rc.otlpDisableTargetInfo)
-	cmd.Flag("receive.otlp-resource-attributes", "Resource attributes to include in OTLP metrics.").Default("").StringsVar(&rc.otlpResourceAttributes)
+	cmd.Flag("receive.otlp-disable-target-info", "Disable target information OTLP metrics ingested by Receive.").Default("false").BoolVar(&rc.otlpDisableTargetInfo)
+	cmd.Flag("receive.otlp-resource-attributes", "(Repeatable) Resource attributes to include in OTLP metrics ingested by Receive.").Default("").StringsVar(&rc.otlpResourceAttributes)
 
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }

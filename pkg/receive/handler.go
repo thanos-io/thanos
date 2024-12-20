@@ -278,7 +278,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	)
 
 	h.router.Post(
-		"/v1/metrics",
+		"/api/v1/otlp",
 		instrf(
 			"otlp",
 			readyf(
