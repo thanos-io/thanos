@@ -459,9 +459,11 @@ Flags:
                                  configuration was provided, it means that
                                  receive will run in RoutingOnly mode.
       --receive.otlp-disable-target-info
-                                 Disable target information in OTLP metrics.
+                                 Disable target information OTLP metrics
+                                 ingested by Receive.
       --receive.otlp-resource-attributes= ...
-                                 Resource attributes to include in OTLP metrics.
+                                 (Repeatable) Resource attributes to include in
+                                 OTLP metrics ingested by Receive.
       --receive.relabel-config=<content>
                                  Alternative to 'receive.relabel-config-file'
                                  flag (mutually exclusive). Content of YAML file
