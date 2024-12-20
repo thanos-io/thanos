@@ -77,27 +77,29 @@ func (l *Limiter) HeadSeriesLimiter() headSeriesLimiter {
 	return l.headSeriesLimiter
 }
 
-func (l *Limiter) ShouldRejectNewRequest() bool {
+func (l *Limiter) ShouldRejectNewRequest() (bool, string) {
 	// maxPendingRequests doesn't change once set when a limiter instance is created.
 	// So, it's safe to read it without a lock.
-	if l.maxPendingRequests > 0 && l.pendingRequests.Load() >= l.maxPendingRequests {
-		if l.maxPendingRequestLimitHit != nil {
-			l.maxPendingRequestLimitHit.Inc()
+	if l.maxPendingRequests > 0 {
+		if pendingRequests := l.pendingRequests.Load(); pendingRequests >= l.maxPendingRequests {
+			if l.maxPendingRequestLimitHit != nil {
+				l.maxPendingRequestLimitHit.Inc()
+			}
+			if l.pendingRequestsGauge != nil {
+				l.pendingRequestsGauge.Set(float64(pendingRequests))
+			}
+			return true, fmt.Sprintf("too many pending write requests: %d >= %d", l.pendingRequests.Load(), l.maxPendingRequests)
 		}
-		return true
 	}
 	newValue := l.pendingRequests.Add(1)
 	if l.pendingRequestsGauge != nil {
 		l.pendingRequestsGauge.Set(float64(newValue))
 	}
-	return false
+	return false, ""
 }
 
 func (l *Limiter) DecrementPendingRequests() {
-	newValue := l.pendingRequests.Add(-1)
-	if l.pendingRequestsGauge != nil {
-		l.pendingRequestsGauge.Set(float64(newValue))
-	}
+	l.pendingRequests.Add(-1)
 }
 
 // NewLimiter creates a new *Limiter given a configuration and prometheus
