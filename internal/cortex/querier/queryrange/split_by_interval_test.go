@@ -375,6 +375,14 @@ func Test_evaluateAtModifier(t *testing.T) {
 			[10m:])`,
 		},
 		{
+			in:       `irate(kube_pod_info{namespace="test"}[1h:1m] @ start())`,
+			expected: `irate(kube_pod_info{namespace="test"}[1h:1m] @ 1546300.800)`,
+		},
+		{
+			in:       `irate(kube_pod_info{namespace="test"} @ end()[1h:1m] @ start())`,
+			expected: `irate(kube_pod_info{namespace="test"} @ 1646300.800 [1h:1m] @ 1546300.800)`,
+		},
+		{
 			// parse error: @ modifier must be preceded by an instant vector selector or range vector selector or a subquery
 			in:                "sum(http_requests_total[5m]) @ 10.001",
 			expectedErrorCode: http.StatusBadRequest,

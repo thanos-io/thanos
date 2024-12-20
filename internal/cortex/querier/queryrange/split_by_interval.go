@@ -5,9 +5,10 @@ package queryrange
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -104,6 +105,15 @@ func EvaluateAtModifierFunction(query string, start, end int64) (string, error) 
 	}
 	parser.Inspect(expr, func(n parser.Node, _ []parser.Node) error {
 		if selector, ok := n.(*parser.VectorSelector); ok {
+			switch selector.StartOrEnd {
+			case parser.START:
+				selector.Timestamp = &start
+			case parser.END:
+				selector.Timestamp = &end
+			}
+			selector.StartOrEnd = 0
+		}
+		if selector, ok := n.(*parser.SubqueryExpr); ok {
 			switch selector.StartOrEnd {
 			case parser.START:
 				selector.Timestamp = &start
