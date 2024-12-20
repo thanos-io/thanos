@@ -462,6 +462,11 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
+		// this should happen before any compaction to remove unnecessary process on backlogs beyond retention.
+		if err := compact.ApplyRetentionPolicyByTenant(ctx, logger, insBkt, sy.Metas(), retentionByTenant, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, metadata.TenantRetentionExpired)); err != nil {
+			return errors.Wrap(err, "retention by tenant failed")
+		}
+
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "whole compaction error")
 		}
@@ -538,10 +543,6 @@ func runCompact(
 		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
 		if err := sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync before retention")
-		}
-
-		if err := compact.ApplyRetentionPolicyByTenant(ctx, logger, insBkt, sy.Metas(), retentionByTenant, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, metadata.TenantRetentionExpired)); err != nil {
-			return errors.Wrap(err, "retention by tenant failed")
 		}
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, insBkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
