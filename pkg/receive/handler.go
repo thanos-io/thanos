@@ -99,6 +99,8 @@ type Options struct {
 	ListenAddress           string
 	Registry                *prometheus.Registry
 	TenantHeader            string
+	BasicAuthUsername       string
+	BasicAuthPassword       string
 	TenantField             string
 	DefaultTenantID         string
 	ReplicaHeader           string
@@ -262,16 +264,20 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		}
 		return next
 	}
+	handler := http.HandlerFunc(h.receiveHTTP)
+
+	// Conditionally apply BasicAuth
+	if o.BasicAuthUsername != "" && o.BasicAuthPassword != "" {
+		level.Info(logger).Log("msg", "Basic Auth enabled for incoming requests")
+		handler = middleware.BasicAuth(handler, o.BasicAuthUsername, o.BasicAuthPassword)
+	}
+	handler = middleware.RequestID(handler)
 
 	h.router.Post(
 		"/api/v1/receive",
 		instrf(
 			"receive",
-			readyf(
-				middleware.RequestID(
-					http.HandlerFunc(h.receiveHTTP),
-				),
-			),
+			readyf(handler),
 		),
 	)
 
