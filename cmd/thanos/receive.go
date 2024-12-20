@@ -264,6 +264,8 @@ func runReceive(
 		Registry:             reg,
 		Endpoint:             conf.endpoint,
 		TenantHeader:         conf.tenantHeader,
+		BasicAuthUsername:    conf.basicAuthUsername,
+		BasicAuthPassword:    conf.basicAuthPassword,
 		TenantField:          conf.tenantField,
 		DefaultTenantID:      conf.defaultTenantID,
 		ReplicaHeader:        conf.replicaHeader,
@@ -851,6 +853,8 @@ type receiveConfig struct {
 	refreshInterval     *model.Duration
 	endpoint            string
 	tenantHeader        string
+	basicAuthUsername   string
+	basicAuthPassword   string
 	tenantField         string
 	tenantLabelName     string
 	defaultTenantID     string
@@ -951,6 +955,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
 
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(tenancy.DefaultTenantHeader).StringVar(&rc.tenantHeader)
+
+	cmd.Flag("receive.basic-auth-username", "HTTP Basic Auth username for write requests.").Default("").StringVar(&rc.basicAuthUsername)
+
+	cmd.Flag("receive.basic-auth-password", "HTTP Basic Auth password for write requests.").Default("").StringVar(&rc.basicAuthPassword)
 
 	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
