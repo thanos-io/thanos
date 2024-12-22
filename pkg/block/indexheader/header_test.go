@@ -6,7 +6,6 @@ package indexheader
 import (
 	"context"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"math"
 	"math/rand"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
