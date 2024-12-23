@@ -102,6 +102,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require github.com/DataDog/sketches-go v1.4.6
+
 require (
 	cloud.google.com/go v0.115.1 // indirect
 	cloud.google.com/go/auth v0.9.3 // indirect
