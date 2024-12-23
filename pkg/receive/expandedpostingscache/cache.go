@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/oklog/ulid"
 
 	"github.com/prometheus/client_golang/prometheus"
