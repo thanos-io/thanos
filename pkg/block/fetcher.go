@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/golang/groupcache/singleflight"
@@ -236,9 +238,10 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 
 	partialBlocks = make(map[ulid.ULID]bool)
 	var (
-		metaChan = make(chan ulid.ULID, concurrency)
-		eg, gCtx = errgroup.WithContext(ctx)
-		mu       sync.Mutex
+		metaChan   = make(chan ulid.ULID, concurrency)
+		eg, gCtx   = errgroup.WithContext(ctx)
+		mu, memu   sync.Mutex
+		multiError error
 	)
 	for i := 0; i < concurrency; i++ {
 		eg.Go(func() error {
@@ -247,9 +250,14 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 				// For 1y and 100 block sources this generates ~1.5-3k HEAD RPM. AWS handles 330k RPM per prefix.
 				// TODO(bwplotka): Consider filtering by consistency delay here (can't do until compactor healthyOverride work).
 				metaFile := path.Join(uid.String(), MetaFilename)
+
 				ok, err := f.bkt.Exists(gCtx, metaFile)
+
 				if err != nil {
-					return errors.Wrapf(err, "meta.json file exists: %v", uid)
+					memu.Lock()
+					multiError = multierror.Append(multiError, errors.Wrapf(err, "meta.json file exists: %v", uid))
+					memu.Unlock()
+					continue
 				}
 				if !ok {
 					mu.Lock()
@@ -283,9 +291,24 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 	}
 	close(metaChan)
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	multiError = multierror.Append(multiError, eg.Wait())
+
+	if multiError != nil {
+		switch me := multiError.(type) {
+		case *multierror.Error:
+			// return the multierror if there are multiple errors wrapped
+			if len(me.Errors) > 1 {
+				return nil, multiError
+			}
+			// return singular unwrapped error
+			if len(me.Errors) > 0 {
+				return nil, me.Errors[0]
+			}
+		default:
+			return nil, multiError
+		}
 	}
+
 	return partialBlocks, nil
 }
 
