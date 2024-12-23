@@ -1307,6 +1307,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			thanosMeta.IndexStats.SeriesP99Size = stats.SeriesP99Size
 			thanosMeta.IndexStats.SeriesP999Size = stats.SeriesP999Size
 			thanosMeta.IndexStats.SeriesP9999Size = stats.SeriesP9999Size
+			thanosMeta.IndexStats.SeriesSizeStdDev = stats.SeriesSizeStdDev
 		}
 		newMeta, err = metadata.InjectThanos(cg.logger, bdir, thanosMeta, nil)
 		if err != nil {

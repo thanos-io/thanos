@@ -86,13 +86,14 @@ type HealthStats struct {
 	ChunkAvgSize int64
 	ChunkMaxSize int64
 
-	SeriesMinSize   int64
-	SeriesAvgSize   int64
-	SeriesMaxSize   int64
-	SeriesP9999Size int64
-	SeriesP999Size  int64
-	SeriesP99Size   int64
-	SeriesP90Size   int64
+	SeriesMinSize    int64
+	SeriesAvgSize    int64
+	SeriesMaxSize    int64
+	SeriesP9999Size  int64
+	SeriesP999Size   int64
+	SeriesP99Size    int64
+	SeriesP90Size    int64
+	SeriesSizeStdDev int64
 
 	SingleSampleSeries int64
 	SingleSampleChunks int64
@@ -216,8 +217,10 @@ func (n *minMaxSumInt64) Avg() int64 {
 
 // sketch is a wrapper for DDSketch which allows to calculate quantile values with a relative accuracy.
 type sketch struct {
-	cnt int64
-	s   *ddsketch.DDSketch
+	cnt  int64
+	sum  int64
+	sum2 int64
+	s    *ddsketch.DDSketch
 }
 
 func newSketch() *sketch {
@@ -229,6 +232,8 @@ func newSketch() *sketch {
 
 func (s *sketch) Add(v int64) {
 	s.cnt++
+	s.sum += v
+	s.sum2 += v * v
 	// Impossible to happen since v should > 0.
 	_ = s.s.Add(float64(v))
 }
@@ -237,8 +242,7 @@ func (s *sketch) Avg() int64 {
 	if s.cnt == 0 {
 		return 0
 	}
-	// Impossible to happen if sketch is not empty.
-	return int64(s.s.GetSum()) / s.cnt
+	return s.sum / s.cnt
 }
 
 func (s *sketch) Max() int64 {
@@ -257,6 +261,18 @@ func (s *sketch) Min() int64 {
 	// Impossible to happen if sketch is not empty.
 	v, _ := s.s.GetMinValue()
 	return int64(v)
+}
+
+func (s *sketch) StdDev() float64 {
+	if s.cnt == 0 {
+		return 0
+	}
+	mean := s.sum / s.cnt
+	return math.Sqrt(float64(s.sum2/s.cnt - mean*mean))
+}
+
+func (s *sketch) ZScore(z float64) int64 {
+	return int64(s.StdDev()*z) + s.Avg()
 }
 
 func (s *sketch) Quantile(quantile float64) int64 {
@@ -457,6 +473,7 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 	stats.SeriesP99Size = seriesSize.Quantile(0.99)
 	stats.SeriesP999Size = seriesSize.Quantile(0.999)
 	stats.SeriesP9999Size = seriesSize.Quantile(0.9999)
+	stats.SeriesSizeStdDev = int64(seriesSize.StdDev())
 
 	stats.ChunkMaxDuration = time.Duration(chunkDuration.max) * time.Millisecond
 	stats.ChunkAvgDuration = time.Duration(chunkDuration.Avg()) * time.Millisecond
