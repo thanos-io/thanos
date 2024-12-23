@@ -7,10 +7,9 @@ import (
 	"context"
 	"path"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/gogo/protobuf/proto"
