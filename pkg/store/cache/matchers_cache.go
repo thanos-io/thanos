@@ -71,7 +71,6 @@ func WithSize(size int) MatcherCacheOption {
 
 func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	cache := &LruMatchersCache{
-		reg:  prometheus.NewRegistry(),
 		size: DefaultCacheSize,
 	}
 
@@ -157,7 +156,7 @@ func newMatcherCacheMetrics(reg prometheus.Registerer) *matcherCacheMetrics {
 
 // MatchersToPromMatchersCached returns Prometheus matchers from proto matchers.
 // Works analogously to MatchersToPromMatchers but uses cache to avoid unnecessary allocations and conversions.
-// NOTE: It (can) allocate memory.
+// NOTE: It allocates memory.
 func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for i := range ms {
@@ -183,7 +182,6 @@ func MatcherToPromMatcher(m ConversionLabelMatcher) (*labels.Matcher, error) {
 type ConversionLabelMatcher interface {
 	String() string
 	GetName() string
-	GetType() prompb.LabelMatcher_Type
 	GetValue() string
 }
 
