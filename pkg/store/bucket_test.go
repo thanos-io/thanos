@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,7 +44,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
-	"golang.org/x/exp/slices"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
@@ -996,8 +995,8 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			for id := range bucketStore.blocks {
 				ids = append(ids, id)
 			}
-			sort.Slice(ids, func(i, j int) bool {
-				return ids[i].Compare(ids[j]) < 0
+			slices.SortFunc(ids, func(i, j ulid.ULID) int {
+				return i.Compare(j)
 			})
 			testutil.Equals(t, sc.expectedIDs, ids)
 
@@ -1005,7 +1004,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			// Regression test: https://github.com/thanos-io/thanos/issues/1664
 
 			// Sort records. We load blocks concurrently so operations might be not ordered.
-			sort.Strings(rec.getRangeTouched)
+			slices.Sort(rec.getRangeTouched)
 
 			// With binary header nothing should be downloaded fully.
 			testutil.Equals(t, []string(nil), rec.getTouched)
@@ -1052,7 +1051,7 @@ func expectedTouchedBlockOps(all, expected, cached []ulid.ULID) []string {
 			)
 		}
 	}
-	sort.Strings(ops)
+	slices.Sort(ops)
 	return ops
 }
 
@@ -2581,8 +2580,8 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			var namesHints hintspb.LabelNamesResponseHints
 			testutil.Ok(t, types.UnmarshalAny(namesResp.Hints, &namesHints))
 			// The order is not determinate, so we are sorting them.
-			sort.Slice(namesHints.QueriedBlocks, func(i, j int) bool {
-				return namesHints.QueriedBlocks[i].Id < namesHints.QueriedBlocks[j].Id
+			slices.SortFunc(namesHints.QueriedBlocks, func(i, j hintspb.Block) int {
+				return strings.Compare(i.Id, j.Id)
 			})
 			testutil.Equals(t, tc.expectedNamesHints, namesHints)
 
@@ -2593,8 +2592,8 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			var valuesHints hintspb.LabelValuesResponseHints
 			testutil.Ok(t, types.UnmarshalAny(valuesResp.Hints, &valuesHints))
 			// The order is not determinate, so we are sorting them.
-			sort.Slice(valuesHints.QueriedBlocks, func(i, j int) bool {
-				return valuesHints.QueriedBlocks[i].Id < valuesHints.QueriedBlocks[j].Id
+			slices.SortFunc(valuesHints.QueriedBlocks, func(i, j hintspb.Block) int {
+				return strings.Compare(i.Id, j.Id)
 			})
 			testutil.Equals(t, tc.expectedValuesHints, valuesHints)
 		})
@@ -2730,7 +2729,7 @@ func labelNamesFromSeriesSet(series []*storepb.Series) []string {
 		labels = append(labels, k)
 	}
 
-	sort.Strings(labels)
+	slices.Sort(labels)
 	return labels
 }
 
@@ -3345,7 +3344,7 @@ func TestMatchersToPostingGroup(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			actual, err := matchersToPostingGroups(ctx, func(name string) ([]string, error) {
-				sort.Strings(tc.labelValues[name])
+				slices.Sort(tc.labelValues[name])
 				return tc.labelValues[name], nil
 			}, tc.matchers)
 			testutil.Ok(t, err)

@@ -6,9 +6,9 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/pkg/errors"
-	"golang.org/x/exp/slices"
 )
 
 var allowedIntegrationNames = []string{

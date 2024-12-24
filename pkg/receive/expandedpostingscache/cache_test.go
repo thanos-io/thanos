@@ -9,13 +9,13 @@ package expandedpostingscache
 import (
 	"bytes"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"go.uber.org/atomic"
-	"golang.org/x/exp/rand"
 
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -202,9 +202,8 @@ var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func randSeq(n int) string {
 	b := make([]rune, n)
-	rand.Seed(uint64(time.Now().UnixNano()))
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[rand.IntN(len(letters))]
 	}
 	return string(b)
 }

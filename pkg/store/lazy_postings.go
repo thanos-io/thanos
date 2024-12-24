@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/go-kit/log/level"
@@ -14,7 +15,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"golang.org/x/exp/slices"
 
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 )

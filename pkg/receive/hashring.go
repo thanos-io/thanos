@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/cespare/xxhash"
-	"golang.org/x/exp/slices"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
