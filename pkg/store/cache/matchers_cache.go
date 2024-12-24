@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -172,7 +171,7 @@ func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatche
 func MatcherToPromMatcher(m ConversionLabelMatcher) (*labels.Matcher, error) {
 	mi, ok := m.(*storepb.LabelMatcher)
 	if !ok {
-		return nil, errors.New(fmt.Sprintf("invalid matcher type. Got: %T", m))
+		return nil, fmt.Errorf("invalid matcher type. Got: %T", m)
 	}
 
 	return storepb.MatcherToPromMatcher(*mi)
