@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
