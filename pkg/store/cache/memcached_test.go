@@ -127,24 +127,22 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 		setup         []mockedExpandedPostings
 		mockedErr     error
 		fetchBlockID  ulid.ULID
-		fetchMatchers []*labels.Matcher
-		expectedHit   bool
-		expectedValue []byte
+		fetchMatchers [][]*labels.Matcher
+		expectedValue [][]byte
 	}{
 		"should return no hits on empty cache": {
 			setup:         []mockedExpandedPostings{},
 			fetchBlockID:  block1,
-			fetchMatchers: []*labels.Matcher{matcher1, matcher2},
-			expectedHit:   false,
+			fetchMatchers: [][]*labels.Matcher{{matcher1, matcher2}},
+			expectedValue: [][]byte{nil},
 		},
 		"should return no misses on 100% hit ratio": {
 			setup: []mockedExpandedPostings{
 				{block: block1, matchers: []*labels.Matcher{matcher1}, value: value1},
 			},
 			fetchBlockID:  block1,
-			fetchMatchers: []*labels.Matcher{matcher1},
-			expectedHit:   true,
-			expectedValue: value1,
+			fetchMatchers: [][]*labels.Matcher{{matcher1}},
+			expectedValue: [][]byte{value1},
 		},
 		"Cache miss when matchers key doesn't match": {
 			setup: []mockedExpandedPostings{
@@ -152,8 +150,8 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 				{block: block2, matchers: []*labels.Matcher{matcher2}, value: value2},
 			},
 			fetchBlockID:  block1,
-			fetchMatchers: []*labels.Matcher{matcher1, matcher2},
-			expectedHit:   false,
+			fetchMatchers: [][]*labels.Matcher{{matcher1, matcher2}},
+			expectedValue: [][]byte{nil},
 		},
 		"should return no hits on memcached error": {
 			setup: []mockedExpandedPostings{
@@ -161,8 +159,8 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 			},
 			mockedErr:     errors.New("mocked error"),
 			fetchBlockID:  block1,
-			fetchMatchers: []*labels.Matcher{matcher3},
-			expectedHit:   false,
+			fetchMatchers: [][]*labels.Matcher{{matcher3}},
+			expectedValue: [][]byte{nil},
 		},
 	}
 
@@ -179,17 +177,18 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 			}
 
 			// Fetch postings from cached and assert on it.
-			val, hit := c.FetchExpandedPostings(ctx, testData.fetchBlockID, testData.fetchMatchers, tenancy.DefaultTenant)
-			testutil.Equals(t, testData.expectedHit, hit)
-			if hit {
-				testutil.Equals(t, testData.expectedValue, val)
-			}
+			val := c.FetchExpandedPostings(ctx, testData.fetchBlockID, testData.fetchMatchers, tenancy.DefaultTenant)
+			testutil.Equals(t, testData.expectedValue, val)
 
 			// Assert on metrics.
 			testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
-			if testData.expectedHit {
-				testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
+			hits := 0
+			for _, v := range testData.expectedValue {
+				if len(v) > 0 {
+					hits++
+				}
 			}
+			testutil.Equals(t, float64(hits), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeExpandedPostings, tenancy.DefaultTenant)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))

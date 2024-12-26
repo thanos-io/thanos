@@ -11,6 +11,12 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb/index"
+)
+
+const (
+	seriesByteAlign = 16
 )
 
 type postingsReaderBuilder struct {
@@ -141,3 +147,29 @@ func (r *postingsReaderBuilder) Error() error {
 func (r *postingsReaderBuilder) AtDiffVarint() ([]byte, uint64, int) {
 	return r.cur, r.numberOfPostingsInCur, r.keyID
 }
+
+type seriesByteAlignedPostings struct {
+	// Multiply series ref by seriesByteAlign.
+	postings index.Postings
+}
+
+func newSeriesByteAlignedPostings(postings index.Postings) index.Postings {
+	return &seriesByteAlignedPostings{postings: postings}
+}
+
+func (p *seriesByteAlignedPostings) Next() bool {
+	return p.postings.Next()
+}
+
+func (p *seriesByteAlignedPostings) Seek(v storage.SeriesRef) bool {
+	// Apply reverse order when seeking.
+	// If v is not multiple of seriesByteAlign, the value might be wrong due to round of floats.
+	// Make sure to only use this if all postings are multiple of seriesByteAlign.
+	return p.postings.Seek(v / seriesByteAlign)
+}
+
+func (p *seriesByteAlignedPostings) At() storage.SeriesRef {
+	return p.postings.At() * seriesByteAlign
+}
+
+func (p *seriesByteAlignedPostings) Err() error { return p.postings.Err() }

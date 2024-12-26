@@ -250,7 +250,7 @@ func fetchLazyExpandedPostings(
 		}
 	}
 
-	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant)
+	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant, lazyExpandedPostingEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -260,22 +260,12 @@ func fetchLazyExpandedPostings(
 	return &lazyExpandedPostings{postings: ps, matchers: matchers}, nil
 }
 
-// keysToFetchFromPostingGroups returns label pairs (postings) to fetch
-// and matchers we need to use for lazy posting expansion.
-// Input `postingGroups` needs to be ordered by cardinality in case lazy
-// expansion is enabled. When we find the first lazy posting group we can exit.
-func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label, []*labels.Matcher) {
-	var lazyMatchers []*labels.Matcher
-	keys := make([]labels.Label, 0)
-	i := 0
-	for i < len(postingGroups) {
+// keysToFetchFromPostingGroups returns label pairs (postings) to fetch.
+func keysToFetchFromPostingGroups(postingGroups []*postingGroup, length int) []labels.Label {
+	keys := make([]labels.Label, 0, length)
+	for i := 0; i < len(postingGroups); i++ {
 		pg := postingGroups[i]
-		if pg.lazy {
-			if len(lazyMatchers) == 0 {
-				lazyMatchers = make([]*labels.Matcher, 0)
-			}
-			lazyMatchers = append(lazyMatchers, postingGroups[i].matchers...)
-		} else {
+		if !pg.lazy && pg.postings == nil {
 			// Postings returned by fetchPostings will be in the same order as keys
 			// so it's important that we iterate them in the same order later.
 			// We don't have any other way of pairing keys and fetched postings.
@@ -286,16 +276,37 @@ func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label
 				keys = append(keys, labels.Label{Name: pg.name, Value: key})
 			}
 		}
-
-		i++
 	}
 
-	return keys, lazyMatchers
+	return keys
 }
 
-func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string) ([]storage.SeriesRef, []*labels.Matcher, error) {
-	keys, lazyMatchers := keysToFetchFromPostingGroups(postingGroups)
-	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant)
+// lazyMatchersFromPostingGroups returns matchers for lazy posting expansion.
+func lazyMatchersFromPostingGroups(postingGroups []*postingGroup) []*labels.Matcher {
+	var lazyMatchers []*labels.Matcher
+	for i := 0; i < len(postingGroups); i++ {
+		pg := postingGroups[i]
+		if pg.lazy {
+			lazyMatchers = append(lazyMatchers, postingGroups[i].matchers...)
+		}
+	}
+	return lazyMatchers
+}
+
+func fetchAndExpandPostingGroups(
+	ctx context.Context,
+	r *bucketIndexReader,
+	postingGroups []*postingGroup,
+	bytesLimiter BytesLimiter,
+	tenant string,
+	lazyExpandedPostingEnabled bool,
+) ([]storage.SeriesRef, []*labels.Matcher, error) {
+	var lazyMatchers []*labels.Matcher
+	if lazyExpandedPostingEnabled {
+		lazyMatchers = lazyMatchersFromPostingGroups(postingGroups)
+	}
+
+	fetchedPostings, closeFns, err := r.fetchPostings(ctx, postingGroups, bytesLimiter, tenant)
 	defer func() {
 		for _, closeFn := range closeFns {
 			closeFn()
@@ -305,7 +316,10 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 		return nil, nil, errors.Wrap(err, "get postings")
 	}
 
-	result := mergeFetchedPostings(ctx, fetchedPostings, postingGroups)
+	result, err := mergeFetchedPostings(ctx, r, fetchedPostings, postingGroups, tenant)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "merge postings")
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -316,7 +330,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 	return ps, lazyMatchers, nil
 }
 
-func mergeFetchedPostings(ctx context.Context, fetchedPostings []index.Postings, postingGroups []*postingGroup) index.Postings {
+func mergeFetchedPostings(ctx context.Context, r *bucketIndexReader, fetchedPostings []index.Postings, postingGroups []*postingGroup, tenant string) (index.Postings, error) {
 	// Get "add" and "remove" postings from groups. We iterate over postingGroups and their keys
 	// again, and this is exactly the same order as before (when building the groups), so we can simply
 	// use one incrementing index to fetch postings from returned slice.
@@ -327,6 +341,16 @@ func mergeFetchedPostings(ctx context.Context, fetchedPostings []index.Postings,
 		if g.lazy {
 			continue
 		}
+		// Already fetched expanded postings from cache.
+		if g.postings != nil {
+			if len(g.addKeys) > 0 {
+				groupAdds = append(groupAdds, g.postings)
+			} else if len(g.removeKeys) > 0 {
+				groupRemovals = append(groupRemovals, g.postings)
+			}
+			continue
+		}
+
 		// We cannot add empty set to groupAdds, since they are intersected.
 		if len(g.addKeys) > 0 {
 			toMerge := make([]index.Postings, 0, len(g.addKeys))
@@ -334,16 +358,43 @@ func mergeFetchedPostings(ctx context.Context, fetchedPostings []index.Postings,
 				toMerge = append(toMerge, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
 				postingIndex++
 			}
+			p := index.Merge(ctx, toMerge...)
+			// Cache expanded postings.
+			if len(g.addKeys) > 1 {
+				refs, err := ExpandPostingsWithContext(ctx, p)
+				if err != nil {
+					return nil, err
+				}
+				r.storeExpandedPostingsToCache(g.matchers, index.NewListPostings(refs), len(refs), tenant)
+				groupAdds = append(groupAdds, index.NewListPostings(refs))
+			} else {
+				groupAdds = append(groupAdds, p)
+			}
 
-			groupAdds = append(groupAdds, index.Merge(ctx, toMerge...))
+			continue
 		}
 
-		for _, l := range g.removeKeys {
-			groupRemovals = append(groupRemovals, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
-			postingIndex++
+		if len(g.removeKeys) > 0 {
+			toMerge := make([]index.Postings, 0, len(g.addKeys))
+			for _, l := range g.removeKeys {
+				toMerge = append(toMerge, checkNilPosting(g.name, l, fetchedPostings[postingIndex]))
+				postingIndex++
+			}
+			p := index.Merge(ctx, toMerge...)
+			// Cache expanded postings.
+			if len(g.removeKeys) > 1 {
+				refs, err := ExpandPostingsWithContext(ctx, p)
+				if err != nil {
+					return nil, err
+				}
+				r.storeExpandedPostingsToCache(g.matchers, index.NewListPostings(refs), len(refs), tenant)
+				groupRemovals = append(groupRemovals, index.NewListPostings(refs))
+			} else {
+				groupRemovals = append(groupRemovals, p)
+			}
 		}
 	}
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(ctx, groupRemovals...))
-	return result
+	return result, nil
 }

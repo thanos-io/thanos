@@ -53,17 +53,24 @@ func (c *TracingIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []
 }
 
 // FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
-func (c *TracingIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher, tenant string) (data []byte, exists bool) {
+func (c *TracingIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers [][]*labels.Matcher, tenant string) [][]byte {
 	span, newCtx := tracing.StartSpan(ctx, "fetch_expanded_postings", tracing.Tags{
 		"name":     c.name,
 		"block.id": blockID.String(),
 	})
 	defer span.Finish()
-	data, exists = c.cache.FetchExpandedPostings(newCtx, blockID, matchers, tenant)
-	if exists {
-		span.SetTag("bytes", len(data))
+	data := c.cache.FetchExpandedPostings(newCtx, blockID, matchers, tenant)
+	dataBytes := 0
+	hits := 0
+	for _, v := range data {
+		if v != nil {
+			hits++
+			dataBytes += len(v)
+		}
 	}
-	return data, exists
+	span.SetTag("bytes", dataBytes)
+	span.SetTag("hits", hits)
+	return data
 }
 
 // StoreSeries stores a single series. Skip instrumenting this method

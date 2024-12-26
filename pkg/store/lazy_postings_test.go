@@ -19,21 +19,21 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/objstore/providers/filesystem"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 )
 
 func TestKeysToFetchFromPostingGroups(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name             string
-		pgs              []*postingGroup
-		expectedLabels   []labels.Label
-		expectedMatchers []*labels.Matcher
+		name           string
+		pgs            []*postingGroup
+		length         int
+		expectedLabels []labels.Label
 	}{
 		{
 			name: "empty group",
@@ -134,6 +134,145 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 			},
 		},
 		{
+			name: "skip groups with postings fetched",
+			pgs: []*postingGroup{
+				{
+					name:     "test",
+					addKeys:  []string{"foo", "bar"},
+					postings: index.EmptyPostings(),
+				},
+				{
+					name:       "foo",
+					removeKeys: []string{"bar"},
+					postings:   index.EmptyPostings(),
+				},
+			},
+			expectedLabels: []labels.Label{},
+		},
+		{
+			name: "skip lazy posting group",
+			pgs: []*postingGroup{
+				{
+					name:     "test",
+					addKeys:  []string{"foo", "bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					lazy:     true,
+				},
+			},
+			expectedLabels: []labels.Label{},
+		},
+		{
+			name: "skip multiple lazy posting groups",
+			pgs: []*postingGroup{
+				{
+					name:     "test",
+					addKeys:  []string{"foo", "bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					lazy:     true,
+				},
+				{
+					name:     "job",
+					addKeys:  []string{"prometheus"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "job", "prometheus.*")},
+					lazy:     true,
+				},
+			},
+			expectedLabels: []labels.Label{},
+		},
+		{
+			name: "multiple non lazy and lazy posting groups",
+			pgs: []*postingGroup{
+				{
+					name:     "test",
+					addKeys:  []string{"foo", "bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+				},
+				{
+					name:     "test",
+					addKeys:  []string{"foo", "bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					lazy:     true,
+				},
+				{
+					name:     "job",
+					addKeys:  []string{"prometheus"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "job", "prometheus.*")},
+					lazy:     true,
+				},
+			},
+			expectedLabels: []labels.Label{{Name: "test", Value: "foo"}, {Name: "test", Value: "bar"}},
+		},
+		{
+			name: "multiple non lazy and lazy posting groups with lazy posting groups in the middle",
+			pgs: []*postingGroup{
+				{
+					name:     "test",
+					addKeys:  []string{"foo", "bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+				},
+				{
+					name:     "cluster",
+					addKeys:  []string{"bar"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "cluster", "bar")},
+					lazy:     true,
+				},
+				{
+					name:     "env",
+					addKeys:  []string{"beta", "gamma", "prod"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "env", "beta|gamma|prod")},
+					lazy:     true,
+				},
+				{
+					name:     "job",
+					addKeys:  []string{"prometheus"},
+					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "job", "prometheus.*")},
+				},
+			},
+			expectedLabels: []labels.Label{{Name: "test", Value: "foo"}, {Name: "test", Value: "bar"}, {Name: "job", Value: "prometheus"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			keys := keysToFetchFromPostingGroups(tc.pgs, tc.length)
+			testutil.Equals(t, tc.expectedLabels, keys)
+		})
+	}
+}
+
+func TestLazyMatchersToFetchFromPostingGroups(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name             string
+		pgs              []*postingGroup
+		expectedMatchers []*labels.Matcher
+	}{
+		{
+			name: "empty group",
+			pgs: []*postingGroup{
+				{
+					addKeys:    []string{},
+					removeKeys: []string{},
+				},
+			},
+		},
+		{
+			name: "empty groups",
+			pgs: []*postingGroup{
+				{
+					addKeys:    []string{},
+					removeKeys: []string{},
+				},
+				{
+					addKeys:    []string{},
+					removeKeys: []string{},
+				},
+				{
+					addKeys:    []string{},
+					removeKeys: []string{},
+				},
+			},
+		},
+		{
 			name: "lazy posting group with empty matchers",
 			pgs: []*postingGroup{
 				{
@@ -143,7 +282,6 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 					lazy:     true,
 				},
 			},
-			expectedLabels:   []labels.Label{},
 			expectedMatchers: []*labels.Matcher{},
 		},
 		{
@@ -156,7 +294,6 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 					lazy:     true,
 				},
 			},
-			expectedLabels:   []labels.Label{},
 			expectedMatchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
 		},
 		{
@@ -175,7 +312,6 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 					lazy:     true,
 				},
 			},
-			expectedLabels: []labels.Label{},
 			expectedMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
 				labels.MustNewMatcher(labels.MatchRegexp, "job", "prometheus.*"),
@@ -202,7 +338,6 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 					lazy:     true,
 				},
 			},
-			expectedLabels: []labels.Label{{Name: "test", Value: "foo"}, {Name: "test", Value: "bar"}},
 			expectedMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
 				labels.MustNewMatcher(labels.MatchRegexp, "job", "prometheus.*"),
@@ -234,7 +369,6 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 					matchers: []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "job", "prometheus.*")},
 				},
 			},
-			expectedLabels: []labels.Label{{Name: "test", Value: "foo"}, {Name: "test", Value: "bar"}, {Name: "job", Value: "prometheus"}},
 			expectedMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "cluster", "bar"),
 				labels.MustNewMatcher(labels.MatchRegexp, "env", "beta|gamma|prod"),
@@ -242,8 +376,7 @@ func TestKeysToFetchFromPostingGroups(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			keys, matchers := keysToFetchFromPostingGroups(tc.pgs)
-			testutil.Equals(t, tc.expectedLabels, keys)
+			matchers := lazyMatchersFromPostingGroups(tc.pgs)
 			testutil.Assert(t, len(tc.expectedMatchers) == len(matchers))
 			for i := 0; i < len(tc.expectedMatchers); i++ {
 				testutil.Equals(t, tc.expectedMatchers[i].String(), matchers[i].String())
@@ -749,7 +882,27 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 }
 
 func TestMergeFetchedPostings(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
+	dir := t.TempDir()
+	bkt, err := filesystem.NewBucket(dir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	logger := log.NewNopLogger()
+	blockID := ulid.MustNew(1, nil)
+	meta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{ULID: blockID},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"a": "b",
+				"c": "d",
+			},
+		},
+	}
+	headerReader := &mockIndexHeaderReader{}
+
 	for _, tc := range []struct {
 		name               string
 		fetchedPostings    []index.Postings
@@ -803,6 +956,19 @@ func TestMergeFetchedPostings(t *testing.T) {
 			expectedSeriesRefs: []storage.SeriesRef{3, 5},
 		},
 		{
+			name: "posting group with multiple remove keys",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5, 6, 7}),
+				index.NewListPostings([]storage.SeriesRef{1, 2, 4}),
+				index.NewListPostings([]storage.SeriesRef{6, 7}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", removeKeys: []string{"bar", "foo"}, addAll: true},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{3, 5},
+		},
+		{
 			name: "multiple posting groups with add key and ignore lazy posting groups",
 			fetchedPostings: []index.Postings{
 				index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5}),
@@ -829,12 +995,54 @@ func TestMergeFetchedPostings(t *testing.T) {
 			},
 			expectedSeriesRefs: []storage.SeriesRef{1, 2, 4},
 		},
+		{
+			name:            "multiple posting groups with pre-filled postings",
+			fetchedPostings: []index.Postings{},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}, postings: index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5})},
+				{name: "bar", addKeys: []string{"foo"}, postings: index.NewListPostings([]storage.SeriesRef{5, 6, 7})},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{5},
+		},
+		{
+			name:            "multiple posting groups with pre-filled postings",
+			fetchedPostings: []index.Postings{},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}, postings: index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5})},
+				{name: "bar", addKeys: []string{"foo"}, postings: index.NewListPostings([]storage.SeriesRef{5, 6, 7})},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{5},
+		},
+		{
+			name: "mixed posting groups with pre-filled postings and multiple keys",
+			fetchedPostings: []index.Postings{
+				index.NewListPostings([]storage.SeriesRef{3, 4, 5, 8}),
+				index.NewListPostings([]storage.SeriesRef{3, 4, 5, 9}),
+				index.NewListPostings([]storage.SeriesRef{3}),
+				index.NewListPostings([]storage.SeriesRef{4}),
+			},
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}, postings: index.NewListPostings([]storage.SeriesRef{1, 2, 3, 4, 5})},
+				{name: "bar", addKeys: []string{"foo", "bar"}, postings: index.NewListPostings([]storage.SeriesRef{3, 4, 5, 6, 7})},
+				{name: "baz", addKeys: []string{"foo", "bar"}},
+				{name: "bbb", removeKeys: []string{"foo", "bar"}, addAll: true},
+			},
+			expectedSeriesRefs: []storage.SeriesRef{5},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			p := mergeFetchedPostings(ctx, tc.fetchedPostings, tc.postingGroups)
+			registry := prometheus.NewRegistry()
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, registry, storecache.DefaultInMemoryIndexCacheConfig)
+			testutil.Ok(t, err)
+			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), indexCache, nil, headerReader, nil, nil, nil)
+			testutil.Ok(t, err)
+			ir := newBucketIndexReader(block, logger)
+			testutil.Ok(t, err)
+			p, err := mergeFetchedPostings(ctx, ir, tc.fetchedPostings, tc.postingGroups, "")
+			testutil.Ok(t, err)
 			res, err := index.ExpandPostings(p)
-			require.NoError(t, err)
-			require.Equal(t, tc.expectedSeriesRefs, res)
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.expectedSeriesRefs, res)
 		})
 	}
 }

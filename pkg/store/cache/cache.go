@@ -51,8 +51,9 @@ type IndexCache interface {
 	// StoreExpandedPostings stores expanded postings for a set of label matchers.
 	StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string)
 
-	// FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
-	FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher, tenant string) ([]byte, bool)
+	// FetchExpandedPostings fetches expanded postings and returns a slice of bytes. If cache miss, the corresponding index
+	// of the response slice will be nil.
+	FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers [][]*labels.Matcher, tenant string) [][]byte
 
 	// StoreSeries stores a single series.
 	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string)
