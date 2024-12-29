@@ -573,18 +573,28 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 func (c *memcachedClient) sortKeysByServer(keys []string) []string {
 	bucketed := make(map[string][]string)
 
-	for _, key := range keys {
-		addr, err := c.selector.PickServer(key)
-		// If we couldn't determine the correct server, return keys in existing order
-		if err != nil {
-			return keys
-		}
+	addrs := *(addrsPool.Get().(*[]net.Addr))
+	defer func() {
+		addrs = (addrs)[:0]
+		addrsPool.Put(&addrs)
+	}()
+	err := c.selector.Each(func(addr net.Addr) error {
+		addrs = append(addrs, addr)
+		return nil
+	})
+	// No need to pick server and sort keys if no more than 1 server.
+	if err != nil || len(addrs) <= 1 {
+		return keys
+	}
 
+	for _, key := range keys {
+		// Bypass selector and pick server using jump hash.
+		addr := pickServerWithJumpHash(addrs, key)
 		addrString := addr.String()
 		bucketed[addrString] = append(bucketed[addrString], key)
 	}
 
-	var out []string
+	out := make([]string, 0, len(keys))
 	for srv := range bucketed {
 		out = append(out, bucketed[srv]...)
 	}

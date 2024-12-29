@@ -454,13 +454,9 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	config.Addresses = []string{"127.0.0.1:11211", "127.0.0.2:11211"}
 	backendMock := newMemcachedClientBackendMock()
 	selector := &mockServerSelector{
-		serversByKey: map[string]mockAddr{
-			"key1": "127.0.0.1:11211",
-			"key2": "127.0.0.2:11211",
-			"key3": "127.0.0.1:11211",
-			"key4": "127.0.0.2:11211",
-			"key5": "127.0.0.1:11211",
-			"key6": "127.0.0.2:11211",
+		addrs: []mockAddr{
+			"127.0.0.1:11211",
+			"127.0.0.2:11211",
 		},
 	}
 
@@ -478,8 +474,8 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	}
 
 	sorted := client.sortKeysByServer(keys)
-	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key3", "key5"})
-	testutil.ContainsStringSlice(t, sorted, []string{"key2", "key4", "key6"})
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key4"})
+	testutil.ContainsStringSlice(t, sorted, []string{"key5", "key3", "key6"})
 }
 
 type mockAddr string
@@ -493,25 +489,20 @@ func (m mockAddr) String() string {
 }
 
 type mockServerSelector struct {
-	serversByKey map[string]mockAddr
+	addrs []mockAddr
 }
 
+// PickServer is not used here.
 func (m *mockServerSelector) PickServer(key string) (net.Addr, error) {
-	if srv, ok := m.serversByKey[key]; ok {
-		return srv, nil
-	}
-
 	panic(fmt.Sprintf("unmapped key: %s", key))
 }
 
 func (m *mockServerSelector) Each(f func(net.Addr) error) error {
-	for k := range m.serversByKey {
-		addr := m.serversByKey[k]
+	for _, addr := range m.addrs {
 		if err := f(addr); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 

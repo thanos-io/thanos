@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/bradfitz/gomemcache/memcache"
@@ -30,9 +31,8 @@ var (
 // with consistent DNS names where the naturally sorted order
 // is predictable (ie. Kubernetes statefulsets).
 type MemcachedJumpHashSelector struct {
-	// To avoid copy and pasting all memcache server list logic,
-	// we embed it and implement our features on top of it.
-	servers memcache.ServerList
+	mu    sync.RWMutex
+	addrs []net.Addr
 }
 
 // SetServers changes a MemcachedJumpHashSelector's set of servers at
@@ -53,52 +53,85 @@ func (s *MemcachedJumpHashSelector) SetServers(servers ...string) error {
 	copy(sortedServers, servers)
 	natsort.Sort(sortedServers)
 
-	return s.servers.SetServers(sortedServers...)
+	naddr := make([]net.Addr, len(servers))
+	var err error
+	for i, server := range sortedServers {
+		naddr[i], err = parseStaticAddr(server)
+		if err != nil {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.addrs = naddr
+	return nil
 }
 
 // PickServer returns the server address that a given item
 // should be shared onto.
 func (s *MemcachedJumpHashSelector) PickServer(key string) (net.Addr, error) {
-	// Unfortunately we can't read the list of server addresses from
-	// the original implementation, so we use Each() to fetch all of them.
-	addrs := *(addrsPool.Get().(*[]net.Addr))
-	err := s.servers.Each(func(addr net.Addr) error {
-		addrs = append(addrs, addr)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// No need of a jump hash in case of 0 or 1 servers.
-	if len(addrs) == 0 {
-		addrs = (addrs)[:0]
-		addrsPool.Put(&addrs)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.addrs) == 0 {
 		return nil, memcache.ErrNoServers
+	} else if len(s.addrs) == 1 {
+		return s.addrs[0], nil
 	}
-	if len(addrs) == 1 {
-		picked := addrs[0]
-
-		addrs = (addrs)[:0]
-		addrsPool.Put(&addrs)
-
-		return picked, nil
-	}
-
-	// Pick a server using the jump hash.
-	cs := xxhash.Sum64String(key)
-	idx := jumpHash(cs, len(addrs))
-	picked := (addrs)[idx]
-
-	addrs = (addrs)[:0]
-	addrsPool.Put(&addrs)
-
-	return picked, nil
+	return pickServerWithJumpHash(s.addrs, key), nil
 }
 
 // Each iterates over each server and calls the given function.
 // If f returns a non-nil error, iteration will stop and that
 // error will be returned.
 func (s *MemcachedJumpHashSelector) Each(f func(net.Addr) error) error {
-	return s.servers.Each(f)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, def := range s.addrs {
+		if err := f(def); err != nil {
+			return err
+		}
+	}
+	return nil
 }
+
+// pickServerWithJumpHash returns the server address that a given item should be shared onto.
+func pickServerWithJumpHash(addrs []net.Addr, key string) net.Addr {
+	// Pick a server using the jump hash.
+	cs := xxhash.Sum64String(key)
+	idx := jumpHash(cs, len(addrs))
+	picked := (addrs)[idx]
+	return picked
+}
+
+// Copied from https://github.com/bradfitz/gomemcache/blob/master/memcache/selector.go#L68.
+func parseStaticAddr(server string) (net.Addr, error) {
+	if strings.Contains(server, "/") {
+		addr, err := net.ResolveUnixAddr("unix", server)
+		if err != nil {
+			return nil, err
+		}
+		return newStaticAddr(addr), nil
+	}
+	tcpaddr, err := net.ResolveTCPAddr("tcp", server)
+	if err != nil {
+		return nil, err
+	}
+	return newStaticAddr(tcpaddr), nil
+}
+
+// Copied from https://github.com/bradfitz/gomemcache/blob/master/memcache/selector.go#L45
+// staticAddr caches the Network() and String() values from any net.Addr.
+type staticAddr struct {
+	ntw, str string
+}
+
+func newStaticAddr(a net.Addr) net.Addr {
+	return &staticAddr{
+		ntw: a.Network(),
+		str: a.String(),
+	}
+}
+
+func (s *staticAddr) Network() string { return s.ntw }
+func (s *staticAddr) String() string  { return s.str }
