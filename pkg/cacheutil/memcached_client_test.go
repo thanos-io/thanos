@@ -454,9 +454,9 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	config.Addresses = []string{"127.0.0.1:11211", "127.0.0.2:11211"}
 	backendMock := newMemcachedClientBackendMock()
 	selector := &mockServerSelector{
-		addrs: []mockAddr{
-			"127.0.0.1:11211",
-			"127.0.0.2:11211",
+		resp: map[string][]string{
+			"127.0.0.1:11211": {"key1", "key2", "key4"},
+			"127.0.0.2:11211": {"key5", "key3", "key6"},
 		},
 	}
 
@@ -476,6 +476,23 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	sorted := client.sortKeysByServer(keys)
 	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key4"})
 	testutil.ContainsStringSlice(t, sorted, []string{"key5", "key3", "key6"})
+
+	// 1 server no need to sort.
+	client.selector = &mockServerSelector{
+		resp: map[string][]string{
+			"127.0.0.1:11211": {},
+		},
+	}
+	sorted = client.sortKeysByServer(keys)
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key3", "key4", "key5", "key6"})
+
+	// 0 server no need to sort.
+	client.selector = &mockServerSelector{
+		resp: map[string][]string{},
+		err:  memcache.ErrCacheMiss,
+	}
+	sorted = client.sortKeysByServer(keys)
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key3", "key4", "key5", "key6"})
 }
 
 type mockAddr string
@@ -489,7 +506,8 @@ func (m mockAddr) String() string {
 }
 
 type mockServerSelector struct {
-	addrs []mockAddr
+	resp map[string][]string
+	err  error
 }
 
 // PickServer is not used here.
@@ -497,13 +515,13 @@ func (m *mockServerSelector) PickServer(key string) (net.Addr, error) {
 	panic(fmt.Sprintf("unmapped key: %s", key))
 }
 
+// Each is not used here.
 func (m *mockServerSelector) Each(f func(net.Addr) error) error {
-	for _, addr := range m.addrs {
-		if err := f(addr); err != nil {
-			return err
-		}
-	}
-	return nil
+	panic("not implemented")
+}
+
+func (m *mockServerSelector) PickServerForKeys(keys []string) (map[string][]string, error) {
+	return m.resp, m.err
 }
 
 func (m *mockServerSelector) SetServers(...string) error {

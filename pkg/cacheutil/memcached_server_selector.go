@@ -13,15 +13,6 @@ import (
 	"github.com/facette/natsort"
 )
 
-var (
-	addrsPool = sync.Pool{
-		New: func() interface{} {
-			addrs := make([]net.Addr, 0, 64)
-			return &addrs
-		},
-	}
-)
-
 // MemcachedJumpHashSelector implements the memcache.ServerSelector
 // interface, utilizing a jump hash to distribute keys to servers.
 //
@@ -93,6 +84,32 @@ func (s *MemcachedJumpHashSelector) Each(f func(net.Addr) error) error {
 		}
 	}
 	return nil
+}
+
+// PickServerForKeys is like PickServer but returns a map of server address
+// and corresponding keys.
+func (s *MemcachedJumpHashSelector) PickServerForKeys(keys []string) (map[string][]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// No need of a jump hash in case of 0 or 1 servers.
+	if len(s.addrs) <= 0 {
+		return nil, memcache.ErrNoServers
+	}
+
+	m := make(map[string][]string, len(keys))
+	if len(s.addrs) == 1 {
+		m[s.addrs[0].String()] = keys
+		return m, nil
+	}
+
+	for _, key := range keys {
+		// Pick a server using the jump hash.
+		picked := pickServerWithJumpHash(s.addrs, key).String()
+		m[picked] = append(m[picked], key)
+	}
+
+	return m, nil
 }
 
 // pickServerWithJumpHash returns the server address that a given item should be shared onto.

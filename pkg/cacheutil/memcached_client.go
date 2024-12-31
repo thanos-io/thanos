@@ -102,6 +102,10 @@ type updatableServerSelector interface {
 	// resolve. No attempt is made to connect to the server. If any
 	// error occurs, no changes are made to the internal server list.
 	SetServers(servers ...string) error
+
+	// PickServerForKeys is like PickServer but returns a map of server address
+	// and corresponding keys.
+	PickServerForKeys(keys []string) (map[string][]string, error)
 }
 
 // MemcachedClientConfig is the config accepted by RemoteCacheClient.
@@ -571,27 +575,10 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 // *except* that keys sharded to the same server will be together. The order of keys
 // returned may change from call to call.
 func (c *memcachedClient) sortKeysByServer(keys []string) []string {
-	bucketed := make(map[string][]string)
-
-	addrs := *(addrsPool.Get().(*[]net.Addr))
-	defer func() {
-		addrs = (addrs)[:0]
-		addrsPool.Put(&addrs)
-	}()
-	err := c.selector.Each(func(addr net.Addr) error {
-		addrs = append(addrs, addr)
-		return nil
-	})
+	bucketed, err := c.selector.PickServerForKeys(keys)
 	// No need to pick server and sort keys if no more than 1 server.
-	if err != nil || len(addrs) <= 1 {
+	if err != nil || len(bucketed) <= 1 {
 		return keys
-	}
-
-	for _, key := range keys {
-		// Bypass selector and pick server using jump hash.
-		addr := pickServerWithJumpHash(addrs, key)
-		addrString := addr.String()
-		bucketed[addrString] = append(bucketed[addrString], key)
 	}
 
 	out := make([]string, 0, len(keys))
