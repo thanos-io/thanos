@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -81,6 +82,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				})
 			}
 			return q(true,
+				dedup.AlgorithmPenalty,
 				nil,
 				nil,
 				0,

@@ -24,6 +24,7 @@ import (
 
 type GRPCAPI struct {
 	now                         func() time.Time
+	deduplicateFunc             string
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
 	engineFactory               *QueryEngineFactory
@@ -34,6 +35,7 @@ type GRPCAPI struct {
 
 func NewGRPCAPI(
 	now func() time.Time,
+	deduplicateFunc string,
 	replicaLabels []string,
 	creator query.QueryableCreator,
 	engineFactory *QueryEngineFactory,
@@ -43,6 +45,7 @@ func NewGRPCAPI(
 ) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
+		deduplicateFunc:             deduplicateFunc,
 		replicaLabels:               replicaLabels,
 		queryableCreate:             creator,
 		engineFactory:               engineFactory,
@@ -85,6 +88,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 
 	queryable := g.queryableCreate(
 		request.EnableDedup,
+		g.deduplicateFunc,
 		replicaLabels,
 		storeMatchers,
 		maxResolution,
@@ -208,6 +212,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 
 	queryable := g.queryableCreate(
 		request.EnableDedup,
+		g.deduplicateFunc,
 		replicaLabels,
 		storeMatchers,
 		maxResolution,
