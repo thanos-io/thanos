@@ -129,6 +129,7 @@ type bucketReplicateConfig struct {
 	compactMin  int
 	compactMax  int
 	compactions []int
+	concurrency int
 	matcherStrs string
 	singleRun   bool
 }
@@ -224,6 +225,8 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	cmd.Flag("compaction-max", "Only blocks up to a maximum of this compaction level will be replicated.").Default("4").IntVar(&tbc.compactMax)
 
 	cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag. Overrides compaction-min and compaction-max if set.").Default().IntsVar(&tbc.compactions)
+
+	cmd.Flag("concurrency", "The concurrency with which to replicate blocks from the source to the destination bucket.").Default("1").IntVar(&tbc.concurrency)
 
 	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
@@ -779,6 +782,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			matchers,
 			resolutionLevels,
 			tbc.compactions,
+			tbc.concurrency,
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
