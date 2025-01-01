@@ -75,6 +75,8 @@ Currently supported tracing backends:
 Thanos supports exporting traces in the OpenTelemetry Protocol (OTLP). Both gRPC and HTTP clients are supported. Options can be provided also via environment variables. For more details see the [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options).
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=otlp.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: OTLP
 config:
   client_type: ""
@@ -109,6 +111,8 @@ Client for https://github.com/jaegertracing/jaeger tracing. Options can be provi
 *WARNING: Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set*
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=jaeger.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: JAEGER
 config:
   service_name: ""
@@ -148,6 +152,8 @@ You will also need to ensure that the authentication with the API is working, fo
 *Note:* The `type` in the configuration below can have either value `GOOGLE_CLOUD` or `STACKDRIVER` - this is to ensure backwards compatibility.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=google_cloud.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GOOGLE_CLOUD
 config:
   service_name: ""
@@ -160,6 +166,8 @@ config:
 Client for https://www.elastic.co/products/apm tracing.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=elasticapm.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: ELASTIC_APM
 config:
   service_name: ""
@@ -175,6 +183,8 @@ Client for [Lightstep](https://www.servicenow.com/products/observability.html).
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=lightstep.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: LIGHTSTEP
 config:
   access_token: ""
