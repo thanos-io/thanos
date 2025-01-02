@@ -578,11 +578,11 @@ Flags:
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
-      --tsdb.out-of-order.cap-max=0  
+      --tsdb.out-of-order.cap-max=0
                                  [EXPERIMENTAL] Configures the maximum capacity
                                  for out-of-order chunks (in samples). If set to
                                  <=0, default value 32 is assumed.
-      --tsdb.out-of-order.time-window=0s  
+      --tsdb.out-of-order.time-window=0s
                                  [EXPERIMENTAL] Configures the allowed time
                                  window for ingestion of out-of-order samples.
                                  Disabled (0s) by defaultPlease note if you
