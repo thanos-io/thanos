@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/writev2pb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -91,6 +92,7 @@ var (
 type WriteableStoreAsyncClient interface {
 	storepb.WriteableStoreClient
 	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error))
+	RemoteWriteAsyncV2(context.Context, *storepb.WriteRequestV2, endpointReplica, []int, chan writeResponse, func(error))
 }
 
 // Options for the web Handler.
@@ -488,6 +490,31 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
+func parseProtoMsg(contentType string) (WriteProtoFullName, error) {
+	contentType = strings.TrimSpace(contentType)
+
+	parts := strings.Split(contentType, ";")
+	if parts[0] != appProtoContentType {
+		return "", fmt.Errorf("expected %v as the first (media) part, got %v content-type", appProtoContentType, contentType)
+	}
+	// Parse potential https://www.rfc-editor.org/rfc/rfc9110#parameter
+	for _, p := range parts[1:] {
+		pair := strings.Split(p, "=")
+		if len(pair) != 2 {
+			return "", fmt.Errorf("as per https://www.rfc-editor.org/rfc/rfc9110#parameter expected parameters to be key-values, got %v in %v content-type", p, contentType)
+		}
+		if pair[0] == "proto" {
+			ret := WriteProtoFullName(pair[1])
+			if err := ret.Validate(); err != nil {
+				return "", fmt.Errorf("got %v content type; %w", contentType, err)
+			}
+			return ret, nil
+		}
+	}
+	// No "proto=" parameter, assuming v1.
+	return WriteProtoFullNameV1, nil
+}
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -526,6 +553,42 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		// Don't break yolo 1.0 clients if not needed.
+		// We could give http.StatusUnsupportedMediaType, but let's assume 1.0 message by default.
+		contentType = appProtoContentType
+	}
+
+	msgType, err := parseProtoMsg(contentType)
+	if err != nil {
+		level.Error(tLogger).Log("msg", "Error decoding remote write request", "err", err)
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		return
+	}
+
+	enc := r.Header.Get("Content-Encoding")
+	if enc == "" {
+		// Don't break yolo 1.0 clients if not needed. This is similar to what we did
+		// before 2.0: https://github.com/prometheus/prometheus/blob/d78253319daa62c8f28ed47e40bafcad2dd8b586/storage/remote/write_handler.go#L62
+		// We could give http.StatusUnsupportedMediaType, but let's assume snappy by default.
+	} else if enc != string(SnappyBlockCompression) {
+		err := fmt.Errorf("%v encoding (compression) is not accepted by this server; only %v is acceptable", enc, SnappyBlockCompression)
+		level.Error(tLogger).Log("msg", "Error decoding remote write request", "err", err)
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+	}
+
+	switch msgType {
+	case WriteProtoFullNameV1:
+		h.storeV1(ctx, tLogger, w, r, tenantHTTP)
+	case WriteProtoFullNameV2:
+		h.storeV2(ctx, tLogger, w, r, tenantHTTP)
+	default:
+	}
+}
+
+func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, w http.ResponseWriter, r *http.Request, tenantHTTP string) {
+	var err error
 	requestLimiter := h.Limiter.RequestLimiter()
 	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
@@ -635,8 +698,10 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type requestStats struct {
-	timeseries   int
-	totalSamples int
+	timeseries      int
+	totalSamples    int
+	totalExemplars  int
+	totalHistograms int
 }
 
 type tenantRequestStats map[string]requestStats
@@ -879,7 +944,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		}
 
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := h.hashring.GetN(tenant, ts.Labels, rn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1054,6 +1119,35 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	defer span.Finish()
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	}
+	switch errors.Cause(err) {
+	case nil:
+		return &storepb.WriteResponse{}, nil
+	case errNotReady:
+		return nil, status.Error(codes.Unavailable, err.Error())
+	case errUnavailable:
+		return nil, status.Error(codes.Unavailable, err.Error())
+	case errConflict:
+		return nil, status.Error(codes.AlreadyExists, err.Error())
+	case errBadReplica:
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	default:
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+}
+
+// RemoteWriteV2 implements the gRPC remote write handler for storepb.WriteableStore.
+func (h *Handler) RemoteWriteV2(ctx context.Context, r *storepb.WriteRequestV2) (*storepb.WriteResponse, error) {
+	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
+	defer span.Finish()
+
+	req := tenantWreq{
+		r.Tenant: r.Timeseries,
+	}
+
+	_, err := h.handleRequestV2(ctx, h.logger, uint64(r.Replica), writev2pb.NewSymbolTableFromSymbols(r.Symbols), req)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -1344,6 +1438,10 @@ func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest,
 	return pw.client.RemoteWrite(ctx, in)
 }
 
+func (pw *peerWorker) RemoteWriteV2(ctx context.Context, in *storepb.WriteRequestV2, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return pw.client.RemoteWriteV2(ctx, in)
+}
+
 type peerClient interface {
 	storepb.WriteableStoreClient
 	io.Closer
@@ -1410,6 +1508,31 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 
 		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
 			_, err := p.client.RemoteWrite(ctx, req)
+			responseWriter <- newWriteResponse(
+				seriesIDs,
+				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
+				er,
+			)
+			if err != nil {
+				sp := trace.SpanFromContext(ctx)
+				sp.SetAttributes(attribute.Bool("error", true))
+				sp.SetAttributes(attribute.String("error.msg", err.Error()))
+			}
+			cb(err)
+		}, opentracing.Tags{
+			"endpoint": er.endpoint,
+			"replica":  er.replica,
+		})
+	})
+}
+
+func (p *peerWorker) RemoteWriteAsyncV2(ctx context.Context, req *storepb.WriteRequestV2, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+	now := time.Now()
+	p.wp.Go(func() {
+		p.forwardDelay.Observe(time.Since(now).Seconds())
+
+		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			_, err := p.client.RemoteWriteV2(ctx, req)
 			responseWriter <- newWriteResponse(
 				seriesIDs,
 				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),

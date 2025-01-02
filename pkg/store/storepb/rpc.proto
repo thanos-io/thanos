@@ -7,6 +7,7 @@ package thanos;
 import "store/storepb/types.proto";
 import "gogoproto/gogo.proto";
 import "store/storepb/prompb/types.proto";
+import "store/storepb/writev2pb/types.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "storepb";
@@ -49,6 +50,8 @@ service Store {
 service WriteableStore {
   // WriteRequest allows you to write metrics to this store via remote write
   rpc RemoteWrite(WriteRequest) returns (WriteResponse) {}
+
+  rpc RemoteWriteV2(WriteRequestV2) returns (WriteResponse) {}
 }
 
 message WriteResponse {
@@ -58,6 +61,13 @@ message WriteRequest {
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+}
+
+message WriteRequestV2 {
+  repeated string symbols = 1;
+  repeated prometheus_writev2.TimeSeries timeseries = 2 [(gogoproto.nullable) = false];
+  string tenant = 3;
+  int64 replica = 4;
 }
 
 message SeriesRequest {

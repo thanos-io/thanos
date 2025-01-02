@@ -19,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 // HashringAlgorithm is the algorithm used to distribute series in the ring.
@@ -52,9 +51,9 @@ func (i *insufficientNodesError) Error() string {
 // It returns the node and any error encountered.
 type Hashring interface {
 	// Get returns the first node that should handle the given tenant and time series.
-	Get(tenant string, timeSeries *prompb.TimeSeries) (Endpoint, error)
+	Get(tenant string, timeSeries []labelpb.ZLabel) (Endpoint, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
-	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (Endpoint, error)
+	GetN(tenant string, timeSeries []labelpb.ZLabel, n uint64) (Endpoint, error)
 	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
 	// if, for example, the same address is used for multiple tenants in the multi-hashring.
 	Nodes() []Endpoint
@@ -64,8 +63,8 @@ type Hashring interface {
 type SingleNodeHashring string
 
 // Get implements the Hashring interface.
-func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
-	return s.GetN(tenant, ts, 0)
+func (s SingleNodeHashring) Get(tenant string, lbls []labelpb.ZLabel) (Endpoint, error) {
+	return s.GetN(tenant, lbls, 0)
 }
 
 func (s SingleNodeHashring) Nodes() []Endpoint {
@@ -73,7 +72,7 @@ func (s SingleNodeHashring) Nodes() []Endpoint {
 }
 
 // GetN implements the Hashring interface.
-func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (Endpoint, error) {
+func (s SingleNodeHashring) GetN(_ string, _ []labelpb.ZLabel, n uint64) (Endpoint, error) {
 	if n > 0 {
 		return Endpoint{}, &insufficientNodesError{have: 1, want: n + 1}
 	}
@@ -104,17 +103,17 @@ func (s simpleHashring) Nodes() []Endpoint {
 }
 
 // Get returns a target to handle the given tenant and time series.
-func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
-	return s.GetN(tenant, ts, 0)
+func (s simpleHashring) Get(tenant string, lbls []labelpb.ZLabel) (Endpoint, error) {
+	return s.GetN(tenant, lbls, 0)
 }
 
 // GetN returns the nth target to handle the given tenant and time series.
-func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+func (s simpleHashring) GetN(tenant string, lbls []labelpb.ZLabel, n uint64) (Endpoint, error) {
 	if n >= uint64(len(s)) {
 		return Endpoint{}, &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
 
-	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
+	return s[(labelpb.HashWithPrefix(tenant, lbls)+n)%uint64(len(s))], nil
 }
 
 type section struct {
@@ -216,16 +215,16 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 	}
 }
 
-func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
-	return c.GetN(tenant, ts, 0)
+func (c ketamaHashring) Get(tenant string, lbls []labelpb.ZLabel) (Endpoint, error) {
+	return c.GetN(tenant, lbls, 0)
 }
 
-func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+func (c ketamaHashring) GetN(tenant string, lbls []labelpb.ZLabel, n uint64) (Endpoint, error) {
 	if n >= c.numEndpoints {
 		return Endpoint{}, &insufficientNodesError{have: c.numEndpoints, want: n + 1}
 	}
 
-	v := labelpb.HashWithPrefix(tenant, ts.Labels)
+	v := labelpb.HashWithPrefix(tenant, lbls)
 
 	var i uint64
 	i = uint64(sort.Search(len(c.sections), func(i int) bool {
@@ -287,17 +286,17 @@ type multiHashring struct {
 }
 
 // Get returns a target to handle the given tenant and time series.
-func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
-	return m.GetN(tenant, ts, 0)
+func (m *multiHashring) Get(tenant string, lbls []labelpb.ZLabel) (Endpoint, error) {
+	return m.GetN(tenant, lbls, 0)
 }
 
 // GetN returns the nth target to handle the given tenant and time series.
-func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+func (m *multiHashring) GetN(tenant string, lbls []labelpb.ZLabel, n uint64) (Endpoint, error) {
 	m.mu.RLock()
 	h, ok := m.cache[tenant]
 	m.mu.RUnlock()
 	if ok {
-		return h.GetN(tenant, ts, n)
+		return h.GetN(tenant, lbls, n)
 	}
 	var found bool
 
@@ -325,7 +324,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 			m.cache[tenant] = m.hashrings[i]
 			m.mu.Unlock()
 
-			return m.hashrings[i].GetN(tenant, ts, n)
+			return m.hashrings[i].GetN(tenant, lbls, n)
 		}
 	}
 	return Endpoint{}, errors.New("no matching hashring to handle tenant")
