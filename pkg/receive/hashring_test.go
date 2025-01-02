@@ -201,7 +201,7 @@ func TestHashringGet(t *testing.T) {
 		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
 		require.NoError(t, err)
 
-		h, err := hs.Get(tc.tenant, ts)
+		h, err := hs.Get(tc.tenant, ts.Labels)
 		if tc.nodes != nil {
 			if err != nil {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
@@ -295,7 +295,7 @@ func TestKetamaHashringGet(t *testing.T) {
 			hashRing, err := newKetamaHashring(test.endpoints, 10, test.n+1)
 			require.NoError(t, err)
 
-			result, err := hashRing.GetN("tenant", test.ts, test.n)
+			result, err := hashRing.GetN("tenant", test.ts.Labels, test.n)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedNode, result.Address)
 		})
@@ -530,7 +530,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 
 			azSpread := make(map[string]int64)
 			for i := 0; i < int(tt.replicas); i++ {
-				r, err := hashRing.GetN(tenant, ts, uint64(i))
+				r, err := hashRing.GetN(tenant, ts.Labels, uint64(i))
 				testutil.Ok(t, err)
 
 				for _, n := range tt.nodes {
@@ -631,11 +631,10 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 			nodeSpread := make(map[string]int)
 			for i := 0; i < int(tt.numSeries); i++ {
 				ts := &prompb.TimeSeries{
-					Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
-					Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+					Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
 				}
 				for j := 0; j < int(tt.replicas); j++ {
-					r, err := hashRing.GetN(tenant, ts, uint64(j))
+					r, err := hashRing.GetN(tenant, ts.Labels, uint64(j))
 					testutil.Ok(t, err)
 
 					nodeSpread[r.Address]++
@@ -711,7 +710,7 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 	assignments := make(map[string][]prompb.TimeSeries)
 	for i := uint64(0); i < replicas; i++ {
 		for _, ts := range series {
-			result, err := hashRing.GetN("tenant", &ts, i)
+			result, err := hashRing.GetN("tenant", ts.Labels, i)
 			if err != nil {
 				return nil, err
 			}

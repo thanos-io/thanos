@@ -65,6 +65,11 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 	return r.writeWithReconnect(ctx, 2, in)
 }
 
+// TODO(saswatamcode): Implement this.
+func (r *RemoteWriteClient) RemoteWriteV2(ctx context.Context, in *storepb.WriteRequestV2, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return &storepb.WriteResponse{}, nil
+}
+
 func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnects int, in *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	if err := r.connect(ctx); err != nil {
 		return nil, err

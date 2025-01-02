@@ -915,7 +915,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 // for a given time series, tenant, and replication factor.
 func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, timeSeries *prompb.TimeSeries) bool {
 	for i := uint64(0); i < rf; i++ {
-		e, err := h.GetN(tenant, timeSeries, i)
+		e, err := h.GetN(tenant, timeSeries.Labels, i)
 		if err != nil {
 			t.Fatalf("got unexpected error querying hashring: %v", err)
 		}
@@ -978,6 +978,10 @@ type fakeRemoteWriteGRPCServer struct {
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
+}
+
+func (f *fakeRemoteWriteGRPCServer) RemoteWriteV2(ctx context.Context, in *storepb.WriteRequestV2, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return f.h.RemoteWriteV2(ctx, in)
 }
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
@@ -1782,12 +1786,12 @@ type hashringSeenTenants struct {
 	seenTenants map[string]struct{}
 }
 
-func (h *hashringSeenTenants) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+func (h *hashringSeenTenants) GetN(tenant string, lbls []labelpb.ZLabel, n uint64) (Endpoint, error) {
 	if h.seenTenants == nil {
 		h.seenTenants = map[string]struct{}{}
 	}
 	h.seenTenants[tenant] = struct{}{}
-	return h.Hashring.GetN(tenant, ts, n)
+	return h.Hashring.GetN(tenant, lbls, n)
 }
 
 func TestDistributeSeries(t *testing.T) {
