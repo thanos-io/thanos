@@ -3435,7 +3435,9 @@ func (r *bucketIndexReader) LoadSeriesForTime(ref storage.SeriesRef, lset *[]sym
 func (r *bucketIndexReader) Close() error {
 	r.block.pendingReaders.Done()
 
-	putPostingsSlice(r.postings)
+	if r.postings != nil {
+		putPostingsSlice(r.postings)
+	}
 	return nil
 }
 
