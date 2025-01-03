@@ -1143,11 +1143,12 @@ func (h *Handler) RemoteWriteV2(ctx context.Context, r *storepb.WriteRequestV2) 
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	req := tenantWreq{
-		r.Tenant: r.Timeseries,
+	wreq := writev2pb.Request{
+		Timeseries: r.Timeseries,
+		Symbols:    r.Symbols,
 	}
 
-	_, err := h.handleRequestV2(ctx, h.logger, uint64(r.Replica), writev2pb.NewSymbolTableFromSymbols(r.Symbols), req)
+	_, err := h.handleRequestV2(ctx, h.logger, uint64(r.Replica), &wreq, r.Tenant)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}

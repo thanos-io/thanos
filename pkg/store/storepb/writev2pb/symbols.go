@@ -11,6 +11,7 @@ type SymbolsTable struct {
 }
 
 // NewSymbolTable returns a symbol table.
+// The first element of the symbols table is always an empty string so index will be 1-based.
 func NewSymbolTable() *SymbolsTable {
 	return &SymbolsTable{
 		// Empty string is required as a first element.
@@ -42,16 +43,18 @@ func (t *SymbolsTable) Symbolize(str string) uint32 {
 
 // SymbolizeLabels symbolize Prometheus labels.
 func (t *SymbolsTable) SymbolizeLabels(lbls labels.Labels, buf []uint32) []uint32 {
-	result := buf[:0]
-
-	for _, lbl := range lbls {
-		off := t.Symbolize(lbl.Name)
-		result = append(result, off)
-		off = t.Symbolize(lbl.Value)
-		result = append(result, off)
+	buf = buf[:0]
+	if cap(buf) < len(lbls)*2 {
+		buf = make([]uint32, 0, len(lbls)*2)
 	}
 
-	return result
+	for _, lbl := range lbls {
+		buf = append(buf,
+			t.Symbolize(lbl.Name),
+			t.Symbolize(lbl.Value))
+	}
+
+	return buf
 }
 
 // SymbolizeMetadata symbolizes metadata help and unit text.
@@ -81,7 +84,9 @@ func (t *SymbolsTable) Reset() {
 func DesymbolizeLabels(b *labels.ScratchBuilder, labelRefs []uint32, symbols []string) labels.Labels {
 	b.Reset()
 	for i := 0; i < len(labelRefs); i += 2 {
-		b.Add(symbols[labelRefs[i]], symbols[labelRefs[i+1]])
+		name := symbols[labelRefs[i]]
+		value := symbols[labelRefs[i+1]]
+		b.Add(name, value)
 	}
 	b.Sort()
 	return b.Labels()

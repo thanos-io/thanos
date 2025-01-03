@@ -87,14 +87,8 @@ func (h *Handler) storeV2(ctx context.Context, tLogger log.Logger, w http.Respon
 		return
 	}
 
-	requestSymbolTable, tenantWreqs := h.relabelAndSplitTenant(&wreq, tenantHTTP)
-	if len(wreq.Timeseries) == 0 {
-		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
-		return
-	}
-
 	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequestV2(ctx, tLogger, rep, requestSymbolTable, tenantWreqs)
+	tenantStats, err := h.handleRequestV2(ctx, tLogger, rep, &wreq, tenantHTTP)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -122,7 +116,13 @@ func (h *Handler) storeV2(ctx context.Context, tLogger log.Logger, w http.Respon
 	}
 }
 
-func (h *Handler) handleRequestV2(ctx context.Context, tLogger log.Logger, rep uint64, symbolTable *writev2pb.SymbolsTable, tenantWreqs tenantWreq) (tenantRequestStats, error) {
+func (h *Handler) handleRequestV2(ctx context.Context, tLogger log.Logger, rep uint64, wreq *writev2pb.Request, tenantHTTP string) (tenantRequestStats, error) {
+	symbolTable, tenantWreqs := h.relabelAndSplitTenant(wreq, tenantHTTP)
+	if len(wreq.Timeseries) == 0 {
+		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
+		return tenantRequestStats{}, nil
+	}
+
 	// This replica value is used to detect cycles in cyclic topologies.
 	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
 	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
@@ -523,6 +523,7 @@ func (h *Handler) relabelAndSplitTenant(wreq *writev2pb.Request, tenantHTTP stri
 	relabelledTenantWreqs := make(tenantWreq)
 
 	b = labels.NewScratchBuilder(0)
+	buf := make([]uint32, 0, len(wreq.Symbols)*2)
 
 	for tenant, timeseries := range tenantWreqs {
 		relabelledTimeseries := make([]writev2pb.TimeSeries, 0)
@@ -532,7 +533,7 @@ func (h *Handler) relabelAndSplitTenant(wreq *writev2pb.Request, tenantHTTP stri
 				continue
 			}
 
-			ts.LabelsRefs = st.SymbolizeLabels(lbls, nil)
+			ts.LabelsRefs = st.SymbolizeLabels(lbls, buf)
 			ts.Metadata.HelpRef, ts.Metadata.UnitRef = st.SymbolizeMetadata(wreq.Symbols[ts.Metadata.HelpRef], wreq.Symbols[ts.Metadata.UnitRef])
 			relabelledTimeseries = append(relabelledTimeseries, ts)
 		}
