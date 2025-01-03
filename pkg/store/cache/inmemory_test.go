@@ -158,7 +158,8 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 				cache.StoreExpandedPostings(uid(id), []*labels.Matcher{matcher}, b, tenancy.DefaultTenant)
 			},
 			get: func(id storage.SeriesRef) ([]byte, bool) {
-				return cache.FetchExpandedPostings(ctx, uid(id), []*labels.Matcher{matcher}, tenancy.DefaultTenant)
+				res := cache.FetchExpandedPostings(ctx, uid(id), [][]*labels.Matcher{{matcher}}, tenancy.DefaultTenant)
+				return res[0], res[0] != nil
 			},
 		},
 	} {

@@ -142,26 +142,37 @@ func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labe
 	}
 }
 
-// FetchExpandedPostings fetches multiple postings - each identified by a label -
-// and returns a map containing cache hits, along with a list of missing keys.
-// In case of error, it logs and return an empty cache hits map.
-func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, lbls []*labels.Matcher, tenant string) ([]byte, bool) {
+// FetchExpandedPostings fetches expanded postings and returns a slice of bytes. If cache miss, the corresponding index
+// of the response slice will be nil.
+func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers [][]*labels.Matcher, tenant string) [][]byte {
 	timer := prometheus.NewTimer(c.fetchLatency.WithLabelValues(CacheTypeExpandedPostings, tenant))
 	defer timer.ObserveDuration()
 
-	key := CacheKey{blockID.String(), CacheKeyExpandedPostings(LabelMatchersToString(lbls)), c.compressionScheme}.String()
+	output := make([][]byte, len(matchers))
+	keys := make([]string, 0, len(matchers))
+	blockIDStr := blockID.String()
+	for _, matcher := range matchers {
+		key := CacheKey{blockIDStr, CacheKeyExpandedPostings(LabelMatchersToString(matcher)), c.compressionScheme}.String()
+		keys = append(keys, key)
+	}
 
 	// Fetch the keys from memcached in a single request.
-	c.requestTotal.WithLabelValues(CacheTypeExpandedPostings, tenant).Add(1)
-	results := c.memcached.GetMulti(ctx, []string{key})
+	c.requestTotal.WithLabelValues(CacheTypeExpandedPostings, tenant).Add(float64(len(matchers)))
+	results := c.memcached.GetMulti(ctx, keys)
 	if len(results) == 0 {
-		return nil, false
+		return output
 	}
-	if res, ok := results[key]; ok {
-		c.hitsTotal.WithLabelValues(CacheTypeExpandedPostings, tenant).Add(1)
-		return res, true
+	hits := 0
+	for i := 0; i < len(matchers); i++ {
+		key := keys[i]
+		if res, ok := results[key]; ok {
+			hits++
+			output[i] = res
+		}
 	}
-	return nil, false
+	c.hitsTotal.WithLabelValues(CacheTypeExpandedPostings, tenant).Add(float64(hits))
+
+	return output
 }
 
 // StoreSeries sets the series identified by the ulid and id to the value v.

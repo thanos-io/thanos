@@ -24,6 +24,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#8023](https://github.com/thanos-io/thanos/pull/8023) Store Gateway: Cache expanded postings for matchers with more than 1 key.
+
 ### Removed
 
 ## [v0.37.2](https://github.com/thanos-io/thanos/tree/release-0.37) - 11.12.2024
