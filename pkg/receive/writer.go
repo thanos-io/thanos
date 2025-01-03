@@ -248,7 +248,8 @@ func (r *Writer) WriteV2(ctx context.Context, tenantID string, symbolTable *writ
 			}
 		}
 
-		ref, _ = app.UpdateMetadata(ref, lset, t.ToMetadata(symbolTable.Symbols()))
+		_, err = app.UpdateMetadata(ref, lset, t.ToMetadata(symbolTable.Symbols()))
+		errorTracker.addMetadataError(err, tLogger)
 	}
 
 	errs := errorTracker.collectErrors(tLogger)

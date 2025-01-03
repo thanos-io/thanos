@@ -14,10 +14,7 @@
 package writev2pb
 
 import (
-	"strings"
-
 	"github.com/prometheus/common/model"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -32,22 +29,51 @@ func (m TimeSeries) ToLabels(b *labels.ScratchBuilder, symbols []string) labels.
 
 // ToMetadata return model metadata from timeseries' remote metadata.
 func (m TimeSeries) ToMetadata(symbols []string) metadata.Metadata {
-	mt := strings.ToLower(m.Metadata.Type.String())
+	typ := model.MetricTypeUnknown
+	switch m.Metadata.Type {
+	case Metadata_METRIC_TYPE_COUNTER:
+		typ = model.MetricTypeCounter
+	case Metadata_METRIC_TYPE_GAUGE:
+		typ = model.MetricTypeGauge
+	case Metadata_METRIC_TYPE_HISTOGRAM:
+		typ = model.MetricTypeHistogram
+	case Metadata_METRIC_TYPE_GAUGEHISTOGRAM:
+		typ = model.MetricTypeGaugeHistogram
+	case Metadata_METRIC_TYPE_SUMMARY:
+		typ = model.MetricTypeSummary
+	case Metadata_METRIC_TYPE_INFO:
+		typ = model.MetricTypeInfo
+	case Metadata_METRIC_TYPE_STATESET:
+		typ = model.MetricTypeStateset
+	}
 	return metadata.Metadata{
-		Type: model.MetricType(mt),
+		Type: typ,
 		Unit: symbols[m.Metadata.UnitRef],
 		Help: symbols[m.Metadata.HelpRef],
 	}
 }
 
-// FromMetadataType transforms a Prometheus metricType into writev2 metricType. Since the former is a string we need to transform it to an enum.
+// FromMetadataType transforms a Prometheus metricType into writev2 metricType.
+// Since the former is a string we need to transform it to an enum.
 func FromMetadataType(t model.MetricType) Metadata_MetricType {
-	mt := strings.ToUpper(string(t))
-	v, ok := prompb.MetricMetadata_MetricType_value[mt]
-	if !ok {
+	switch t {
+	case model.MetricTypeCounter:
+		return Metadata_METRIC_TYPE_COUNTER
+	case model.MetricTypeGauge:
+		return Metadata_METRIC_TYPE_GAUGE
+	case model.MetricTypeHistogram:
+		return Metadata_METRIC_TYPE_HISTOGRAM
+	case model.MetricTypeGaugeHistogram:
+		return Metadata_METRIC_TYPE_GAUGEHISTOGRAM
+	case model.MetricTypeSummary:
+		return Metadata_METRIC_TYPE_SUMMARY
+	case model.MetricTypeInfo:
+		return Metadata_METRIC_TYPE_INFO
+	case model.MetricTypeStateset:
+		return Metadata_METRIC_TYPE_STATESET
+	default:
 		return Metadata_METRIC_TYPE_UNSPECIFIED
 	}
-	return Metadata_MetricType(v)
 }
 
 // IsFloatHistogram returns true if the histogram is float.
@@ -177,11 +203,11 @@ func spansToSpansProto(s []histogram.Span) []BucketSpan {
 }
 
 func (m Exemplar) ToExemplar(b *labels.ScratchBuilder, symbols []string) exemplar.Exemplar {
-	timestamp := m.GetTimestamp()
+	timestamp := m.Timestamp
 
 	return exemplar.Exemplar{
-		Labels: DesymbolizeLabels(b, m.GetLabelsRefs(), symbols),
-		Value:  m.GetValue(),
+		Labels: DesymbolizeLabels(b, m.LabelsRefs, symbols),
+		Value:  m.Value,
 		Ts:     timestamp,
 		HasTs:  timestamp != 0,
 	}
