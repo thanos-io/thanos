@@ -52,6 +52,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/writev2pb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
@@ -994,16 +995,33 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *st
 	cb(err)
 }
 
+func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsyncV2(ctx context.Context, in *storepb.WriteRequestV2, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+	_, err := f.h.RemoteWriteV2(ctx, in)
+	responses <- writeResponse{
+		er:        er,
+		err:       err,
+		seriesIDs: seriesIDs,
+	}
+	cb(err)
+}
+
 func (f *fakeRemoteWriteGRPCServer) Close() error { return nil }
 
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b))
+	// Switch between v1 and v2 by changing the argument.
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b), "v2")
 }
 
 func TestHandlerReceiveHTTP(t *testing.T) {
 	t.Parallel()
 
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t), "v1")
+}
+
+func TestHandlerReceiveHTTPRemoteWriteV2(t *testing.T) {
+	t.Parallel()
+
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t), "v2")
 }
 
 // tsOverrideTenantStorage is storage that overrides timestamp to make it have consistent interval.
@@ -1064,6 +1082,34 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 	return snappy.Encode(nil, body)
 }
 
+func serializeSeriesWithOneSampleV2(t testing.TB, series [][]labelpb.ZLabel) []byte {
+	r := &writev2pb.Request{
+		Timeseries: make([]writev2pb.TimeSeries, 0, len(series)),
+		Symbols:    make([]string, 0),
+	}
+
+	buf := make([]uint32, 0, len(series)*2)
+	st := writev2pb.NewSymbolTable()
+	for _, s := range series {
+		refs := st.SymbolizeLabels(labelpb.ZLabelsToPromLabels(s), buf)
+		r.Timeseries = append(r.Timeseries, writev2pb.TimeSeries{
+			LabelsRefs: refs,
+			Samples: []writev2pb.Sample{
+				{
+					Value:     math.MaxFloat64,
+					Timestamp: math.MinInt64,
+				},
+			},
+		})
+	}
+
+	r.Symbols = st.Symbols()
+
+	body, err := proto.Marshal(r)
+	testutil.Ok(t, err)
+	return snappy.Encode(nil, body)
+}
+
 func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 	series := make([]prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
@@ -1085,7 +1131,7 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 	return series
 }
 
-func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
+func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB, mode string) {
 	dir := b.TempDir()
 
 	handlers, _, closeFunc, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
@@ -1120,13 +1166,18 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
 
+	serializerFn := serializeSeriesWithOneSample
+	if mode == "v2" {
+		serializerFn = serializeSeriesWithOneSampleV2
+	}
+
 	for _, tcase := range []struct {
 		name         string
 		writeRequest []byte
 	}{
 		{
 			name: "typical labels under 1KB, 500 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+			writeRequest: serializerFn(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 500)
 				for s := 0; s < len(series); s++ {
 					lbls := make([]labelpb.ZLabel, 10)
@@ -1141,7 +1192,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 5000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+			writeRequest: serializerFn(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 5000)
 				for s := 0; s < len(series); s++ {
 					lbls := make([]labelpb.ZLabel, 10)
@@ -1156,7 +1207,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 20000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+			writeRequest: serializerFn(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 20000)
 				for s := 0; s < len(series); s++ {
 					lbls := make([]labelpb.ZLabel, 10)
@@ -1171,7 +1222,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "extremely large label value 10MB, 10 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+			writeRequest: serializerFn(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 10)
 				for s := 0; s < len(series); s++ {
 					lbl := &strings.Builder{}
@@ -1209,7 +1260,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					req := &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
+					if mode == "v2" {
+						req.Header.Add("Content-Type", contentTypeHeader(WriteProtoFullNameV2))
+						req.Header.Add(versionHeader, version2HeaderValue)
+						req.Header.Add("Content-Encoding", string(SnappyBlockCompression))
+					}
+					handler.receiveHTTP(r, req)
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 				}
 			})
@@ -1233,7 +1290,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			req := &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
+			if mode == "v2" {
+				req.Header.Add("Content-Type", contentTypeHeader(WriteProtoFullNameV2))
+				req.Header.Add(versionHeader, version2HeaderValue)
+				req.Header.Add("Content-Encoding", string(SnappyBlockCompression))
+			}
+			handler.receiveHTTP(r, req)
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			b.Run("conflict errors", func(b testutil.TB) {
@@ -1241,7 +1304,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					req := &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
+					if mode == "v2" {
+						req.Header.Add("Content-Type", contentTypeHeader(WriteProtoFullNameV2))
+						req.Header.Add(versionHeader, version2HeaderValue)
+						req.Header.Add("Content-Encoding", string(SnappyBlockCompression))
+					}
+					handler.receiveHTTP(r, req)
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
 						b, _ := io.ReadAll(r.Body)
 						return string(b)
@@ -1690,6 +1759,276 @@ func TestRelabel(t *testing.T) {
 	}
 }
 
+func TestRelabelV2(t *testing.T) {
+	t.Parallel()
+
+	for _, tcase := range []struct {
+		name                 string
+		relabel              []*relabel.Config
+		writeRequest         writev2pb.Request
+		expectedWriteRequest writev2pb.Request
+	}{
+		{
+			name: "empty relabel configs",
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4}, // References into symbols array
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+		},
+		{
+			name: "has relabel configs but no relabelling applied",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"zoo"},
+					TargetLabel:  "bar",
+					Regex:        relabel.MustNewRegexp("bar"),
+					Action:       relabel.Replace,
+					Replacement:  "baz",
+				},
+			},
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+		},
+		{
+			name: "relabel rewrite existing labels",
+			relabel: []*relabel.Config{
+				{
+					TargetLabel: "foo",
+					Action:      relabel.Replace,
+					Regex:       relabel.MustNewRegexp(""),
+					Replacement: "test",
+				},
+				{
+					TargetLabel: "__name__",
+					Action:      relabel.Replace,
+					Regex:       relabel.MustNewRegexp(""),
+					Replacement: "foo",
+				},
+			},
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 2, 3},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "foo", "test"},
+			},
+		},
+		{
+			name: "relabel drops label",
+			relabel: []*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("foo"),
+				},
+			},
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric"},
+			},
+		},
+		{
+			name: "relabel drops time series",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"foo"},
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("bar"),
+				},
+			},
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{},
+				Symbols:    []string{""},
+			},
+		},
+		{
+			name: "relabel rewrite existing exemplar series labels",
+			relabel: []*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("foo"),
+				},
+			},
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric"},
+			},
+		},
+		{
+			name: "relabel drops exemplars",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"foo"},
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("bar"),
+				},
+			},
+			writeRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "__name__", "test_metric", "foo", "bar"},
+			},
+			expectedWriteRequest: writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{},
+				Symbols:    []string{""},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			h := NewHandler(nil, &Options{
+				RelabelConfigs: tcase.relabel,
+			})
+
+			st, twreq := h.relabelAndSplitTenant(&tcase.writeRequest, "default")
+			testutil.Equals(t, tcase.expectedWriteRequest.Symbols, st.Symbols())
+			for i, ts := range tcase.expectedWriteRequest.Timeseries {
+				testutil.Equals(t, ts, twreq["default"][i])
+			}
+		})
+	}
+}
+
 func TestGetStatsLimitParameter(t *testing.T) {
 	t.Parallel()
 
@@ -1882,6 +2221,66 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 	require.Equal(t, map[string]struct{}{"bar": {}, "foo": {}}, hr.seenTenants)
 }
 
+func TestHandlerSplitTenantLabelLocalWriteV2(t *testing.T) {
+	const tenantIDLabelName = "thanos_tenant_id"
+
+	appendable := &fakeAppendable{
+		appender: newFakeAppender(nil, nil, nil),
+	}
+
+	h := NewHandler(nil, &Options{
+		Endpoint:             "localhost",
+		SplitTenantLabelName: tenantIDLabelName,
+		ReceiverMode:         RouterIngestor,
+		ReplicationFactor:    1,
+		ForwardTimeout:       1 * time.Second,
+		Writer: NewWriter(
+			log.NewNopLogger(),
+			newFakeTenantAppendable(appendable),
+			&WriterOptions{},
+		),
+	})
+
+	// initialize hashring with a single local endpoint matching the handler endpoint to force
+	// using local write
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: h.options.Endpoint,
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	response, err := h.RemoteWriteV2(context.Background(), &storepb.WriteRequestV2{
+		Timeseries: []writev2pb.TimeSeries{
+			{
+				LabelsRefs: []uint32{1, 2, 3, 4},
+				Samples: []writev2pb.Sample{
+					{
+						Value:     123.45,
+						Timestamp: time.Now().UnixMilli(),
+					},
+				},
+			},
+			{
+				LabelsRefs: []uint32{2, 1, 3, 5},
+				Samples: []writev2pb.Sample{
+					{
+						Value:     124.45,
+						Timestamp: time.Now().UnixMilli(),
+					},
+				},
+			},
+		},
+		Symbols: []string{"", "a", "b", tenantIDLabelName, "bar", "foo"},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	require.Equal(t, map[string]struct{}{"bar": {}, "foo": {}}, hr.seenTenants)
+}
+
 func TestHandlerFlippingHashrings(t *testing.T) {
 	t.Parallel()
 
@@ -1958,4 +2357,91 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	<-time.After(1 * time.Second)
 	cancel()
 	wg.Wait()
+}
+
+func TestHandlerRemoteWriteV2(t *testing.T) {
+	t.Parallel()
+
+	appendable := &fakeAppendable{
+		appender: newFakeAppender(nil, nil, nil),
+	}
+
+	h := NewHandler(nil, &Options{
+		Endpoint:          "localhost",
+		ReceiverMode:      RouterIngestor,
+		ReplicationFactor: 1,
+		ForwardTimeout:    1 * time.Second,
+		Writer: NewWriter(
+			log.NewNopLogger(),
+			newFakeTenantAppendable(appendable),
+			&WriterOptions{},
+		),
+	})
+
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: h.options.Endpoint,
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	for _, tc := range []struct {
+		name    string
+		request *writev2pb.Request
+	}{
+		{
+			name: "simple timeseries with samples",
+			request: &writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{3, 4, 1, 2},
+						Samples: []writev2pb.Sample{
+							{
+								Value:     123.45,
+								Timestamp: time.Now().UnixMilli(),
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "foo", "bar", "__name__", "test_metric"},
+			},
+		},
+		{
+			name: "timeseries with exemplar",
+			request: &writev2pb.Request{
+				Timeseries: []writev2pb.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples: []writev2pb.Sample{
+							{
+								Value:     123.45,
+								Timestamp: time.Now().UnixMilli(),
+							},
+						},
+						Exemplars: []writev2pb.Exemplar{
+							{
+								LabelsRefs: []uint32{2, 3},
+								Value:      123.45,
+								Timestamp:  time.Now().UnixMilli(),
+							},
+						},
+					},
+				},
+				Symbols: []string{"", "bar", "baz", "__name__", "test_exemplar"},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response, err := h.RemoteWriteV2(context.Background(), &storepb.WriteRequestV2{
+				Tenant:     "test",
+				Timeseries: tc.request.Timeseries,
+				Symbols:    tc.request.Symbols,
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, response)
+		})
+	}
 }
