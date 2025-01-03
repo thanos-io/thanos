@@ -44,43 +44,43 @@ func TestMatchersCache(t *testing.T) {
 	expected2 := labels.MustNewMatcher(labels.MatchRegexp, "key2", "val2|val3")
 	expected3 := labels.MustNewMatcher(labels.MatchEqual, "key3", "val3")
 
-	item, err := cache.GetOrSet(matcher, newItem)
+	item, err := cache.GetOrSet(cloneMatcher(matcher), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher, newItem)
+	item, err = cache.GetOrSet(cloneMatcher(matcher), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, cacheHit)
 	testutil.Equals(t, expected.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher2, newItem)
+	item, err = cache.GetOrSet(cloneMatcher(matcher2), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher2, newItem)
+	item, err = cache.GetOrSet(cloneMatcher(matcher2), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher, newItem)
+	item, err = cache.GetOrSet(cloneMatcher(matcher), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, cacheHit)
 	testutil.Equals(t, expected, item)
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher3, newItem)
+	item, err = cache.GetOrSet(cloneMatcher(matcher3), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected3, item)
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher2, newItem)
+	item, err = cache.GetOrSet(cloneMatcher(matcher2), newItem)
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
@@ -108,5 +108,13 @@ func BenchmarkMatchersCache(b *testing.B) {
 		if err != nil {
 			b.Fatalf("failed to get or set cache item: %v", err)
 		}
+	}
+}
+
+func cloneMatcher(m *storepb.LabelMatcher) *storepb.LabelMatcher {
+	return &storepb.LabelMatcher{
+		Type:  m.Type,
+		Name:  m.Name,
+		Value: m.Value,
 	}
 }

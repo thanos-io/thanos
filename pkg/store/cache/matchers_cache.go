@@ -48,7 +48,7 @@ func (n *NoopMatcherCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemF
 // LruMatchersCache implements MatchersCache with an LRU cache and metrics.
 type LruMatchersCache struct {
 	reg     prometheus.Registerer
-	cache   *lru.Cache[ConversionLabelMatcher, *labels.Matcher]
+	cache   *lru.Cache[string, *labels.Matcher]
 	metrics *matcherCacheMetrics
 	size    int
 	sf      singleflight.Group
@@ -78,7 +78,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	}
 	cache.metrics = newMatcherCacheMetrics(cache.reg)
 
-	lruCache, err := lru.NewWithEvict[ConversionLabelMatcher, *labels.Matcher](cache.size, cache.onEvict)
+	lruCache, err := lru.NewWithEvict[string, *labels.Matcher](cache.size, cache.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -89,9 +89,9 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 
 func (c *LruMatchersCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	c.metrics.requestsTotal.Inc()
-
-	v, err, _ := c.sf.Do(key.String(), func() (interface{}, error) {
-		if item, ok := c.cache.Get(key); ok {
+	ks := key.String()
+	v, err, _ := c.sf.Do(ks, func() (interface{}, error) {
+		if item, ok := c.cache.Get(ks); ok {
 			c.metrics.hitsTotal.Inc()
 			return item, nil
 		}
@@ -100,7 +100,7 @@ func (c *LruMatchersCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemF
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Add(key, item)
+		c.cache.Add(ks, item)
 		c.metrics.numItems.Set(float64(c.cache.Len()))
 		return item, nil
 	})
@@ -111,7 +111,7 @@ func (c *LruMatchersCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemF
 	return v.(*labels.Matcher), nil
 }
 
-func (c *LruMatchersCache) onEvict(_ ConversionLabelMatcher, _ *labels.Matcher) {
+func (c *LruMatchersCache) onEvict(_ string, _ *labels.Matcher) {
 	c.metrics.evicted.Inc()
 	c.metrics.numItems.Set(float64(c.cache.Len()))
 }
