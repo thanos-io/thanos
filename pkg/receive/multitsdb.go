@@ -18,10 +18,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"go.uber.org/atomic"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"

@@ -89,10 +89,6 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 
 func (c *LruMatchersCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	c.metrics.requestsTotal.Inc()
-	if item, ok := c.cache.Get(key); ok {
-		c.metrics.hitsTotal.Inc()
-		return item, nil
-	}
 
 	v, err, _ := c.sf.Do(key.String(), func() (interface{}, error) {
 		if item, ok := c.cache.Get(key); ok {
