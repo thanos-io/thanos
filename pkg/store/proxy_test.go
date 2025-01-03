@@ -6,22 +6,21 @@ package store
 import (
 	"context"
 	"fmt"
-	"strings"
-
-	"github.com/pkg/errors"
-
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -29,11 +28,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc"
 
-	"github.com/efficientgo/core/testutil"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -2086,6 +2084,47 @@ func BenchmarkProxySeries(b *testing.B) {
 	})
 }
 
+func BenchmarkProxySeriesRegex(b *testing.B) {
+	tb := testutil.NewTB(b)
+
+	cache, err := storecache.NewMatchersCache(storecache.WithSize(200))
+	testutil.Ok(b, err)
+
+	q := NewProxyStore(nil,
+		nil,
+		func() []Client { return nil },
+		component.Query,
+		labels.EmptyLabels(), 0*time.Second, EagerRetrieval,
+		WithMatcherCache(cache),
+	)
+
+	words := []string{"foo", "bar", "baz", "qux", "quux", "corge", "grault", "garply", "waldo", "fred", "plugh", "xyzzy", "thud"}
+	bigRegex := strings.Builder{}
+	for i := 0; i < 200; i++ {
+		bigRegex.WriteString(words[rand.Intn(len(words))])
+		bigRegex.WriteString("|")
+	}
+
+	matchers := []storepb.LabelMatcher{
+		{Type: storepb.LabelMatcher_RE, Name: "foo", Value: ".*"},
+		{Type: storepb.LabelMatcher_RE, Name: "bar", Value: bigRegex.String()},
+	}
+
+	// Create a regex that matches all series.
+	req := &storepb.SeriesRequest{
+		MinTime:  0,
+		MaxTime:  math.MaxInt64,
+		Matchers: matchers,
+	}
+	s := newStoreSeriesServer(context.Background())
+
+	tb.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		testutil.Ok(b, q.Series(req, s))
+	}
+}
+
 func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 	tmpDir := t.TempDir()
 
@@ -2136,6 +2175,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		responseTimeout:   5 * time.Second,
 		retrievalStrategy: EagerRetrieval,
 		tsdbSelector:      DefaultSelector,
+		matcherCache:      storecache.NewNoopMatcherCache(),
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -2272,6 +2312,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					responseTimeout:   50 * time.Millisecond,
 					retrievalStrategy: respStrategy,
 					tsdbSelector:      DefaultSelector,
+					matcherCache:      storecache.NewNoopMatcherCache(),
 				}
 
 				ctx, cancel := context.WithCancel(context.Background())
@@ -2309,6 +2350,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					responseTimeout:   50 * time.Millisecond,
 					retrievalStrategy: respStrategy,
 					tsdbSelector:      DefaultSelector,
+					matcherCache:      storecache.NewNoopMatcherCache(),
 				}
 
 				ctx := context.Background()
@@ -2469,5 +2511,4 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 			tcase.testFn(tcase.responses, h)
 		})
 	}
-
 }
