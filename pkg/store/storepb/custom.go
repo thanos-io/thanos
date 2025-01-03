@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -451,21 +450,6 @@ func (m *LabelMatcher) GetName() string {
 
 func (m *LabelMatcher) GetValue() string {
 	return m.Value
-}
-
-func (m *LabelMatcher) GetType() prompb.LabelMatcher_Type {
-	switch m.Type {
-	case LabelMatcher_EQ:
-		return prompb.LabelMatcher_EQ
-	case LabelMatcher_NEQ:
-		return prompb.LabelMatcher_NEQ
-	case LabelMatcher_RE:
-		return prompb.LabelMatcher_RE
-	case LabelMatcher_NRE:
-		return prompb.LabelMatcher_NRE
-	default:
-		return prompb.LabelMatcher_EQ
-	}
 }
 
 func (x LabelMatcher_Type) PromString() string {
