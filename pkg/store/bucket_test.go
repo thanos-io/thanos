@@ -2979,7 +2979,7 @@ func TestExpandPostingsWithContextCancel(t *testing.T) {
 	res, err := ExpandPostingsWithContext(ctx, p)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, context.Canceled, err)
-	testutil.Equals(t, []storage.SeriesRef(nil), res)
+	testutil.Equals(t, true, cap(res) == 1024)
 }
 
 func samePostingGroup(a, b *postingGroup) bool {
