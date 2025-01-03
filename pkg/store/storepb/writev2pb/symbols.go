@@ -47,15 +47,15 @@ func (t *SymbolsTable) Symbolize(str string) uint32 {
 // SymbolizeLabels symbolize Prometheus labels.
 func (t *SymbolsTable) SymbolizeLabels(lbls labels.Labels, buf []uint32) []uint32 {
 	buf = buf[:0]
-	if cap(buf) < len(lbls)*2 {
-		buf = make([]uint32, 0, len(lbls)*2)
+	if cap(buf) < lbls.Len()*2 {
+		buf = make([]uint32, 0, lbls.Len()*2)
 	}
 
-	for _, lbl := range lbls {
+	lbls.Range(func(l labels.Label) {
 		buf = append(buf,
-			t.Symbolize(lbl.Name),
-			t.Symbolize(lbl.Value))
-	}
+			t.Symbolize(l.Name),
+			t.Symbolize(l.Value))
+	})
 
 	return buf
 }
