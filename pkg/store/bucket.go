@@ -436,6 +436,8 @@ type BucketStore struct {
 	indexHeaderLazyDownloadStrategy indexheader.LazyDownloadIndexHeaderFunc
 
 	requestLoggerFunc RequestLoggerFunc
+
+	blockLifecycleCallback BlockLifecycleCallback
 }
 
 func (s *BucketStore) validate() error {
@@ -583,6 +585,24 @@ func WithIndexHeaderLazyDownloadStrategy(strategy indexheader.LazyDownloadIndexH
 	}
 }
 
+// BlockLifecycleCallback specifies callbacks that will be called during the lifecycle of a block.
+type BlockLifecycleCallback interface {
+	// PreAdd is called before adding a block to indicate if the block needs to be added.
+	// A non nil error means the block should not be added.
+	PreAdd(meta metadata.Meta) error
+}
+
+type noopBlockLifecycleCallback struct{}
+
+func (c noopBlockLifecycleCallback) PreAdd(meta metadata.Meta) error { return nil }
+
+// WithBlockLifecycleCallback allows customizing callbacks of block lifecycle.
+func WithBlockLifecycleCallback(c BlockLifecycleCallback) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.blockLifecycleCallback = c
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -628,6 +648,7 @@ func NewBucketStore(
 		sortingStrategy:                 sortingStrategyStore,
 		indexHeaderLazyDownloadStrategy: indexheader.AlwaysEagerDownloadIndexHeader,
 		requestLoggerFunc:               NoopRequestLoggerFunc,
+		blockLifecycleCallback:          &noopBlockLifecycleCallback{},
 	}
 
 	for _, option := range options {
@@ -683,6 +704,9 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			for meta := range blockc {
+				if preAddErr := s.blockLifecycleCallback.PreAdd(*meta); preAddErr != nil {
+					continue
+				}
 				if err := s.addBlock(ctx, meta); err != nil {
 					continue
 				}
