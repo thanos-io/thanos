@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package receive
 
 import (
@@ -153,8 +156,7 @@ func (h *Handler) handleRequestV2(ctx context.Context, tLogger log.Logger, rep u
 }
 
 func (h *Handler) gatherWriteStatsV2(rf int, writes ...map[endpointReplica]map[string]trackedV2Series) tenantRequestStats {
-	var stats tenantRequestStats = make(tenantRequestStats)
-
+	stats := make(tenantRequestStats)
 	for _, write := range writes {
 		for er := range write {
 			for tenant, series := range write[er] {
@@ -203,8 +205,6 @@ func (h *Handler) fanoutForwardV2(ctx context.Context, r replica, symbolTable *w
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
-	var stats tenantRequestStats = make(tenantRequestStats)
-
 	var replicas []uint64
 	if r.replicated {
 		replicas = []uint64{r.n}
@@ -217,7 +217,6 @@ func (h *Handler) fanoutForwardV2(ctx context.Context, r replica, symbolTable *w
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
-	var _ tenantRequestStats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -244,7 +243,7 @@ func (h *Handler) fanoutForwardV2(ctx context.Context, r replica, symbolTable *w
 		return tenantRequestStats{}, err
 	}
 
-	stats = h.gatherWriteStatsV2(len(replicas), localWrites, remoteWrites)
+	stats := h.gatherWriteStatsV2(len(replicas), localWrites, remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
