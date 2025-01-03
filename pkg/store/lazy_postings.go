@@ -310,6 +310,7 @@ func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, post
 		return nil, nil, err
 	}
 	ps, err := ExpandPostingsWithContext(ctx, result)
+	r.postings = ps
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "expand")
 	}
