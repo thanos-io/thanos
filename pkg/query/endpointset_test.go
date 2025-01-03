@@ -464,8 +464,6 @@ func TestEndpointSetUpdate_EndpointComingOnline(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_StrictEndpointMetadata(t *testing.T) {
-	t.Parallel()
-
 	info := sidecarInfo
 	info.Store.MinTime = 111
 	info.Store.MaxTime = 222
