@@ -72,7 +72,6 @@ Thanos is **not** tied to Kubernetes. However, Kubernetes, Thanos and Prometheus
 Our friendly community maintains a few different ways of installing Thanos on Kubernetes. See those below:
 
 * [prometheus-operator](https://github.com/coreos/prometheus-operator): Prometheus operator has support for deploying Prometheus with Thanos
-* [kube-thanos](https://github.com/thanos-io/kube-thanos): Jsonnet based Kubernetes templates.
 * [Community Helm charts](https://artifacthub.io/packages/search?ts_query_web=thanos)
 
 If you want to add yourself to this list, let us know!
