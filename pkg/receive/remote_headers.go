@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package receive
 
 import (
@@ -20,7 +23,7 @@ type WriteProtoFullName protoreflect.FullName
 const (
 	// WriteProtoFullNameV1 represents the `prometheus.WriteRequest` protobuf
 	// message introduced in the https://prometheus.io/docs/specs/remote_write_spec/.
-	// To be DEPRECATED
+	// To be DEPRECATED.
 	WriteProtoFullNameV1 WriteProtoFullName = "prometheus.WriteRequest"
 	// WriteProtoFullNameV2 represents the `io.prometheus.write.v2.Request` protobuf
 	// message introduced in https://prometheus.io/docs/specs/remote_write_spec_2_0/
