@@ -109,7 +109,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	switch strings.ToUpper(string(config.Type)) {
 	case string(MemcachedBucketCacheProvider):
-		var memcached cacheutil.RemoteCacheClient
+		var memcached cacheutil.ReadThroughRemoteCache
 		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create memcached client")
