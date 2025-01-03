@@ -4,8 +4,6 @@
 package storecache
 
 import (
-	"fmt"
-
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -13,17 +11,16 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 const DefaultCacheSize = 200
 
-type NewItemFunc func(matcher ConversionLabelMatcher) (*labels.Matcher, error)
+type NewItemFunc func() (*labels.Matcher, error)
 
 type MatchersCache interface {
 	// GetOrSet retrieves a matcher from cache or creates and stores it if not present.
 	// If the matcher is not in cache, it uses the provided newItem function to create it.
-	GetOrSet(key ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error)
+	GetOrSet(key string, newItem NewItemFunc) (*labels.Matcher, error)
 }
 
 // Ensure implementations satisfy the interface.
@@ -41,14 +38,14 @@ func NewNoopMatcherCache() MatchersCache {
 }
 
 // GetOrSet implements MatchersCache by always creating a new matcher without caching.
-func (n *NoopMatcherCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
-	return newItem(key)
+func (n *NoopMatcherCache) GetOrSet(_ string, newItem NewItemFunc) (*labels.Matcher, error) {
+	return newItem()
 }
 
 // LruMatchersCache implements MatchersCache with an LRU cache and metrics.
 type LruMatchersCache struct {
 	reg     prometheus.Registerer
-	cache   *lru.Cache[ConversionLabelMatcher, *labels.Matcher]
+	cache   *lru.Cache[string, *labels.Matcher]
 	metrics *matcherCacheMetrics
 	size    int
 	sf      singleflight.Group
@@ -78,7 +75,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	}
 	cache.metrics = newMatcherCacheMetrics(cache.reg)
 
-	lruCache, err := lru.NewWithEvict[ConversionLabelMatcher, *labels.Matcher](cache.size, cache.onEvict)
+	lruCache, err := lru.NewWithEvict[string, *labels.Matcher](cache.size, cache.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -87,16 +84,15 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	return cache, nil
 }
 
-func (c *LruMatchersCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
+func (c *LruMatchersCache) GetOrSet(key string, newItem NewItemFunc) (*labels.Matcher, error) {
 	c.metrics.requestsTotal.Inc()
-
-	v, err, _ := c.sf.Do(key.String(), func() (interface{}, error) {
+	v, err, _ := c.sf.Do(key, func() (interface{}, error) {
 		if item, ok := c.cache.Get(key); ok {
 			c.metrics.hitsTotal.Inc()
 			return item, nil
 		}
 
-		item, err := newItem(key)
+		item, err := newItem()
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +107,7 @@ func (c *LruMatchersCache) GetOrSet(key ConversionLabelMatcher, newItem NewItemF
 	return v.(*labels.Matcher), nil
 }
 
-func (c *LruMatchersCache) onEvict(_ ConversionLabelMatcher, _ *labels.Matcher) {
+func (c *LruMatchersCache) onEvict(_ string, _ *labels.Matcher) {
 	c.metrics.evicted.Inc()
 	c.metrics.numItems.Set(float64(c.cache.Len()))
 }
@@ -155,7 +151,7 @@ func newMatcherCacheMetrics(reg prometheus.Registerer) *matcherCacheMetrics {
 func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for i := range ms {
-		pm, err := cache.GetOrSet(&ms[i], MatcherToPromMatcher)
+		pm, err := cache.GetOrSet(ms[i].String(), func() (*labels.Matcher, error) { return storepb.MatcherToPromMatcher(ms[i]) })
 		if err != nil {
 			return nil, err
 		}
@@ -163,24 +159,3 @@ func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatche
 	}
 	return res, nil
 }
-
-func MatcherToPromMatcher(m ConversionLabelMatcher) (*labels.Matcher, error) {
-	mi, ok := m.(*storepb.LabelMatcher)
-	if !ok {
-		return nil, fmt.Errorf("invalid matcher type. Got: %T", m)
-	}
-
-	return storepb.MatcherToPromMatcher(*mi)
-}
-
-// ConversionLabelMatcher is a common interface for the Prometheus and Thanos label matchers.
-type ConversionLabelMatcher interface {
-	String() string
-	GetName() string
-	GetValue() string
-}
-
-var (
-	_ ConversionLabelMatcher = (*storepb.LabelMatcher)(nil)
-	_ ConversionLabelMatcher = (*prompb.LabelMatcher)(nil)
-)

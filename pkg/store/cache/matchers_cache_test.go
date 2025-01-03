@@ -36,51 +36,53 @@ func TestMatchersCache(t *testing.T) {
 	}
 
 	var cacheHit bool
-	newItem := func(matcher storecache.ConversionLabelMatcher) (*labels.Matcher, error) {
-		cacheHit = false
-		return storecache.MatcherToPromMatcher(matcher)
+	newItem := func(matcher *storepb.LabelMatcher) func() (*labels.Matcher, error) {
+		return func() (*labels.Matcher, error) {
+			cacheHit = false
+			return storepb.MatcherToPromMatcher(*matcher)
+		}
 	}
 	expected := labels.MustNewMatcher(labels.MatchEqual, "key", "val")
 	expected2 := labels.MustNewMatcher(labels.MatchRegexp, "key2", "val2|val3")
 	expected3 := labels.MustNewMatcher(labels.MatchEqual, "key3", "val3")
 
-	item, err := cache.GetOrSet(matcher, newItem)
+	item, err := cache.GetOrSet(matcher.String(), newItem(matcher))
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher, newItem)
+	item, err = cache.GetOrSet(matcher.String(), newItem(matcher))
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, cacheHit)
 	testutil.Equals(t, expected.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher2, newItem)
+	item, err = cache.GetOrSet(matcher2.String(), newItem(matcher2))
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher2, newItem)
+	item, err = cache.GetOrSet(matcher2.String(), newItem(matcher2))
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher, newItem)
+	item, err = cache.GetOrSet(matcher.String(), newItem(matcher))
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, cacheHit)
 	testutil.Equals(t, expected, item)
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher3, newItem)
+	item, err = cache.GetOrSet(matcher3.String(), newItem(matcher3))
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected3, item)
 
 	cacheHit = true
-	item, err = cache.GetOrSet(matcher2, newItem)
+	item, err = cache.GetOrSet(matcher2.String(), newItem(matcher2))
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, cacheHit)
 	testutil.Equals(t, expected2.String(), item.String())
@@ -104,7 +106,9 @@ func BenchmarkMatchersCache(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		matcher := matchers[i%len(matchers)]
-		_, err := cache.GetOrSet(matcher, storecache.MatcherToPromMatcher)
+		_, err := cache.GetOrSet(matcher.String(), func() (*labels.Matcher, error) {
+			return storepb.MatcherToPromMatcher(*matcher)
+		})
 		if err != nil {
 			b.Fatalf("failed to get or set cache item: %v", err)
 		}
