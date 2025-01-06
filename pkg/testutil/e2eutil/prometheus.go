@@ -654,10 +654,13 @@ func createBlock(
 		// For simplicity, use series size for all series size fields.
 		IndexStats: metadata.IndexStats{
 			SeriesMaxSize:   seriesSize,
+			SeriesAvgSize:   seriesSize,
 			SeriesP90Size:   seriesSize,
 			SeriesP99Size:   seriesSize,
 			SeriesP999Size:  seriesSize,
 			SeriesP9999Size: seriesSize,
+			// Hardcode stddev here.
+			SeriesSizeStdDev: 1,
 		},
 	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")

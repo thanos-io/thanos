@@ -77,11 +77,12 @@ const (
 type BlockSeriesSizeStat string
 
 const (
-	BlockSeriesSizeMax   BlockSeriesSizeStat = "max"
-	BlockSeriesSizeP90   BlockSeriesSizeStat = "p90"
-	BlockSeriesSizeP99   BlockSeriesSizeStat = "p99"
-	BlockSeriesSizeP999  BlockSeriesSizeStat = "p999"
-	BlockSeriesSizeP9999 BlockSeriesSizeStat = "p9999"
+	BlockSeriesSizeMax    BlockSeriesSizeStat = "max"
+	BlockSeriesSizeP90    BlockSeriesSizeStat = "p90"
+	BlockSeriesSizeP99    BlockSeriesSizeStat = "p99"
+	BlockSeriesSizeP999   BlockSeriesSizeStat = "p999"
+	BlockSeriesSizeP9999  BlockSeriesSizeStat = "p9999"
+	BlockSeriesSizeZScore BlockSeriesSizeStat = "zscore"
 )
 
 const (

@@ -143,7 +143,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 702, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 756, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 
 		// File stats are gathered.
 		testutil.Equals(t, fmt.Sprintf(`{
@@ -185,10 +185,12 @@ func TestUpload(t *testing.T) {
 		],
 		"index_stats": {
 			"series_max_size": 16,
+			"series_avg_size": 16,
 			"series_p90_size": 16,
 			"series_p99_size": 16,
 			"series_p999_size": 16,
-			"series_p9999_size": 16
+			"series_p9999_size": 16,
+			"series_size_stddev": 1
 		}
 	}
 }
@@ -200,7 +202,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 702, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 756, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Upload with no external labels should be blocked.
@@ -232,7 +234,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 6, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
-		testutil.Equals(t, 681, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
+		testutil.Equals(t, 735, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
 	}
 }
 

@@ -77,6 +77,7 @@ type storeConfig struct {
 	chunkPoolSize                 units.Base2Bytes
 	estimatedMaxSeriesSize        uint64
 	estimatedSeriesSizeStat       string
+	estimatedSeriesSizeZScore     float64
 	estimatedMaxChunkSize         uint64
 	seriesBatchSize               int
 	storeRateLimits               store.SeriesSelectLimits
@@ -168,9 +169,12 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("debug.estimated-max-series-size", "Estimated max series size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 64KB.").
 		Hidden().Default(strconv.Itoa(store.EstimatedMaxSeriesSize)).Uint64Var(&sc.estimatedMaxSeriesSize)
 
-	cmd.Flag("estimated-series-size-stat", "Statistic to use to estimate block series size. This is currently used for lazy expanded posting series size estimation. Available options are max, p90, p99, p999 and p9999. Default value is "+string(store.BlockSeriesSizeMax)).
+	cmd.Flag("estimated-series-size-stat", "Statistic to use to estimate block series size. This is currently used for lazy expanded posting series size estimation. Available options are max, p90, p99, p99, p9999 and zscore. If zscore is picked, the actual zscore value is set via estimated-series-size-stat-zscore. Default value is "+string(store.BlockSeriesSizeMax)).
 		Default(string(store.BlockSeriesSizeMax)).
-		EnumVar(&sc.estimatedSeriesSizeStat, string(store.BlockSeriesSizeMax), string(store.BlockSeriesSizeP99), string(store.BlockSeriesSizeP999), string(store.BlockSeriesSizeP9999))
+		EnumVar(&sc.estimatedSeriesSizeStat, string(store.BlockSeriesSizeMax), string(store.BlockSeriesSizeP90), string(store.BlockSeriesSizeP99), string(store.BlockSeriesSizeP999), string(store.BlockSeriesSizeP9999), string(store.BlockSeriesSizeZScore))
+
+	cmd.Flag("estimated-series-size-stat-zscore", "Zscore is a statistical measurement that describes a value's relationship to the mean series size. Zscore 2 is calculated as average size + 2 * standard deviation. Use a larger zscore if you want a larger estimated series size. Default value is 2. Cannot be lower than 0.").
+		Default("2").Float64Var(&sc.estimatedSeriesSizeZScore)
 
 	cmd.Flag("debug.estimated-max-chunk-size", "Estimated max chunk size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 16KiB.").
 		Hidden().Default(strconv.Itoa(store.EstimatedMaxChunkSize)).Uint64Var(&sc.estimatedMaxChunkSize)
@@ -420,6 +424,9 @@ func runStore(
 	}
 
 	estimatedSeriesSizeStat := strings.ToLower(conf.estimatedSeriesSizeStat)
+	if estimatedSeriesSizeStat == string(store.BlockSeriesSizeZScore) && conf.estimatedSeriesSizeZScore < 0 {
+		return errors.Errorf("estimated series size zscore cannot be lower than 0 (got %v)", conf.estimatedSeriesSizeZScore)
+	}
 
 	options := []store.BucketStoreOption{
 		store.WithLogger(logger),
@@ -466,6 +473,10 @@ func runStore(
 			case string(store.BlockSeriesSizeP9999):
 				if m.Thanos.IndexStats.SeriesP9999Size > 0 {
 					return uint64(m.Thanos.IndexStats.SeriesP9999Size)
+				}
+			case string(store.BlockSeriesSizeZScore):
+				if m.Thanos.IndexStats.SeriesSizeStdDev > 0 && m.Thanos.IndexStats.SeriesAvgSize > 0 {
+					return uint64(float64(m.Thanos.IndexStats.SeriesSizeStdDev)*conf.estimatedSeriesSizeZScore) + uint64(m.Thanos.IndexStats.SeriesAvgSize)
 				}
 			}
 

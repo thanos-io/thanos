@@ -18,6 +18,7 @@ require (
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/cristalhq/hedgedhttp v0.9.1
 	github.com/dustin/go-humanize v1.0.1
+	github.com/DataDog/sketches-go v1.4.6
 	github.com/efficientgo/core v1.0.0-rc.3
 	github.com/efficientgo/e2e v0.14.1-0.20230710114240-c316eb95ae5b
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd
@@ -101,8 +102,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-require github.com/DataDog/sketches-go v1.4.6
 
 require (
 	cloud.google.com/go v0.115.1 // indirect
