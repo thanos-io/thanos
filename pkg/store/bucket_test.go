@@ -4115,3 +4115,68 @@ func TestBucketStoreMetadataLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestBucketStoreBlockLifecycleCallback(t *testing.T) {
+	t.Parallel()
+
+	tb := testutil.NewTB(t)
+
+	tmpDir := t.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(tb, bkt.Close()) }()
+
+	blockID1 := uploadTestBlock(tb, tmpDir, bkt, 300)
+	blockID2 := uploadTestBlock(tb, tmpDir, bkt, 300)
+
+	instrBkt := objstore.WithNoopInstr(bkt)
+	logger := log.NewNopLogger()
+
+	// Instance a real bucket store we'll use to query the series.
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, instrBkt)
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, baseBlockIDsFetcher, tmpDir, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		instrBkt,
+		fetcher,
+		tmpDir,
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		10,
+		false,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+		false,
+		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+		WithBlockLifecycleCallback(&mockBlockLifecycleCallback{allowed: []ulid.ULID{blockID2}}),
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	_, ok := store.blocks[blockID2]
+	testutil.Equals(t, true, ok)
+
+	_, ok = store.blocks[blockID1]
+	testutil.Equals(t, false, ok)
+}
+
+type mockBlockLifecycleCallback struct {
+	allowed []ulid.ULID
+}
+
+func (c *mockBlockLifecycleCallback) PreAdd(meta metadata.Meta) error {
+	contains := slices.Contains(c.allowed, meta.ULID)
+	if !contains {
+		return fmt.Errorf("don't add")
+	}
+	return nil
+}
