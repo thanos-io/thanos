@@ -458,10 +458,11 @@ Flags:
                                  configuration. If it's empty AND hashring
                                  configuration was provided, it means that
                                  receive will run in RoutingOnly mode.
-      --receive.otlp-disable-target-info
+      --receive.otlp-enable-target-info
                                  Disable target information OTLP metrics
-                                 ingested by Receive.
-      --receive.otlp-resource-attributes= ...
+                                 ingested by Receive. If enabled, converts the
+                                 resource to the target info metric
+      --receive.otlp-promote-resource-attributes= ...
                                  (Repeatable) Resource attributes to include in
                                  OTLP metrics ingested by Receive.
       --receive.relabel-config=<content>

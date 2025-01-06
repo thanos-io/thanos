@@ -159,7 +159,7 @@ func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetri
 	converter := otlptranslator.NewPrometheusConverter()
 	settings := otlptranslator.Settings{
 		AddMetricSuffixes:         true,
-		DisableTargetInfo:         h.options.OtlpDisableTargetInfo,
+		DisableTargetInfo:         h.options.OtlpEnableTargetInfo,
 		PromoteResourceAttributes: h.options.OtlpResourceAttributes,
 	}
 

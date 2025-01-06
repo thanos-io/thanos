@@ -116,7 +116,7 @@ type Options struct {
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
 	ReplicationProtocol     ReplicationProtocol
-	OtlpDisableTargetInfo   bool
+	OtlpEnableTargetInfo    bool
 	OtlpResourceAttributes  []string
 }
 
