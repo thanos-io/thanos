@@ -66,7 +66,7 @@ func newCRC32() hash.Hash32 {
 	return crc32.New(castagnoliTable)
 }
 
-// LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
+// BinaryReaderMetrics holds metrics tracked by BinaryReader.
 type BinaryReaderMetrics struct {
 	downloadDuration prometheus.Histogram
 	loadDuration     prometheus.Histogram
@@ -76,14 +76,18 @@ type BinaryReaderMetrics struct {
 func NewBinaryReaderMetrics(reg prometheus.Registerer) *BinaryReaderMetrics {
 	return &BinaryReaderMetrics{
 		downloadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "indexheader_download_duration_seconds",
-			Help:    "Duration of the index-header download from objstore in seconds.",
-			Buckets: []float64{0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
+			Name:                           "indexheader_download_duration_seconds",
+			Help:                           "Duration of the index-header download from objstore in seconds.",
+			Buckets:                        []float64{0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
+			NativeHistogramMaxBucketNumber: 256,
+			NativeHistogramBucketFactor:    1.1,
 		}),
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "indexheader_load_duration_seconds",
-			Help:    "Duration of the index-header loading in seconds.",
-			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
+			Name:                           "indexheader_load_duration_seconds",
+			Help:                           "Duration of the index-header loading in seconds.",
+			Buckets:                        []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
+			NativeHistogramMaxBucketNumber: 256,
+			NativeHistogramBucketFactor:    1.1,
 		}),
 	}
 }
@@ -97,7 +101,12 @@ type BinaryTOC struct {
 }
 
 // WriteBinary build index header from the pieces of index in object storage, and cached in file if necessary.
-func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string) ([]byte, error) {
+func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string, downloadDuration prometheus.Histogram) ([]byte, error) {
+	start := time.Now()
+
+	defer func() {
+		downloadDuration.Observe(time.Since(start).Seconds())
+	}()
 	var tmpDir = ""
 	if filename != "" {
 		tmpDir = filepath.Dir(filename)
@@ -569,15 +578,14 @@ func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 		level.Debug(logger).Log("msg", "failed to read index-header from disk; recreating", "path", binfn, "err", err)
 
 		start := time.Now()
-		if _, err := WriteBinary(ctx, bkt, id, binfn); err != nil {
+		if _, err := WriteBinary(ctx, bkt, id, binfn, metrics.downloadDuration); err != nil {
 			return nil, errors.Wrap(err, "write index header")
 		}
-		metrics.loadDuration.Observe(time.Since(start).Seconds())
 
 		level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
 		return newFileBinaryReader(binfn, postingOffsetsInMemSampling, metrics)
 	} else {
-		buf, err := WriteBinary(ctx, bkt, id, "")
+		buf, err := WriteBinary(ctx, bkt, id, "", metrics.downloadDuration)
 		if err != nil {
 			return nil, errors.Wrap(err, "generate index header")
 		}
