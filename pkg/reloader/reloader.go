@@ -10,14 +10,19 @@
 //   - Optionally, specify different output file for watched `cfgFile` (`cfgOutputFile`).
 //     This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
 //   - Watch on changes against certain directories (`watchedDirs`).
+//   - Optionally, specify map of header for HTTPReloader
 //
 // Once any of those two changes, Prometheus on given `reloadURL` will be notified, causing Prometheus to reload configuration and rules.
 //
 // This and below for reloader:
 //
 //		u, _ := url.Parse("http://localhost:9090")
+//		h := &http.Header{
+//			"Authorization": {fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte("user:password")))},
+//		}
 //		rl := reloader.New(nil, nil, &reloader.Options{
 //			ReloadURL:     reloader.ReloadURLFromBase(u),
+//			ReloadHeader:  h,
 //			CfgFile:       "/path/to/cfg",
 //			CfgOutputFile: "/path/to/cfg.out",
 //			WatchedDirs:      []string{"/path/to/dirs"},
@@ -141,6 +146,9 @@ type Options struct {
 	// ReloadURL is the Prometheus URL to trigger reloads.
 	ReloadURL *url.URL
 
+	// ReloadHeader is the map of headers transmits in http reload request
+	ReloadHeader *http.Header
+
 	// HTTP client used to connect to the web server.
 	HTTPClient http.Client
 
@@ -254,7 +262,7 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 		r.tr = NewPIDReloader(r.logger, o.ProcessName, o.RuntimeInfoURL, o.HTTPClient)
 		r.reloaderInfo.WithLabelValues("signal").Set(1)
 	} else {
-		r.tr = NewHTTPReloader(r.logger, o.ReloadURL, o.HTTPClient)
+		r.tr = NewHTTPReloader(r.logger, o.ReloadURL, o.ReloadHeader, o.HTTPClient)
 		r.reloaderInfo.WithLabelValues("http").Set(1)
 	}
 
@@ -656,22 +664,27 @@ var _ = TriggerReloader(&PIDReloader{})
 type HTTPReloader struct {
 	logger log.Logger
 
-	u *url.URL
-	c http.Client
+	u       *url.URL
+	headers *http.Header
+	c       http.Client
 }
 
 var _ = TriggerReloader(&HTTPReloader{})
 
-func NewHTTPReloader(logger log.Logger, u *url.URL, c http.Client) *HTTPReloader {
+func NewHTTPReloader(logger log.Logger, u *url.URL, headers *http.Header, c http.Client) *HTTPReloader {
 	return &HTTPReloader{
-		logger: logger,
-		u:      u,
-		c:      c,
+		logger:  logger,
+		u:       u,
+		headers: headers,
+		c:       c,
 	}
 }
 
 func (hr *HTTPReloader) TriggerReload(ctx context.Context) error {
 	req, err := http.NewRequest("POST", hr.u.String(), nil)
+	if hr.headers != nil {
+		req.Header = *hr.headers
+	}
 	if err != nil {
 		return errors.Wrap(err, "create request")
 	}

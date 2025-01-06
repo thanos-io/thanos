@@ -5,6 +5,7 @@ package reloader
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
@@ -198,6 +199,97 @@ config:
 
 	testutil.Ok(t, os.Unsetenv("TEST_RELOADER_THANOS_ENV"))
 	testutil.Ok(t, os.Unsetenv("TEST_RELOADER_THANOS_ENV2"))
+}
+
+func TestReloader_ConfigApplyWithHttpHeader(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := &atomic.Value{}
+	reloads.Store(0)
+	i := 0
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		i++
+		if i%2 == 0 {
+			// Every second request, fail to ensure that retry works.
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		// return http invalid request if basic authorization header is missing
+		if r.Header.Get("Authorization") != "Basic dXNlcjpwYXNzd29yZA==" {
+			resp.WriteHeader(http.StatusBadRequest)
+		} else {
+			reloads.Store(reloads.Load().(int) + 1) // The only writer.
+			resp.WriteHeader(http.StatusOK)
+		}
+	})
+	go func() { _ = srv.Serve(l) }()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir := t.TempDir()
+
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
+
+	var (
+		input  = filepath.Join(dir, "in", "cfg.yaml.tmpl")
+		output = filepath.Join(dir, "out", "cfg.yaml")
+	)
+	reloader := New(nil, nil, &Options{
+		ReloadURL: reloadURL,
+		ReloadHeader: &http.Header{
+			"Authorization": {fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte("user:password")))},
+		},
+		CfgFile:       input,
+		CfgOutputFile: output,
+		CfgDirs:       nil,
+		WatchedDirs:   nil,
+		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
+		RetryInterval: 100 * time.Millisecond,
+		DelayInterval: 1 * time.Millisecond,
+	})
+
+	testutil.Ok(t, os.WriteFile(input, []byte(`
+config:
+  a: 1
+  b: 2
+  c: 3
+`), os.ModePerm))
+
+	rctx, cancel2 := context.WithCancel(ctx)
+	g := sync.WaitGroup{}
+	g.Add(1)
+	go func() {
+		defer g.Done()
+		testutil.Ok(t, reloader.Watch(rctx))
+	}()
+
+Outer:
+	for {
+		select {
+		case <-ctx.Done():
+			break Outer
+		case <-time.After(300 * time.Millisecond):
+		}
+
+		rel := reloads.Load().(int)
+		if rel == 1 {
+			testutil.Equals(t, 1, rel)
+			break
+		}
+	}
+
+	cancel2()
+	g.Wait()
 }
 
 func TestReloader_ConfigRollback(t *testing.T) {
