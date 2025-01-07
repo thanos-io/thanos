@@ -227,7 +227,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&sc.label)
 
-	cmd.Flag("matcher-cache-size", "The size of the cache used for matching against external labels. Using 0 disables caching.").Default("0").IntVar(&sc.matcherCacheSize)
+	cmd.Flag("matcher-cache-size", "The size of the cache used for caching matchers. Using 0 disables caching.").Default("0").IntVar(&sc.matcherCacheSize)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }

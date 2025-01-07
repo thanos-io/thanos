@@ -1058,7 +1058,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
-	cmd.Flag("matcher-cache-size", "The size of the cache used for matching against external labels. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
+	cmd.Flag("matcher-cache-size", "The size of the cache used for caching matchers. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
