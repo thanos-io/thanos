@@ -25,20 +25,18 @@ type MatchersCache interface {
 
 // Ensure implementations satisfy the interface.
 var (
-	_ MatchersCache = (*LruMatchersCache)(nil)
-	_ MatchersCache = (*NoopMatcherCache)(nil)
+	_                 MatchersCache = (*LruMatchersCache)(nil)
+	NoopMatchersCache MatchersCache = &noopMatcherCache{}
 )
 
-// NoopMatcherCache is a no-op implementation of MatchersCache that doesn't cache anything.
-type NoopMatcherCache struct{}
+type noopMatcherCache struct{}
 
-// NewNoopMatcherCache creates a new no-op matcher cache.
-func NewNoopMatcherCache() MatchersCache {
-	return &NoopMatcherCache{}
+func newNoopMatcherCache() MatchersCache {
+	return &noopMatcherCache{}
 }
 
 // GetOrSet implements MatchersCache by always creating a new matcher without caching.
-func (n *NoopMatcherCache) GetOrSet(_ string, newItem NewItemFunc) (*labels.Matcher, error) {
+func (n *noopMatcherCache) GetOrSet(_ string, newItem NewItemFunc) (*labels.Matcher, error) {
 	return newItem()
 }
 
@@ -74,6 +72,7 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 		opt(cache)
 	}
 	cache.metrics = newMatcherCacheMetrics(cache.reg)
+	cache.metrics.maxItems.Set(float64(cache.size))
 
 	lruCache, err := lru.NewWithEvict[string, *labels.Matcher](cache.size, cache.onEvict)
 	if err != nil {

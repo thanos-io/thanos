@@ -2175,7 +2175,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		responseTimeout:   5 * time.Second,
 		retrievalStrategy: EagerRetrieval,
 		tsdbSelector:      DefaultSelector,
-		matcherCache:      storecache.NewNoopMatcherCache(),
+		matcherCache:      storecache.NoopMatchersCache,
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -2312,7 +2312,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					responseTimeout:   50 * time.Millisecond,
 					retrievalStrategy: respStrategy,
 					tsdbSelector:      DefaultSelector,
-					matcherCache:      storecache.NewNoopMatcherCache(),
+					matcherCache:      storecache.NoopMatchersCache,
 				}
 
 				ctx, cancel := context.WithCancel(context.Background())
@@ -2350,7 +2350,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					responseTimeout:   50 * time.Millisecond,
 					retrievalStrategy: respStrategy,
 					tsdbSelector:      DefaultSelector,
-					matcherCache:      storecache.NewNoopMatcherCache(),
+					matcherCache:      storecache.NoopMatchersCache,
 				}
 
 				ctx := context.Background()

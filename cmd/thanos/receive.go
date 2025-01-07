@@ -225,7 +225,7 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var cache = storecache.NewNoopMatcherCache()
+	var cache = storecache.NoopMatchersCache
 	if conf.matcherCacheSize > 0 {
 		cache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
 		if err != nil {

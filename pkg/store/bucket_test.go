@@ -2080,6 +2080,9 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
+	matcherCache, err := storecache.NewMatchersCache(storecache.WithSize(1024))
+	testutil.Ok(tb, err)
+
 	store, err := NewBucketStore(
 		instrBkt,
 		fetcher,
@@ -2096,6 +2099,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		0,
 		WithLogger(logger),
 		WithIndexCache(indexCache),
+		WithMatchersCache(matcherCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
