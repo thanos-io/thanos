@@ -31,10 +31,6 @@ var (
 
 type noopMatcherCache struct{}
 
-func newNoopMatcherCache() MatchersCache {
-	return &noopMatcherCache{}
-}
-
 // GetOrSet implements MatchersCache by always creating a new matcher without caching.
 func (n *noopMatcherCache) GetOrSet(_ string, newItem NewItemFunc) (*labels.Matcher, error) {
 	return newItem()
