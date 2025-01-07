@@ -126,7 +126,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NewNoopMatcherCache())
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -543,7 +543,7 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NewNoopMatcherCache())
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -606,7 +606,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NewNoopMatcherCache())
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

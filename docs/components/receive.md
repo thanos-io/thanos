@@ -407,8 +407,8 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --matcher-cache-size=0     The size of the cache used for matching against
-                                 external labels. Using 0 disables caching.
+      --matcher-cache-size=0     Max number of cached matchers items. Using 0
+                                 disables caching.
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of

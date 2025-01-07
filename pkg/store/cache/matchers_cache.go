@@ -4,6 +4,8 @@
 package storecache
 
 import (
+	"strings"
+
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -17,28 +19,37 @@ const DefaultCacheSize = 200
 
 type NewItemFunc func() (*labels.Matcher, error)
 
+type ConversionLabelMatcher interface {
+	GetValue() string
+	GetName() string
+	MatcherType() (labels.MatchType, error)
+}
+
 type MatchersCache interface {
 	// GetOrSet retrieves a matcher from cache or creates and stores it if not present.
 	// If the matcher is not in cache, it uses the provided newItem function to create it.
-	GetOrSet(key string, newItem NewItemFunc) (*labels.Matcher, error)
+	GetOrSet(m ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error)
 }
 
 // Ensure implementations satisfy the interface.
 var (
-	_ MatchersCache = (*LruMatchersCache)(nil)
-	_ MatchersCache = (*NoopMatcherCache)(nil)
+	_                 MatchersCache = (*LruMatchersCache)(nil)
+	NoopMatchersCache MatchersCache = &noopMatcherCache{}
+
+	defaultIsCacheableFunc = func(m ConversionLabelMatcher) bool {
+		t, err := m.MatcherType()
+		if err != nil {
+			return false
+		}
+
+		return t == labels.MatchRegexp || t == labels.MatchNotRegexp
+	}
 )
 
-// NoopMatcherCache is a no-op implementation of MatchersCache that doesn't cache anything.
-type NoopMatcherCache struct{}
-
-// NewNoopMatcherCache creates a new no-op matcher cache.
-func NewNoopMatcherCache() MatchersCache {
-	return &NoopMatcherCache{}
-}
+type noopMatcherCache struct{}
 
 // GetOrSet implements MatchersCache by always creating a new matcher without caching.
-func (n *NoopMatcherCache) GetOrSet(_ string, newItem NewItemFunc) (*labels.Matcher, error) {
+func (n *noopMatcherCache) GetOrSet(_ ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	return newItem()
 }
 
@@ -49,6 +60,8 @@ type LruMatchersCache struct {
 	metrics *matcherCacheMetrics
 	size    int
 	sf      singleflight.Group
+
+	isCacheable func(matcher ConversionLabelMatcher) bool
 }
 
 type MatcherCacheOption func(*LruMatchersCache)
@@ -65,15 +78,24 @@ func WithSize(size int) MatcherCacheOption {
 	}
 }
 
+// WithIsCacheableFunc sets the function that determines if the item should be cached or not.
+func WithIsCacheableFunc(f func(matcher ConversionLabelMatcher) bool) MatcherCacheOption {
+	return func(c *LruMatchersCache) {
+		c.isCacheable = f
+	}
+}
+
 func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	cache := &LruMatchersCache{
-		size: DefaultCacheSize,
+		size:        DefaultCacheSize,
+		isCacheable: defaultIsCacheableFunc,
 	}
 
 	for _, opt := range opts {
 		opt(cache)
 	}
 	cache.metrics = newMatcherCacheMetrics(cache.reg)
+	cache.metrics.maxItems.Set(float64(cache.size))
 
 	lruCache, err := lru.NewWithEvict[string, *labels.Matcher](cache.size, cache.onEvict)
 	if err != nil {
@@ -84,8 +106,18 @@ func NewMatchersCache(opts ...MatcherCacheOption) (*LruMatchersCache, error) {
 	return cache, nil
 }
 
-func (c *LruMatchersCache) GetOrSet(key string, newItem NewItemFunc) (*labels.Matcher, error) {
+func (c *LruMatchersCache) GetOrSet(m ConversionLabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
+	if !c.isCacheable(m) {
+		return newItem()
+	}
+
 	c.metrics.requestsTotal.Inc()
+	key, err := cacheKey(m)
+
+	if err != nil {
+		return nil, err
+	}
+
 	v, err, _ := c.sf.Do(key, func() (interface{}, error) {
 		if item, ok := c.cache.Get(key); ok {
 			c.metrics.hitsTotal.Inc()
@@ -151,11 +183,25 @@ func newMatcherCacheMetrics(reg prometheus.Registerer) *matcherCacheMetrics {
 func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for i := range ms {
-		pm, err := cache.GetOrSet(ms[i].String(), func() (*labels.Matcher, error) { return storepb.MatcherToPromMatcher(ms[i]) })
+		pm, err := cache.GetOrSet(&ms[i], func() (*labels.Matcher, error) { return storepb.MatcherToPromMatcher(ms[i]) })
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, pm)
 	}
 	return res, nil
+}
+
+func cacheKey(m ConversionLabelMatcher) (string, error) {
+	sb := strings.Builder{}
+	t, err := m.MatcherType()
+	if err != nil {
+		return "", err
+	}
+	typeStr := t.String()
+	sb.Grow(len(m.GetValue()) + len(m.GetName()) + len(typeStr))
+	sb.WriteString(m.GetName())
+	sb.WriteString(typeStr)
+	sb.WriteString(m.GetValue())
+	return sb.String(), nil
 }

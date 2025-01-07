@@ -177,7 +177,7 @@ func NewProxyStore(
 		retrievalStrategy: retrievalStrategy,
 		tsdbSelector:      DefaultSelector,
 		enableDedup:       true,
-		matcherCache:      storecache.NewNoopMatcherCache(),
+		matcherCache:      storecache.NoopMatchersCache,
 	}
 
 	for _, option := range options {
