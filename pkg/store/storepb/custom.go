@@ -552,3 +552,21 @@ func (c *SeriesStatsCounter) Count(series *Series) {
 func (m *SeriesRequest) ToPromQL() string {
 	return m.QueryHints.toPromQL(m.Matchers)
 }
+
+func (m *LabelMatcher) MatcherType() (labels.MatchType, error) {
+	var t labels.MatchType
+	switch m.Type {
+	case LabelMatcher_EQ:
+		t = labels.MatchEqual
+	case LabelMatcher_NEQ:
+		t = labels.MatchNotEqual
+	case LabelMatcher_RE:
+		t = labels.MatchRegexp
+	case LabelMatcher_NRE:
+		t = labels.MatchNotRegexp
+	default:
+		return 0, errors.Errorf("unrecognized label matcher type %d", m.Type)
+	}
+
+	return t, nil
+}
