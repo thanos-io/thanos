@@ -1682,6 +1682,8 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		MaxSize: 8889,
 	})
 	testutil.Ok(t, err)
+	matcherCache, err := storecache.NewMatchersCache(storecache.WithSize(10000))
+	testutil.Ok(t, err)
 
 	var b1 *bucketBlock
 
@@ -1775,6 +1777,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	store := &BucketStore{
 		bkt:             objstore.WithNoopInstr(bkt),
 		logger:          logger,
+		matcherCache:    matcherCache,
 		indexCache:      indexCache,
 		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, indexheader.NewReaderPoolMetrics(nil), indexheader.AlwaysEagerDownloadIndexHeader),
 		metrics:         newBucketStoreMetrics(nil),
