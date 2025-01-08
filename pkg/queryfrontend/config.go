@@ -256,7 +256,9 @@ func (cfg *Config) Validate() error {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 && !cfg.isDynamicSplitSet() {
 			return errors.New("split queries or split threshold interval should be greater than 0 when caching is enabled")
 		}
-		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{}); err != nil {
+		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{
+			EnablePerStepStats: cfg.QueryRangeConfig.ResultsCacheConfig.CacheQueryableSamplesStats,
+		}); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
 		}
 	}

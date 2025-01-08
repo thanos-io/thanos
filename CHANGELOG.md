@@ -11,6 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
+- [#8046](https://github.com/thanos-io/thanos/pull/8046) Query-Frontend: Fix query statistic reporting for range queries when caching is enabled.
 
 ### Added
 
