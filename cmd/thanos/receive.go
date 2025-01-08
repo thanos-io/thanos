@@ -225,7 +225,7 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var cache = storecache.NewNoopMatcherCache()
+	var cache = storecache.NoopMatchersCache
 	if conf.matcherCacheSize > 0 {
 		cache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
 		if err != nil {
@@ -1058,7 +1058,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
-	cmd.Flag("matcher-cache-size", "The size of the cache used for matching against external labels. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
+	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 

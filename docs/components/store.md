@@ -163,6 +163,8 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
+      --matcher-cache-size=0     Max number of cached matchers items. Using 0
+                                 disables caching.
       --max-time=9999-12-31T23:59:59Z
                                  End of time range limit to serve. Thanos Store
                                  will serve only blocks, which happened earlier

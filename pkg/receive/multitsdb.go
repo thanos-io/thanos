@@ -134,7 +134,7 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
-		matcherCache:          storecache.NewNoopMatcherCache(),
+		matcherCache:          storecache.NoopMatchersCache,
 	}
 
 	for _, option := range options {

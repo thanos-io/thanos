@@ -120,7 +120,7 @@ func NewTSDBStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
-		matcherCache: storecache.NewNoopMatcherCache(),
+		matcherCache: storecache.NoopMatchersCache,
 	}
 
 	for _, option := range options {

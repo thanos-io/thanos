@@ -400,6 +400,7 @@ type BucketStore struct {
 	fetcher         block.MetadataFetcher
 	dir             string
 	indexCache      storecache.IndexCache
+	matcherCache    storecache.MatchersCache
 	indexReaderPool *indexheader.ReaderPool
 	buffers         sync.Pool
 	chunkPool       pool.Pool[byte]
@@ -514,6 +515,13 @@ func WithRegistry(reg prometheus.Registerer) BucketStoreOption {
 func WithIndexCache(cache storecache.IndexCache) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.indexCache = cache
+	}
+}
+
+// WithMatchersCache sets a matchers cache to use instead of a noopCache.
+func WithMatchersCache(cache storecache.MatchersCache) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.matcherCache = cache
 	}
 }
 
@@ -637,11 +645,12 @@ func NewBucketStore(
 	options ...BucketStoreOption,
 ) (*BucketStore, error) {
 	s := &BucketStore{
-		logger:     log.NewNopLogger(),
-		bkt:        bkt,
-		fetcher:    fetcher,
-		dir:        dir,
-		indexCache: noopCache{},
+		logger:       log.NewNopLogger(),
+		bkt:          bkt,
+		fetcher:      fetcher,
+		dir:          dir,
+		indexCache:   noopCache{},
+		matcherCache: storecache.NoopMatchersCache,
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
 			return &b
@@ -1536,7 +1545,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(srv.Context())
 
-	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+	matchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
