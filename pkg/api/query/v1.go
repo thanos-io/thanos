@@ -27,7 +27,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -122,37 +121,15 @@ func (a *prometheusEngineAdapter) MakeRangeQueryFromPlan(ctx context.Context, q 
 }
 
 type QueryEngineFactory struct {
-	engineOpts            engine.Opts
-	remoteEngineEndpoints promqlapi.RemoteEndpoints
-
-	createPrometheusEngine sync.Once
-	prometheus             Engine
-
-	createThanosEngine sync.Once
-	thanos             Engine
+	prometheus Engine
+	thanos     Engine
 }
 
 func (f *QueryEngineFactory) GetPrometheusEngine() Engine {
-	f.createPrometheusEngine.Do(func() {
-		if f.prometheus != nil {
-			return
-		}
-		f.prometheus = &prometheusEngineAdapter{engine: promql.NewEngine(f.engineOpts.EngineOpts)}
-	})
 	return f.prometheus
 }
 
 func (f *QueryEngineFactory) GetThanosEngine() Engine {
-	f.createThanosEngine.Do(func() {
-		if f.thanos != nil {
-			return
-		}
-		if f.remoteEngineEndpoints == nil {
-			f.thanos = engine.New(f.engineOpts)
-		} else {
-			f.thanos = engine.NewDistributedEngine(f.engineOpts, f.remoteEngineEndpoints)
-		}
-	})
 	return f.thanos
 }
 
@@ -160,9 +137,18 @@ func NewQueryEngineFactory(
 	engineOpts engine.Opts,
 	remoteEngineEndpoints promqlapi.RemoteEndpoints,
 ) *QueryEngineFactory {
+	promEngine := promql.NewEngine(engineOpts.EngineOpts)
+	// set engine here to avoid duplicate registration of metrics
+	engineOpts.Engine = promEngine
+	var thanosEngine Engine
+	if remoteEngineEndpoints == nil {
+		thanosEngine = engine.New(engineOpts)
+	} else {
+		thanosEngine = engine.NewDistributedEngine(engineOpts, remoteEngineEndpoints)
+	}
 	return &QueryEngineFactory{
-		engineOpts:            engineOpts,
-		remoteEngineEndpoints: remoteEngineEndpoints,
+		prometheus: &prometheusEngineAdapter{promEngine},
+		thanos:     thanosEngine,
 	}
 }
 
