@@ -617,6 +617,23 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			},
 		},
 		{
+			name: "two posting groups with add keys, group not marked as lazy because of lower series match ratio",
+			inputPostings: map[string]map[string]index.Range{
+				"foo": {"bar": index.Range{End: 44}},
+				"bar": {"foo": index.Range{Start: 44, End: 5052}},
+			},
+			seriesMaxSize:    1000,
+			seriesMatchRatio: 0.1,
+			postingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}},
+				{name: "bar", addKeys: []string{"foo"}},
+			},
+			expectedPostingGroups: []*postingGroup{
+				{name: "foo", addKeys: []string{"bar"}, cardinality: 10, existentKeys: 1},
+				{name: "bar", addKeys: []string{"foo"}, cardinality: 1251, existentKeys: 1, lazy: false},
+			},
+		},
+		{
 			name: "three posting groups with add keys, two small posting group and a very large posting group, large one become lazy",
 			inputPostings: map[string]map[string]index.Range{
 				"foo":     {"bar": index.Range{End: 8}},

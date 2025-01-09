@@ -214,6 +214,7 @@ func fetchLazyExpandedPostings(
 	bytesLimiter BytesLimiter,
 	addAllPostings bool,
 	lazyExpandedPostingEnabled bool,
+	seriesMatchRatio float64,
 	postingGroupMaxKeySeriesRatio float64,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
@@ -237,7 +238,7 @@ func fetchLazyExpandedPostings(
 			r,
 			postingGroups,
 			int64(r.block.estimatedMaxSeriesSize),
-			0.5, // TODO(yeya24): Expose this as a flag.
+			seriesMatchRatio,
 			postingGroupMaxKeySeriesRatio,
 			lazyExpandedPostingSizeBytes,
 			lazyExpandedPostingGroupsByReason,
