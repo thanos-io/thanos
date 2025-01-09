@@ -94,14 +94,13 @@ Flags:
                                  --no-cache-index-header option is specified.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
-      --estimated-series-size-stat=max
+      --estimated-series-size-stat=zscore
                                  Statistic to use to estimate block series size.
                                  This is currently used for lazy expanded
                                  posting series size estimation. Available
                                  options are max, p90, p99, p99, p9999 and
                                  zscore. If zscore is picked, the actual zscore
                                  value is set via estimated-series-size-zscore.
-                                 Default value is max
       --estimated-series-size-zscore=2
                                  Zscore is a statistical measurement that
                                  describes a value's relationship to the mean
