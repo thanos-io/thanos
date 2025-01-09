@@ -169,11 +169,11 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("debug.estimated-max-series-size", "Estimated max series size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 64KB.").
 		Hidden().Default(strconv.Itoa(store.EstimatedMaxSeriesSize)).Uint64Var(&sc.estimatedMaxSeriesSize)
 
-	cmd.Flag("estimated-series-size-stat", "Statistic to use to estimate block series size. This is currently used for lazy expanded posting series size estimation. Available options are max, p90, p99, p99, p9999 and zscore. If zscore is picked, the actual zscore value is set via estimated-series-size-stat-zscore. Default value is "+string(store.BlockSeriesSizeMax)).
+	cmd.Flag("estimated-series-size-stat", "Statistic to use to estimate block series size. This is currently used for lazy expanded posting series size estimation. Available options are max, p90, p99, p99, p9999 and zscore. If zscore is picked, the actual zscore value is set via estimated-series-size-zscore. Default value is "+string(store.BlockSeriesSizeMax)).
 		Default(string(store.BlockSeriesSizeMax)).
 		EnumVar(&sc.estimatedSeriesSizeStat, string(store.BlockSeriesSizeMax), string(store.BlockSeriesSizeP90), string(store.BlockSeriesSizeP99), string(store.BlockSeriesSizeP999), string(store.BlockSeriesSizeP9999), string(store.BlockSeriesSizeZScore))
 
-	cmd.Flag("estimated-series-size-stat-zscore", "Zscore is a statistical measurement that describes a value's relationship to the mean series size. Zscore 2 is calculated as average size + 2 * standard deviation. Use a larger zscore if you want a larger estimated series size. Default value is 2. Cannot be lower than 0.").
+	cmd.Flag("estimated-series-size-zscore", "Zscore is a statistical measurement that describes a value's relationship to the mean series size. Zscore 2 is calculated as average size + 2 * standard deviation. Use a larger zscore if you want a larger estimated series size. Default value is 2. Cannot be lower than 0.").
 		Default("2").Float64Var(&sc.estimatedSeriesSizeZScore)
 
 	cmd.Flag("debug.estimated-max-chunk-size", "Estimated max chunk size. Setting a value might result in over fetching data while a small value might result in data refetch. Default value is 16KiB.").
