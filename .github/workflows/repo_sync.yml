@@ -4,6 +4,9 @@ on:
     - cron:  "0 0 * * 1"
 
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/repo_sync.yml'
 
 jobs:
   repo-sync:
