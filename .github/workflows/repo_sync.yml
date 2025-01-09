@@ -1,0 +1,22 @@
+on:
+  schedule:
+    # runs every monday at 00:00 UTC
+    - cron:  "0 0 * * 1"
+
+  workflow_dispatch:
+
+jobs:
+  repo-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: repo-sync
+        uses: repo-sync/github-sync@v2
+        with:
+          source_repo: "https://github.com/thanos-io/thanos"
+          source_branch: ""
+          destination_branch: ""
+          sync_tags: "true"
+          github_token: ${{ secrets.PAT }}
