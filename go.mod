@@ -102,6 +102,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require github.com/hashicorp/go-multierror v1.1.1
+
 require (
 	cloud.google.com/go v0.115.1 // indirect
 	cloud.google.com/go/auth v0.9.3 // indirect
@@ -181,6 +183,7 @@ require (
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/jcchavezs/porto v0.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
