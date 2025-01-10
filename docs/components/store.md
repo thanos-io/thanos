@@ -94,6 +94,21 @@ Flags:
                                  --no-cache-index-header option is specified.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --estimated-series-size-stat=zscore
+                                 Statistic to use to estimate block series size.
+                                 This is currently used for lazy expanded
+                                 posting series size estimation. Available
+                                 options are max, p90, p99, p99, p9999 and
+                                 zscore. If zscore is picked, the actual zscore
+                                 value is set via estimated-series-size-zscore.
+      --estimated-series-size-zscore=2
+                                 Zscore is a statistical measurement that
+                                 describes a value's relationship to the mean
+                                 series size. Zscore 2 is calculated as average
+                                 size + 2 * standard deviation. Use a larger
+                                 zscore if you want a larger estimated series
+                                 size. Default value is 2. Cannot be lower than
+                                 0.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

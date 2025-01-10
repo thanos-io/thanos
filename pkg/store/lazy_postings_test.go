@@ -314,7 +314,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		inputPostings                 map[string]map[string]index.Range
 		inputError                    error
 		postingGroups                 []*postingGroup
-		seriesMaxSize                 int64
+		seriesSize                    int64
 		seriesMatchRatio              float64
 		postingGroupMaxKeySeriesRatio float64
 		expectedPostingGroups         []*postingGroup
@@ -340,7 +340,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"bar": {"foo": index.Range{Start: 8, End: 16}},
 			},
 			inputError:       inputError,
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -352,7 +352,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		{
 			name:             "posting offsets empty with add keys, expect empty posting",
 			inputPostings:    map[string]map[string]index.Range{},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -366,7 +366,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -380,7 +380,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 			inputPostings: map[string]map[string]index.Range{
 				"foo": {"bar": index.Range{End: 8}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -397,7 +397,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"baz": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -412,7 +412,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"baz": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -429,7 +429,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -446,7 +446,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -463,7 +463,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -481,7 +481,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 108}},
 				"bar": {"foo": index.Range{Start: 108, End: 116}, "bar": index.Range{Start: 116, End: 124}, "baz": index.Range{Start: 124, End: 132}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -499,7 +499,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}, "bar": index.Range{Start: 16, End: 24}, "baz": index.Range{Start: 24, End: 32}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -517,7 +517,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}, "bar": index.Range{Start: 16, End: 24}, "baz": index.Range{Start: 24, End: 32}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -535,7 +535,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}, "baz": index.Range{Start: 16, End: 24}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
@@ -554,7 +554,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
@@ -571,7 +571,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 1000012}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
@@ -588,7 +588,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 16}},
 			},
-			seriesMaxSize:    1,
+			seriesSize:       1,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -605,7 +605,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"foo": {"bar": index.Range{End: 8}},
 				"bar": {"foo": index.Range{Start: 8, End: 1000012}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -623,7 +623,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"bar":     {"foo": index.Range{Start: 8, End: 1000012}},
 				"cluster": {"us": index.Range{Start: 1000012, End: 1000020}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{name: "foo", addKeys: []string{"bar"}},
@@ -643,7 +643,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"bar":     {"bar": index.Range{Start: 8, End: 16}, "baz": index.Range{Start: 16, End: 24}, "foo": index.Range{Start: 24, End: 32}},
 				"cluster": {"us": index.Range{Start: 32, End: 108}},
 			},
-			seriesMaxSize:                 1000,
+			seriesSize:                    1000,
 			seriesMatchRatio:              0.5,
 			postingGroupMaxKeySeriesRatio: 2,
 			postingGroups: []*postingGroup{
@@ -664,7 +664,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"bar":     {"bar": index.Range{Start: 8, End: 16}, "baz": index.Range{Start: 16, End: 24}, "foo": index.Range{Start: 24, End: 32}},
 				"cluster": {"us": index.Range{Start: 32, End: 108}},
 			},
-			seriesMaxSize:                 1000,
+			seriesSize:                    1000,
 			seriesMatchRatio:              0.5,
 			postingGroupMaxKeySeriesRatio: 2,
 			postingGroups: []*postingGroup{
@@ -685,7 +685,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"bar":     {"foo": index.Range{Start: 8, End: 1000012}},
 				"cluster": {"us": index.Range{Start: 1000012, End: 1000020}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
@@ -706,7 +706,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 				"baz":     {"foo": index.Range{Start: 2012, End: 4020}},
 				"cluster": {"us": index.Range{Start: 4020, End: 1004024}},
 			},
-			seriesMaxSize:    1000,
+			seriesSize:       1000,
 			seriesMatchRatio: 0.5,
 			postingGroups: []*postingGroup{
 				{addAll: true, name: "foo", removeKeys: []string{"bar"}},
@@ -725,12 +725,12 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			headerReader := &mockIndexHeaderReader{postings: tc.inputPostings, err: tc.inputError}
 			registry := prometheus.NewRegistry()
-			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
+			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil, nil)
 			testutil.Ok(t, err)
 			ir := newBucketIndexReader(block, logger)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})
 			dummyCounterVec := promauto.With(registry).NewCounterVec(prometheus.CounterOpts{Name: "test_counter_vec"}, []string{"reason"})
-			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesMaxSize, tc.seriesMatchRatio, tc.postingGroupMaxKeySeriesRatio, dummyCounter, dummyCounterVec)
+			pgs, emptyPosting, err := optimizePostingsFetchByDownloadedBytes(ir, tc.postingGroups, tc.seriesSize, tc.seriesMatchRatio, tc.postingGroupMaxKeySeriesRatio, dummyCounter, dummyCounterVec)
 			if err != nil {
 				testutil.Equals(t, tc.expectedError, err.Error())
 				return

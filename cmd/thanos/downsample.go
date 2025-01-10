@@ -411,6 +411,12 @@ func processDownsampling(
 	}
 	if stats.SeriesMaxSize > 0 {
 		meta.Thanos.IndexStats.SeriesMaxSize = stats.SeriesMaxSize
+		meta.Thanos.IndexStats.SeriesAvgSize = stats.SeriesAvgSize
+		meta.Thanos.IndexStats.SeriesP90Size = stats.SeriesP90Size
+		meta.Thanos.IndexStats.SeriesP99Size = stats.SeriesP99Size
+		meta.Thanos.IndexStats.SeriesP999Size = stats.SeriesP999Size
+		meta.Thanos.IndexStats.SeriesP9999Size = stats.SeriesP9999Size
+		meta.Thanos.IndexStats.SeriesSizeStdDev = stats.SeriesSizeStdDev
 	}
 	if err := meta.WriteToDir(logger, resdir); err != nil {
 		return errors.Wrap(err, "write meta")

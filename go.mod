@@ -5,6 +5,7 @@ go 1.23.0
 require (
 	capnproto.org/go/capnp/v3 v3.0.0-alpha.30
 	cloud.google.com/go/trace v1.10.12
+	github.com/DataDog/sketches-go v1.4.6
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.8.3
 	github.com/KimMachineGun/automemlimit v0.6.1
 	github.com/alecthomas/units v0.0.0-20240626203959-61d1e3462e30
