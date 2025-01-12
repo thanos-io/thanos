@@ -443,6 +443,7 @@ type BucketStore struct {
 
 	enabledLazyExpandedPostings   bool
 	postingGroupMaxKeySeriesRatio float64
+	maxKeysToSkipCache            int
 
 	sortingStrategy sortingStrategy
 
@@ -588,6 +589,13 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 func WithPostingGroupMaxKeySeriesRatio(postingGroupMaxKeySeriesRatio float64) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.postingGroupMaxKeySeriesRatio = postingGroupMaxKeySeriesRatio
+	}
+}
+
+// WithMaxKeysToSkipCache configures a threshold to skip fetching index cache if a posting group has more keys.
+func WithMaxKeysToSkipCache(maxKeysToSkipCache int) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.maxKeysToSkipCache = maxKeysToSkipCache
 	}
 }
 
@@ -1067,6 +1075,7 @@ type blockSeriesClient struct {
 	lazyExpandedPostingEnabled bool
 	// Mark posting group as lazy if it adds too many keys. 0 to disable.
 	postingGroupMaxKeySeriesRatio                 float64
+	maxKeysToSkipCache                            int
 	lazyExpandedPostingsCount                     prometheus.Counter
 	lazyExpandedPostingGroupByReason              *prometheus.CounterVec
 	lazyExpandedPostingSizeBytes                  prometheus.Counter
@@ -1112,6 +1121,7 @@ func newBlockSeriesClient(
 	extLsetToRemove map[string]struct{},
 	lazyExpandedPostingEnabled bool,
 	postingGroupMaxKeySeriesRatio float64,
+	maxKeysToSkipCache int,
 	lazyExpandedPostingsCount prometheus.Counter,
 	lazyExpandedPostingByReason *prometheus.CounterVec,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
@@ -1149,6 +1159,7 @@ func newBlockSeriesClient(
 
 		lazyExpandedPostingEnabled:                    lazyExpandedPostingEnabled,
 		postingGroupMaxKeySeriesRatio:                 postingGroupMaxKeySeriesRatio,
+		maxKeysToSkipCache:                            maxKeysToSkipCache,
 		lazyExpandedPostingsCount:                     lazyExpandedPostingsCount,
 		lazyExpandedPostingGroupByReason:              lazyExpandedPostingByReason,
 		lazyExpandedPostingSizeBytes:                  lazyExpandedPostingSizeBytes,
@@ -1202,7 +1213,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	matchers sortedMatchers,
 	seriesLimiter SeriesLimiter,
 ) error {
-	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.postingGroupMaxKeySeriesRatio, b.lazyExpandedPostingSizeBytes, b.lazyExpandedPostingGroupByReason, b.tenant)
+	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter, b.lazyExpandedPostingEnabled, b.postingGroupMaxKeySeriesRatio, b.maxKeysToSkipCache, b.lazyExpandedPostingSizeBytes, b.lazyExpandedPostingGroupByReason, b.tenant)
 	if err != nil {
 		return errors.Wrap(err, "expanded matching posting")
 	}
@@ -1636,6 +1647,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				extLsetToRemove,
 				s.enabledLazyExpandedPostings,
 				s.postingGroupMaxKeySeriesRatio,
+				s.maxKeysToSkipCache,
 				s.metrics.lazyExpandedPostingsCount,
 				s.metrics.lazyExpandedPostingGroupsByReason,
 				s.metrics.lazyExpandedPostingSizeBytes,
@@ -1952,6 +1964,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					extLsetToRemove,
 					s.enabledLazyExpandedPostings,
 					s.postingGroupMaxKeySeriesRatio,
+					s.maxKeysToSkipCache,
 					s.metrics.lazyExpandedPostingsCount,
 					s.metrics.lazyExpandedPostingGroupsByReason,
 					s.metrics.lazyExpandedPostingSizeBytes,
@@ -2180,6 +2193,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					nil,
 					s.enabledLazyExpandedPostings,
 					s.postingGroupMaxKeySeriesRatio,
+					s.maxKeysToSkipCache,
 					s.metrics.lazyExpandedPostingsCount,
 					s.metrics.lazyExpandedPostingGroupsByReason,
 					s.metrics.lazyExpandedPostingSizeBytes,
@@ -2648,6 +2662,7 @@ func (r *bucketIndexReader) ExpandedPostings(
 	bytesLimiter BytesLimiter,
 	lazyExpandedPostingEnabled bool,
 	postingGroupMaxKeySeriesRatio float64,
+	maxKeysToSkipCache int,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
 	tenant string,
@@ -2703,7 +2718,7 @@ func (r *bucketIndexReader) ExpandedPostings(
 		postingGroups = append(postingGroups, newPostingGroup(true, name, []string{value}, nil))
 	}
 
-	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, addAllPostings, lazyExpandedPostingEnabled, postingGroupMaxKeySeriesRatio, lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason, tenant)
+	ps, err := fetchLazyExpandedPostings(ctx, postingGroups, r, bytesLimiter, addAllPostings, lazyExpandedPostingEnabled, postingGroupMaxKeySeriesRatio, maxKeysToSkipCache, lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason, tenant)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch and expand postings")
 	}
@@ -3070,22 +3085,80 @@ var bufioReaderPool = sync.Pool{
 	},
 }
 
+func skipCachePostingGroup(group *postingGroup, maxKeys int) bool {
+	if maxKeys <= 0 {
+		return false
+	}
+	return len(group.addKeys) > maxKeys || len(group.removeKeys) > maxKeys
+}
+
 // fetchPostings fill postings requested by posting groups.
 // It returns one posting for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
-func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiter BytesLimiter, tenant string) ([]index.Postings, []func(), error) {
+func (r *bucketIndexReader) fetchPostings(ctx context.Context, postingGroups []*postingGroup, maxKeysToSkipCache int, bytesLimiter BytesLimiter, tenant string) ([]index.Postings, []func(), error) {
 	var closeFns []func()
+
+	cacheKeyCount := 0
+	skipCacheKeyCount := 0
+	skipCachePostingGroupSet := make(map[string]struct{})
+	// Find out posting groups which fetch more than 1 key to fetch expanded posting cache.
+	for _, pg := range postingGroups {
+		if pg.lazy {
+			continue
+		}
+		// If posting group has more than maxKeysToSkipCache key to fetch, skip fetching them from cache.
+		// This helps for matcher such as !="", =~".+" to avoid fetching too many keys from cache.
+		if skipCachePostingGroup(pg, maxKeysToSkipCache) {
+			skipCacheKeyCount += len(pg.addKeys) + len(pg.removeKeys)
+			skipCachePostingGroupSet[pg.name] = struct{}{}
+			continue
+		}
+
+		// A posting group has either add key or remove key and cannot have both the same time.
+		cacheKeyCount += len(pg.addKeys) + len(pg.removeKeys)
+	}
+
+	totalKeys := cacheKeyCount + skipCacheKeyCount
+	cacheKeys := make([]labels.Label, 0, cacheKeyCount)
+	keys := make([]labels.Label, 0, totalKeys)
+	output := make([]index.Postings, totalKeys)
+	var ptrs []postingPtr
+	if skipCacheKeyCount > 0 {
+		// We know we have keys to fetch but bypass cache.
+		ptrs = make([]postingPtr, 0, skipCacheKeyCount)
+	}
+
+	for _, pg := range postingGroups {
+		if pg.lazy {
+			continue
+		}
+		if !skipCachePostingGroup(pg, maxKeysToSkipCache) {
+			// Postings returned by fetchPostings will be in the same order as keys
+			// so it's important that we iterate them in the same order later.
+			// We don't have any other way of pairing keys and fetched postings.
+			for _, key := range pg.addKeys {
+				cacheKeys = append(cacheKeys, labels.Label{Name: pg.name, Value: key})
+			}
+			for _, key := range pg.removeKeys {
+				cacheKeys = append(cacheKeys, labels.Label{Name: pg.name, Value: key})
+			}
+		}
+		// Cache keys are copied twice but they should be very small portion as groups
+		// of large amount of keys are already not fetched from cache.
+		for _, key := range pg.addKeys {
+			keys = append(keys, labels.Label{Name: pg.name, Value: key})
+		}
+		for _, key := range pg.removeKeys {
+			keys = append(keys, labels.Label{Name: pg.name, Value: key})
+		}
+	}
 
 	timer := prometheus.NewTimer(r.block.metrics.postingsFetchDuration.WithLabelValues(tenant))
 	defer timer.ObserveDuration()
 
-	var ptrs []postingPtr
-
-	output := make([]index.Postings, len(keys))
-
 	var size int64
 	// Fetch postings from the cache with a single call.
-	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys, tenant)
+	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, cacheKeys, tenant)
 	for _, dataFromCache := range fromCache {
 		size += int64(len(dataFromCache))
 	}
@@ -3186,6 +3259,11 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				diffVarintPostings, postingsCount, keyID := rdr.AtDiffVarint()
 
 				output[keyID] = newDiffVarintPostings(diffVarintPostings, nil)
+				// If the corresponding posting group is marked as no cache, don't encode
+				// and restore data to cache.
+				if _, ok := skipCachePostingGroupSet[keys[keyID].Name]; ok {
+					continue
+				}
 
 				startCompression := time.Now()
 				dataToCache, err := snappyStreamedEncode(int(postingsCount), diffVarintPostings)
