@@ -79,13 +79,13 @@ The following are valid use cases for vertical compaction:
 * **Backfilling**. If you want to add blocks of data to any stream where there already is existing data for some time range, you will need to enable vertical compaction.
 * **Offline deduplication** of series. It's very common to have the same data replicated into multiple streams. We can distinguish two common strategies for deduplications, `one-to-one` and `penalty`:
   * `one-to-one` deduplication is when multiple series (with the same labels) from different blocks for the same time range have **exactly** the same samples: Same values and timestamps. This is very common when using [Receivers](receive.md) with replication greater than 1 as receiver replication copies samples exactly (same timestamps and values) to different receive instances.
-  * `penalty` deduplication is when the same data is **duplicated logically**, i.e. the same application is scraped from two different Prometheis. This usually requires more complex deduplication algorithms. For example, one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is a common case when Prometheus HA replicas are used. You can enable this deduplication strategy via the `--deduplication.func=penalty` flag.
+  * `penalty` deduplication is when the same data is **duplicated logically**, i.e. the same application is scraped from two different Prometheus. This usually requires more complex deduplication algorithms. For example, one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is a common case when Prometheus HA replicas are used. You can enable this deduplication strategy via the `--deduplication.func=penalty` flag.
 
 #### Vertical Compaction Risks
 
 The main risk is the **irreversible** implications of potential configuration errors:
 
-* If you accidentally upload blocks with the same external labels but produced by totally different Prometheis for totally different applications, some metrics can overlap and potentially merge together, making the series useless.
+* If you accidentally upload blocks with the same external labels but produced by totally different Prometheus for totally different applications, some metrics can overlap and potentially merge together, making the series useless.
 * If you merge disjoint series in multiple of blocks together, there is currently no easy way to split them back.
 * The `penalty` offline deduplication algorithm has its own limitations. Even though it has been battle-tested for quite a long time, very few issues still come up from time to time (such as [breaking rate/irate](https://github.com/thanos-io/thanos/issues/2890)). If you'd like to enable this deduplication algorithm, do so at your own risk and back up your data first!
 
