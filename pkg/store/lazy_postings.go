@@ -215,6 +215,7 @@ func fetchLazyExpandedPostings(
 	addAllPostings bool,
 	lazyExpandedPostingEnabled bool,
 	postingGroupMaxKeySeriesRatio float64,
+	maxKeysToSkipCache int,
 	lazyExpandedPostingSizeBytes prometheus.Counter,
 	lazyExpandedPostingGroupsByReason *prometheus.CounterVec,
 	tenant string,
@@ -250,7 +251,7 @@ func fetchLazyExpandedPostings(
 		}
 	}
 
-	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant)
+	ps, matchers, err := fetchAndExpandPostingGroups(ctx, r, postingGroups, bytesLimiter, tenant, lazyExpandedPostingEnabled, maxKeysToSkipCache)
 	if err != nil {
 		return nil, err
 	}
@@ -260,42 +261,20 @@ func fetchLazyExpandedPostings(
 	return &lazyExpandedPostings{postings: ps, matchers: matchers}, nil
 }
 
-// keysToFetchFromPostingGroups returns label pairs (postings) to fetch
-// and matchers we need to use for lazy posting expansion.
-// Input `postingGroups` needs to be ordered by cardinality in case lazy
-// expansion is enabled. When we find the first lazy posting group we can exit.
-func keysToFetchFromPostingGroups(postingGroups []*postingGroup) ([]labels.Label, []*labels.Matcher) {
+func fetchAndExpandPostingGroups(
+	ctx context.Context,
+	r *bucketIndexReader,
+	postingGroups []*postingGroup,
+	bytesLimiter BytesLimiter,
+	tenant string,
+	lazyExpandedPostingEnabled bool,
+	maxKeysToSkipCache int,
+) ([]storage.SeriesRef, []*labels.Matcher, error) {
 	var lazyMatchers []*labels.Matcher
-	keys := make([]labels.Label, 0)
-	i := 0
-	for i < len(postingGroups) {
-		pg := postingGroups[i]
-		if pg.lazy {
-			if len(lazyMatchers) == 0 {
-				lazyMatchers = make([]*labels.Matcher, 0)
-			}
-			lazyMatchers = append(lazyMatchers, postingGroups[i].matchers...)
-		} else {
-			// Postings returned by fetchPostings will be in the same order as keys
-			// so it's important that we iterate them in the same order later.
-			// We don't have any other way of pairing keys and fetched postings.
-			for _, key := range pg.addKeys {
-				keys = append(keys, labels.Label{Name: pg.name, Value: key})
-			}
-			for _, key := range pg.removeKeys {
-				keys = append(keys, labels.Label{Name: pg.name, Value: key})
-			}
-		}
-
-		i++
+	if lazyExpandedPostingEnabled {
+		lazyMatchers = lazyMatchersFromPostingGroups(postingGroups)
 	}
-
-	return keys, lazyMatchers
-}
-
-func fetchAndExpandPostingGroups(ctx context.Context, r *bucketIndexReader, postingGroups []*postingGroup, bytesLimiter BytesLimiter, tenant string) ([]storage.SeriesRef, []*labels.Matcher, error) {
-	keys, lazyMatchers := keysToFetchFromPostingGroups(postingGroups)
-	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter, tenant)
+	fetchedPostings, closeFns, err := r.fetchPostings(ctx, postingGroups, maxKeysToSkipCache, bytesLimiter, tenant)
 	defer func() {
 		for _, closeFn := range closeFns {
 			closeFn()
@@ -347,4 +326,16 @@ func mergeFetchedPostings(ctx context.Context, fetchedPostings []index.Postings,
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(ctx, groupRemovals...))
 	return result
+}
+
+// lazyMatchersFromPostingGroups returns matchers for lazy posting expansion.
+func lazyMatchersFromPostingGroups(postingGroups []*postingGroup) []*labels.Matcher {
+	var lazyMatchers []*labels.Matcher
+	for i := 0; i < len(postingGroups); i++ {
+		pg := postingGroups[i]
+		if pg.lazy {
+			lazyMatchers = append(lazyMatchers, postingGroups[i].matchers...)
+		}
+	}
+	return lazyMatchers
 }
