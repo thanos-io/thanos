@@ -463,6 +463,12 @@ func runCompact(
 
 	compactMainFn := func() error {
 		// this should happen before any compaction to remove unnecessary process on backlogs beyond retention.
+		if len(retentionByTenant) != 0 && len(sy.Metas()) == 0 {
+			level.Info(logger).Log("msg", "sync before tenant retention due to no blocks")
+			if err := sy.SyncMetas(ctx); err != nil {
+				return errors.Wrap(err, "sync before tenant retention")
+			}
+		}
 		if err := compact.ApplyRetentionPolicyByTenant(ctx, logger, insBkt, sy.Metas(), retentionByTenant, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, metadata.TenantRetentionExpired)); err != nil {
 			return errors.Wrap(err, "retention by tenant failed")
 		}
