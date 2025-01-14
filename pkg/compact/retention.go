@@ -114,20 +114,28 @@ func ApplyRetentionPolicyByTenant(
 		level.Info(logger).Log("msg", "tenant retention is disabled due to no policy")
 		return nil
 	}
-	level.Info(logger).Log("msg", "start tenant retention")
+	level.Info(logger).Log("msg", "start tenant retention", "total", len(metas))
+	deleted, skipped, notExpired := 0, 0, 0
 	for id, m := range metas {
 		policy, ok := retentionByTenant[m.Thanos.GetTenant()]
 		if !ok {
+			skipped++
 			continue
 		}
 		maxTime := time.Unix(m.MaxTime/1000, 0)
 		if policy.isExpired(maxTime) {
 			level.Info(logger).Log("msg", "applying retention: marking block for deletion", "id", id, "maxTime", maxTime.String())
-			if err := block.MarkForDeletion(ctx, logger, bkt, id, fmt.Sprintf("block exceeding retention of %v", policy), blocksMarkedForDeletion); err != nil {
-				return errors.Wrap(err, "delete block")
+			if err := block.Delete(ctx, logger, bkt, id); err != nil {
+				level.Error(logger).Log("msg", "failed to delete block", "id", id, "err", err)
+				continue // continue to next block to clean up backlogs
+			} else {
+				blocksMarkedForDeletion.Inc()
+				deleted++
 			}
+		} else {
+			notExpired++
 		}
 	}
-	level.Info(logger).Log("msg", "tenant retention apply done")
+	level.Info(logger).Log("msg", "tenant retention apply done", "deleted", deleted, "skipped", skipped, "notExpired", notExpired)
 	return nil
 }

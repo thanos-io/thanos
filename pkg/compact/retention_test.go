@@ -525,7 +525,6 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 			}
 
 			got := []string{}
-			gotMarkedBlocksCount := 0.0
 			testutil.Ok(t, bkt.Iter(context.TODO(), "", func(name string) error {
 				exists, err := bkt.Exists(ctx, filepath.Join(name, metadata.DeletionMarkFilename))
 				if err != nil {
@@ -535,12 +534,12 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 					got = append(got, name)
 					return nil
 				}
-				gotMarkedBlocksCount += 1.0
 				return nil
 			}))
+			deleted := float64(len(tt.blocks) - len(got))
 
 			testutil.Equals(t, got, tt.want)
-			testutil.Equals(t, gotMarkedBlocksCount, promtest.ToFloat64(blocksMarkedForDeletion))
+			testutil.Equals(t, deleted, promtest.ToFloat64(blocksMarkedForDeletion))
 		})
 	}
 }
