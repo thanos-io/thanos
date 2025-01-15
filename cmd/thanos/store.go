@@ -447,6 +447,7 @@ func runStore(
 		}),
 		store.WithLazyExpandedPostings(conf.lazyExpandedPostingsEnabled),
 		store.WithPostingGroupMaxKeySeriesRatio(conf.postingGroupMaxKeySeriesRatio),
+		store.WithSeriesMatchRatio(0.5), // TODO: expose series match ratio as config.
 		store.WithIndexHeaderLazyDownloadStrategy(
 			indexheader.IndexHeaderLazyDownloadStrategy(conf.indexHeaderLazyDownloadStrategy).StrategyToDownloadFunc(),
 		),
