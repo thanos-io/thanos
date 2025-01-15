@@ -899,9 +899,9 @@ test_metric{a="2", b="2"} 1`)
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "10",
 				SeriesCount:    "1",
-				MetricInterval: "3600",
-				SeriesInterval: "30",
-				ValueInterval:  "30",
+				MetricInterval: "30",
+				SeriesInterval: "3600",
+				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
 				RemoteWriteInterval: "30s",
@@ -937,9 +937,9 @@ test_metric{a="2", b="2"} 1`)
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "10",
 				SeriesCount:    "1",
-				MetricInterval: "3600",
-				SeriesInterval: "30",
-				ValueInterval:  "30",
+				MetricInterval: "30",
+				SeriesInterval: "3600",
+				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
 				RemoteWriteInterval: "30s",
