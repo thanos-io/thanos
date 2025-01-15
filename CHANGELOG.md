@@ -11,6 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
+- [#8046](https://github.com/thanos-io/thanos/pull/8046) Query-Frontend: Fix query statistic reporting for range queries when caching is enabled.
 
 - [#7978](https://github.com/thanos-io/thanos/pull/7978) Receive: Fix deadlock during local writes when `split-tenant-label-name` is used
 - [#8016](https://github.com/thanos-io/thanos/pull/8016) Query Frontend: Fix @ modifier not being applied correctly on sub queries.

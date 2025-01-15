@@ -256,7 +256,12 @@ func (cfg *Config) Validate() error {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 && !cfg.isDynamicSplitSet() {
 			return errors.New("split queries or split threshold interval should be greater than 0 when caching is enabled")
 		}
-		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{}); err != nil {
+		// This is instantiated just to make the QFE config comply with validation against the Cortex Querier,
+		// but in Thanos we don't use this configuration at all.
+		ignoredQueryConfig := querier.Config{
+			EnablePerStepStats: cfg.QueryRangeConfig.ResultsCacheConfig.CacheQueryableSamplesStats,
+		}
+		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(ignoredQueryConfig); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
 		}
 	}

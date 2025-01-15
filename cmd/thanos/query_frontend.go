@@ -270,8 +270,9 @@ func runQueryFrontend(
 			return errors.Wrap(err, "initializing the query range cache config")
 		}
 		cfg.QueryRangeConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
-			Compression: cfg.CacheCompression,
-			CacheConfig: *cacheConfig,
+			Compression:                cfg.CacheCompression,
+			CacheConfig:                *cacheConfig,
+			CacheQueryableSamplesStats: cfg.CortexHandlerConfig.QueryStatsEnabled,
 		}
 	}
 
