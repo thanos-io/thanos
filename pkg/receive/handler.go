@@ -116,6 +116,8 @@ type Options struct {
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
 	ReplicationProtocol     ReplicationProtocol
+	OtlpEnableTargetInfo    bool
+	OtlpResourceAttributes  []string
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -270,6 +272,18 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			readyf(
 				middleware.RequestID(
 					http.HandlerFunc(h.receiveHTTP),
+				),
+			),
+		),
+	)
+
+	h.router.Post(
+		"/api/v1/otlp",
+		instrf(
+			"otlp",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveOTLPHTTP),
 				),
 			),
 		),

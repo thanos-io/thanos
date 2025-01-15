@@ -110,6 +110,7 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 	}
 	return &fakeAppender{
 		samples:     make(map[storage.SeriesRef][]prompb.Sample),
+		exemplars:   make(map[storage.SeriesRef][]exemplar.Exemplar),
 		appendErr:   appendErr,
 		commitErr:   commitErr,
 		rollbackErr: rollbackErr,
