@@ -675,11 +675,11 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	endpointSet := NewEndpointSet(nowFunc, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
-				specs = append(specs, NewGRPCEndpointSpec(addr, false))
+				specs = append(specs, NewGRPCEndpointSpec(addr, false, testGRPCOpts...))
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute, 2*time.Second)
+		time.Minute, 2*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1052,7 +1052,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute, 2*time.Second)
+		time.Minute, 2*time.Second)
 	defer endpointSet.Close()
 
 	// Should not matter how many of these we run.
@@ -1159,11 +1159,11 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 	slowStaticEndpointAddr := discoveredEndpointAddr[2]
 	endpointSet := NewEndpointSet(time.Now, nil, nil, func() (specs []*GRPCEndpointSpec) {
 		return []*GRPCEndpointSpec{
-			NewGRPCEndpointSpec(discoveredEndpointAddr[0], true),
-			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false),
-			NewGRPCEndpointSpec(discoveredEndpointAddr[2], true),
+			NewGRPCEndpointSpec(discoveredEndpointAddr[0], true, testGRPCOpts...),
+			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false, testGRPCOpts...),
+			NewGRPCEndpointSpec(discoveredEndpointAddr[2], true, testGRPCOpts...),
 		}
-	}, testGRPCOpts, time.Minute, 1*time.Second)
+	}, time.Minute, 1*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1273,7 +1273,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					endpointSpec: func() []*GRPCEndpointSpec {
 						endpointSpec := make([]*GRPCEndpointSpec, 0, len(endpoints.orderAddrs))
 						for _, addr := range endpoints.orderAddrs {
-							endpointSpec = append(endpointSpec, NewGRPCEndpointSpec(addr, false))
+							endpointSpec = append(endpointSpec, NewGRPCEndpointSpec(addr, false, testGRPCOpts...))
 						}
 						return endpointSpec
 					},
@@ -1297,7 +1297,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					name: "Sidecar discovered, no Ruler discovered",
 					endpointSpec: func() []*GRPCEndpointSpec {
 						return []*GRPCEndpointSpec{
-							NewGRPCEndpointSpec(endpoints.orderAddrs[0], false),
+							NewGRPCEndpointSpec(endpoints.orderAddrs[0], false, testGRPCOpts...),
 						}
 					},
 					expectedStores:         1, // sidecar
@@ -1310,8 +1310,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					name: "Ruler discovered",
 					endpointSpec: func() []*GRPCEndpointSpec {
 						return []*GRPCEndpointSpec{
-							NewGRPCEndpointSpec(endpoints.orderAddrs[0], false),
-							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false),
+							NewGRPCEndpointSpec(endpoints.orderAddrs[0], false, testGRPCOpts...),
+							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false, testGRPCOpts...),
 						}
 					},
 					expectedStores:         2, // sidecar + ruler
@@ -1324,7 +1324,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					name: "Sidecar removed",
 					endpointSpec: func() []*GRPCEndpointSpec {
 						return []*GRPCEndpointSpec{
-							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false),
+							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false, testGRPCOpts...),
 						}
 					},
 					expectedStores: 1, // ruler
@@ -1344,7 +1344,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 					return tc.states[currentState].endpointSpec()
 				},
-				testGRPCOpts, time.Minute, 2*time.Second)
+				time.Minute, 2*time.Second)
 
 			defer endpointSet.Close()
 
@@ -1532,11 +1532,11 @@ func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, 
 	endpointSet := NewEndpointSet(now, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
-				specs = append(specs, NewGRPCEndpointSpec(addr, strict))
+				specs = append(specs, NewGRPCEndpointSpec(addr, strict, testGRPCOpts...))
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute, time.Second, metricLabels...)
+		time.Minute, time.Second, metricLabels...)
 	return endpointSet
 }
 

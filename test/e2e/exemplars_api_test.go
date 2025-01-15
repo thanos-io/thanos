@@ -82,7 +82,7 @@ config:
 	t.Cleanup(cancel)
 
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_query_exemplar_apis_dns_provider_results"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_query_endpoints_dns_provider_results"}, e2emon.WaitMissingMetrics()))
 
 	now := time.Now()
 	start := timestamp.FromTime(now.Add(-time.Hour))

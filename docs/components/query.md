@@ -299,27 +299,37 @@ Flags:
                                  detected maximum container or system memory.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
-      --endpoint=<endpoint> ...  Addresses of statically configured Thanos
-                                 API servers (repeatable). The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
-                                 Thanos API servers through respective DNS
-                                 lookups.
+      --endpoint=<endpoint> ...  (Deprecated): Addresses of statically
+                                 configured Thanos API servers (repeatable).
+                                 The scheme may be prefixed with 'dns+' or
+                                 'dnssrv+' to detect Thanos API servers through
+                                 respective DNS lookups.
       --endpoint-group=<endpoint-group> ...
-                                 Experimental: DNS name of statically configured
-                                 Thanos API server groups (repeatable). Targets
-                                 resolved from the DNS name will be queried in
-                                 a round-robin, instead of a fanout manner.
-                                 This flag should be used when connecting a
-                                 Thanos Query to HA groups of Thanos components.
+                                 (Deprecated, Experimental): DNS name of
+                                 statically configured Thanos API server groups
+                                 (repeatable). Targets resolved from the DNS
+                                 name will be queried in a round-robin, instead
+                                 of a fanout manner. This flag should be used
+                                 when connecting a Thanos Query to HA groups of
+                                 Thanos components.
       --endpoint-group-strict=<endpoint-group-strict> ...
-                                 Experimental: DNS name of statically configured
-                                 Thanos API server groups (repeatable) that are
-                                 always used, even if the health check fails.
-      --endpoint-strict=<staticendpoint> ...
-                                 Addresses of only statically configured Thanos
-                                 API servers that are always used, even if
-                                 the health check fails. Useful if you have a
-                                 caching layer on top.
+                                 (Deprecated, Experimental): DNS name of
+                                 statically configured Thanos API server groups
+                                 (repeatable) that are always used, even if the
+                                 health check fails.
+      --endpoint-strict=<endpoint-strict> ...
+                                 (Deprecated): Addresses of only statically
+                                 configured Thanos API servers that are always
+                                 used, even if the health check fails. Useful if
+                                 you have a caching layer on top.
+      --endpoint.sd-config=<content>
+                                 Alternative to 'endpoint.sd-config-file' flag
+                                 (mutually exclusive). Content of Config File
+                                 with endpoint definitions
+      --endpoint.sd-config-file=<file-path>
+                                 Path to Config File with endpoint definitions
+      --endpoint.sd-config-reload-interval=5m
+                                 Interval between endpoint config refreshes
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -500,19 +510,6 @@ Flags:
                                  It follows the Thanos sharding relabel-config
                                  syntax. For format details see:
                                  https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --store=<store> ...        Deprecation Warning - This flag is deprecated
-                                 and replaced with `endpoint`. Addresses of
-                                 statically configured store API servers
-                                 (repeatable). The scheme may be prefixed with
-                                 'dns+' or 'dnssrv+' to detect store API servers
-                                 through respective DNS lookups.
-      --store-strict=<staticstore> ...
-                                 Deprecation Warning - This flag is deprecated
-                                 and replaced with `endpoint-strict`. Addresses
-                                 of only statically configured store API servers
-                                 that are always used, even if the health check
-                                 fails. Useful if you have a caching layer on
-                                 top.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
@@ -532,11 +529,11 @@ Flags:
       --store.sd-dns-interval=30s
                                  Interval between DNS resolutions.
       --store.sd-files=<path> ...
-                                 Path to files that contain addresses of store
-                                 API servers. The path can be a glob pattern
-                                 (repeatable).
-      --store.sd-interval=5m     Refresh interval to re-read file SD files.
-                                 It is used as a resync fallback.
+                                 (Deprecated) Path to files that contain
+                                 addresses of store API servers. The path can be
+                                 a glob pattern (repeatable).
+      --store.sd-interval=5m     (Deprecated) Refresh interval to re-read file
+                                 SD files. It is used as a resync fallback.
       --store.unhealthy-timeout=5m
                                  Timeout before an unhealthy store is cleaned
                                  from the store UI page.

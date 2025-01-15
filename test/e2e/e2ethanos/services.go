@@ -17,9 +17,7 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/relabel"
 	"gopkg.in/yaml.v2"
 
@@ -463,26 +461,25 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		"--store.sd-dns-interval": "5s",
 		"--log.level":             infoLogLevel,
 		"--query.max-concurrent":  "1",
-		"--store.sd-interval":     "5s",
 	})
 
 	for _, repl := range q.replicaLabels {
 		args = append(args, "--query.replica-label="+repl)
 	}
 	for _, addr := range q.storeAddresses {
-		args = append(args, "--store="+addr)
+		args = append(args, "--endpoint="+addr)
 	}
 	for _, addr := range q.ruleAddresses {
-		args = append(args, "--rule="+addr)
+		args = append(args, "--endpoint="+addr)
 	}
 	for _, addr := range q.targetAddresses {
-		args = append(args, "--target="+addr)
+		args = append(args, "--endpoint="+addr)
 	}
 	for _, addr := range q.metadataAddresses {
-		args = append(args, "--metadata="+addr)
+		args = append(args, "--endpoint="+addr)
 	}
 	for _, addr := range q.exemplarAddresses {
-		args = append(args, "--exemplar="+addr)
+		args = append(args, "--endpoint="+addr)
 	}
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
@@ -504,21 +501,27 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
-		fileSD := []*targetgroup.Group{{}}
+		type EndpointSpec struct{ Address string }
+
+		endpoints := make([]EndpointSpec, 0)
 		for _, a := range q.fileSDStoreAddresses {
-			fileSD[0].Targets = append(fileSD[0].Targets, model.LabelSet{model.AddressLabel: model.LabelValue(a)})
+			endpoints = append(endpoints, EndpointSpec{Address: a})
 		}
 
-		b, err := yaml.Marshal(fileSD)
+		endpointSDConfig := struct {
+			Endpoints []EndpointSpec `yaml:"endpoints"`
+		}{Endpoints: endpoints}
+		b, err := yaml.Marshal(endpointSDConfig)
 		if err != nil {
 			return nil, err
 		}
 
-		if err := os.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
+		if err := os.WriteFile(q.Dir()+"/endpoint-sd-config.yaml", b, 0600); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
-		args = append(args, "--store.sd-files="+filepath.Join(q.InternalDir(), "filesd.yaml"))
+		args = append(args, "--endpoint.sd-config-file="+filepath.Join(q.InternalDir(), "endpoint-sd-config.yaml"))
+		args = append(args, "--endpoint.sd-config-reload-interval=5s")
 	}
 	if q.routePrefix != "" {
 		args = append(args, "--web.route-prefix="+q.routePrefix)
