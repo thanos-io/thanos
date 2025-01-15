@@ -598,7 +598,7 @@ Flags:
                                  window for ingestion of out-of-order samples.
                                  Disabled (0s) by defaultPlease note if you
                                  enable this option and you use compactor, make
-                                 sure you have the --enable-vertical-compaction
+                                 sure you have the --compact.enable-vertical-compaction
                                  flag enabled, otherwise you might risk
                                  compactor halt.
       --tsdb.out-of-order.cap-max=0
