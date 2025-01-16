@@ -26,6 +26,8 @@ type writeErrorTracker struct {
 	numExemplarsOutOfOrder  int
 	numExemplarsDuplicate   int
 	numExemplarsLabelLength int
+
+	numMetadataErrors int
 }
 
 func (a *writeErrorTracker) addLabelsError(err error, lset *labelpb.ZLabelSet, logger log.Logger) {
@@ -160,4 +162,12 @@ func (a *writeErrorTracker) collectErrors(tLogger log.Logger) writeErrors {
 		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", a.numExemplarsLabelLength))
 	}
 	return errs
+}
+
+func (a *writeErrorTracker) addMetadataError(err error, tLogger log.Logger) {
+	if err == nil {
+		return
+	}
+	a.numMetadataErrors++
+	level.Debug(tLogger).Log("msg", "Error on ingesting metadata", "err", err)
 }
