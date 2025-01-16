@@ -117,6 +117,7 @@ require (
 )
 
 require (
+	github.com/tjhop/slog-gokit v0.1.2
 	go.opentelemetry.io/collector/pdata v1.14.1
 	go.opentelemetry.io/collector/semconv v0.108.1
 )
