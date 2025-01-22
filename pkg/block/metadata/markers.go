@@ -81,6 +81,8 @@ const (
 	OutOfOrderChunksNoCompactReason = "block-index-out-of-order-chunk"
 	// DownsampleVerticalCompactionNoCompactReason is a reason to not compact overlapping downsampled blocks as it does not make sense e.g. how to vertically compact the average.
 	DownsampleVerticalCompactionNoCompactReason = "downsample-vertical-compaction"
+	// TenantRetentionExpired is a reason to delete block as it's per tenant retention is expired.
+	TenantRetentionExpired = "tenant-retention-expired"
 )
 
 // NoCompactMark marker stores reason of block being excluded from compaction if needed.

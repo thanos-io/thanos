@@ -12,7 +12,10 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/types"
+	cache "github.com/hashicorp/golang-lru/v2"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
 
@@ -381,32 +384,118 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 	return res, nil
 }
 
+func matcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
+	var t labels.MatchType
+
+	switch m.Type {
+	case LabelMatcher_EQ:
+		t = labels.MatchEqual
+	case LabelMatcher_NEQ:
+		t = labels.MatchNotEqual
+	case LabelMatcher_RE:
+		t = labels.MatchRegexp
+	case LabelMatcher_NRE:
+		t = labels.MatchNotRegexp
+	default:
+		return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
+	}
+	pm, err := labels.NewMatcher(t, m.Name, m.Value)
+	if err != nil {
+		return nil, err
+	}
+	return pm, nil
+}
+
 // MatchersToPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
 func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
-		var t labels.MatchType
-
-		switch m.Type {
-		case LabelMatcher_EQ:
-			t = labels.MatchEqual
-		case LabelMatcher_NEQ:
-			t = labels.MatchNotEqual
-		case LabelMatcher_RE:
-			t = labels.MatchRegexp
-		case LabelMatcher_NRE:
-			t = labels.MatchNotRegexp
-		default:
-			return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
-		}
-		m, err := labels.NewMatcher(t, m.Name, m.Value)
+		m, err := matcherToPromMatcher(m)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, m)
 	}
 	return res, nil
+}
+
+type MatcherConverter struct {
+	cache         *cache.TwoQueueCache[LabelMatcher, *labels.Matcher]
+	cacheCapacity int
+	metrics       *matcherConverterMetrics
+}
+
+type matcherConverterMetrics struct {
+	cacheTotalCount prometheus.Counter
+	cacheHitCount   prometheus.Counter
+	cacheSizeGauge  prometheus.Gauge
+}
+
+func newMatcherConverterMetrics(reg prometheus.Registerer) *matcherConverterMetrics {
+	var m matcherConverterMetrics
+
+	m.cacheTotalCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_store_matcher_converter_cache_total",
+		Help: "Total number of cache access.",
+	})
+	m.cacheHitCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_store_matcher_converter_cache_hit_total",
+		Help: "Total number of cache hits.",
+	})
+	m.cacheSizeGauge = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_store_matcher_converter_cache_size",
+		Help: "Current size of the cache.",
+	})
+
+	return &m
+}
+
+// NewMatcherConverter creates a new MatcherConverter with given capacity.
+func NewMatcherConverter(cacheCapacity int, reg prometheus.Registerer) (*MatcherConverter, error) {
+	c, err := cache.New2Q[LabelMatcher, *labels.Matcher](cacheCapacity)
+	if err != nil {
+		return nil, err
+	}
+	metrics := newMatcherConverterMetrics(reg)
+	return &MatcherConverter{cache: c, cacheCapacity: cacheCapacity, metrics: metrics}, nil
+}
+
+// MatchersToPromMatchers converts proto label matchers to Prometheus label matchers. It caches regex conversions.
+func (c *MatcherConverter) MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
+	res := make([]*labels.Matcher, 0, len(ms))
+	for _, m := range ms {
+		if m.Type != LabelMatcher_RE && m.Type != LabelMatcher_NRE {
+			// EQ and NEQ are very cheap, so we don't cache them.
+			pm, err := matcherToPromMatcher(m)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, pm)
+			continue
+		}
+		c.metrics.cacheTotalCount.Inc()
+		if pm, ok := c.cache.Get(m); ok {
+			// cache hit
+			c.metrics.cacheHitCount.Inc()
+			res = append(res, pm)
+			continue
+		}
+		// cache miss
+		pm, err := matcherToPromMatcher(m)
+		if err != nil {
+			return nil, err
+		}
+		c.cache.Add(m, pm)
+		res = append(res, pm)
+	}
+	c.metrics.cacheSizeGauge.Set(float64(c.cache.Len()))
+	return res, nil
+}
+
+// Get all keys from the cache for debugging.
+func (c *MatcherConverter) Keys() []LabelMatcher {
+	return c.cache.Keys()
 }
 
 // MatchersToString converts label matchers to string format.

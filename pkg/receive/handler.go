@@ -1073,6 +1073,12 @@ func quorumReached(successes []int, successThreshold int) bool {
 
 // RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
+	if rejected, msg := h.Limiter.ShouldRejectNewRequest(); rejected {
+		return nil, status.Error(codes.ResourceExhausted, msg)
+	}
+	// NB: ShouldRejectNewRequest() increments the number of pending requests only when it returns false.
+	defer h.Limiter.DecrementPendingRequests()
+
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 

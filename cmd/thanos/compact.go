@@ -436,6 +436,12 @@ func runCompact(
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
+	retentionByTenant, err := compact.ParesRetentionPolicyByTenant(logger, *conf.retentionTenants)
+	if err != nil {
+		level.Error(logger).Log("msg", "failed to parse retention policy by tenant", "err", err)
+		return err
+	}
+
 	var cleanMtx sync.Mutex
 	// TODO(GiedriusS): we could also apply retention policies here but the logic would be a bit more complex.
 	cleanPartialMarked := func() error {
@@ -456,6 +462,17 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
+		// this should happen before any compaction to remove unnecessary process on backlogs beyond retention.
+		if len(retentionByTenant) != 0 && len(sy.Metas()) == 0 {
+			level.Info(logger).Log("msg", "sync before tenant retention due to no blocks")
+			if err := sy.SyncMetas(ctx); err != nil {
+				return errors.Wrap(err, "sync before tenant retention")
+			}
+		}
+		if err := compact.ApplyRetentionPolicyByTenant(ctx, logger, insBkt, sy.Metas(), retentionByTenant, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, metadata.TenantRetentionExpired)); err != nil {
+			return errors.Wrap(err, "retention by tenant failed")
+		}
+
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "whole compaction error")
 		}
@@ -726,6 +743,7 @@ type compactConfig struct {
 	objStore                                       extflag.PathOrContent
 	consistencyDelay                               time.Duration
 	retentionRaw, retentionFiveMin, retentionOneHr model.Duration
+	retentionTenants                               *[]string
 	wait                                           bool
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
@@ -781,6 +799,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("0d").SetValue(&cc.retentionFiveMin)
 	cmd.Flag("retention.resolution-1h", "How long to retain samples of resolution 2 (1 hour) in bucket. Setting this to 0d will retain samples of this resolution forever").
 		Default("0d").SetValue(&cc.retentionOneHr)
+	cc.retentionTenants = cmd.Flag("retention.tenant", "How long to retain samples in bucket per tenant. Setting this to 0d will retain samples of this resolution forever").Strings()
 
 	// TODO(kakkoyun, pgough): https://github.com/thanos-io/thanos/issues/2266.
 	cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").

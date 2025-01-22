@@ -157,7 +157,6 @@ type instrumentedStoreServer struct {
 	chunksRequested prometheus.Histogram
 }
 
-// NewInstrumentedStoreServer creates a new instrumentedStoreServer.
 func NewInstrumentedStoreServer(reg prometheus.Registerer, store storepb.StoreServer) storepb.StoreServer {
 	return &instrumentedStoreServer{
 		StoreServer: store,
@@ -176,6 +175,7 @@ func NewInstrumentedStoreServer(reg prometheus.Registerer, store storepb.StoreSe
 
 func (s *instrumentedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	instrumented := newInstrumentedServer(srv)
+
 	if err := s.StoreServer.Series(req, instrumented); err != nil {
 		return err
 	}

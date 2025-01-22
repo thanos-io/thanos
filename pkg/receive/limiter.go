@@ -18,6 +18,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+
+	"go.uber.org/atomic"
 )
 
 // Limiter is responsible for managing the configuration and initialization of
@@ -35,6 +37,19 @@ type Limiter struct {
 	configReloadFailedCounter prometheus.Counter
 	receiverMode              ReceiverMode
 	configReloadTimer         time.Duration
+
+	// Reject a request if this limit is reached.
+	// This filed is set at the instance creation and never changes afterwards.
+	// So it's safe to read it without a lock.
+	maxPendingRequests        int32
+	maxPendingRequestLimitHit prometheus.Counter
+	pendingRequests           atomic.Int32
+	pendingRequestsGauge      prometheus.Gauge
+}
+
+type LimiterOptions struct {
+	// Value 0 disables the max pending request limiting hehavior.
+	MaxPendingRequests int32
 }
 
 // headSeriesLimiter encompasses active/head series limiting logic.
@@ -62,16 +77,52 @@ func (l *Limiter) HeadSeriesLimiter() headSeriesLimiter {
 	return l.headSeriesLimiter
 }
 
+func (l *Limiter) ShouldRejectNewRequest() (bool, string) {
+	// maxPendingRequests doesn't change once set when a limiter instance is created.
+	// So, it's safe to read it without a lock.
+	if l.maxPendingRequests > 0 {
+		if pendingRequests := l.pendingRequests.Load(); pendingRequests >= l.maxPendingRequests {
+			if l.maxPendingRequestLimitHit != nil {
+				l.maxPendingRequestLimitHit.Inc()
+			}
+			if l.pendingRequestsGauge != nil {
+				l.pendingRequestsGauge.Set(float64(pendingRequests))
+			}
+			return true, fmt.Sprintf("too many pending write requests: %d >= %d", l.pendingRequests.Load(), l.maxPendingRequests)
+		}
+	}
+	newValue := l.pendingRequests.Add(1)
+	if l.pendingRequestsGauge != nil {
+		l.pendingRequestsGauge.Set(float64(newValue))
+	}
+	return false, ""
+}
+
+func (l *Limiter) DecrementPendingRequests() {
+	l.pendingRequests.Add(-1)
+}
+
 // NewLimiter creates a new *Limiter given a configuration and prometheus
 // registerer.
 func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMode, logger log.Logger, configReloadTimer time.Duration) (*Limiter, error) {
+	return NewLimiterWithOptions(configFile, reg, r, logger, configReloadTimer, LimiterOptions{})
+}
+
+func NewLimiterWithOptions(
+	configFile fileContent,
+	reg prometheus.Registerer,
+	r ReceiverMode,
+	logger log.Logger,
+	configReloadTimer time.Duration,
+	opts LimiterOptions) (*Limiter, error) {
 	limiter := &Limiter{
-		writeGate:         gate.NewNoop(),
-		requestLimiter:    &noopRequestLimiter{},
-		headSeriesLimiter: NewNopSeriesLimit(),
-		logger:            logger,
-		receiverMode:      r,
-		configReloadTimer: configReloadTimer,
+		writeGate:          gate.NewNoop(),
+		requestLimiter:     &noopRequestLimiter{},
+		headSeriesLimiter:  NewNopSeriesLimit(),
+		logger:             logger,
+		receiverMode:       r,
+		configReloadTimer:  configReloadTimer,
+		maxPendingRequests: opts.MaxPendingRequests,
 	}
 
 	if reg != nil {
@@ -90,6 +141,26 @@ func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMod
 				Subsystem: "receive",
 				Name:      "limits_config_reload_err_total",
 				Help:      "How many times the limit configuration failed to reload.",
+			},
+		)
+		limiter.configReloadFailedCounter = promauto.With(limiter.registerer).NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "limits_config_reload_err_total",
+				Help:      "How many times the limit configuration failed to reload.",
+			},
+		)
+		limiter.maxPendingRequestLimitHit = promauto.With(limiter.registerer).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_max_pending_write_request_limit_hit_total",
+				Help: "Number of times the max pending write request limit was hit",
+			},
+		)
+		limiter.pendingRequestsGauge = promauto.With(limiter.registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_pending_write_requests",
+				Help: "Number of pending write requests",
 			},
 		)
 	}
