@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,17 +19,20 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/responseset"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -2361,6 +2363,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 					},
 				})
 
+				require.Error(t, err)
 				testutil.Assert(t, strings.Contains(err.Error(), context.Canceled.Error()))
 			})
 		})
@@ -2501,12 +2504,19 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 	} {
 		t.Run(tcase.tname, func(t *testing.T) {
 			h := NewResponseDeduplicator(NewProxyResponseLoserTree(
-				&eagerRespSet{
-					closeSeries:       func() {},
-					cl:                nopClientSendCloser{},
-					wg:                &sync.WaitGroup{},
-					bufferedResponses: tcase.responses,
-				},
+				responseset.NewEagerResponseSet(
+					opentracing.StartSpan("test"),
+					1*time.Second,
+					"test",
+					[]labels.Labels{labels.FromStrings("a", "1")},
+					func() {},
+					&nopClientSendCloser{
+						responses: tcase.responses,
+					},
+					func(data []*storepb.SeriesResponse) {},
+					func(data *storepb.SeriesResponse) bool { return true },
+					func() {},
+				),
 			))
 			tcase.testFn(tcase.responses, h)
 		})
