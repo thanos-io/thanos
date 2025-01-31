@@ -7,8 +7,11 @@ import (
 	"context"
 	"os"
 	"path"
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"gopkg.in/yaml.v2"
 
@@ -52,15 +55,17 @@ func TestRelabeller_ConfigReload(t *testing.T) {
 
 	// Rewrite the relabels file in temp with an invalid file, should not update the config.
 	testutil.Ok(t, relabelFile.Rewrite(invalidRelabels))
-	time.Sleep(1 * time.Second)
-	testutil.Equals(t, origRelabelsConfig, relabeller.RelabelConfig())
+	require.Never(t, func() bool {
+		return !reflect.DeepEqual(origRelabelsConfig, relabeller.RelabelConfig())
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// Rewrite the relabels file in temp with a different valid file.
 	testutil.Ok(t, relabelFile.Rewrite(newRelabels))
 	newRelabelsConfig, err := parseRelabel("./testdata/relabel_config/good_relabels2.yaml")
 	testutil.Ok(t, err)
-	time.Sleep(1 * time.Second)
-	testutil.Equals(t, newRelabelsConfig, relabeller.RelabelConfig())
+	require.Eventually(t, func() bool {
+		return reflect.DeepEqual(newRelabelsConfig, relabeller.RelabelConfig())
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func parseRelabel(path string) (RelabelConfig, error) {

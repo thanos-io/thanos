@@ -134,6 +134,9 @@ func (r *Relabeller) StartConfigReloader(ctx context.Context) error {
 }
 
 func (r *Relabeller) CanReload() bool {
+	if r.configReloadTimer == 0 {
+		return false
+	}
 	if r.configPathOrContent == nil {
 		return false
 	}
