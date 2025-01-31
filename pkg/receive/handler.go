@@ -112,7 +112,7 @@ type Options struct {
 	DialOpts                []grpc.DialOption
 	ForwardTimeout          time.Duration
 	MaxBackoff              time.Duration
-	RelabelConfigs          []*relabel.Config
+	Relabeller              *Relabeller
 	TSDBStats               TSDBStats
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
@@ -1104,13 +1104,14 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 
 // relabel relabels the time series labels in the remote write request.
 func (h *Handler) relabel(wreq *prompb.WriteRequest) {
-	if len(h.options.RelabelConfigs) == 0 {
+	relabelConfigs := h.options.Relabeller.RelabelConfig()
+	if len(relabelConfigs) == 0 {
 		return
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), relabelConfigs...)
 		if !keep {
 			continue
 		}

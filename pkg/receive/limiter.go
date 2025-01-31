@@ -64,12 +64,6 @@ type requestLimiter interface {
 	AllowSamples(tenant string, amount int64) bool
 }
 
-// fileContent is an interface to avoid a direct dependency on kingpin or extkingpin.
-type fileContent interface {
-	Content() ([]byte, error)
-	Path() string
-}
-
 func (l *Limiter) HeadSeriesLimiter() headSeriesLimiter {
 	l.headSeriesLimiterMtx.Lock()
 	defer l.headSeriesLimiterMtx.Unlock()
@@ -133,14 +127,6 @@ func NewLimiterWithOptions(
 				Subsystem: "receive",
 				Name:      "limits_config_reload_total",
 				Help:      "How many times the limit configuration was reloaded",
-			},
-		)
-		limiter.configReloadFailedCounter = promauto.With(limiter.registerer).NewCounter(
-			prometheus.CounterOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Name:      "limits_config_reload_err_total",
-				Help:      "How many times the limit configuration failed to reload.",
 			},
 		)
 		limiter.configReloadFailedCounter = promauto.With(limiter.registerer).NewCounter(

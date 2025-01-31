@@ -1,0 +1,8 @@
+- action: keep
+  source_labels: [__name__]
+  regex: "http_requests_total|cpu_usage"
+- action: labelmap
+  regex: "__meta_kubernetes_pod_label_(.+)"  # Map Kubernetes labels
+- action: drop
+  source_labels: [__name__]
+  regex: "^zippy_data_apply_latency_millis_bucket$"

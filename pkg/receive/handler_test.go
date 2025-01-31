@@ -1733,7 +1733,7 @@ func TestRelabel(t *testing.T) {
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
 			h := NewHandler(nil, &Options{
-				RelabelConfigs: tcase.relabel,
+				Relabeller: newRelabelerWithConstantConfig(tcase.relabel, nil),
 			})
 
 			h.relabel(&tcase.writeRequest)

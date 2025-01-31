@@ -27,12 +27,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/wlog"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -231,13 +229,10 @@ func runReceive(
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
 
-	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	relabeller, err := receive.NewRelabeller(conf.relabelConfigPath, reg, logger, conf.relabelConfigReloadTimer)
+
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
-	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
 	}
 
 	dbs := receive.NewMultiTSDB(
@@ -286,29 +281,46 @@ func runReceive(
 	}
 
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:               writer,
-		ListenAddress:        conf.rwAddress,
-		Registry:             reg,
-		Endpoint:             conf.endpoint,
-		TenantHeader:         conf.tenantHeader,
-		TenantField:          conf.tenantField,
-		DefaultTenantID:      conf.defaultTenantID,
-		ReplicaHeader:        conf.replicaHeader,
-		ReplicationFactor:    conf.replicationFactor,
-		RelabelConfigs:       relabelConfig,
-		ReceiverMode:         receiveMode,
-		Tracer:               tracer,
-		TLSConfig:            rwTLSConfig,
-		SplitTenantLabelName: conf.splitTenantLabelName,
-		DialOpts:             dialOpts,
-		ForwardTimeout:       time.Duration(*conf.forwardTimeout),
-		MaxBackoff:           time.Duration(*conf.maxBackoff),
-		TSDBStats:            dbs,
-		Limiter:              limiter,
-
+		Writer:                  writer,
+		ListenAddress:           conf.rwAddress,
+		Registry:                reg,
+		Endpoint:                conf.endpoint,
+		TenantHeader:            conf.tenantHeader,
+		TenantField:             conf.tenantField,
+		DefaultTenantID:         conf.defaultTenantID,
+		ReplicaHeader:           conf.replicaHeader,
+		ReplicationFactor:       conf.replicationFactor,
+		Relabeller:              relabeller,
+		ReceiverMode:            receiveMode,
+		Tracer:                  tracer,
+		TLSConfig:               rwTLSConfig,
+		SplitTenantLabelName:    conf.splitTenantLabelName,
+		DialOpts:                dialOpts,
+		ForwardTimeout:          time.Duration(*conf.forwardTimeout),
+		MaxBackoff:              time.Duration(*conf.maxBackoff),
+		TSDBStats:               dbs,
+		Limiter:                 limiter,
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 	})
+
+	{
+		if relabeller.CanReload() {
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				level.Debug(logger).Log("msg", "relabel config initialized with file watcher.")
+				if err := relabeller.StartConfigReloader(ctx); err != nil {
+					level.Error(logger).Log("msg", "initializing relabel config reloading.", "err", err)
+					return err
+				}
+				level.Info(logger).Log("msg", "relabel config reloading initialized.")
+				<-ctx.Done()
+				return nil
+			}, func(error) {
+				cancel()
+			})
+		}
+	}
 
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -974,8 +986,9 @@ type receiveConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 
-	reqLogConfig      *extflag.PathOrContent
-	relabelConfigPath *extflag.PathOrContent
+	reqLogConfig             *extflag.PathOrContent
+	relabelConfigPath        *extflag.PathOrContent
+	relabelConfigReloadTimer time.Duration
 
 	writeLimitsConfig       *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
@@ -1073,6 +1086,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
 	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
+	cmd.Flag("receive.relabel-config-reload-timer", "Minimum amount of time to pass for the relabel configuration to be reloaded. Helps to avoid excessive reloads.").
+		Default("1s").Hidden().DurationVar(&rc.relabelConfigReloadTimer)
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
