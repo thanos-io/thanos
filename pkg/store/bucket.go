@@ -585,7 +585,7 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	}
 }
 
-// WithPostingGroupMaxKeySeriesRatio configures a threshold to mark a posting group as lazy if it has more add keys.
+// WithPostingGroupMaxKeySeriesRatio configures a threshold to mark a posting group as lazy if it has more add keys or remove keys.
 func WithPostingGroupMaxKeySeriesRatio(postingGroupMaxKeySeriesRatio float64) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.postingGroupMaxKeySeriesRatio = postingGroupMaxKeySeriesRatio
@@ -1076,7 +1076,7 @@ type blockSeriesClient struct {
 
 	lazyExpandedPostingEnabled bool
 	seriesMatchRatio           float64
-	// Mark posting group as lazy if it adds too many keys. 0 to disable.
+	// Mark posting group as lazy if it adds or removes too many keys. 0 to disable.
 	postingGroupMaxKeySeriesRatio                 float64
 	lazyExpandedPostingsCount                     prometheus.Counter
 	lazyExpandedPostingGroupByReason              *prometheus.CounterVec
