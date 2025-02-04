@@ -48,9 +48,9 @@ func TestFilterCache(t *testing.T) {
 		{
 			name: "empty enabled items",
 			verifyFunc: func(t *testing.T, c IndexCache) {
-				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
-				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
-				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant, 0)
+				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant, 0)
+				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant, 0)
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
@@ -69,9 +69,9 @@ func TestFilterCache(t *testing.T) {
 			name:         "all enabled items",
 			enabledItems: []string{CacheTypeSeries, CacheTypePostings, CacheTypeExpandedPostings},
 			verifyFunc: func(t *testing.T, c IndexCache) {
-				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
-				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
-				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant, 0)
+				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant, 0)
+				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant, 0)
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
@@ -90,9 +90,9 @@ func TestFilterCache(t *testing.T) {
 			name:         "only enable postings",
 			enabledItems: []string{CacheTypePostings},
 			verifyFunc: func(t *testing.T, c IndexCache) {
-				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
-				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
-				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant, 0)
+				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant, 0)
+				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant, 0)
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
@@ -110,9 +110,9 @@ func TestFilterCache(t *testing.T) {
 			name:         "only enable expanded postings",
 			enabledItems: []string{CacheTypeExpandedPostings},
 			verifyFunc: func(t *testing.T, c IndexCache) {
-				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
-				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
-				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant, 0)
+				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant, 0)
+				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant, 0)
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 1, len(missed))
@@ -131,9 +131,9 @@ func TestFilterCache(t *testing.T) {
 			name:         "only enable series",
 			enabledItems: []string{CacheTypeSeries},
 			verifyFunc: func(t *testing.T, c IndexCache) {
-				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant)
-				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant)
-				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant)
+				c.StorePostings(blockID, postingKeys[0], testPostingData, tenancy.DefaultTenant, 0)
+				c.StoreExpandedPostings(blockID, expandedPostingsMatchers, testExpandedPostingsData, tenancy.DefaultTenant, 0)
+				c.StoreSeries(blockID, 1, testSeriesData, tenancy.DefaultTenant, 0)
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 1, len(missed))
