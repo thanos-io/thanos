@@ -65,7 +65,7 @@ const (
 
 var corsHeaders = map[string]string{
 	"Access-Control-Allow-Headers":  "Accept, Accept-Encoding, Authorization, Content-Type, Origin",
-	"Access-Control-Allow-Methods":  "GET, OPTIONS",
+	"Access-Control-Allow-Methods":  "GET, POST, OPTIONS",
 	"Access-Control-Allow-Origin":   "*",
 	"Access-Control-Expose-Headers": "Date",
 }
