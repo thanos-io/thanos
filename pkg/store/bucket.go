@@ -766,8 +766,15 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		return metaFetchErr
 	}
 
+	s.mtx.RLock()
+	keys := make([]ulid.ULID, 0, len(s.blocks))
+	for k := range s.blocks {
+		keys = append(keys, k)
+	}
+	s.mtx.RUnlock()
+
 	// Drop all blocks that are no longer present in the bucket.
-	for id := range s.blocks {
+	for _, id := range keys {
 		if _, ok := metas[id]; ok {
 			continue
 		}
