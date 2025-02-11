@@ -24,6 +24,10 @@ type seriesStatsAggregator struct {
 	seriesStats storepb.SeriesStatsCounter
 }
 
+func (s *seriesStatsAggregator) GetSeriesStatsCounter() storepb.SeriesStatsCounter {
+	return s.seriesStats
+}
+
 type seriesStatsAggregatorFactory struct {
 	queryDuration    *prometheus.HistogramVec
 	seriesLeBuckets  []float64
@@ -81,6 +85,7 @@ func (s *seriesStatsAggregator) Aggregate(stats storepb.SeriesStatsCounter) {
 	s.seriesStats.Series += stats.Series
 	s.seriesStats.Samples += stats.Samples
 	s.seriesStats.Chunks += stats.Chunks
+	s.seriesStats.Bytes += stats.Bytes
 }
 
 // Observe commits the aggregated SeriesStatsCounter as an observation.
@@ -124,10 +129,15 @@ type SeriesQueryPerformanceMetricsAggregatorFactory interface {
 type SeriesQueryPerformanceMetricsAggregator interface {
 	Aggregate(seriesStats storepb.SeriesStatsCounter)
 	Observe(duration float64)
+	GetSeriesStatsCounter() storepb.SeriesStatsCounter
 }
 
 // NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.
 type NoopSeriesStatsAggregator struct{}
+
+func (s *NoopSeriesStatsAggregator) GetSeriesStatsCounter() storepb.SeriesStatsCounter {
+	return storepb.SeriesStatsCounter{}
+}
 
 func (s *NoopSeriesStatsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
