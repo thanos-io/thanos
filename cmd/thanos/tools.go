@@ -29,6 +29,7 @@ func registerTools(app *extkingpin.App) {
 	registerBucket(cmd)
 	registerCheckRules(cmd)
 	registerStreamMetric(cmd)
+	registerStreamerTool(cmd)
 }
 
 func (tc *checkRulesConfig) registerFlag(cmd extkingpin.FlagClause) *checkRulesConfig {
