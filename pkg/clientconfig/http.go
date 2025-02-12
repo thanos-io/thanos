@@ -30,6 +30,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
+	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
 // HTTPConfig is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
@@ -363,7 +364,7 @@ func NewClient(logger log.Logger, cfg HTTPEndpointsConfig, client *http.Client, 
 		}
 		// We provide an empty registry and ignore metrics for now.
 		sdReg := prometheus.NewRegistry()
-		fileSD, err := file.NewDiscovery(&fileSDCfg, logger, fileSDCfg.NewDiscovererMetrics(sdReg, discovery.NewRefreshMetrics(sdReg)))
+		fileSD, err := file.NewDiscovery(&fileSDCfg, logutil.GoKitLogToSlog(logger), fileSDCfg.NewDiscovererMetrics(sdReg, discovery.NewRefreshMetrics(sdReg)))
 		if err != nil {
 			return nil, err
 		}

@@ -3270,7 +3270,7 @@ func (r *bucketIndexReader) decodeCachedPostings(b []byte) (index.Postings, []fu
 			closeFns = append(closeFns, l.(closeablePostings).close)
 		}
 	} else {
-		_, l, err = r.dec.Postings(b)
+		_, l, err = index.DecodePostingsRaw(encoding.Decbuf{B: b})
 	}
 	return l, closeFns, err
 }
