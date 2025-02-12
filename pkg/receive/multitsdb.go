@@ -34,6 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/receive/expandedpostingscache"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -720,6 +721,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	opts := *t.tsdbOpts
 	opts.BlocksToDelete = tenant.blocksToDelete
 	opts.EnableDelayedCompaction = true
+	opts.CompactionDelayMaxPercent = tsdb.DefaultCompactionDelayMaxPercent
 
 	opts.BlockChunkQuerierFunc = func(b tsdb.BlockReader, mint, maxt int64) (storage.ChunkQuerier, error) {
 		if expandedPostingsCache != nil {
@@ -739,7 +741,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	opts.EnableOverlappingCompaction = false
 	s, err := tsdb.Open(
 		dataDir,
-		logger,
+		logutil.GoKitLogToSlog(logger),
 		reg,
 		&opts,
 		nil,

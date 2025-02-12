@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/gate"
+	"github.com/thanos-io/thanos/pkg/logutil"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -378,7 +379,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			timeout := 5 * time.Minute
 			e := promql.NewEngine(promql.EngineOpts{
-				Logger:        logger,
+				Logger:        logutil.GoKitLogToSlog(logger),
 				Timeout:       timeout,
 				MaxSamples:    math.MaxInt64,
 				LookbackDelta: tcase.lookbackDelta,
@@ -765,7 +766,7 @@ func TestQuerier_Select(t *testing.T) {
 	} {
 		timeout := 5 * time.Second
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:     logger,
+			Logger:     logutil.GoKitLogToSlog(logger),
 			Timeout:    timeout,
 			MaxSamples: math.MaxInt64,
 		})
@@ -1091,7 +1092,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 		})
 
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:     logger,
+			Logger:     logutil.GoKitLogToSlog(logger),
 			Timeout:    timeout,
 			MaxSamples: math.MaxInt64,
 		})
@@ -1161,7 +1162,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 		})
 
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:     logger,
+			Logger:     logutil.GoKitLogToSlog(logger),
 			Timeout:    timeout,
 			MaxSamples: math.MaxInt64,
 		})

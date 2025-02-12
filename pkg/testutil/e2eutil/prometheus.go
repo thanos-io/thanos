@@ -27,6 +27,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -600,7 +601,7 @@ func createBlock(
 	if err := g.Wait(); err != nil {
 		return id, err
 	}
-	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, promslog.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -666,7 +667,7 @@ func createBlock(
 }
 
 func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
-	r, err := index.NewFileReader(fn)
+	r, err := index.NewFileReader(fn, index.DecodePostingsRaw)
 	if err != nil {
 		return 0, errors.Wrap(err, "open index file")
 	}
@@ -764,7 +765,7 @@ func CreateBlockWithChurn(
 		return id, errors.Wrap(err, "commit")
 	}
 
-	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, promslog.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}

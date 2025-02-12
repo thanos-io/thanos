@@ -185,5 +185,5 @@ func compactSeries(ctx context.Context, sReaders ...seriesReader) (symbols index
 		return symbols, set, nil
 	}
 	// Merge series using compacting chunk series merger.
-	return symbols, storage.NewMergeChunkSeriesSet(sets, storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)), nil
+	return symbols, storage.NewMergeChunkSeriesSet(sets, 0, storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)), nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,11 @@ func (s sample) FH() *histogram.FloatHistogram {
 
 func (s sample) Type() chunkenc.ValueType {
 	return chunkenc.ValFloat
+}
+
+func (s sample) Copy() chunks.Sample {
+	c := sample{t: s.t, f: s.f}
+	return c
 }
 
 type series struct {
