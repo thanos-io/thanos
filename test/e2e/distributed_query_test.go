@@ -127,7 +127,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 		30*time.Minute,
 		labels.FromStrings("prometheus", "p1", "replica", "0"),
 		0,
-		metadata.NoneFunc,
+		metadata.NoneFunc, nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt1, path.Join(dir1, blockID1.String()), blockID1.String()))
@@ -141,7 +141,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 		30*time.Minute,
 		labels.FromStrings("prometheus", "p1", "replica", "0"),
 		0,
-		metadata.NoneFunc,
+		metadata.NoneFunc, nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt1, path.Join(dir1, blockID2.String()), blockID2.String()))
@@ -220,7 +220,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 		30*time.Minute,
 		labels.FromStrings("prometheus", "p1", "replica", "0"),
 		0,
-		metadata.NoneFunc,
+		metadata.NoneFunc, nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt1, path.Join(dir1, blockID1.String()), blockID1.String()))
@@ -234,7 +234,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 		30*time.Minute,
 		labels.FromStrings("prometheus", "p1", "replica", "0"),
 		0,
-		metadata.NoneFunc,
+		metadata.NoneFunc, nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt1, path.Join(dir1, blockID2.String()), blockID2.String()))
