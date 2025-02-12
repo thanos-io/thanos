@@ -34,7 +34,7 @@ func TestRewrite(t *testing.T) {
 		labels.New(labels.Label{Name: "a", Value: "4"}),
 		labels.New(labels.Label{Name: "a", Value: "1"}),
 		labels.New(labels.Label{Name: "b", Value: "1"}),
-	}, 150, 0, 1000, labels.EmptyLabels(), 124, metadata.NoneFunc)
+	}, 150, 0, 1000, labels.EmptyLabels(), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
 	ir, err := index.NewFileReader(filepath.Join(tmpDir, b.String(), IndexFilename), index.DecodePostingsRaw)

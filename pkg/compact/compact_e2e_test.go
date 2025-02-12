@@ -433,7 +433,7 @@ func createBlock(t testing.TB, ctx context.Context, prepareDir string, b blockge
 	if b.numSamples == 0 {
 		id, err = e2eutil.CreateEmptyBlock(prepareDir, b.mint, b.maxt, b.extLset, b.res)
 	} else {
-		id, err = e2eutil.CreateBlock(ctx, prepareDir, b.series, b.numSamples, b.mint, b.maxt, b.extLset, b.res, metadata.NoneFunc)
+		id, err = e2eutil.CreateBlock(ctx, prepareDir, b.series, b.numSamples, b.mint, b.maxt, b.extLset, b.res, metadata.NoneFunc, nil)
 	}
 	testutil.Ok(t, err)
 
