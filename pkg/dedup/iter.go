@@ -5,6 +5,8 @@ package dedup
 
 import (
 	"math"
+	"os"
+	"strconv"
 
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -14,6 +16,22 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
+
+var minPenalty int64
+
+func init() {
+	var err error
+	// Enable minPenalty for deduplication if the environment variable is set.
+	minPenaltyEnv, existing := os.LookupEnv("THANOS_MIN_DEDUP_PENALTY")
+	if !existing {
+		minPenaltyEnv = "0"
+	}
+
+	minPenalty, err = strconv.ParseInt(minPenaltyEnv, 10, 0)
+	if err != nil || minPenalty < 0 {
+		minPenalty = 0
+	}
+}
 
 type dedupSeriesSet struct {
 	set       storage.SeriesSet
@@ -318,7 +336,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		if it.bval != chunkenc.ValNone {
 			it.lastT = it.b.AtT()
 			it.lastIter = it.b
-			it.penB = 0
+			it.penB = minPenalty
 		}
 		return it.bval
 	}
@@ -326,7 +344,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		it.useA = true
 		it.lastT = it.a.AtT()
 		it.lastIter = it.a
-		it.penA = 0
+		it.penA = minPenalty
 		return it.aval
 	}
 	// General case where both iterators still have data. We pick the one
@@ -353,7 +371,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		} else {
 			it.penB = initialPenalty
 		}
-		it.penA = 0
+		it.penA = minPenalty
 		it.lastT = ta
 		it.lastIter = it.a
 
@@ -364,7 +382,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	} else {
 		it.penA = initialPenalty
 	}
-	it.penB = 0
+	it.penB = minPenalty
 	it.lastT = tb
 	it.lastIter = it.b
 	return it.bval
