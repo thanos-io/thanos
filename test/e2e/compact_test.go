@@ -1044,5 +1044,5 @@ func TestCompactorDownsampleNativeHistograms(t *testing.T) {
 		Type:   client.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	})
-	testutil.NotOk(t, bds.Start())
+	testutil.Ok(t, bds.Start())
 }
