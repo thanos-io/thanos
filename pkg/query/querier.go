@@ -61,6 +61,7 @@ type QueryableCreator func(
 type Options struct {
 	GroupReplicaPartialResponseStrategy bool
 	DeduplicationFunc                   string
+	RewriteAggregationLabelTo           string
 }
 
 // NewQueryableCreator creates QueryableCreator.
@@ -159,6 +160,11 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
+
+	enablePreAggregationLabelRewrite bool
+	aggregationStandardSuffixes      []string
+	aggregationLabelName             string
+	rewriteAggregationLabelTo        string
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -232,6 +238,11 @@ func newQuerierWithOpts(
 		skipChunks:              skipChunks,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
+
+		enablePreAggregationLabelRewrite: opts.RewriteAggregationLabelTo != "",
+		aggregationStandardSuffixes:      []string{":aggr", ":count", ":sum", ":min", ":max", ":avg"},
+		aggregationLabelName:             "__rollup__",
+		rewriteAggregationLabelTo:        opts.RewriteAggregationLabelTo,
 	}
 }
 
@@ -365,6 +376,47 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 }
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
+	if q.enablePreAggregationLabelRewrite {
+		hasNameLabel, needLabelRewrite := false, false
+		for _, m := range ms {
+			if m.Name == labels.MetricName {
+				hasNameLabel = true
+				if m.Type == labels.MatchEqual {
+					for _, suffix := range q.aggregationStandardSuffixes {
+						if strings.HasSuffix(m.Value, suffix) {
+							needLabelRewrite = true
+							break
+						}
+					}
+					break
+				} else {
+					level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite attempt", "reason", "non-equal name matcher", "name_matcher", m, "labels", ms)
+				}
+			}
+		}
+		if !hasNameLabel {
+			level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite", "reason", "no metric name matcher found", "labels", ms)
+		}
+		if needLabelRewrite {
+			hasAggregationLabel := false
+			for i, m := range ms {
+				if m.Name == q.aggregationLabelName {
+					hasAggregationLabel = true
+					ms[i].Type = labels.MatchEqual
+					ms[i].Value = q.rewriteAggregationLabelTo
+					break
+				}
+			}
+			if !hasAggregationLabel {
+				ms = append(ms, &labels.Matcher{
+					Name:  q.aggregationLabelName,
+					Type:  labels.MatchEqual,
+					Value: q.rewriteAggregationLabelTo,
+				})
+			}
+		}
+	}
+
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "convert matchers")
