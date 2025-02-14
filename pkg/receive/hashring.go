@@ -244,13 +244,42 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 	return c.endpoints[endpointIndex], nil
 }
 
+type tenantSet map[string]tenantMatcher
+
+func (t tenantSet) match(tenant string) (bool, error) {
+	// Fast path for the common case of direct match.
+	if mt, ok := t[tenant]; ok && isExactMatcher(mt) {
+		return true, nil
+	} else {
+		for tenantPattern, matcherType := range t {
+			switch matcherType {
+			case TenantMatcherGlob:
+				matches, err := filepath.Match(tenantPattern, tenant)
+				if err != nil {
+					return false, fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
+				}
+				if matches {
+					return true, nil
+				}
+			case TenantMatcherTypeExact:
+				// Already checked above, skipping.
+				fallthrough
+			default:
+				continue
+			}
+
+		}
+	}
+	return false, nil
+}
+
 // multiHashring represents a set of hashrings.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 type multiHashring struct {
 	cache      map[string]Hashring
 	hashrings  []Hashring
-	tenantSets []map[string]tenantMatcher
+	tenantSets []tenantSet
 
 	// We need a mutex to guard concurrent access
 	// to the cache map, as this is both written to
@@ -283,28 +312,10 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 		if t == nil {
 			found = true
 		} else {
-			// Fast path for the common case of direct match.
-			if mt, ok := t[tenant]; ok && isExactMatcher(mt) {
-				found = true
-			} else {
-				for tenantPattern, matcherType := range t {
-					switch matcherType {
-					case TenantMatcherGlob:
-						matches, err := filepath.Match(tenantPattern, tenant)
-						if err != nil {
-							return Endpoint{}, fmt.Errorf("error matching tenant pattern %s (tenant %s): %w", tenantPattern, tenant, err)
-						}
-						found = matches
-					case TenantMatcherTypeExact:
-						// Already checked above, skipping.
-						fallthrough
-					default:
-						continue
-					}
-
-				}
+			var err error
+			if found, err = t.match(tenant); err != nil {
+				return Endpoint{}, err
 			}
-
 		}
 		if found {
 			m.mu.Lock()
