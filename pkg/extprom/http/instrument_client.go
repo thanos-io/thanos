@@ -23,7 +23,7 @@ type ClientMetrics struct {
 
 // NewClientMetrics creates a new instance of ClientMetrics.
 // It will also register the metrics with the included register.
-// This ClientMetrics should be re-used for diff clients with the same purpose.
+// This ClientMetrics should be reused for diff clients with the same purpose.
 // e.g. 1 ClientMetrics should be used for all the clients that talk to Alertmanager.
 func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 	var m ClientMetrics

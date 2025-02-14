@@ -140,6 +140,63 @@ func TestHashringGet(t *testing.T) {
 				"node6": {},
 			},
 		},
+		{
+			name: "glob hashring match",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
+					Tenants:           []string{"prefix*"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+				{
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
+				},
+			},
+			nodes: map[string]struct{}{
+				"node1": {},
+				"node2": {},
+				"node3": {},
+			},
+			tenant: "prefix-1",
+		},
+		{
+			name: "glob hashring not match",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
+					Tenants:           []string{"prefix*"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+				{
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
+				},
+			},
+			nodes: map[string]struct{}{
+				"node4": {},
+				"node5": {},
+				"node6": {},
+			},
+			tenant: "suffix-1",
+		},
+		{
+			name: "glob hashring multiple matches",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
+					Tenants:           []string{"t1-*", "t2", "t3-*"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+				{
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
+				},
+			},
+			nodes: map[string]struct{}{
+				"node1": {},
+				"node2": {},
+				"node3": {},
+			},
+			tenant: "t2",
+		},
 	} {
 		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
 		require.NoError(t, err)
