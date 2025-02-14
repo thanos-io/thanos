@@ -104,6 +104,7 @@ func NewQueryableCreatorWithOptions(
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
+			reg:                 reg,
 			replicaLabels:       replicaLabels,
 			storeDebugMatchers:  storeDebugMatchers,
 			proxy:               proxy,
@@ -125,6 +126,7 @@ func NewQueryableCreatorWithOptions(
 
 type queryable struct {
 	logger               log.Logger
+	reg                  prometheus.Registerer
 	replicaLabels        []string
 	storeDebugMatchers   [][]*labels.Matcher
 	proxy                storepb.StoreServer
@@ -142,11 +144,12 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerierWithOpts(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.opts), nil
+	return newQuerierWithOpts(q.logger, q.reg, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.opts), nil
 }
 
 type querier struct {
 	logger                  log.Logger
+	reg                     prometheus.Registerer
 	mint, maxt              int64
 	deduplicationFunc       string
 	replicaLabels           []string
@@ -161,10 +164,7 @@ type querier struct {
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
 
-	enablePreAggregationLabelRewrite bool
-	aggregationStandardSuffixes      []string
-	aggregationLabelName             string
-	rewriteAggregationLabelTo        string
+	aggregationLabelRewriter *AggregationLabelRewriter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -172,6 +172,7 @@ type querier struct {
 // nolint:unparam
 func newQuerier(
 	logger log.Logger,
+	reg prometheus.Registerer,
 	mint,
 	maxt int64,
 	replicaLabels []string,
@@ -186,11 +187,12 @@ func newQuerier(
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
 ) *querier {
-	return newQuerierWithOpts(logger, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, Options{})
+	return newQuerierWithOpts(logger, reg, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, Options{})
 }
 
 func newQuerierWithOpts(
 	logger log.Logger,
+	reg prometheus.Registerer,
 	mint,
 	maxt int64,
 	replicaLabels []string,
@@ -223,6 +225,7 @@ func newQuerierWithOpts(
 	}
 	return &querier{
 		logger:        logger,
+		reg:           reg,
 		selectGate:    selectGate,
 		selectTimeout: selectTimeout,
 
@@ -239,10 +242,11 @@ func newQuerierWithOpts(
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
 
-		enablePreAggregationLabelRewrite: opts.RewriteAggregationLabelTo != "",
-		aggregationStandardSuffixes:      []string{":aggr", ":count", ":sum", ":min", ":max", ":avg"},
-		aggregationLabelName:             "__rollup__",
-		rewriteAggregationLabelTo:        opts.RewriteAggregationLabelTo,
+		aggregationLabelRewriter: NewAggregationLabelRewriter(
+			logger,
+			extprom.WrapRegistererWithPrefix("aggregation_label_rewriter_", reg),
+			opts.RewriteAggregationLabelTo,
+		),
 	}
 }
 
@@ -376,51 +380,7 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 }
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
-	if q.enablePreAggregationLabelRewrite {
-		hasNameLabel, needLabelRewrite := false, false
-		var nameLabelMatcher *labels.Matcher
-		for _, m := range ms {
-			if m.Name == labels.MetricName {
-				hasNameLabel = true
-				if m.Type == labels.MatchEqual {
-					for _, suffix := range q.aggregationStandardSuffixes {
-						if strings.HasSuffix(m.Value, suffix) {
-							needLabelRewrite = true
-							nameLabelMatcher = m
-							break
-						}
-					}
-					break
-				} else {
-					level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite attempt", "reason", "non-equal name matcher", "name_matcher", m)
-				}
-			}
-		}
-		if !hasNameLabel {
-			level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite", "reason", "no metric name matcher found")
-		}
-		if needLabelRewrite {
-			hasAggregationLabel := false
-			for i, m := range ms {
-				if m.Name == q.aggregationLabelName {
-					level.Info(q.logger).Log("msg", "Rewriting aggregation label", "original_matcher", m, "name_matcher", nameLabelMatcher, "new_value", q.rewriteAggregationLabelTo)
-					hasAggregationLabel = true
-					ms[i].Type = labels.MatchEqual
-					ms[i].Value = q.rewriteAggregationLabelTo
-					break
-				}
-			}
-			if !hasAggregationLabel {
-				newMatcher := &labels.Matcher{
-					Name:  q.aggregationLabelName,
-					Type:  labels.MatchEqual,
-					Value: q.rewriteAggregationLabelTo,
-				}
-				level.Info(q.logger).Log("msg", "Adding aggregation label", "new_matcher", newMatcher, "name_matcher", nameLabelMatcher)
-				ms = append(ms, newMatcher)
-			}
-		}
-	}
+	ms = q.aggregationLabelRewriter.Rewrite(ms)
 
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
