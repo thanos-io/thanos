@@ -87,6 +87,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	logger := log.NewNopLogger()
 	q := newQuerier(
 		logger,
+		nil,
 		math.MinInt64,
 		math.MaxInt64,
 		[]string{"a_replica"},
