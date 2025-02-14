@@ -378,6 +378,7 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
 	if q.enablePreAggregationLabelRewrite {
 		hasNameLabel, needLabelRewrite := false, false
+		var nameLabelMatcher *labels.Matcher
 		for _, m := range ms {
 			if m.Name == labels.MetricName {
 				hasNameLabel = true
@@ -385,22 +386,24 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 					for _, suffix := range q.aggregationStandardSuffixes {
 						if strings.HasSuffix(m.Value, suffix) {
 							needLabelRewrite = true
+							nameLabelMatcher = m
 							break
 						}
 					}
 					break
 				} else {
-					level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite attempt", "reason", "non-equal name matcher", "name_matcher", m, "labels", ms)
+					level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite attempt", "reason", "non-equal name matcher", "name_matcher", m)
 				}
 			}
 		}
 		if !hasNameLabel {
-			level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite", "reason", "no metric name matcher found", "labels", ms)
+			level.Info(q.logger).Log("msg", "Skipping aggregation label rewrite", "reason", "no metric name matcher found")
 		}
 		if needLabelRewrite {
 			hasAggregationLabel := false
 			for i, m := range ms {
 				if m.Name == q.aggregationLabelName {
+					level.Info(q.logger).Log("msg", "Rewriting aggregation label", "original_matcher", m, "name_matcher", nameLabelMatcher, "new_value", q.rewriteAggregationLabelTo)
 					hasAggregationLabel = true
 					ms[i].Type = labels.MatchEqual
 					ms[i].Value = q.rewriteAggregationLabelTo
@@ -408,11 +411,13 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 				}
 			}
 			if !hasAggregationLabel {
-				ms = append(ms, &labels.Matcher{
+				newMatcher := &labels.Matcher{
 					Name:  q.aggregationLabelName,
 					Type:  labels.MatchEqual,
 					Value: q.rewriteAggregationLabelTo,
-				})
+				}
+				level.Info(q.logger).Log("msg", "Adding aggregation label", "new_matcher", newMatcher, "name_matcher", nameLabelMatcher)
+				ms = append(ms, newMatcher)
 			}
 		}
 	}
