@@ -51,9 +51,8 @@ func newAggregationLabelRewriterMetrics(reg prometheus.Registerer, desiredLabelV
 		ConstLabels: prometheus.Labels{"new_value": desiredLabelValue},
 	})
 	m.aggregationLabelRewriterRuntimeSeconds = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "total_runtime_seconds",
-		Help:    "Runtime of aggregation-label-rewriter in seconds",
-		Buckets: prometheus.DefBuckets,
+		Name: "total_runtime_seconds",
+		Help: "Runtime of aggregation-label-rewriter in seconds",
 	}, []string{"is_rewritten"})
 
 	return m
