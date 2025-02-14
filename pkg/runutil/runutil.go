@@ -45,7 +45,7 @@
 // The rununtil.Exhaust* family of functions provide the same functionality but
 // they take an io.ReadCloser and they exhaust the whole reader before closing
 // them. They are useful when trying to use http keep-alive connections because
-// for the same connection to be re-used the whole response body needs to be
+// for the same connection to be reused the whole response body needs to be
 // exhausted.
 package runutil
 
