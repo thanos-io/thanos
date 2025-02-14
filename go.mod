@@ -114,6 +114,7 @@ require (
 require (
 	capnproto.org/go/capnp/v3 v3.0.1-alpha.2.0.20240830165715-46ccd63a72af
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
+	github.com/gobwas/glob v0.2.3
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/hashicorp/golang-lru v0.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
@@ -140,7 +141,6 @@ require (
 	github.com/elastic/go-licenser v0.3.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-openapi/runtime v0.27.1 // indirect
-	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
