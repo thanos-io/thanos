@@ -13,7 +13,7 @@ import (
 
 const (
 	aggregationLabelName            = "__rollup__"
-	aggregatedMetricNameGlobPattern = "*:(aggr|sum|count|avg|min|max)"
+	aggregatedMetricNameGlobPattern = "{*:aggr,*:sum,*:count,*:avg,*:min,*:max}"
 )
 
 type AggregationLabelRewriter struct {
@@ -60,6 +60,9 @@ func newAggregationLabelRewriterMetrics(reg prometheus.Registerer, desiredLabelV
 }
 
 func NewAggregationLabelRewriter(logger log.Logger, reg prometheus.Registerer, desiredLabelValue string) *AggregationLabelRewriter {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	g := glob.MustCompile(aggregatedMetricNameGlobPattern)
 	return &AggregationLabelRewriter{
 		enabled:                  desiredLabelValue != "",
@@ -76,6 +79,7 @@ func (a *AggregationLabelRewriter) Rewrite(ms []*labels.Matcher) []*labels.Match
 		needsRewrite := false
 		skipReason := "no-name-matcher"
 		var aggregationLabelMatcher *labels.Matcher
+		aggregationLabelIndex := -1
 		for i := 0; i < len(ms); i++ {
 			m := ms[i]
 			if !needsRewrite && m.Name == labels.MetricName {
@@ -94,20 +98,20 @@ func (a *AggregationLabelRewriter) Rewrite(ms []*labels.Matcher) []*labels.Match
 				break
 			} else if m.Name == aggregationLabelName {
 				aggregationLabelMatcher = m
+				aggregationLabelIndex = i
 			}
 		}
 		if needsRewrite {
+			newMatcher := &labels.Matcher{
+				Name:  aggregationLabelName,
+				Type:  labels.MatchEqual,
+				Value: a.desiredLabelValue,
+			}
 			if aggregationLabelMatcher != nil {
 				a.metrics.aggregationLabelRewrittenCount.WithLabelValues(aggregationLabelMatcher.Value).Inc()
-				aggregationLabelMatcher.Type = labels.MatchEqual
-				aggregationLabelMatcher.Value = a.desiredLabelValue
+				ms[aggregationLabelIndex] = newMatcher
 			} else {
 				a.metrics.aggregationLabelAddedCount.Inc()
-				newMatcher := &labels.Matcher{
-					Name:  aggregationLabelName,
-					Type:  labels.MatchEqual,
-					Value: a.desiredLabelValue,
-				}
 				ms = append(ms, newMatcher)
 			}
 			a.metrics.aggregationLabelRewriterRuntimeSeconds.WithLabelValues("true").Observe(

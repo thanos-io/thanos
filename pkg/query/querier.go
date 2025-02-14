@@ -211,9 +211,6 @@ func newQuerierWithOpts(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if reg == nil {
-		reg = prometheus.NewRegistry()
-	}
 	rl := make(map[string]struct{})
 	for _, replicaLabel := range replicaLabels {
 		rl[replicaLabel] = struct{}{}
