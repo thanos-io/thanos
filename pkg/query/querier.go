@@ -91,7 +91,11 @@ func NewQueryableCreatorWithOptions(
 	opts Options,
 ) QueryableCreator {
 	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
-
+	aggregationLabelRewriter := NewAggregationLabelRewriter(
+		logger,
+		extprom.WrapRegistererWithPrefix("aggregation_label_rewriter_", reg),
+		opts.RewriteAggregationLabelTo,
+	)
 	return func(
 		deduplicate bool,
 		replicaLabels []string,
@@ -104,7 +108,6 @@ func NewQueryableCreatorWithOptions(
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
-			reg:                 reg,
 			replicaLabels:       replicaLabels,
 			storeDebugMatchers:  storeDebugMatchers,
 			proxy:               proxy,
@@ -120,13 +123,14 @@ func NewQueryableCreatorWithOptions(
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
 			opts:                 opts,
+
+			aggregationLabelRewriter: aggregationLabelRewriter,
 		}
 	}
 }
 
 type queryable struct {
 	logger               log.Logger
-	reg                  prometheus.Registerer
 	replicaLabels        []string
 	storeDebugMatchers   [][]*labels.Matcher
 	proxy                storepb.StoreServer
@@ -140,16 +144,17 @@ type queryable struct {
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
 	opts                 Options
+
+	aggregationLabelRewriter *AggregationLabelRewriter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerierWithOpts(q.logger, q.reg, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.opts), nil
+	return newQuerierWithOpts(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.aggregationLabelRewriter, q.opts), nil
 }
 
 type querier struct {
 	logger                  log.Logger
-	reg                     prometheus.Registerer
 	mint, maxt              int64
 	deduplicationFunc       string
 	replicaLabels           []string
@@ -172,7 +177,6 @@ type querier struct {
 // nolint:unparam
 func newQuerier(
 	logger log.Logger,
-	reg prometheus.Registerer,
 	mint,
 	maxt int64,
 	replicaLabels []string,
@@ -186,13 +190,13 @@ func newQuerier(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	aggregationLabelRewriter *AggregationLabelRewriter,
 ) *querier {
-	return newQuerierWithOpts(logger, reg, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, Options{})
+	return newQuerierWithOpts(logger, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, aggregationLabelRewriter, Options{})
 }
 
 func newQuerierWithOpts(
 	logger log.Logger,
-	reg prometheus.Registerer,
 	mint,
 	maxt int64,
 	replicaLabels []string,
@@ -206,10 +210,14 @@ func newQuerierWithOpts(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	aggregationLabelRewriter *AggregationLabelRewriter,
 	opts Options,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
+	}
+	if aggregationLabelRewriter == nil {
+		aggregationLabelRewriter = NewNopAggregationLabelRewriter()
 	}
 	rl := make(map[string]struct{})
 	for _, replicaLabel := range replicaLabels {
@@ -225,7 +233,6 @@ func newQuerierWithOpts(
 	}
 	return &querier{
 		logger:        logger,
-		reg:           reg,
 		selectGate:    selectGate,
 		selectTimeout: selectTimeout,
 
@@ -242,11 +249,7 @@ func newQuerierWithOpts(
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
 
-		aggregationLabelRewriter: NewAggregationLabelRewriter(
-			logger,
-			extprom.WrapRegistererWithPrefix("aggregation_label_rewriter_", reg),
-			opts.RewriteAggregationLabelTo,
-		),
+		aggregationLabelRewriter: aggregationLabelRewriter,
 	}
 }
 

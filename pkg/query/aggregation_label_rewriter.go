@@ -61,6 +61,12 @@ func newAggregationLabelRewriterMetrics(reg prometheus.Registerer, desiredLabelV
 	return m
 }
 
+func NewNopAggregationLabelRewriter() *AggregationLabelRewriter {
+	return &AggregationLabelRewriter{
+		enabled: false,
+	}
+}
+
 func NewAggregationLabelRewriter(logger log.Logger, reg prometheus.Registerer, desiredLabelValue string) *AggregationLabelRewriter {
 	if logger == nil {
 		logger = log.NewNopLogger()
