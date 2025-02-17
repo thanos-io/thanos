@@ -4,4 +4,4 @@ go 1.14
 
 require github.com/fatih/faillint v1.13.0
 
-replace github.com/fatih/faillint => github.com/thanos-community/faillint@830c220
+replace github.com/fatih/faillint => github.com/thanos-community/faillint main
