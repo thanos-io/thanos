@@ -17,9 +17,9 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/efficientgo/core/testutil"
-	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -61,7 +61,7 @@ type HeadGenOptions struct {
 }
 
 func CreateBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
-	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil, nil)
+	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, promslog.NewNopLogger(), []int64{1000000}, nil, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, os.MkdirAll(dir, 0777))

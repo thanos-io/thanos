@@ -71,6 +71,15 @@ func (es NonNilMultiError) Cause() error {
 	return es.getCause()
 }
 
+func (es NonNilMultiError) Is(target error) bool {
+	for _, err := range es {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	return false
+}
+
 func (es NonNilMultiError) getCause() NonNilMultiRootError {
 	var causes []error
 	for _, err := range es {

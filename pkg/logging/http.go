@@ -14,8 +14,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-
-	httputil "github.com/thanos-io/thanos/pkg/server/http"
 )
 
 type HTTPServerMiddleware struct {
@@ -35,7 +33,7 @@ func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Req
 	)
 }
 
-func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *httputil.ResponseWriterWithStatus, r *http.Request) {
+func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *ResponseWriterWithStatus, r *http.Request) {
 	status := wrapped.Status()
 
 	remoteAddr := r.Header.Get("X-Forwarded-For")
@@ -58,7 +56,7 @@ func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *h
 
 func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		wrapped := httputil.WrapResponseWriterWithStatus(w)
+		wrapped := WrapResponseWriterWithStatus(w)
 		start := time.Now()
 		hostPort := r.Host
 		if hostPort == "" {

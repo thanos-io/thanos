@@ -55,6 +55,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/pool"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
@@ -1305,7 +1306,7 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
+				p, err := indexr.ExpandedPostings(context.Background(), newSortedMatchers(c.matchers), NewBytesLimiterFactory(0)(nil), false, 0.5, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p.postings))
 			}
@@ -1344,7 +1345,7 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	dummyCounter := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test"})
 	dummyCounterVec := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{Name: "test_counter_vec"}, []string{"reason"})
-	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2}), NewBytesLimiterFactory(0)(nil), false, 0.5, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
 	testutil.Ok(t, err)
 	testutil.Equals(t, ps, (*lazyExpandedPostings)(nil))
 	// Make sure even if a matcher doesn't match any postings, we still cache empty expanded postings.
@@ -1384,7 +1385,7 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	dummyCounter := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test"})
 	dummyCounterVec := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{Name: "test_counter_vec"}, []string{"reason"})
-	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2, matcher3}), NewBytesLimiterFactory(0)(nil), true, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
+	ps, err := indexr.ExpandedPostings(ctx, newSortedMatchers([]*labels.Matcher{matcher1, matcher2, matcher3}), NewBytesLimiterFactory(0)(nil), true, 0.5, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
 	testutil.Ok(t, err)
 	// We expect emptyLazyPostings rather than lazy postings with 0 length but with matchers.
 	testutil.Equals(t, ps, emptyLazyPostings)
@@ -1512,7 +1513,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 		// Histogram chunks are represented differently in memory and on disk. In order to
 		// have a precise comparison, we need to use the on-disk representation as the expected value
 		// instead of the in-memory one.
-		diskBlock, err := tsdb.OpenBlock(logger, blockIDDir, nil)
+		diskBlock, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), blockIDDir, nil, nil)
 		testutil.Ok(t, err)
 		series = append(series, storetestutil.ReadSeriesFromBlock(t, diskBlock, extLset, skipChunk)...)
 
@@ -2931,6 +2932,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 					dummyHistogram,
 					nil,
 					false,
+					0.5,
 					0,
 					dummyCounter,
 					dummyCounterVec,
@@ -3591,7 +3593,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 			wg.Add(1)
 
 			go func(i int, bb *bucketBlock) {
-				refs, err := bb.indexReader(logger).ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
+				refs, err := bb.indexReader(logger).ExpandedPostings(context.Background(), m, NewBytesLimiterFactory(0)(nil), false, 0.5, 0, dummyCounter, dummyCounterVec, tenancy.DefaultTenant)
 				testutil.Ok(t, err)
 				defer wg.Done()
 

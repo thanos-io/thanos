@@ -110,11 +110,14 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 	}
 	return &fakeAppender{
 		samples:     make(map[storage.SeriesRef][]prompb.Sample),
+		exemplars:   make(map[storage.SeriesRef][]exemplar.Exemplar),
 		appendErr:   appendErr,
 		commitErr:   commitErr,
 		rollbackErr: rollbackErr,
 	}
 }
+
+func (f *fakeAppender) SetOptions(opts *storage.AppendOptions) {}
 
 func (f *fakeAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, prometheusMetadata.Metadata) (storage.SeriesRef, error) {
 	return 0, nil
@@ -151,6 +154,11 @@ func (f *fakeAppender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e 
 
 // TODO(rabenhorst): Needs to be implement for native histogram support.
 func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
+// TODO(sungjin1212): Needs to be implement for native histogram support.
+func (f *fakeAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
 	panic("not implemented")
 }
 
@@ -231,7 +239,7 @@ func newTestHandlerHashring(
 
 		ag         = addrGen{}
 		logger     = logging.NewLogger("debug", "logfmt", "receive_test")
-		limiter, _ = NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+		limiter, _ = NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	)
 	for i := range appendables {
 		h := NewHandler(logger, &Options{

@@ -290,6 +290,8 @@ func runReceive(
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
+		OtlpEnableTargetInfo:    conf.otlpEnableTargetInfo,
+		OtlpResourceAttributes:  conf.otlpResourceAttributes,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -909,6 +911,8 @@ type receiveConfig struct {
 
 	headExpandedPostingsCacheSize            uint64
 	compactedBlocksExpandedPostingsCacheSize uint64
+	otlpEnableTargetInfo                     bool
+	otlpResourceAttributes                   []string
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1065,6 +1069,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.writeLimitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
 	cmd.Flag("receive.limits-config-reload-timer", "Minimum amount of time to pass for the limit configuration to be reloaded. Helps to avoid excessive reloads.").
 		Default("1s").Hidden().DurationVar(&rc.limitsConfigReloadTimer)
+
+	cmd.Flag("receive.otlp-enable-target-info", "Enables target information in OTLP metrics ingested by Receive. If enabled, it converts the resource to the target info metric").Default("true").BoolVar(&rc.otlpEnableTargetInfo)
+	cmd.Flag("receive.otlp-promote-resource-attributes", "(Repeatable) Resource attributes to include in OTLP metrics ingested by Receive.").Default("").StringsVar(&rc.otlpResourceAttributes)
 
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
 }
