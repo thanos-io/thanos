@@ -4,22 +4,6 @@ go 1.22.0
 
 toolchain go1.24.0
 
-require github.com/fatih/faillint v1.13.0
-
-require (
-	dmitri.shuralyov.com/go/generated v0.0.0-20170818220700-b1254a446363 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/yuin/goldmark v1.4.13 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
-	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/telemetry v0.0.0-20240521205824-bda55230c457 // indirect
-	golang.org/x/term v0.29.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
-	golang.org/x/tools v0.30.0 // indirect
-	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7 // indirect
-)
-
 replace github.com/fatih/faillint => github.com/thanos-community/faillint v0.0.0-20250217160734-830c2205d383
+
+require github.com/fatih/faillint v1.13.0
