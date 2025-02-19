@@ -1,0 +1,5 @@
+- action: unknown # This is invalid
+  source_labels: [__name__]
+  regex: "http_requests_total|cpu_usage"  # Only keep specific metrics
+- action: labelmap
+  regex: "__meta_kubernetes_pod_label_(.+)"  # Map Kubernetes labels
