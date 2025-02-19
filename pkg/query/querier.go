@@ -61,6 +61,7 @@ type QueryableCreator func(
 type Options struct {
 	GroupReplicaPartialResponseStrategy bool
 	DeduplicationFunc                   string
+	RewriteAggregationLabelTo           string
 }
 
 // NewQueryableCreator creates QueryableCreator.
@@ -90,7 +91,11 @@ func NewQueryableCreatorWithOptions(
 	opts Options,
 ) QueryableCreator {
 	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
-
+	aggregationLabelRewriter := NewAggregationLabelRewriter(
+		logger,
+		extprom.WrapRegistererWithPrefix("aggregation_label_rewriter_", reg),
+		opts.RewriteAggregationLabelTo,
+	)
 	return func(
 		deduplicate bool,
 		replicaLabels []string,
@@ -118,6 +123,8 @@ func NewQueryableCreatorWithOptions(
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
 			opts:                 opts,
+
+			aggregationLabelRewriter: aggregationLabelRewriter,
 		}
 	}
 }
@@ -137,11 +144,13 @@ type queryable struct {
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
 	opts                 Options
+
+	aggregationLabelRewriter *AggregationLabelRewriter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerierWithOpts(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.opts), nil
+	return newQuerierWithOpts(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.aggregationLabelRewriter, q.opts), nil
 }
 
 type querier struct {
@@ -159,6 +168,8 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
+
+	aggregationLabelRewriter *AggregationLabelRewriter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -179,8 +190,9 @@ func newQuerier(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	aggregationLabelRewriter *AggregationLabelRewriter,
 ) *querier {
-	return newQuerierWithOpts(logger, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, Options{})
+	return newQuerierWithOpts(logger, mint, maxt, replicaLabels, storeDebugMatchers, proxy, deduplicate, maxResolutionMillis, partialResponse, skipChunks, selectGate, selectTimeout, shardInfo, seriesStatsReporter, aggregationLabelRewriter, Options{})
 }
 
 func newQuerierWithOpts(
@@ -198,10 +210,14 @@ func newQuerierWithOpts(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	aggregationLabelRewriter *AggregationLabelRewriter,
 	opts Options,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
+	}
+	if aggregationLabelRewriter == nil {
+		aggregationLabelRewriter = NewNopAggregationLabelRewriter()
 	}
 	rl := make(map[string]struct{})
 	for _, replicaLabel := range replicaLabels {
@@ -232,6 +248,8 @@ func newQuerierWithOpts(
 		skipChunks:              skipChunks,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
+
+		aggregationLabelRewriter: aggregationLabelRewriter,
 	}
 }
 
@@ -365,6 +383,8 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 }
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
+	ms = q.aggregationLabelRewriter.Rewrite(ms)
+
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "convert matchers")
