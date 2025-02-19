@@ -221,7 +221,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
-		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Ok(t, bComp.Compact(ctx, nil))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectedBlocks))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.BlocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectionFailures))
@@ -314,7 +314,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		groupKey1 := metas[0].Thanos.GroupKey()
 		groupKey2 := metas[6].Thanos.GroupKey()
 
-		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Ok(t, bComp.Compact(ctx, nil))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.GarbageCollectedBlocks))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.BlocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.GarbageCollectionFailures))
