@@ -326,6 +326,7 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = tracing.ContextWithTracer(ctx, tracer)
+	ctx = objstoretracing.ContextWithTracer(ctx, tracer) // objstore tracing uses a different tracer key in context.
 
 	defer func() {
 		if rerr != nil {
