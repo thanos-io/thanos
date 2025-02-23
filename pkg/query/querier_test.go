@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/prometheus/util/gate"
 	"github.com/thanos-io/thanos/pkg/logutil"
 
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -1278,4 +1279,135 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		s.Chunks = append(s.Chunks, ch)
 	}
 	return storepb.NewSeriesResponse(&s)
+}
+
+func TestMaxResolutionFromSelectHints(t *testing.T) {
+	twoMinRange := int64(2 * 60 * 1000)
+	for _, tc := range []struct {
+		name                string
+		maxResolutionMillis int64
+		hints               storage.SelectHints
+		expected            int64
+	}{
+		{
+			name: "no range",
+			hints: storage.SelectHints{
+				Range: 0,
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "no function",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "function doesn't impact resolution",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "max_over_time",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "rate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "rate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "rate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "rate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "irate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "irate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "increase",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "increase",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "delta",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "delta",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "idelta",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "idelta",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "deriv",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "deriv",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "predict_linear",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "predict_linear",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "holt_winters",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "holt_winters",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "double_exponential_smoothing",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "double_exponential_smoothing",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := maxResolutionFromSelectHints(tc.maxResolutionMillis, tc.hints)
+			testutil.Equals(t, tc.expected, res)
+		})
+	}
 }
