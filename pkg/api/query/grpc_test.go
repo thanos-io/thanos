@@ -32,10 +32,10 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
 	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
-	engineFactory := &QueryEngineFactory{
+	queryFactory := &QueryFactory{
 		thanos: &engineStub{},
 	}
-	api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+	api := NewGRPCAPI(time.Now, nil, queryableCreator, queryFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
 
 	expr, err := extpromql.ParseExpr("metric")
 	testutil.Ok(t, err)
@@ -97,10 +97,10 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		engineFactory := &QueryEngineFactory{
+		queryFactory := &QueryFactory{
 			prometheus: test.engine,
 		}
-		api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
+		api := NewGRPCAPI(time.Now, nil, queryableCreator, queryFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
 		t.Run("range_query", func(t *testing.T) {
 			rangeRequest := &querypb.QueryRangeRequest{
 				Query:            "metric",
