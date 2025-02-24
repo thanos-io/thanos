@@ -234,7 +234,7 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	if strings.HasPrefix(f, "sum_") {
 		return []storepb.Aggr{storepb.Aggr_SUM}
 	}
-	if f == "increase" || f == "rate" || f == "irate" || f == "resets" {
+	if f == "increase" || f == "rate" || f == "irate" || f == "resets" || f == "xincrease" || f == "xrate" {
 		return []storepb.Aggr{storepb.Aggr_COUNTER}
 	}
 	// In the default case, we retrieve count and sum to compute an average.
