@@ -27,6 +27,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+var promqlFuncRequiresTwoSamples = map[string]struct{}{
+	"rate":                         {},
+	"irate":                        {},
+	"increase":                     {},
+	"delta":                        {},
+	"idelta":                       {},
+	"deriv":                        {},
+	"predict_linear":               {},
+	"holt_winters":                 {},
+	"double_exponential_smoothing": {},
+}
+
 type seriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
 
 var NoopSeriesStatsReporter seriesStatsReporter = func(_ storepb.SeriesStatsCounter) {}
@@ -320,6 +332,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
+	maxResolutionMillis := maxResolutionFromSelectHints(q.maxResolutionMillis, hints.Range, hints.Func)
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
@@ -333,7 +346,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		MaxTime:                 hints.End,
 		Limit:                   int64(hints.Limit),
 		Matchers:                sms,
-		MaxResolutionWindow:     q.maxResolutionMillis,
+		MaxResolutionWindow:     maxResolutionMillis,
 		Aggregates:              aggrs,
 		ShardInfo:               q.shardInfo,
 		PartialResponseStrategy: q.partialResponseStrategy,
@@ -460,3 +473,13 @@ func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, mat
 }
 
 func (q *querier) Close() error { return nil }
+
+// maxResolutionFromSelectHints finds the max possible resolution by inferring from the promql query.
+func maxResolutionFromSelectHints(maxResolutionMillis int64, hintsRange int64, hintsFunc string) int64 {
+	if hintsRange > 0 {
+		if _, ok := promqlFuncRequiresTwoSamples[hintsFunc]; ok {
+			maxResolutionMillis = min(maxResolutionMillis, hintsRange/2)
+		}
+	}
+	return maxResolutionMillis
+}
