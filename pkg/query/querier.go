@@ -332,7 +332,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
-	maxResolutionMillis := maxResolutionFromSelectHints(q.maxResolutionMillis, *hints)
+	maxResolutionMillis := maxResolutionFromSelectHints(q.maxResolutionMillis, hints.Range, hints.Func)
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
@@ -475,10 +475,10 @@ func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, mat
 func (q *querier) Close() error { return nil }
 
 // maxResolutionFromSelectHints finds the max possible resolution by inferring from the promql query.
-func maxResolutionFromSelectHints(maxResolutionMillis int64, hints storage.SelectHints) int64 {
-	if hints.Range > 0 {
-		if _, ok := promqlFuncRequiresTwoSamples[hints.Func]; ok {
-			maxResolutionMillis = min(maxResolutionMillis, hints.Range/2)
+func maxResolutionFromSelectHints(maxResolutionMillis int64, hintsRange int64, hintsFunc string) int64 {
+	if hintsRange > 0 {
+		if _, ok := promqlFuncRequiresTwoSamples[hintsFunc]; ok {
+			maxResolutionMillis = min(maxResolutionMillis, hintsRange/2)
 		}
 	}
 	return maxResolutionMillis

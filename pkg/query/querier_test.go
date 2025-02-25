@@ -1406,7 +1406,7 @@ func TestMaxResolutionFromSelectHints(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			res := maxResolutionFromSelectHints(tc.maxResolutionMillis, tc.hints)
+			res := maxResolutionFromSelectHints(tc.maxResolutionMillis, tc.hints.Range, tc.hints.Func)
 			testutil.Equals(t, tc.expected, res)
 		})
 	}
