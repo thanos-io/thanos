@@ -42,6 +42,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -2378,4 +2379,92 @@ func TestDistributedEngineWithExtendedFunctions(t *testing.T) {
 		return "sum(xrate(up[3m]))"
 	}, time.Now, promclient.QueryOptions{}, 1)
 	testutil.Equals(t, model.SampleValue(0), result[0].Value)
+}
+
+func TestChainDeduplication(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("chain-dedup"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	receiver1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	receiver2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver1, receiver2))
+
+	predefTimestamp := time.Date(2025, time.February, 25, 12, 0, 0, 0, time.UTC)
+	series1 := []prompb.Label{
+		{
+			Name: "__name__", Value: "chain_dedup_test",
+		},
+	}
+
+	testutil.Ok(t, remoteWrite(context.Background(), []prompb.TimeSeries{
+		{
+			Labels: series1,
+			Samples: []prompb.Sample{
+				{Timestamp: timestamp.FromTime(predefTimestamp), Value: 1},
+				{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 15)), Value: 2},
+				{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 45)), Value: 4},
+			},
+		},
+	}, receiver1.Endpoint("remote-write")))
+
+	testutil.Ok(t, remoteWrite(context.Background(), []prompb.TimeSeries{
+		{
+			Labels: series1,
+			Samples: []prompb.Sample{
+				{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 15)), Value: 2},
+				{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 30)), Value: 3},
+				{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 60)), Value: 5},
+			},
+		},
+	}, receiver2.Endpoint("remote-write")))
+
+	qPenalty := e2ethanos.NewQuerierBuilder(e, "penalty", receiver1.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).WithReplicaLabels("receive").WithDeduplicationFunc(dedup.AlgorithmPenalty).Init()
+	qChain := e2ethanos.NewQuerierBuilder(e, "chain", receiver1.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).WithReplicaLabels("receive").WithDeduplicationFunc(dedup.AlgorithmChain).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(qPenalty, qChain))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	queryFunc := func() string { return "sum_over_time(chain_dedup_test[2m])" }
+	timeFunc := func() time.Time { return predefTimestamp.Add(time.Second * 90) }
+
+	// Preliminary check without deduplication.
+	queryAndAssert(t, ctx, qPenalty.Endpoint("http"),
+		queryFunc,
+		timeFunc,
+		promclient.QueryOptions{
+			Deduplicate: false,
+		},
+		model.Vector{
+			{Metric: map[model.LabelName]model.LabelValue{"tenant_id": "default-tenant", "receive": "receive-1"}, Value: 7},
+			{Metric: map[model.LabelName]model.LabelValue{"tenant_id": "default-tenant", "receive": "receive-2"}, Value: 10},
+		},
+	)
+
+	// For Penalty algorithm only samples from the receive-1 should be summed up.
+	queryAndAssert(t, ctx, qPenalty.Endpoint("http"),
+		queryFunc,
+		timeFunc,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		},
+		model.Vector{
+			{Metric: map[model.LabelName]model.LabelValue{"tenant_id": "default-tenant"}, Value: 7},
+		},
+	)
+
+	// For Penalty algorithm samples from both replicas should be summed up.
+	queryAndAssert(t, ctx, qChain.Endpoint("http"),
+		queryFunc,
+		timeFunc,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		},
+		model.Vector{
+			{Metric: map[model.LabelName]model.LabelValue{"tenant_id": "default-tenant"}, Value: 15},
+		},
+	)
 }

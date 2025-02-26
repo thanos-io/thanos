@@ -285,6 +285,7 @@ type QuerierBuilder struct {
 	queryMode                               string
 	queryDistributedWithOverlappingInterval bool
 	enableXFunctions                        bool
+	deduplicationFunc                       string
 
 	replicaLabels []string
 	tracingConfig string
@@ -411,6 +412,11 @@ func (q *QuerierBuilder) WithDistributedOverlap(overlap bool) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithEnableXFunctions() *QuerierBuilder {
 	q.enableXFunctions = true
+	return q
+}
+
+func (q *QuerierBuilder) WithDeduplicationFunc(deduplicationFunc string) *QuerierBuilder {
+	q.deduplicationFunc = deduplicationFunc
 	return q
 }
 
@@ -558,6 +564,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.relabelConfig != "" {
 		args = append(args, "--selector.relabel-config="+q.relabelConfig)
+	}
+	if q.deduplicationFunc != "" {
+		args = append(args, "--deduplication.func="+q.deduplicationFunc)
 	}
 
 	return args, nil
