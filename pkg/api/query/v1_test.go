@@ -52,6 +52,7 @@ import (
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -193,7 +194,7 @@ func TestQueryEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
 		engineFactory:         ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -644,7 +645,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
 		engineFactory:         ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -711,7 +712,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
 		engineFactory:         ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -883,7 +884,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
 		engineFactory:       ef,
 		defaultEngine:       PromqlEnginePrometheus,
 		lookbackDeltaCreate: func(m int64) time.Duration { return time.Duration(0) },
@@ -899,7 +900,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
+		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
 		engineFactory:            ef,
 		defaultEngine:            PromqlEnginePrometheus,
 		lookbackDeltaCreate:      func(m int64) time.Duration { return time.Duration(0) },

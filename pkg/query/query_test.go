@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -73,6 +74,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				component.Debug, nil, 5*time.Minute, store.EagerRetrieval, store.WithMatcherCache(cache)),
 			1000000,
 			5*time.Minute,
+			dedup.AlgorithmPenalty,
 		)
 
 		createQueryableFn := func(stores []*testStore) storage.Queryable {
