@@ -185,7 +185,7 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := NewQueryEngineFactory(engine.Opts{EngineOpts: promql.EngineOpts{
+	ef := NewQueryFactory(engine.Opts{EngineOpts: promql.EngineOpts{
 		MaxSamples: 10000,
 		Timeout:    timeout,
 	}}, nil)
@@ -194,7 +194,7 @@ func TestQueryEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		engineFactory:         ef,
+		queryFactory:          ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
 		gate:                  gate.New(nil, 4, gate.Queries),
@@ -636,7 +636,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := NewQueryEngineFactory(engine.Opts{EngineOpts: promql.EngineOpts{
+	ef := NewQueryFactory(engine.Opts{EngineOpts: promql.EngineOpts{
 		MaxSamples: 10000,
 		Timeout:    timeout,
 	}}, nil)
@@ -645,7 +645,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		engineFactory:         ef,
+		queryFactory:          ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
 		gate:                  gate.New(nil, 4, gate.Queries),
@@ -703,7 +703,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := NewQueryEngineFactory(engine.Opts{EngineOpts: promql.EngineOpts{
+	ef := NewQueryFactory(engine.Opts{EngineOpts: promql.EngineOpts{
 		MaxSamples: 10000,
 		Timeout:    timeout,
 	}}, nil)
@@ -712,7 +712,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		engineFactory:         ef,
+		queryFactory:          ef,
 		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
 		gate:                  gate.New(nil, 4, gate.Queries),
@@ -875,7 +875,7 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := NewQueryEngineFactory(engine.Opts{EngineOpts: promql.EngineOpts{
+	f := NewQueryFactory(engine.Opts{EngineOpts: promql.EngineOpts{
 		MaxSamples: 10000,
 		Timeout:    timeout,
 	}}, nil)
@@ -884,7 +884,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		engineFactory:       ef,
+		queryFactory:        f,
 		defaultEngine:       PromqlEnginePrometheus,
 		lookbackDeltaCreate: func(m int64) time.Duration { return time.Duration(0) },
 		gate:                gate.New(nil, 4, gate.Queries),
@@ -900,7 +900,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		engineFactory:            ef,
+		queryFactory:             f,
 		defaultEngine:            PromqlEnginePrometheus,
 		lookbackDeltaCreate:      func(m int64) time.Duration { return time.Duration(0) },
 		gate:                     gate.New(nil, 4, gate.Queries),
