@@ -106,7 +106,7 @@ external_labels: {cluster="us1", replica="1", receive="true", environment="produ
 external_labels: {cluster="us1", replica="1", receive="true", environment="staging"}
 ```
 
-and set `--deduplication.replica-label="replica"`, Compactor will assume those as:
+and set `--deduplication.replica-label=replica`, Compactor will assume those as:
 
 ```
 external_labels: {cluster="eu1", receive="true", environment="production"} (2 streams, resulted in one)

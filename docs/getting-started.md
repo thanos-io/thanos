@@ -162,7 +162,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
   * [HelloFresh blog posts part 1](https://engineering.hellofresh.com/monitoring-at-hellofresh-part-1-architecture-677b4bd6b728)
   * [HelloFresh blog posts part 2](https://engineering.hellofresh.com/monitoring-at-hellofresh-part-2-operating-the-monitoring-system-8175cd939c1d)
   * [Thanos deployment](https://www.metricfire.com/blog/ha-kubernetes-monitoring-using-prometheus-and-thanos)
-  * [Taboola user story](https://blog.taboola.com/monitoring-and-metering-scale/)
+  * [Taboola user story](https://www.taboola.com/engineering/monitoring-and-metering-scale/)
   * [Thanos via Prometheus Operator](https://kkc.github.io/2019/02/10/prometheus-operator-with-thanos/)
 
 * 2018:

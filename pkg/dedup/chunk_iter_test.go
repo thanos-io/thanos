@@ -356,6 +356,17 @@ func (h histoSample) Type() chunkenc.ValueType {
 	return chunkenc.ValFloat
 }
 
+func (h histoSample) Copy() chunks.Sample {
+	c := histoSample{}
+	if h.h != nil {
+		c.h = h.h.Copy()
+	}
+	if h.fh != nil {
+		c.fh = h.fh.Copy()
+	}
+	return c
+}
+
 var histogramSample = &histogram.Histogram{
 	Schema:        0,
 	Count:         20,

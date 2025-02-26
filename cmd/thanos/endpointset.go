@@ -29,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -250,7 +251,7 @@ func setupEndpointSet(
 			RefreshInterval: model.Duration(legacyFileSDInterval),
 		}
 		var err error
-		if fileSD, err = file.NewDiscovery(conf, logger, conf.NewDiscovererMetrics(reg, discovery.NewRefreshMetrics(reg))); err != nil {
+		if fileSD, err = file.NewDiscovery(conf, logutil.GoKitLogToSlog(logger), conf.NewDiscovererMetrics(reg, discovery.NewRefreshMetrics(reg))); err != nil {
 			return nil, fmt.Errorf("unable to create new legacy file sd config: %w", err)
 		}
 	}
@@ -319,9 +320,6 @@ func setupEndpointSet(
 		specs := make([]*query.GRPCEndpointSpec, 0)
 		for _, ecfg := range endpointConfig.Endpoints {
 			strict, group, addr := ecfg.Strict, ecfg.Group, ecfg.Address
-			if dns.IsDynamicNode(addr) {
-				continue
-			}
 			if group {
 				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(dialOpts, extgrpc.EndpointGroupGRPCOpts()...)...))
 			} else {

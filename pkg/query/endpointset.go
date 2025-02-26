@@ -366,7 +366,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		if er.HasStoreAPI() && (er.ComponentType() == component.Sidecar || er.ComponentType() == component.Rule) &&
 			stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset] > 0 {
 
-			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
+			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advised as it will malform data in in the same bucket",
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset]+1))
 		}
 		stats[er.ComponentType().String()][extLset]++
