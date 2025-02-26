@@ -103,6 +103,15 @@ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
+### Deduplication Algorithms
+
+Thanos Querier supports different algorithms for deduplicating overlapping series. You can choose the deduplication algorithm using the `--deduplication.func` flag. The available options are:
+
+* `penalty` (default): This is the default deduplication algorithm used by Thanos. It fills gaps only after a certain penalty window. This helps avoid flapping between replicas due to minor differences or delays.
+* `chain`: This algorithm performs 1:1 deduplication for samples. It merges all available data points from the replicas without applying any penalty. This is useful in deployments based on receivers, where each replica is populated by the same data. In such cases, using the penalty algorithm may cause gaps even when data is available in other replicas.
+
+Note that deduplication of HA groups is not supported by the `chain` algorithm.
+
 ## Thanos PromQL Engine (experimental)
 
 By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
@@ -297,6 +306,16 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
+      --deduplication.func=penalty
+                                 Experimental. Deduplication algorithm for
+                                 merging overlapping series. Possible values
+                                 are: "penalty", "chain". If no value is
+                                 specified, penalty based deduplication
+                                 algorithm will be used. When set to chain, the
+                                 default compact deduplication merger is used,
+                                 which performs 1:1 deduplication for samples.
+                                 At least one replica label has to be set via
+                                 --query.replica-label flag.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
       --endpoint=<endpoint> ...  (Deprecated): Addresses of statically
