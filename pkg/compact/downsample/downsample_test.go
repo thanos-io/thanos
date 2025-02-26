@@ -1160,7 +1160,7 @@ func TestDownsample(t *testing.T) {
 			_, err = metadata.ReadFromDir(filepath.Join(dir, id.String()))
 			testutil.Ok(t, err)
 
-			indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
+			indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename), index.DecodePostingsRaw)
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, indexr.Close()) }()
 
@@ -1289,7 +1289,7 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	_, err = metadata.ReadFromDir(filepath.Join(dir, id.String()))
 	testutil.Ok(t, err)
 
-	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
+	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename), index.DecodePostingsRaw)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, indexr.Close()) }()
 
@@ -1697,6 +1697,11 @@ func (s testSample) FH() *histogram.FloatHistogram {
 
 func (s testSample) Type() chunkenc.ValueType {
 	panic("not implemented")
+}
+
+func (s testSample) Copy() chunks.Sample {
+	c := testSample{t: s.t, f: s.f}
+	return c
 }
 
 type sampleIterator struct {

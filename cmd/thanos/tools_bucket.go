@@ -54,6 +54,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -1233,7 +1234,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				if err != nil {
 					return errors.Wrapf(err, "read meta of %v", id)
 				}
-				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), chunkPool)
+				b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), filepath.Join(tbc.tmpDir, id.String()), chunkPool, nil)
 				if err != nil {
 					return errors.Wrapf(err, "open block %v", id)
 				}

@@ -39,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
@@ -440,7 +441,7 @@ func runQuery(
 
 	engineOpts := engine.Opts{
 		EngineOpts: promql.EngineOpts{
-			Logger: logger,
+			Logger: logutil.GoKitLogToSlog(logger),
 			Reg:    reg,
 			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 			MaxSamples:    math.MaxInt32,
@@ -460,7 +461,7 @@ func runQuery(
 	// An active query tracker will be added only if the user specifies a non-default path.
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	if activeQueryDir != "" {
-		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
+		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
 	}
 
 	var remoteEngineEndpoints api.RemoteEndpoints

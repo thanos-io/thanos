@@ -166,6 +166,13 @@ func optimizePostingsFetchByDownloadedBytes(
 		if seriesMatched <= 0 {
 			break
 		}
+		// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
+		if postingGroupMaxKeySeriesRatio > 0 && maxSeriesMatched > 0 &&
+			float64(pg.existentKeys)/float64(maxSeriesMatched) > postingGroupMaxKeySeriesRatio {
+			markPostingGroupLazy(pg, "keys_limit", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
+			i++
+			continue
+		}
 		if pg.addAll {
 			// For posting group that has negative matchers, we assume we can underfetch
 			// min(pg.cardinality, current_series_matched) * match ratio series.
@@ -177,13 +184,6 @@ func optimizePostingsFetchByDownloadedBytes(
 			seriesMatched -= underfetchedSeries
 			underfetchedSeriesSize = underfetchedSeries * seriesMaxSize
 		} else {
-			// Only mark posting group as lazy due to too many keys when those keys are known to be existent.
-			if postingGroupMaxKeySeriesRatio > 0 && maxSeriesMatched > 0 &&
-				float64(pg.existentKeys)/float64(maxSeriesMatched) > postingGroupMaxKeySeriesRatio {
-				markPostingGroupLazy(pg, "keys_limit", lazyExpandedPostingSizeBytes, lazyExpandedPostingGroupsByReason)
-				i++
-				continue
-			}
 			underfetchedSeriesSize = seriesMaxSize * int64(math.Ceil(float64(seriesMatched)*(1-seriesMatchRatio)))
 			seriesMatched = int64(math.Ceil(float64(seriesMatched) * seriesMatchRatio))
 		}

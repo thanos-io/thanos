@@ -585,7 +585,7 @@ func WithLazyExpandedPostings(enabled bool) BucketStoreOption {
 	}
 }
 
-// WithPostingGroupMaxKeySeriesRatio configures a threshold to mark a posting group as lazy if it has more add keys.
+// WithPostingGroupMaxKeySeriesRatio configures a threshold to mark a posting group as lazy if it has more add keys or remove keys.
 func WithPostingGroupMaxKeySeriesRatio(postingGroupMaxKeySeriesRatio float64) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.postingGroupMaxKeySeriesRatio = postingGroupMaxKeySeriesRatio
@@ -766,8 +766,15 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		return metaFetchErr
 	}
 
+	s.mtx.RLock()
+	keys := make([]ulid.ULID, 0, len(s.blocks))
+	for k := range s.blocks {
+		keys = append(keys, k)
+	}
+	s.mtx.RUnlock()
+
 	// Drop all blocks that are no longer present in the bucket.
-	for id := range s.blocks {
+	for _, id := range keys {
 		if _, ok := metas[id]; ok {
 			continue
 		}
@@ -1076,7 +1083,7 @@ type blockSeriesClient struct {
 
 	lazyExpandedPostingEnabled bool
 	seriesMatchRatio           float64
-	// Mark posting group as lazy if it adds too many keys. 0 to disable.
+	// Mark posting group as lazy if it adds or removes too many keys. 0 to disable.
 	postingGroupMaxKeySeriesRatio                 float64
 	lazyExpandedPostingsCount                     prometheus.Counter
 	lazyExpandedPostingGroupByReason              *prometheus.CounterVec
@@ -2978,6 +2985,12 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 			return nil, nil, err
 		}
 
+		// If the matcher is ="" or =~"", it is the same as removing all values for the label.
+		// We can skip calling `Matches` here.
+		if m.Value == "" && (m.Type == labels.MatchEqual || m.Type == labels.MatchRegexp) {
+			return newPostingGroup(true, m.Name, nil, vals), vals, nil
+		}
+
 		for i, val := range vals {
 			if (i+1)%checkContextEveryNIterations == 0 && ctx.Err() != nil {
 				return nil, nil, ctx.Err()
@@ -3004,6 +3017,12 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	vals, err := lvalsFn(m.Name)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// If the matcher is !="" or !~"", it is the same as adding all values for the label.
+	// We can skip calling `Matches` here.
+	if m.Value == "" && (m.Type == labels.MatchNotEqual || m.Type == labels.MatchNotRegexp) {
+		return newPostingGroup(false, m.Name, vals, nil), vals, nil
 	}
 
 	var toAdd []string
@@ -3251,7 +3270,7 @@ func (r *bucketIndexReader) decodeCachedPostings(b []byte) (index.Postings, []fu
 			closeFns = append(closeFns, l.(closeablePostings).close)
 		}
 	} else {
-		_, l, err = r.dec.Postings(b)
+		_, l, err = index.DecodePostingsRaw(encoding.Decbuf{B: b})
 	}
 	return l, closeFns, err
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -214,7 +215,7 @@ func (n *minMaxSumInt64) Avg() int64 {
 // It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
 // See HealthStats.Issue347OutsideChunks for details.
 func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, minTime, maxTime int64) (stats HealthStats, err error) {
-	r, err := index.NewFileReader(fn)
+	r, err := index.NewFileReader(fn, index.DecodePostingsRaw)
 	if err != nil {
 		return stats, errors.Wrap(err, "open index file")
 	}
@@ -427,7 +428,7 @@ func Repair(ctx context.Context, logger log.Logger, dir string, id ulid.ULID, so
 		return resid, errors.New("cannot repair downsampled block")
 	}
 
-	b, err := tsdb.OpenBlock(logger, bdir, nil)
+	b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), bdir, nil, nil)
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}

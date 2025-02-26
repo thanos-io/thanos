@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/middleware"
@@ -52,7 +53,7 @@ func TestRoundTrip(t *testing.T) {
 		PrometheusCodec,
 		nil,
 		promql.EngineOpts{
-			Logger:     log.NewNopLogger(),
+			Logger:     promslog.NewNopLogger(),
 			Reg:        nil,
 			MaxSamples: 1000,
 			Timeout:    time.Minute,
