@@ -7,6 +7,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/pprof"
+	"runtime"
+	"runtime/debug"
 
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
@@ -48,7 +50,7 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 
 	registerMetrics(mux, reg)
 	registerProbes(mux, prober, logger)
-	registerProfiler(mux)
+	registerProfiler(mux, logger)
 
 	var h http.Handler
 	if options.enableH2C {
@@ -115,12 +117,27 @@ func (s *Server) Handle(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 
-func registerProfiler(mux *http.ServeMux) {
+func forceMemoryRelease(logger log.Logger) {
+	var memStatsBefore, memStatsAfter runtime.MemStats
+	runtime.ReadMemStats(&memStatsBefore)
+	runtime.GC()         // Run Garbage Collection
+	debug.FreeOSMemory() // Release unused memory to OS
+	runtime.ReadMemStats(&memStatsBefore)
+	level.Info(logger).Log("msg", "Heap Alloc MB", "before", memStatsBefore.HeapAlloc/1024/1024, "after", memStatsAfter.HeapAlloc/1024/1024)
+	level.Info(logger).Log("msg", "Total Alloc MB", "before", memStatsBefore.TotalAlloc/1024/1024, "after", memStatsAfter.TotalAlloc/1024/1024)
+	level.Info(logger).Log("msg", "Sys MB", "before", memStatsBefore.Sys/1024/1024, "after", memStatsAfter.Sys/1024/1024)
+}
+
+func registerProfiler(mux *http.ServeMux, logger log.Logger) {
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	mux.Handle("/debug/fgprof", fgprof.Handler())
+	mux.HandleFunc("/debug/release-memory", func(w http.ResponseWriter, _ *http.Request) {
+		forceMemoryRelease(logger)
+		_, _ = w.Write([]byte("Release memory run succeeded"))
+	})
 }
 
 func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
