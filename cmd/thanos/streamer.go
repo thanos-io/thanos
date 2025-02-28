@@ -274,6 +274,9 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 				Name:  label.Name,
 				Value: label.Value,
 			})
+			if label.Name == labels.MetricName {
+				metricName = label.Value
+			}
 		}
 		sort.Sort(aggrChunkByTimestamp(seriesResp.Chunks))
 		samples := 0
