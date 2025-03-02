@@ -28,6 +28,7 @@ import (
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	remoteapi "github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
@@ -47,6 +48,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -143,7 +145,8 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	Limiter *Limiter
+	Limiter            *Limiter
+	remoteWriteHandler http.Handler
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -257,6 +260,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		)
 	}
 
+	h.remoteWriteHandler = remoteapi.NewHandler(
+		h,
+		remoteapi.MessageTypes{remoteapi.WriteV1MessageType, remoteapi.WriteV2MessageType},
+		remoteapi.WithHandlerLogger(logutil.GoKitLogToSlog(h.logger).With("component", "remote_write_handler")),
+		remoteapi.WithHandlerMiddlewares(h.LimitedSnappyDecompressorMiddleware()),
+	)
+
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		next = ins.NewHandler(name, http.HandlerFunc(next))
@@ -273,7 +283,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			"receive",
 			readyf(
 				middleware.RequestID(
-					http.HandlerFunc(h.receiveHTTP),
+					h.remoteWriteHandler,
 				),
 			),
 		),
@@ -490,56 +500,29 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
-func parseProtoMsg(contentType string) (WriteProtoFullName, error) {
-	contentType = strings.TrimSpace(contentType)
-
-	parts := strings.Split(contentType, ";")
-	if parts[0] != appProtoContentType {
-		return "", fmt.Errorf("expected %v as the first (media) part, got %v content-type", appProtoContentType, contentType)
-	}
-	// Parse potential https://www.rfc-editor.org/rfc/rfc9110#parameter
-	for _, p := range parts[1:] {
-		pair := strings.Split(p, "=")
-		if len(pair) != 2 {
-			return "", fmt.Errorf("as per https://www.rfc-editor.org/rfc/rfc9110#parameter expected parameters to be key-values, got %v in %v content-type", p, contentType)
-		}
-		if pair[0] == "proto" {
-			ret := WriteProtoFullName(pair[1])
-			if err := ret.Validate(); err != nil {
-				return "", fmt.Errorf("got %v content type; %w", contentType, err)
-			}
-			return ret, nil
-		}
-	}
-	// No "proto=" parameter, assuming v1.
-	return WriteProtoFullNameV1, nil
-}
-
-func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Store(ctx context.Context, msgType remoteapi.WriteMessageType, req *http.Request) (*remoteapi.WriteResponse, error) {
 	var err error
-	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
+	span, ctx := tracing.StartSpan(ctx, "receive_http")
 	span.SetTag("receiver.mode", string(h.receiverMode))
 	defer span.Finish()
 
-	tenantHTTP, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
+	tenantHTTP, err := tenancy.GetTenantFromHTTP(req, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
 	if err != nil {
 		level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenantHTTP)
 	span.SetTag("tenant", tenantHTTP)
 
 	writeGate := h.Limiter.WriteGate()
-	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = writeGate.Start(r.Context())
+	tracing.DoInSpan(ctx, "receive_write_gate_ismyturn", func(ctx context.Context) {
+		err = writeGate.Start(ctx)
 	})
 	defer writeGate.Done()
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	under, err := h.Limiter.HeadSeriesLimiter().isUnderLimit(tenantHTTP)
@@ -549,91 +532,117 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
-		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
-		return
-	}
-
-	contentType := r.Header.Get("Content-Type")
-	if contentType == "" {
-		// Don't break yolo 1.0 clients if not needed.
-		// We could give http.StatusUnsupportedMediaType, but let's assume 1.0 message by default.
-		contentType = appProtoContentType
-	}
-
-	msgType, err := parseProtoMsg(contentType)
-	if err != nil {
-		level.Error(tLogger).Log("msg", "Error decoding remote write request", "err", err)
-		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
-		return
-	}
-
-	enc := r.Header.Get("Content-Encoding")
-	if enc == "" {
-		// Don't break yolo 1.0 clients if not needed. This is similar to what we did
-		// before 2.0: https://github.com/prometheus/prometheus/blob/d78253319daa62c8f28ed47e40bafcad2dd8b586/storage/remote/write_handler.go#L62
-		// We could give http.StatusUnsupportedMediaType, but let's assume snappy by default.
-	} else if enc != string(SnappyBlockCompression) {
-		err := fmt.Errorf("%v encoding (compression) is not accepted by this server; only %v is acceptable", enc, SnappyBlockCompression)
-		level.Error(tLogger).Log("msg", "Error decoding remote write request", "err", err)
-		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		return nil, fmt.Errorf("tenant is above active series limit")
 	}
 
 	switch msgType {
-	case WriteProtoFullNameV1:
-		h.storeV1(ctx, tLogger, w, r, tenantHTTP)
-	case WriteProtoFullNameV2:
-		h.storeV2(ctx, tLogger, w, r, tenantHTTP)
+	case remoteapi.WriteV1MessageType:
+		return h.storeV1(ctx, tLogger, req, tenantHTTP)
+	case remoteapi.WriteV2MessageType:
+		return h.storeV2(ctx, tLogger, req, tenantHTTP)
 	default:
+		return nil, fmt.Errorf("unsupported message type")
 	}
 }
 
-func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, w http.ResponseWriter, r *http.Request, tenantHTTP string) {
-	var err error
-	requestLimiter := h.Limiter.RequestLimiter()
-	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
-	// Since this is receive hot path, grow upfront saving allocations and CPU time.
-	compressed := bytes.Buffer{}
-	if r.ContentLength >= 0 {
-		if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
-			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
-			return
-		}
-		compressed.Grow(int(r.ContentLength))
-	} else {
-		compressed.Grow(512)
-	}
-	_, err = io.Copy(&compressed, r.Body)
-	if err != nil {
-		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
-		return
-	}
-	reqBuf, err := s2.Decode(nil, compressed.Bytes())
-	if err != nil {
-		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
-		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
-		return
+// LimitedSnappyDecompressorMiddleware returns a middleware that checks if the request body is snappy-encoded and decompresses it.
+// If the request body is not snappy-encoded, it returns an error.
+// It also checks if the request body is too large for the limiter.
+func (h *Handler) LimitedSnappyDecompressorMiddleware() func(http.Handler) http.Handler {
+	bufPool := sync.Pool{
+		New: func() any {
+			return bytes.NewBuffer(nil)
+		},
 	}
 
-	if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(reqBuf))) {
-		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
-		return
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			enc := r.Header.Get("Content-Encoding")
+			if enc != "" && enc != string(remoteapi.SnappyBlockCompression) {
+				err := fmt.Errorf("%v encoding (compression) is not accepted by this server; only %v is acceptable", enc, remoteapi.SnappyBlockCompression)
+				level.Error(h.logger).Log("msg", "error decoding remote write request", "err", err)
+				http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+				return
+			}
+
+			tenantHTTP, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
+			if err != nil {
+				level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
+				http.Error(w, fmt.Sprintf("error getting tenant from HTTP: %v", err), http.StatusBadRequest)
+				return
+			}
+			tLogger := log.With(h.logger, "tenant", tenantHTTP)
+
+			requestLimiter := h.Limiter.RequestLimiter()
+
+			buf := bufPool.Get().(*bytes.Buffer)
+			buf.Reset()
+			defer bufPool.Put(buf)
+			// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+			// Since this is receive hot path, grow upfront saving allocations and CPU time.
+			if r.ContentLength >= 0 {
+				if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
+					level.Error(tLogger).Log("msg", "write request too large", "err", err)
+					http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+					return
+				}
+				buf.Grow(int(r.ContentLength))
+			} else {
+				buf.Grow(512)
+			}
+
+			_, err = io.Copy(buf, r.Body)
+			if err != nil {
+				level.Error(tLogger).Log("msg", "error reading compressed request body", "err", err)
+				http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
+				return
+			}
+			reqBuf, err := s2.Decode(nil, buf.Bytes())
+			if err != nil {
+				level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
+				http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+				return
+			}
+
+			if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(reqBuf))) {
+				level.Error(tLogger).Log("msg", "write request too large", "err", err)
+				http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+
+			// Replace the body with decompressed data and remove Content-Encoding header.
+			r.Body = io.NopCloser(bytes.NewReader(reqBuf))
+			r.Header.Del("Content-Encoding")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, req *http.Request, tenantHTTP string) (*remoteapi.WriteResponse, error) {
+	var err error
+	writeResponse := remoteapi.WriteResponse{}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		writeResponse.SetStatusCode(http.StatusInternalServerError)
+		return &writeResponse, fmt.Errorf("error reading decompressed request body: %w", err)
 	}
 
 	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
 	// from the whole request. Ensure that we always copy those when we want to
 	// store them for longer time.
 	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if err := proto.Unmarshal(bodyBytes, &wreq); err != nil {
+		writeResponse.SetStatusCode(http.StatusBadRequest)
+		return &writeResponse, fmt.Errorf("error unmarshalling request body: %w", err)
 	}
 
 	rep := uint64(0)
 	// If the header is empty, we assume the request is not yet replicated.
-	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
+	if replicaRaw := req.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
 		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
-			http.Error(w, "could not parse replica header", http.StatusBadRequest)
-			return
+			writeResponse.SetStatusCode(http.StatusBadRequest)
+			return &writeResponse, fmt.Errorf("could not parse replica header: %w", err)
 		}
 	}
 
@@ -644,15 +653,16 @@ func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, w http.Respon
 		if len(wreq.Metadata) > 0 {
 			// TODO(bwplotka): Do we need this error message?
 			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
-			return
+			return &writeResponse, nil
 		}
 		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
-		return
+		return &writeResponse, nil
 	}
 
+	requestLimiter := h.Limiter.RequestLimiter()
 	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
-		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
-		return
+		writeResponse.SetStatusCode(http.StatusRequestEntityTooLarge)
+		return &writeResponse, fmt.Errorf("too many timeseries")
 	}
 
 	totalSamples := 0
@@ -660,19 +670,32 @@ func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, w http.Respon
 		totalSamples += len(timeseries.Samples)
 	}
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
-		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
-		return
+		writeResponse.SetStatusCode(http.StatusRequestEntityTooLarge)
+		return &writeResponse, fmt.Errorf("too many samples")
 	}
 
 	// Apply relabeling configs.
 	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
-		return
+		return &writeResponse, nil
 	}
 
 	responseStatusCode := http.StatusOK
 	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq)
+
+	for tenant, stats := range tenantStats {
+		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+
+		stats := remoteapi.WriteResponseStats{
+			Samples:    stats.totalSamples,
+			Exemplars:  stats.totalExemplars,
+			Histograms: stats.totalHistograms,
+		}
+		writeResponse.Add(stats)
+	}
+
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -688,13 +711,12 @@ func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, w http.Respon
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
 		}
-		http.Error(w, err.Error(), responseStatusCode)
+		writeResponse.SetStatusCode(responseStatusCode)
+		return &writeResponse, fmt.Errorf("failed to handle request: %w", err)
 	}
 
-	for tenant, stats := range tenantStats {
-		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
-	}
+	writeResponse.SetStatusCode(responseStatusCode)
+	return &writeResponse, nil
 }
 
 type requestStats struct {

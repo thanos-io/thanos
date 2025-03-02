@@ -31,6 +31,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
+	remoteapi "github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
@@ -318,7 +319,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 	}{
 		{
 			name:              "size 1 success",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -351,7 +352,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 2 success",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -365,7 +366,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 success",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -382,7 +383,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 success with replication",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -504,7 +505,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 with replication and one faulty",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -521,7 +522,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 with replication and one commit error",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -589,7 +590,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 6 with replication 3",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -641,7 +642,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 6 with replication 5 two commit errors",
-			status:            http.StatusOK,
+			status:            http.StatusNoContent,
 			replicationFactor: 5,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -807,7 +808,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 		},
 		{
 			name:         "Request under the limit of series",
-			status:       http.StatusOK,
+			status:       http.StatusNoContent,
 			amountSeries: 20,
 		},
 		{
@@ -818,7 +819,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 		},
 		{
 			name:          "Request under the limit of samples (series * samples)",
-			status:        http.StatusOK,
+			status:        http.StatusNoContent,
 			amountSeries:  10,
 			amountSamples: 2,
 		},
@@ -956,7 +957,7 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	req.Header.Add(h.options.TenantHeader, tenant)
 
 	rec := httptest.NewRecorder()
-	h.receiveHTTP(rec, req)
+	h.remoteWriteHandler.ServeHTTP(rec, req)
 	rec.Flush()
 
 	return rec, nil
@@ -1009,7 +1010,7 @@ func (f *fakeRemoteWriteGRPCServer) Close() error { return nil }
 
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
 	// Switch between v1 and v2 by changing the argument.
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b), "v2")
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b), "v1")
 }
 
 func TestHandlerReceiveHTTP(t *testing.T) {
@@ -1051,13 +1052,18 @@ type tsOverrideAppender struct {
 	storage.Appender
 
 	interval int64
+	mu       sync.Mutex // Add mutex
 }
 
 var cnt int64
 
 func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, _ int64, v float64) (storage.SeriesRef, error) {
+	a.mu.Lock()
 	cnt += a.interval
-	return a.Appender.Append(ref, l, cnt, v)
+	ts := cnt
+	a.mu.Unlock()
+
+	return a.Appender.Append(ref, l, ts, v)
 }
 
 func (a *tsOverrideAppender) GetRef(lset labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
@@ -1129,6 +1135,24 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 		}
 	}
 	return series
+}
+
+const (
+	versionHeader        = "X-Prometheus-Remote-Write-Version"
+	version1HeaderValue  = "0.1.0"
+	version20HeaderValue = "2.0.0"
+	appProtoContentType  = "application/x-protobuf"
+)
+
+var contentTypeHeaders = map[remoteapi.WriteMessageType]string{
+	remoteapi.WriteV1MessageType: appProtoContentType, // Also application/x-protobuf;proto=prometheus.WriteRequest but simplified for compatibility with 1.x spec.
+	remoteapi.WriteV2MessageType: appProtoContentType + ";proto=io.prometheus.write.v2.Request",
+}
+
+// ContentTypeHeader returns content type header value for the given proto message
+// or empty string for unknown proto message.
+func contentTypeHeader(m remoteapi.WriteMessageType) string {
+	return contentTypeHeaders[m]
 }
 
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB, mode string) {
@@ -1260,14 +1284,14 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB, mode string) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					req := &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
+					req := &http.Request{Method: http.MethodPost, ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
 					if mode == "v2" {
-						req.Header.Add("Content-Type", contentTypeHeader(WriteProtoFullNameV2))
-						req.Header.Add(versionHeader, version2HeaderValue)
-						req.Header.Add("Content-Encoding", string(SnappyBlockCompression))
+						req.Header.Add("Content-Type", contentTypeHeader(remoteapi.WriteV2MessageType))
+						req.Header.Add(versionHeader, version20HeaderValue)
+						req.Header.Add("Content-Encoding", string(remoteapi.SnappyBlockCompression))
 					}
-					handler.receiveHTTP(r, req)
-					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+					handler.remoteWriteHandler.ServeHTTP(r, req)
+					testutil.Equals(b, http.StatusNoContent, r.Code, "got non 200 error: %v", r.Body.String())
 				}
 			})
 
@@ -1290,27 +1314,27 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB, mode string) {
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()
-			req := &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
+			req := &http.Request{Method: http.MethodPost, ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
 			if mode == "v2" {
-				req.Header.Add("Content-Type", contentTypeHeader(WriteProtoFullNameV2))
-				req.Header.Add(versionHeader, version2HeaderValue)
-				req.Header.Add("Content-Encoding", string(SnappyBlockCompression))
+				req.Header.Add("Content-Type", contentTypeHeader(remoteapi.WriteV2MessageType))
+				req.Header.Add(versionHeader, version20HeaderValue)
+				req.Header.Add("Content-Encoding", string(remoteapi.SnappyBlockCompression))
 			}
-			handler.receiveHTTP(r, req)
-			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+			handler.remoteWriteHandler.ServeHTTP(r, req)
+			testutil.Equals(b, http.StatusNoContent, r.Code, "got non 200 error: %v", r.Body.String())
 
 			b.Run("conflict errors", func(b testutil.TB) {
 				n := b.N()
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					req := &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
+					req := &http.Request{Method: http.MethodPost, ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest)), Header: http.Header{}}
 					if mode == "v2" {
-						req.Header.Add("Content-Type", contentTypeHeader(WriteProtoFullNameV2))
-						req.Header.Add(versionHeader, version2HeaderValue)
-						req.Header.Add("Content-Encoding", string(SnappyBlockCompression))
+						req.Header.Add("Content-Type", contentTypeHeader(remoteapi.WriteV2MessageType))
+						req.Header.Add(versionHeader, version20HeaderValue)
+						req.Header.Add("Content-Encoding", string(remoteapi.SnappyBlockCompression))
 					}
-					handler.receiveHTTP(r, req)
+					handler.remoteWriteHandler.ServeHTTP(r, req)
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
 						b, _ := io.ReadAll(r.Body)
 						return string(b)

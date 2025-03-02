@@ -4,8 +4,8 @@
 package receive
 
 import (
-	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -14,8 +14,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
-	"github.com/klauspost/compress/s2"
 	"github.com/pkg/errors"
+	remoteapi "github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"google.golang.org/grpc/codes"
@@ -28,56 +28,35 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-func (h *Handler) storeV2(ctx context.Context, tLogger log.Logger, w http.ResponseWriter, r *http.Request, tenantHTTP string) {
+func (h *Handler) storeV2(ctx context.Context, tLogger log.Logger, req *http.Request, tenantHTTP string) (*remoteapi.WriteResponse, error) {
 	var err error
-	requestLimiter := h.Limiter.RequestLimiter()
-	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
-	// Since this is receive hot path, grow upfront saving allocations and CPU time.
-	compressed := bytes.Buffer{}
-	if r.ContentLength >= 0 {
-		if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
-			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
-			return
-		}
-		compressed.Grow(int(r.ContentLength))
-	} else {
-		compressed.Grow(512)
-	}
-	_, err = io.Copy(&compressed, r.Body)
-	if err != nil {
-		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
-		return
-	}
-	reqBuf, err := s2.Decode(nil, compressed.Bytes())
-	if err != nil {
-		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
-		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
-		return
-	}
+	writeResponse := remoteapi.WriteResponse{}
 
-	if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(reqBuf))) {
-		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
-		return
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		writeResponse.SetStatusCode(http.StatusInternalServerError)
+		return &writeResponse, fmt.Errorf("error reading decompressed request body: %w", err)
 	}
 
 	var wreq writev2pb.Request
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if err := proto.Unmarshal(bodyBytes, &wreq); err != nil {
+		writeResponse.SetStatusCode(http.StatusBadRequest)
+		return &writeResponse, fmt.Errorf("error unmarshalling request body: %w", err)
 	}
 
 	rep := uint64(0)
 	// If the header is empty, we assume the request is not yet replicated.
-	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
+	if replicaRaw := req.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
 		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
-			http.Error(w, "could not parse replica header", http.StatusBadRequest)
-			return
+			writeResponse.SetStatusCode(http.StatusBadRequest)
+			return &writeResponse, fmt.Errorf("could not parse replica header: %w", err)
 		}
 	}
 
+	requestLimiter := h.Limiter.RequestLimiter()
 	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
-		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
-		return
+		writeResponse.SetStatusCode(http.StatusRequestEntityTooLarge)
+		return &writeResponse, fmt.Errorf("too many timeseries")
 	}
 
 	totalSamples := 0
@@ -86,12 +65,25 @@ func (h *Handler) storeV2(ctx context.Context, tLogger log.Logger, w http.Respon
 	}
 
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
-		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
-		return
+		writeResponse.SetStatusCode(http.StatusRequestEntityTooLarge)
+		return &writeResponse, fmt.Errorf("too many samples")
 	}
 
-	responseStatusCode := http.StatusOK
+	responseStatusCode := http.StatusNoContent
 	tenantStats, err := h.handleRequestV2(ctx, tLogger, rep, &wreq, tenantHTTP)
+
+	for tenant, stats := range tenantStats {
+		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+
+		stats := remoteapi.WriteResponseStats{
+			Samples:    stats.totalSamples,
+			Exemplars:  stats.totalExemplars,
+			Histograms: stats.totalHistograms,
+		}
+		writeResponse.Add(stats)
+	}
+
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -107,16 +99,12 @@ func (h *Handler) storeV2(ctx context.Context, tLogger log.Logger, w http.Respon
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
 		}
-		http.Error(w, err.Error(), responseStatusCode)
+		writeResponse.SetStatusCode(responseStatusCode)
+		return &writeResponse, fmt.Errorf("failed to handle request: %w", err)
 	}
 
-	for tenant, stats := range tenantStats {
-		w.Header().Set(writtenSamplesHeader, strconv.Itoa(stats.totalSamples))
-		w.Header().Set(writtenHistogramsHeader, strconv.Itoa(stats.totalHistograms))
-		w.Header().Set(writtenExemplarsHeader, strconv.Itoa(stats.totalExemplars))
-		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
-	}
+	writeResponse.SetStatusCode(responseStatusCode)
+	return &writeResponse, nil
 }
 
 func (h *Handler) handleRequestV2(ctx context.Context, tLogger log.Logger, rep uint64, wreq *writev2pb.Request, tenantHTTP string) (tenantRequestStats, error) {
@@ -125,6 +113,7 @@ func (h *Handler) handleRequestV2(ctx context.Context, tLogger log.Logger, rep u
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return tenantRequestStats{}, nil
 	}
+	defer symbolTable.Reset()
 
 	// This replica value is used to detect cycles in cyclic topologies.
 	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
