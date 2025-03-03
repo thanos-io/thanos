@@ -29,6 +29,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7890](https://github.com/thanos-io/thanos/pull/7890) Query,Ruler: *breaking :warning:* deprecated `--store.sd-file` and `--store.sd-interval` to be replaced with `--endpoint.sd-config` and `--endpoint-sd-config-reload-interval`; removed legacy flags to pass endpoints `--store`, `--metadata`, `--rule`, `--exemplar`.
 - [#7012](https://github.com/thanos-io/thanos/pull/7012) Query: Automatically adjust `max_source_resolution` based on promql query to avoid querying data from higher resolution resulting empty results.
+- [#8118](https://github.com/thanos-io/thanos/pull/8118) Query: Bumped promql-engine
 
 ### Removed
 

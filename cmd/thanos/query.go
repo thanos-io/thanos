@@ -478,7 +478,7 @@ func runQuery(
 		})
 	}
 
-	engineFactory := apiv1.NewQueryEngineFactory(engineOpts, remoteEngineEndpoints)
+	engineFactory := apiv1.NewQueryFactory(engineOpts, remoteEngineEndpoints)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts.EngineOpts, dynamicLookbackDelta)
 
