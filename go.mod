@@ -3,7 +3,7 @@ module github.com/thanos-io/thanos
 go 1.24
 
 require (
-	capnproto.org/go/capnp/v3 v3.0.0-alpha.30
+	capnproto.org/go/capnp/v3 v3.1.0-alpha.1
 	cloud.google.com/go/trace v1.10.12
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.8.3
 	github.com/KimMachineGun/automemlimit v0.6.1
@@ -159,7 +159,6 @@ require (
 	k8s.io/client-go v0.31.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8 // indirect
-	zenhack.net/go/util v0.0.0-20230414204917-531d38494cf5 // indirect
 )
 
 require (
@@ -186,6 +185,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/clbanning/mxj v1.8.4 // indirect
+	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
