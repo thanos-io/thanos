@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/writev2pb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
@@ -76,12 +77,13 @@ func TestWriter(t *testing.T) {
 				},
 			},
 		},
+		// DesymbolizeLabels should sort the labels so this case will never fail.
 		"should error out and skip series with out-of-order labels": {
 			reqs: []*prompb.WriteRequest{
 				{
 					Timeseries: []prompb.TimeSeries{
 						{
-							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "Z", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "Z", Value: "1"}, labelpb.ZLabel{Name: "c", Value: "2"}),
 							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						},
 					},
@@ -102,6 +104,7 @@ func TestWriter(t *testing.T) {
 			},
 			expectedErr: errors.Wrapf(labelpb.ErrDuplicateLabels, "add 1 series"),
 		},
+		// DesymbolizeLabels should sort the labels so this case will never fail.
 		"should error out and skip series with out-of-order labels; accept series with valid labels": {
 			reqs: []*prompb.WriteRequest{
 				{
@@ -380,6 +383,69 @@ func TestWriter(t *testing.T) {
 
 				assertWrittenData(t, app, testData.expectedIngested)
 			})
+
+			t.Run("writev2_writer", func(t *testing.T) {
+				if strings.Contains(testName, "out-of-order labels") {
+					t.Skip("v2 writer out of order shouldn't happen")
+				}
+				logger, m, app := setupMultitsdb(t, testData.maxExemplars)
+
+				w := NewWriter(logger, m, testData.opts)
+				v2timeseries := make([]writev2pb.TimeSeries, 0, len(testData.reqs))
+
+				for idx, req := range testData.reqs {
+					st := writev2pb.NewSymbolTable()
+					for _, ts := range req.Timeseries {
+						refs := st.SymbolizeLabels(labelpb.ZLabelsToPromLabels(ts.Labels), nil)
+
+						samples := make([]writev2pb.Sample, 0, len(ts.Samples))
+						for _, s := range ts.Samples {
+							samples = append(samples, writev2pb.Sample{
+								Value:     s.Value,
+								Timestamp: s.Timestamp,
+							})
+						}
+
+						exemplars := make([]writev2pb.Exemplar, 0, len(ts.Exemplars))
+						for _, e := range ts.Exemplars {
+							exemplars = append(exemplars, writev2pb.Exemplar{
+								LabelsRefs: st.SymbolizeLabels(labelpb.ZLabelsToPromLabels(e.Labels), nil),
+								Value:      e.Value,
+								Timestamp:  e.Timestamp,
+							})
+						}
+
+						histograms := make([]writev2pb.Histogram, 0, len(ts.Histograms))
+						for _, h := range ts.Histograms {
+							if h.IsFloatHistogram() {
+								histograms = append(histograms, writev2pb.FromFloatHistogram(h.GetTimestamp(), prompb.FloatHistogramProtoToFloatHistogram(h)))
+							} else {
+								histograms = append(histograms, writev2pb.FromIntHistogram(h.GetTimestamp(), prompb.HistogramProtoToHistogram(h)))
+							}
+						}
+
+						v2timeseries = append(v2timeseries, writev2pb.TimeSeries{
+							LabelsRefs: refs,
+							Samples:    samples,
+							Exemplars:  exemplars,
+							Histograms: histograms,
+						})
+					}
+
+					err := w.WriteV2(context.Background(), tenancy.DefaultTenant, st, v2timeseries)
+
+					// We expect no error on any request except the last one
+					// which may error (and in that case we assert on it).
+					if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
+						testutil.Ok(t, err)
+					} else {
+						testutil.NotOk(t, err)
+						testutil.Equals(t, testData.expectedErr.Error(), err.Error())
+					}
+				}
+
+				assertWrittenData(t, app, testData.expectedIngested)
+			})
 		})
 	}
 }
@@ -503,6 +569,46 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		Timeseries: timeSeries,
 	}
 
+	st := writev2pb.NewSymbolTable()
+	v2timeseries := make([]writev2pb.TimeSeries, 0, len(wreq.Timeseries))
+
+	for _, ts := range wreq.Timeseries {
+		refs := st.SymbolizeLabels(labelpb.ZLabelsToPromLabels(ts.Labels), nil)
+
+		samples := make([]writev2pb.Sample, 0, len(ts.Samples))
+		for _, s := range ts.Samples {
+			samples = append(samples, writev2pb.Sample{
+				Value:     s.Value,
+				Timestamp: s.Timestamp,
+			})
+		}
+
+		exemplars := make([]writev2pb.Exemplar, 0, len(ts.Exemplars))
+		for _, e := range ts.Exemplars {
+			exemplars = append(exemplars, writev2pb.Exemplar{
+				LabelsRefs: st.SymbolizeLabels(labelpb.ZLabelsToPromLabels(e.Labels), nil),
+				Value:      e.Value,
+				Timestamp:  e.Timestamp,
+			})
+		}
+
+		histograms := make([]writev2pb.Histogram, 0, len(ts.Histograms))
+		for _, h := range ts.Histograms {
+			if h.IsFloatHistogram() {
+				histograms = append(histograms, writev2pb.FromFloatHistogram(h.GetTimestamp(), prompb.FloatHistogramProtoToFloatHistogram(h)))
+			} else {
+				histograms = append(histograms, writev2pb.FromIntHistogram(h.GetTimestamp(), prompb.HistogramProtoToHistogram(h)))
+			}
+		}
+
+		v2timeseries = append(v2timeseries, writev2pb.TimeSeries{
+			LabelsRefs: refs,
+			Samples:    samples,
+			Exemplars:  exemplars,
+			Histograms: histograms,
+		})
+	}
+
 	b.Run("without interning", func(b *testing.B) {
 		w := NewWriter(logger, m, &WriterOptions{Intern: false})
 
@@ -525,6 +631,27 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		}
 	})
 
+	b.Run("with interning remote write v2", func(b *testing.B) {
+		w := NewWriter(logger, m, &WriterOptions{Intern: true})
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			testutil.Ok(b, w.WriteV2(ctx, "foo", st, v2timeseries))
+		}
+	})
+
+	b.Run("without interning remote write v2", func(b *testing.B) {
+		w := NewWriter(logger, m, &WriterOptions{Intern: false})
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			testutil.Ok(b, w.WriteV2(ctx, "foo", st, v2timeseries))
+		}
+	})
 }
 
 // generateLabelsAndSeries generates time series for benchmark with specified number of labels.

@@ -28,6 +28,7 @@ import (
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	remoteapi "github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
@@ -47,12 +48,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/writev2pb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -91,6 +94,7 @@ var (
 type WriteableStoreAsyncClient interface {
 	storepb.WriteableStoreClient
 	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error))
+	RemoteWriteAsyncV2(context.Context, *storepb.WriteRequestV2, endpointReplica, []int, chan writeResponse, func(error))
 }
 
 // Options for the web Handler.
@@ -141,7 +145,8 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	Limiter *Limiter
+	Limiter            *Limiter
+	remoteWriteHandler http.Handler
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -255,6 +260,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		)
 	}
 
+	h.remoteWriteHandler = remoteapi.NewHandler(
+		h,
+		remoteapi.MessageTypes{remoteapi.WriteV1MessageType, remoteapi.WriteV2MessageType},
+		remoteapi.WithHandlerLogger(logutil.GoKitLogToSlog(h.logger).With("component", "remote_write_handler")),
+		remoteapi.WithHandlerMiddlewares(h.LimitedSnappyDecompressorMiddleware()),
+	)
+
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		next = ins.NewHandler(name, http.HandlerFunc(next))
@@ -271,7 +283,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			"receive",
 			readyf(
 				middleware.RequestID(
-					http.HandlerFunc(h.receiveHTTP),
+					h.remoteWriteHandler,
 				),
 			),
 		),
@@ -488,31 +500,29 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
-func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Store(ctx context.Context, msgType remoteapi.WriteMessageType, req *http.Request) (*remoteapi.WriteResponse, error) {
 	var err error
-	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
+	span, ctx := tracing.StartSpan(ctx, "receive_http")
 	span.SetTag("receiver.mode", string(h.receiverMode))
 	defer span.Finish()
 
-	tenantHTTP, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
+	tenantHTTP, err := tenancy.GetTenantFromHTTP(req, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
 	if err != nil {
 		level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenantHTTP)
 	span.SetTag("tenant", tenantHTTP)
 
 	writeGate := h.Limiter.WriteGate()
-	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = writeGate.Start(r.Context())
+	tracing.DoInSpan(ctx, "receive_write_gate_ismyturn", func(ctx context.Context) {
+		err = writeGate.Start(ctx)
 	})
 	defer writeGate.Done()
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	under, err := h.Limiter.HeadSeriesLimiter().isUnderLimit(tenantHTTP)
@@ -522,55 +532,117 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
-		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
-		return
+		return nil, fmt.Errorf("tenant is above active series limit")
 	}
 
-	requestLimiter := h.Limiter.RequestLimiter()
-	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
-	// Since this is receive hot path, grow upfront saving allocations and CPU time.
-	compressed := bytes.Buffer{}
-	if r.ContentLength >= 0 {
-		if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
-			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
-			return
-		}
-		compressed.Grow(int(r.ContentLength))
-	} else {
-		compressed.Grow(512)
+	switch msgType {
+	case remoteapi.WriteV1MessageType:
+		return h.storeV1(ctx, tLogger, req, tenantHTTP)
+	case remoteapi.WriteV2MessageType:
+		return h.storeV2(ctx, tLogger, req, tenantHTTP)
+	default:
+		return nil, fmt.Errorf("unsupported message type")
 	}
-	_, err = io.Copy(&compressed, r.Body)
-	if err != nil {
-		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
-		return
-	}
-	reqBuf, err := s2.Decode(nil, compressed.Bytes())
-	if err != nil {
-		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
-		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
-		return
+}
+
+// LimitedSnappyDecompressorMiddleware returns a middleware that checks if the request body is snappy-encoded and decompresses it.
+// If the request body is not snappy-encoded, it returns an error.
+// It also checks if the request body is too large for the limiter.
+func (h *Handler) LimitedSnappyDecompressorMiddleware() func(http.Handler) http.Handler {
+	bufPool := sync.Pool{
+		New: func() any {
+			return bytes.NewBuffer(nil)
+		},
 	}
 
-	if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(reqBuf))) {
-		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
-		return
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			enc := r.Header.Get("Content-Encoding")
+			if enc != "" && enc != string(remoteapi.SnappyBlockCompression) {
+				err := fmt.Errorf("%v encoding (compression) is not accepted by this server; only %v is acceptable", enc, remoteapi.SnappyBlockCompression)
+				level.Error(h.logger).Log("msg", "error decoding remote write request", "err", err)
+				http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+				return
+			}
+
+			tenantHTTP, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
+			if err != nil {
+				level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
+				http.Error(w, fmt.Sprintf("error getting tenant from HTTP: %v", err), http.StatusBadRequest)
+				return
+			}
+			tLogger := log.With(h.logger, "tenant", tenantHTTP)
+
+			requestLimiter := h.Limiter.RequestLimiter()
+
+			buf := bufPool.Get().(*bytes.Buffer)
+			buf.Reset()
+			defer bufPool.Put(buf)
+			// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+			// Since this is receive hot path, grow upfront saving allocations and CPU time.
+			if r.ContentLength >= 0 {
+				if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
+					level.Error(tLogger).Log("msg", "write request too large", "err", err)
+					http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+					return
+				}
+				buf.Grow(int(r.ContentLength))
+			} else {
+				buf.Grow(512)
+			}
+
+			_, err = io.Copy(buf, r.Body)
+			if err != nil {
+				level.Error(tLogger).Log("msg", "error reading compressed request body", "err", err)
+				http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
+				return
+			}
+			reqBuf, err := s2.Decode(nil, buf.Bytes())
+			if err != nil {
+				level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
+				http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+				return
+			}
+
+			if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(reqBuf))) {
+				level.Error(tLogger).Log("msg", "write request too large", "err", err)
+				http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+
+			// Replace the body with decompressed data and remove Content-Encoding header.
+			r.Body = io.NopCloser(bytes.NewReader(reqBuf))
+			r.Header.Del("Content-Encoding")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (h *Handler) storeV1(ctx context.Context, tLogger log.Logger, req *http.Request, tenantHTTP string) (*remoteapi.WriteResponse, error) {
+	var err error
+	writeResponse := remoteapi.WriteResponse{}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		writeResponse.SetStatusCode(http.StatusInternalServerError)
+		return &writeResponse, fmt.Errorf("error reading decompressed request body: %w", err)
 	}
 
 	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
 	// from the whole request. Ensure that we always copy those when we want to
 	// store them for longer time.
 	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if err := proto.Unmarshal(bodyBytes, &wreq); err != nil {
+		writeResponse.SetStatusCode(http.StatusBadRequest)
+		return &writeResponse, fmt.Errorf("error unmarshalling request body: %w", err)
 	}
 
 	rep := uint64(0)
 	// If the header is empty, we assume the request is not yet replicated.
-	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
+	if replicaRaw := req.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
 		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
-			http.Error(w, "could not parse replica header", http.StatusBadRequest)
-			return
+			writeResponse.SetStatusCode(http.StatusBadRequest)
+			return &writeResponse, fmt.Errorf("could not parse replica header: %w", err)
 		}
 	}
 
@@ -581,15 +653,16 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(wreq.Metadata) > 0 {
 			// TODO(bwplotka): Do we need this error message?
 			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
-			return
+			return &writeResponse, nil
 		}
 		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
-		return
+		return &writeResponse, nil
 	}
 
+	requestLimiter := h.Limiter.RequestLimiter()
 	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
-		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
-		return
+		writeResponse.SetStatusCode(http.StatusRequestEntityTooLarge)
+		return &writeResponse, fmt.Errorf("too many timeseries")
 	}
 
 	totalSamples := 0
@@ -597,19 +670,32 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		totalSamples += len(timeseries.Samples)
 	}
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
-		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
-		return
+		writeResponse.SetStatusCode(http.StatusRequestEntityTooLarge)
+		return &writeResponse, fmt.Errorf("too many samples")
 	}
 
 	// Apply relabeling configs.
 	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
-		return
+		return &writeResponse, nil
 	}
 
 	responseStatusCode := http.StatusOK
 	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq)
+
+	for tenant, stats := range tenantStats {
+		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+
+		stats := remoteapi.WriteResponseStats{
+			Samples:    stats.totalSamples,
+			Exemplars:  stats.totalExemplars,
+			Histograms: stats.totalHistograms,
+		}
+		writeResponse.Add(stats)
+	}
+
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -625,18 +711,19 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
 		}
-		http.Error(w, err.Error(), responseStatusCode)
+		writeResponse.SetStatusCode(responseStatusCode)
+		return &writeResponse, fmt.Errorf("failed to handle request: %w", err)
 	}
 
-	for tenant, stats := range tenantStats {
-		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
-	}
+	writeResponse.SetStatusCode(responseStatusCode)
+	return &writeResponse, nil
 }
 
 type requestStats struct {
-	timeseries   int
-	totalSamples int
+	timeseries      int
+	totalSamples    int
+	totalExemplars  int
+	totalHistograms int
 }
 
 type tenantRequestStats map[string]requestStats
@@ -879,7 +966,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		}
 
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := h.hashring.GetN(tenant, ts.Labels, rn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1054,6 +1141,36 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	defer span.Finish()
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	}
+	switch errors.Cause(err) {
+	case nil:
+		return &storepb.WriteResponse{}, nil
+	case errNotReady:
+		return nil, status.Error(codes.Unavailable, err.Error())
+	case errUnavailable:
+		return nil, status.Error(codes.Unavailable, err.Error())
+	case errConflict:
+		return nil, status.Error(codes.AlreadyExists, err.Error())
+	case errBadReplica:
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	default:
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+}
+
+// RemoteWriteV2 implements the gRPC remote write handler for storepb.WriteableStore.
+func (h *Handler) RemoteWriteV2(ctx context.Context, r *storepb.WriteRequestV2) (*storepb.WriteResponse, error) {
+	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
+	defer span.Finish()
+
+	wreq := writev2pb.Request{
+		Timeseries: r.Timeseries,
+		Symbols:    r.Symbols,
+	}
+
+	_, err := h.handleRequestV2(ctx, h.logger, uint64(r.Replica), &wreq, r.Tenant)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -1344,6 +1461,10 @@ func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest,
 	return pw.client.RemoteWrite(ctx, in)
 }
 
+func (pw *peerWorker) RemoteWriteV2(ctx context.Context, in *storepb.WriteRequestV2, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return pw.client.RemoteWriteV2(ctx, in)
+}
+
 type peerClient interface {
 	storepb.WriteableStoreClient
 	io.Closer
@@ -1410,6 +1531,31 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 
 		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
 			_, err := p.client.RemoteWrite(ctx, req)
+			responseWriter <- newWriteResponse(
+				seriesIDs,
+				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
+				er,
+			)
+			if err != nil {
+				sp := trace.SpanFromContext(ctx)
+				sp.SetAttributes(attribute.Bool("error", true))
+				sp.SetAttributes(attribute.String("error.msg", err.Error()))
+			}
+			cb(err)
+		}, opentracing.Tags{
+			"endpoint": er.endpoint,
+			"replica":  er.replica,
+		})
+	})
+}
+
+func (p *peerWorker) RemoteWriteAsyncV2(ctx context.Context, req *storepb.WriteRequestV2, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+	now := time.Now()
+	p.wp.Go(func() {
+		p.forwardDelay.Observe(time.Since(now).Seconds())
+
+		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			_, err := p.client.RemoteWriteV2(ctx, req)
 			responseWriter <- newWriteResponse(
 				seriesIDs,
 				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
