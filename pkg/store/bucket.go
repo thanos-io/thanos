@@ -2958,6 +2958,16 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
+	// .* regexp matches any string.
+	if m.Type == labels.MatchRegexp && m.Value == ".*" {
+		return newPostingGroup(true, m.Name, nil, nil), nil, nil
+	}
+
+	// .* not regexp doesn't match any string.
+	if m.Type == labels.MatchNotRegexp && m.Value == ".*" {
+		return newPostingGroup(false, m.Name, nil, nil), nil, nil
+	}
+
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
@@ -2991,6 +3001,11 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 			return newPostingGroup(true, m.Name, nil, vals), vals, nil
 		}
 
+		// .+ regexp matches any non-empty string: get postings for all label values and remove them.
+		if m.Type == labels.MatchNotRegexp && m.Value == ".+" {
+			return newPostingGroup(true, m.Name, nil, vals), vals, nil
+		}
+
 		for i, val := range vals {
 			if (i+1)%checkContextEveryNIterations == 0 && ctx.Err() != nil {
 				return nil, nil, ctx.Err()
@@ -3002,6 +3017,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 
 		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
 	}
+
 	if m.Type == labels.MatchRegexp {
 		if vals := m.SetMatches(); len(vals) > 0 {
 			sort.Strings(vals)
@@ -3022,6 +3038,11 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	// If the matcher is !="" or !~"", it is the same as adding all values for the label.
 	// We can skip calling `Matches` here.
 	if m.Value == "" && (m.Type == labels.MatchNotEqual || m.Type == labels.MatchNotRegexp) {
+		return newPostingGroup(false, m.Name, vals, nil), vals, nil
+	}
+
+	// .+ regexp matches any non-empty string: get postings for all label values.
+	if m.Type == labels.MatchRegexp && m.Value == ".+" {
 		return newPostingGroup(false, m.Name, vals, nil), vals, nil
 	}
 

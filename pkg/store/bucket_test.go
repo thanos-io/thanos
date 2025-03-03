@@ -3492,6 +3492,62 @@ func TestPostingGroupMerge(t *testing.T) {
 	}
 }
 
+func TestToPostingGroup(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name                  string
+		vals                  []string
+		matcher               *labels.Matcher
+		addAll                bool
+		addKeys               []string
+		removeKeys            []string
+		numberLabelValueCalls int
+	}{
+		{
+			name:                  "regexp .*",
+			matcher:               labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".*"),
+			addAll:                true,
+			numberLabelValueCalls: 0,
+		},
+		{
+			name:                  "not regexp .*",
+			matcher:               labels.MustNewMatcher(labels.MatchNotRegexp, labels.MetricName, ".*"),
+			addAll:                false,
+			numberLabelValueCalls: 0,
+		},
+		{
+			name:                  "regexp .+",
+			matcher:               labels.MustNewMatcher(labels.MatchRegexp, labels.MetricName, ".+"),
+			addAll:                false,
+			addKeys:               []string{"foo"},
+			vals:                  []string{"foo"},
+			numberLabelValueCalls: 1,
+		},
+		{
+			name:                  "not regexp .+",
+			matcher:               labels.MustNewMatcher(labels.MatchNotRegexp, labels.MetricName, ".+"),
+			addAll:                true,
+			removeKeys:            []string{"foo"},
+			vals:                  []string{"foo"},
+			numberLabelValueCalls: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			lvalsFn := func(name string) ([]string, error) {
+				calls++
+				return tc.vals, nil
+			}
+			pg, _, err := toPostingGroup(ctx, lvalsFn, tc.matcher)
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.addAll, pg.addAll)
+			testutil.Equals(t, tc.addKeys, pg.addKeys)
+			testutil.Equals(t, tc.removeKeys, pg.removeKeys)
+			testutil.Equals(t, tc.numberLabelValueCalls, calls)
+		})
+	}
+}
+
 // TestExpandedPostings is a test whether there is a race between multiple ExpandPostings() calls.
 func TestExpandedPostingsRace(t *testing.T) {
 	t.Parallel()
