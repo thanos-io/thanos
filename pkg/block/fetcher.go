@@ -278,7 +278,9 @@ func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReade
 func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
 	level.Info(f.logger).Log("msg", "concurrent block lister started")
 	start := time.Now()
-	defer level.Info(f.logger).Log("msg", "concurrent block lister end", "duration", time.Since(start))
+	defer func() {
+		level.Info(f.logger).Log("msg", "concurrent block lister end", "duration", time.Since(start))
+	}()
 	const concurrency = 64
 
 	partialBlocks = make(map[ulid.ULID]bool)
