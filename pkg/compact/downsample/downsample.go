@@ -47,6 +47,26 @@ const (
 	ResLevel2DownsampleRange = 10 * 24 * 60 * 60 * 1000 // 10 days.
 )
 
+// cutNewChunk returns true when a new chunk needs to be cut.
+// Float histograms & regular histograms are the same
+// from our point of view (we always write float histograms)
+// so we only need to cut a chunk when we are going from any histogram encoding to non-histogram encoding.
+func cutNewChunk(curEnc, prevEnc chunkenc.Encoding) bool {
+	isHist := func(c chunkenc.Encoding) bool {
+		return c == chunkenc.EncFloatHistogram || c == chunkenc.EncHistogram
+	}
+
+	if isHist(curEnc) && !isHist(prevEnc) {
+		return true
+	}
+
+	if !isHist(curEnc) && isHist(prevEnc) {
+		return true
+	}
+
+	return false
+}
+
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	ctx context.Context,
@@ -114,11 +134,13 @@ func Downsample(
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
+		resChunks  []chunks.Meta
 		builder    labels.ScratchBuilder
 		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
 		chks = chks[:0]
+		resChunks = resChunks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
 
@@ -148,57 +170,106 @@ func Downsample(
 
 		// Raw and already downsampled data need different processing.
 		if origMeta.Thanos.Downsample.Resolution == 0 {
+			var prevEnc chunkenc.Encoding = chks[0].Chunk.Encoding()
+
 			for _, c := range chks {
+				if cutNewChunk(c.Chunk.Encoding(), prevEnc) {
+					resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
+					all = all[:0]
+					prevEnc = c.Chunk.Encoding()
+				}
 				// TODO(bwplotka): We can optimize this further by using in WriteSeries iterators of each chunk instead of
 				// samples. Also ensure 120 sample limit, otherwise we have gigantic chunks.
 				// https://github.com/thanos-io/thanos/issues/2542.
-				if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
+				if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), c.Chunk.Encoding(), &all); err != nil {
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
-			if err := streamedBlockWriter.WriteSeries(lset, DownsampleRaw(all, resolution)); err != nil {
+			resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
+			if err := streamedBlockWriter.WriteSeries(lset, resChunks); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
 		} else {
-			// Downsample a block that contains aggregated chunks already.
-			for _, c := range chks {
-				ac, ok := c.Chunk.(*AggrChunk)
-				if !ok {
-					if c.Chunk.NumSamples() == 0 {
-						// Downsampled block can erroneously contain empty XOR chunks, skip those
-						// https://github.com/thanos-io/thanos/issues/5272
-						level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got an empty %T instead for series: %d", c.Chunk, postings.At()))
-						continue
-					} else {
-						if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
-							return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
-						}
-						aggrDataChunks := DownsampleRaw(all, ResLevel1)
-						for _, cn := range aggrDataChunks {
-							ac, ok = cn.Chunk.(*AggrChunk)
-							if !ok {
-								return id, errors.New("Not able to convert non-empty XOR chunks to 5m downsampled aggregated chunks.")
-							}
-						}
-					}
+			var (
+				previousIsHistogram bool
+				mint, maxt          int64
+			)
 
+			fixedChks := make([]chunks.Meta, 0, len(chks))
+
+			// First loop through chunks and fix chunks if possible.
+			// See https://github.com/thanos-io/thanos/commit/a159680ca437576bf78f7b08a14715a61f5d3ca9 for context.
+			for _, c := range chks {
+				_, ok := c.Chunk.(*AggrChunk)
+				if ok {
+					fixedChks = append(fixedChks, c)
+					continue
+				}
+				if c.Chunk.NumSamples() == 0 {
+					// Downsampled block can erroneously contain empty XOR chunks, skip those
+					// https://github.com/thanos-io/thanos/issues/5272
+					level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got an empty %T instead for series: %d", c.Chunk, postings.At()))
+					continue
+				} else {
+					if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), c.Chunk.Encoding(), &all); err != nil {
+						return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
+					}
+					aggrDataChunks := DownsampleRaw(all, ResLevel1)
+					for _, cn := range aggrDataChunks {
+						_, ok = cn.Chunk.(*AggrChunk)
+						if !ok {
+							return id, errors.New("Not able to convert non-empty chunks to 5m downsampled aggregated chunks.")
+						}
+						fixedChks = append(fixedChks, cn)
+					}
+					all = all[:0]
+				}
+			}
+
+			// Downsample a block that contains aggregated chunks already.
+			for i, c := range fixedChks {
+				ac := c.Chunk.(*AggrChunk)
+				if i > 0 && previousIsHistogram != isHistogramAggrChunk(ac) {
+					err := downsampleAggr(
+						aggrChunks,
+						&all,
+						mint,
+						maxt,
+						origMeta.Thanos.Downsample.Resolution,
+						resolution,
+						&resChunks,
+					)
+					if err != nil {
+						return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
+					}
+					previousIsHistogram = isHistogramAggrChunk(ac)
+					aggrChunks = aggrChunks[:0]
+					mint = c.MinTime
 				}
 				aggrChunks = append(aggrChunks, ac)
 
+				if i == 0 {
+					mint = c.MinTime
+					previousIsHistogram = isHistogramAggrChunk(ac)
+				}
+				maxt = c.MaxTime
 			}
-			downsampledChunks, err := downsampleAggr(
+
+			err = downsampleAggr(
 				aggrChunks,
 				&all,
-				chks[0].MinTime,
-				chks[len(chks)-1].MaxTime,
+				mint,
+				maxt,
 				origMeta.Thanos.Downsample.Resolution,
 				resolution,
+				&resChunks,
 			)
 			if err != nil {
 				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 			}
-			if err := streamedBlockWriter.WriteSeries(lset, downsampledChunks); err != nil {
-				return id, errors.Wrapf(err, "write series: %d", postings.At())
+
+			if err := streamedBlockWriter.WriteSeries(lset, resChunks); err != nil {
+				return id, errors.Wrapf(err, "write aggr series: %d", postings.At())
 			}
 		}
 	}
@@ -245,8 +316,197 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 	return x
 }
 
-// aggregator collects cumulative stats for a stream of values.
-type aggregator struct {
+type histogramAggregator struct {
+	total    int                       // Total histograms processed.
+	count    int                       // Histograms in current window.
+	sum      *histogram.FloatHistogram // Value sum of current window (for gauge histograms).
+	counter  *histogram.FloatHistogram // Total counter state since beginning (for counter histograms).
+	previous *histogram.FloatHistogram // Previously added value.
+	schema   int32                     // Smallest schema in the batch that's being aggregated.
+}
+
+func newHistogramAggregator(schema int32) *histogramAggregator {
+	return &histogramAggregator{
+		schema: schema,
+	}
+}
+
+func (h *histogramAggregator) reset() {
+	h.count = 0
+	h.sum = nil
+}
+
+func mustHistogramOp(_ *histogram.FloatHistogram, err error) {
+	// NOTE(GiedriusS): this can only happen with custom
+	// boundaries. We do not support them yet.
+	if err != nil {
+		panic(fmt.Sprintf("unexpected error: %v", err))
+	}
+}
+
+func (h *histogramAggregator) add(s sample) {
+	fh := s.fh
+	if fh.Schema < h.schema {
+		panic("schema must be greater or equal to aggregator schema")
+	}
+
+	// A schema increase is treated as a reset, so we need to preserve
+	// the original histogram in case the schema is adjusted.
+	oFh := fh
+	// If schema of the sample is greater than the
+	// aggregator schema, we need to reduce the resolution.
+	if fh.Schema > h.schema {
+		fh = fh.CopyToSchema(h.schema)
+	}
+
+	if h.total > 0 {
+		if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
+			// Counter reset, correct the value.
+			mustHistogramOp(h.counter.Add(fh))
+		} else {
+			// Add delta with previous value to the counter.
+			deltaFh, err := fh.Copy().Sub(h.previous)
+			if err != nil {
+				// TODO(GiedriusS): support native histograms with custom buckets.
+				// This can only happen with custom buckets.
+				panic(fmt.Sprintf("unexpected error: %v", err))
+			}
+
+			mustHistogramOp(h.counter.Add(deltaFh))
+		}
+	} else {
+		// First sample sets the counter.
+		h.counter = fh.Copy()
+	}
+
+	if h.sum == nil {
+		h.sum = fh.Copy()
+	} else {
+		mustHistogramOp(h.sum.Add(fh))
+	}
+
+	// This needs to be h gauge histogram, otherwise reset detection will be triggered
+	// when appending the aggregated chunk and histogram.count < appender.count.
+	h.sum.CounterResetHint = histogram.GaugeType
+
+	h.previous = fh
+
+	h.count++
+	h.total++
+}
+
+func (h *histogramAggregator) processedSamples() int {
+	return h.total
+}
+
+func (f *floatAggregator) processedSamples() int {
+	return f.total
+}
+
+func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
+	b := &aggrChunkBuilder{
+		mint:           math.MaxInt64,
+		maxt:           math.MinInt64,
+		isGaugeSamples: isGaugeSamples,
+	}
+
+	b.chunks[AggrCount] = chunkenc.NewXORChunk()
+	b.chunks[AggrSum] = chunkenc.NewFloatHistogramChunk()
+	b.chunks[AggrCounter] = chunkenc.NewFloatHistogramChunk()
+
+	for i, c := range b.chunks {
+		if c != nil {
+			b.apps[i], _ = c.Appender()
+		}
+	}
+	return b
+}
+
+func minSchema(samples []sample) int32 {
+	schema := int32(math.MaxInt32)
+	for _, s := range samples {
+		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema < schema {
+			schema = s.fh.Schema
+		}
+	}
+	return schema
+}
+
+func downsampleFloatBatch(batch []sample, resolution int64) chunks.Meta {
+	ab := newAggrChunkBuilder()
+	// Encode first raw value; see ApplyCounterResetsSeriesIterator.
+	ab.apps[AggrCounter].Append(batch[0].t, batch[0].v)
+	lastT := downsampleBatch(batch, resolution, &floatAggregator{}, ab.add)
+	// Encode last raw value; see ApplyCounterResetsSeriesIterator.
+	ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
+	return ab.encode()
+}
+
+func downsampleHistogramBatch(batch []sample, resolution int64) chunks.Meta {
+	// We need to know the smallest schema in advanced otherwise we might end
+	// up with a non appendable histogram if histogram.schema < chunk.schema.
+	schema := minSchema(batch)
+	ab := newHistogramAggrChunkBuilder(isGaugeSamples(batch))
+	downsampleBatch(batch, resolution, newHistogramAggregator(schema), ab.addHistogram)
+	return ab.encode()
+}
+
+type sampleAggregator interface {
+	reset()
+	add(s sample)
+	processedSamples() int
+}
+
+func (b *aggrChunkBuilder) addHistogram(t int64, a sampleAggregator) {
+	if t < b.mint {
+		b.mint = t
+	}
+	if t > b.maxt {
+		b.maxt = t
+	}
+
+	aggr := mustGetHistogramAggregator(a)
+
+	// NOTE(GiedriusS): For gauge histograms we need to set these to gauge too
+	// so that append wouldn't fail when sum_window_n > sum_window_n+1.
+	if b.isGaugeSamples {
+		aggr.counter.CounterResetHint = histogram.GaugeType
+		aggr.sum.CounterResetHint = histogram.GaugeType
+	}
+	b.appendFloatHistogram(AggrCounter, t, aggr.counter)
+	b.appendFloatHistogram(AggrSum, t, aggr.sum)
+	b.apps[AggrCount].Append(t, float64(aggr.count))
+
+	b.added++
+}
+
+// Mostly copied from https://github.com/prometheus/prometheus/blob/fd8992cdbd6bf7274f2a815e4af64a0b8734841b/tsdb/head_append.go#L1235-L1326
+// but we shouldn't have the not appendable case.
+func (b *aggrChunkBuilder) appendFloatHistogram(t AggrType, ts int64, fh *histogram.FloatHistogram) {
+	app := b.apps[t].(*chunkenc.FloatHistogramAppender)
+
+	ch, _, cApp, err := b.apps[t].AppendFloatHistogram(app, ts, fh, false)
+	if err != nil {
+		panic("unexpected error: " + err.Error())
+	}
+	// NOTE(GiedriusS): from docs:
+	// The returned Chunk c is nil if sample could be appended to the current Chunk, otherwise c is the new Chunk.
+
+	if ch != nil {
+		b.chunks[t] = ch
+	}
+	b.apps[t] = cApp
+}
+
+func isGaugeSamples(samples []sample) bool {
+	if len(samples) == 0 {
+		return false
+	}
+	return samples[0].fh.CounterResetHint == histogram.GaugeType
+}
+
+// floatAggregator collects cumulative stats for a stream of values.
+type floatAggregator struct {
 	total   int     // Total samples processed.
 	count   int     // Samples in current window.
 	sum     float64 // Value sum of current window.
@@ -258,38 +518,38 @@ type aggregator struct {
 }
 
 // reset the stats to start a new aggregation window.
-func (a *aggregator) reset() {
+func (a *floatAggregator) reset() {
 	a.count = 0
 	a.sum = 0
 	a.min = math.MaxFloat64
 	a.max = -math.MaxFloat64
 }
 
-func (a *aggregator) add(v float64) {
+func (a *floatAggregator) add(s sample) {
 	if a.total > 0 {
-		if v < a.last {
+		if s.v < a.last {
 			// Counter reset, correct the value.
-			a.counter += v
+			a.counter += s.v
 			a.resets++
 		} else {
 			// Add delta with last value to the counter.
-			a.counter += v - a.last
+			a.counter += s.v - a.last
 		}
 	} else {
 		// First sample sets the counter.
-		a.counter = v
+		a.counter = s.v
 	}
-	a.last = v
+	a.last = s.v
 
-	a.sum += v
+	a.sum += s.v
 	a.count++
 	a.total++
 
-	if v < a.min {
-		a.min = v
+	if s.v < a.min {
+		a.min = s.v
 	}
-	if v > a.max {
-		a.max = v
+	if s.v > a.max {
+		a.max = s.v
 	}
 }
 
@@ -300,6 +560,8 @@ type aggrChunkBuilder struct {
 
 	chunks [5]chunkenc.Chunk
 	apps   [5]chunkenc.Appender
+
+	isGaugeSamples bool
 }
 
 func newAggrChunkBuilder() *aggrChunkBuilder {
@@ -321,13 +583,31 @@ func newAggrChunkBuilder() *aggrChunkBuilder {
 	return b
 }
 
-func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
+func mustGetFloatAggregator(aggr sampleAggregator) *floatAggregator {
+	a, ok := aggr.(*floatAggregator)
+	if !ok {
+		panic("aggregator is not of type *floatAggregator")
+	}
+	return a
+}
+
+func mustGetHistogramAggregator(aggr sampleAggregator) *histogramAggregator {
+	a, ok := aggr.(*histogramAggregator)
+	if !ok {
+		panic("aggregator is not of type *histogramAggregator")
+	}
+	return a
+}
+
+func (b *aggrChunkBuilder) add(t int64, a sampleAggregator) {
 	if t < b.mint {
 		b.mint = t
 	}
 	if t > b.maxt {
 		b.maxt = t
 	}
+
+	aggr := mustGetFloatAggregator(a)
 	b.apps[AggrSum].Append(t, aggr.sum)
 	b.apps[AggrMin].Append(t, aggr.min)
 	b.apps[AggrMax].Append(t, aggr.max)
@@ -355,12 +635,30 @@ func DownsampleRaw(data []sample, resolution int64) []chunks.Meta {
 	// We assume a raw resolution of 1 minute. In practice it will often be lower
 	// but this is sufficient for our heuristic to produce well-sized chunks.
 	numChunks := targetChunkCount(mint, maxt, 1*60*1000, resolution, len(data))
-	return downsampleRawLoop(data, resolution, numChunks)
+	chks := make([]chunks.Meta, 0, numChunks)
+
+	// First sample determines the type of the samples, since we process
+	// one chunk and all samples of one chunk have the same type.
+	if data[0].fh != nil {
+		downsampleRawLoop(data, resolution, numChunks, &chks, downsampleHistogramBatch)
+	} else {
+		downsampleRawLoop(data, resolution, numChunks, &chks, downsampleFloatBatch)
+	}
+
+	return chks
 }
 
-func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.Meta {
+func downsampleRawLoop(
+	data []sample,
+	resolution int64,
+	numChunks int,
+	chks *[]chunks.Meta,
+	downsampleBatchFn func(batch []sample, resolution int64) chunks.Meta,
+) {
+	if len(data) == 0 {
+		return
+	}
 	batchSize := (len(data) / numChunks) + 1
-	chks := make([]chunks.Meta, 0, numChunks)
 
 	for len(data) > 0 {
 		j := batchSize
@@ -379,6 +677,9 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 			if math.IsNaN(s.v) {
 				continue
 			}
+			if s.fh != nil && math.IsNaN(s.fh.Sum) {
+				continue
+			}
 			batch = append(batch, s)
 		}
 		data = data[j:]
@@ -386,38 +687,148 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 			continue
 		}
 
-		ab := newAggrChunkBuilder()
+		*chks = append(*chks, downsampleBatchFn(batch, resolution))
+	}
+}
 
-		// Encode first raw value; see ApplyCounterResetsSeriesIterator.
-		ab.apps[AggrCounter].Append(batch[0].t, batch[0].v)
+func downsampleHistogramAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
+	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
+	var reuseIt chunkenc.Iterator
 
-		lastT := downsampleBatch(batch, resolution, ab.add)
+	// Native histograms support counter, sum, count types.
 
-		// Encode last raw value; see ApplyCounterResetsSeriesIterator.
-		ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
-
-		chks = append(chks, ab.encode())
+	// Expand all samples for the counter aggregate type.
+	*buf = (*buf)[:0]
+	for _, achk := range chks {
+		c, err := achk.Get(AggrCounter)
+		if err == ErrAggrNotExist {
+			continue
+		} else if err != nil {
+			return chk, err
+		}
+		if err := expandFloatHistogramChunkIterator(c.Iterator(reuseIt), buf); err != nil {
+			return chk, err
+		}
 	}
 
-	return chks
+	ab := newHistogramAggrChunkBuilder(isGaugeSamples(*buf))
+
+	schema := minSchema(*buf)
+	downsampleBatch(*buf, resolution, newHistogramAggregator(schema), func(t int64, a sampleAggregator) {
+		if t < mint {
+			mint = t
+		}
+		if t > maxt {
+			maxt = t
+		}
+		ab.appendFloatHistogram(AggrCounter, t, mustGetHistogramAggregator(a).counter)
+	})
+
+	// Expand all samples for the sum aggregate.
+	*buf = (*buf)[:0]
+	for _, achk := range chks {
+		c, err := achk.Get(AggrSum)
+		if err == ErrAggrNotExist {
+			continue
+		} else if err != nil {
+			return chk, err
+		}
+		if err := expandFloatHistogramChunkIterator(c.Iterator(reuseIt), buf); err != nil {
+			return chk, err
+		}
+	}
+	if len(*buf) == 0 {
+		return chk, nil
+	}
+
+	schema = minSchema(*buf)
+	downsampleBatch(*buf, resolution, newHistogramAggregator(schema), func(t int64, a sampleAggregator) {
+		if t < mint {
+			mint = t
+		}
+		if t > maxt {
+			maxt = t
+		}
+		ab.appendFloatHistogram(AggrSum, t, mustGetHistogramAggregator(a).sum)
+	})
+
+	*buf = (*buf)[:0]
+	batchMint, batchMaxt, err := genericAggregate(AggrCount, chks, buf, ab, resolution, func(a sampleAggregator) float64 {
+		aggr := mustGetFloatAggregator(a)
+		return aggr.sum
+	})
+	if err != nil {
+		return chk, err
+	}
+	if batchMint < mint {
+		mint = batchMint
+	}
+	if batchMaxt > maxt {
+		maxt = batchMaxt
+	}
+
+	ab.mint = mint
+	ab.maxt = maxt
+	return ab.encode(), nil
+}
+
+// genericAggregate does a generic aggregation for count, sum, min, and max aggregates.
+// Counters need special treatment.
+func genericAggregate(
+	at AggrType,
+	chks []*AggrChunk,
+	buf *[]sample,
+	ab *aggrChunkBuilder,
+	resolution int64,
+	f func(a sampleAggregator) float64,
+) (int64, int64, error) {
+	var mint, maxt int64 = math.MaxInt64, math.MinInt64
+	var reuseIt chunkenc.Iterator
+	*buf = (*buf)[:0]
+
+	// Expand all samples for the aggregate type.
+	for _, chk := range chks {
+		c, err := chk.Get(at)
+		if err == ErrAggrNotExist {
+			continue
+		} else if err != nil {
+			return 0, 0, err
+		}
+		if err := expandXorChunkIterator(c.Iterator(reuseIt), buf); err != nil {
+			return 0, 0, err
+		}
+	}
+	if len(*buf) == 0 {
+		return 0, 0, nil
+	}
+	ab.chunks[at] = chunkenc.NewXORChunk()
+	ab.apps[at], _ = ab.chunks[at].Appender()
+
+	downsampleBatch(*buf, resolution, &floatAggregator{}, func(t int64, a sampleAggregator) {
+		if t < mint {
+			mint = t
+		}
+		if t > maxt {
+			maxt = t
+		}
+		ab.apps[at].Append(t, f(a))
+	})
+
+	return mint, maxt, nil
 }
 
 // downsampleBatch aggregates the data over the given resolution and calls add each time
 // the end of a resolution was reached.
-func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregator)) int64 {
+func downsampleBatch(data []sample, resolution int64, aggr sampleAggregator, add func(int64, sampleAggregator)) int64 {
 	var (
-		aggr  aggregator
 		nextT = int64(-1)
 		lastT = data[len(data)-1].t
 	)
 	// Fill up one aggregate chunk with up to m samples.
 	for _, s := range data {
-		if value.IsStaleNaN(s.v) {
-			continue
-		}
 		if s.t > nextT {
 			if nextT != -1 {
-				add(nextT, &aggr)
+				add(nextT, aggr)
 			}
 			aggr.reset()
 			nextT = currentWindow(s.t, resolution)
@@ -429,25 +840,78 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 				nextT = lastT
 			}
 		}
-		aggr.add(s.v)
+		aggr.add(s)
 	}
-	// Add the last sample.
-	add(nextT, &aggr)
+	// Add the last sample if any samples were processed.
+	if aggr.processedSamples() > 0 {
+		// Add the last sample.
+		add(nextT, aggr)
+	}
 
 	return nextT
 }
 
-// downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
-func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes int64) ([]chunks.Meta, error) {
-	var numSamples int
-	for _, c := range chks {
-		numSamples += c.NumSamples()
+func isHistogramAggrChunk(c *AggrChunk) bool {
+	// If it is an aggregated chunk histogram chunk, the counter will be of the type histogram.
+	cntr, err := c.Get(AggrCounter)
+	if err != nil {
+		return false
 	}
-	numChunks := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
-	return downsampleAggrLoop(chks, buf, outRes, numChunks)
+	return cntr.Encoding() == chunkenc.EncHistogram || cntr.Encoding() == chunkenc.EncFloatHistogram
 }
 
-func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numChunks int) ([]chunks.Meta, error) {
+// downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
+func downsampleAggr(
+	chks []*AggrChunk,
+	buf *[]sample,
+	mint, maxt, inRes, outRes int64,
+	res *[]chunks.Meta,
+) error {
+	var fChks, hChks []*AggrChunk
+	var numSamples int
+
+	for _, c := range chks {
+		if isHistogramAggrChunk(c) {
+			hChks = append(hChks, c)
+			numSamples += c.NumSamples()
+		} else {
+			fChks = append(fChks, c)
+			numSamples += c.NumSamples()
+		}
+	}
+
+	var (
+		rescChks []chunks.Meta
+		err      error
+	)
+
+	numChunks := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
+
+	if len(fChks) > 0 {
+		rescChks, err = downsampleAggrLoop(fChks, buf, outRes, numChunks, downsampleFloatAggrBatch)
+		if err != nil {
+			return err
+		}
+	} else {
+		rescChks, err = downsampleAggrLoop(hChks, buf, outRes, numChunks, downsampleHistogramAggrBatch)
+		if err != nil {
+			return err
+		}
+	}
+
+	*res = append(*res, rescChks...)
+	return nil
+}
+
+type downsampleAggrFunc = func(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error)
+
+func downsampleAggrLoop(
+	chks []*AggrChunk,
+	buf *[]sample,
+	resolution int64,
+	numChunks int,
+	downsampleAggr downsampleAggrFunc,
+) ([]chunks.Meta, error) {
 	// We downsample aggregates only along chunk boundaries. This is required
 	// for counters to be downsampled correctly since a chunk's first and last
 	// counter values are the true values of the original series. We need
@@ -463,7 +927,12 @@ func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numC
 		part := chks[:j]
 		chks = chks[j:]
 
-		chk, err := downsampleAggrBatch(part, buf, resolution)
+		chk, err := downsampleAggr(part, buf, resolution)
+		if chk.MinTime == math.MaxInt64 || chk.MaxTime == math.MinInt64 {
+			msg := fmt.Sprintf("invalid range for downsampled aggregate chunk: mint=%d maxt=%d", chk.MinTime, chk.MaxTime)
+			return nil, errors.New(msg)
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -473,82 +942,120 @@ func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numC
 	return res, nil
 }
 
-// expandChunkIterator reads all samples from the iterator and appends them to buf.
+func expandChunkIterator(it chunkenc.Iterator, encoding chunkenc.Encoding, samples *[]sample) error {
+	switch encoding {
+	case chunkenc.EncXOR:
+		return expandXorChunkIterator(it, samples)
+	case chunkenc.EncFloatHistogram:
+		return expandFloatHistogramChunkIterator(it, samples)
+	case chunkenc.EncHistogram:
+		return expandHistogramChunkIterator(it, samples)
+	default:
+		return errors.Errorf("unexpected chunk encoding %d %s", encoding, encoding)
+	}
+}
+
+// expandXorChunkIterator reads all samples from the iterator and appends them to buf.
 // Stale markers and out of order samples are skipped.
-func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
+func expandXorChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	// For safety reasons, we check for each sample that it does not go back in time.
 	// If it does, we skip it.
 	lastT := int64(0)
-
 	for it.Next() != chunkenc.ValNone {
 		t, v := it.At()
 		if value.IsStaleNaN(v) {
 			continue
 		}
 		if t >= lastT {
-			*buf = append(*buf, sample{t, v})
+			*buf = append(*buf, sample{t: t, v: v})
 			lastT = t
 		}
 	}
 	return it.Err()
 }
 
-func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
+// expandHistogramChunkIterator reads all histograms from the iterator and appends them to buf.
+func expandHistogramChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
+	// For safety reasons, we check for each sample that it does not go back in time.
+	// If it does, we skip it.
+	var (
+		lastT int64
+		t     int64
+		h     *histogram.Histogram
+	)
+
+	for it.Next() != chunkenc.ValNone {
+		t, h = it.AtHistogram(h)
+		if value.IsStaleNaN(h.Sum) {
+			continue
+		}
+		if t >= lastT {
+			*buf = append(*buf, sample{t: t, fh: h.ToFloat(nil)})
+			lastT = t
+		}
+	}
+	return it.Err()
+}
+
+// expandFloatHistogramChunkIterator reads all histograms from the iterator and appends them to buf.
+func expandFloatHistogramChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
+	// For safety reasons, we check for each sample that it does not go back in time.
+	// If it does, we skip it.
+	var (
+		fh    *histogram.FloatHistogram
+		t     int64
+		lastT int64
+	)
+
+	for it.Next() != chunkenc.ValNone {
+		t, fh = it.AtFloatHistogram(nil)
+		if value.IsStaleNaN(fh.Sum) {
+			continue
+		}
+		if t >= lastT {
+			*buf = append(*buf, sample{t: t, fh: fh})
+			lastT = t
+		}
+	}
+	return it.Err()
+}
+
+func downsampleFloatAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
 	ab := &aggrChunkBuilder{}
 	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
 	var reuseIt chunkenc.Iterator
 
 	// do does a generic aggregation for count, sum, min, and max aggregates.
 	// Counters need special treatment.
-	do := func(at AggrType, f func(a *aggregator) float64) error {
-		*buf = (*buf)[:0]
-		// Expand all samples for the aggregate type.
-		for _, chk := range chks {
-			c, err := chk.Get(at)
-			if err == ErrAggrNotExist {
-				continue
-			} else if err != nil {
-				return err
-			}
-			if err := expandChunkIterator(c.Iterator(reuseIt), buf); err != nil {
-				return err
-			}
+	do := func(at AggrType, f func(a sampleAggregator) float64) error {
+		aggrMint, aggrMaxt, err := genericAggregate(at, chks, buf, ab, resolution, f)
+		if aggrMint < mint {
+			mint = aggrMint
 		}
-		if len(*buf) == 0 {
-			return nil
+		if aggrMaxt > maxt {
+			maxt = aggrMaxt
 		}
-		ab.chunks[at] = chunkenc.NewXORChunk()
-		ab.apps[at], _ = ab.chunks[at].Appender()
-
-		downsampleBatch(*buf, resolution, func(t int64, a *aggregator) {
-			if t < mint {
-				mint = t
-			} else if t > maxt {
-				maxt = t
-			}
-			ab.apps[at].Append(t, f(a))
-		})
-		return nil
+		return err
 	}
-	if err := do(AggrCount, func(a *aggregator) float64 {
+	if err := do(AggrCount, func(a sampleAggregator) float64 {
 		// To get correct count of elements from already downsampled count chunk
 		// we have to sum those values.
-		return a.sum
+		return mustGetFloatAggregator(a).sum
 	}); err != nil {
 		return chk, err
 	}
-	if err = do(AggrSum, func(a *aggregator) float64 {
-		return a.sum
+	if err = do(AggrSum, func(a sampleAggregator) float64 {
+		return mustGetFloatAggregator(a).sum
 	}); err != nil {
 		return chk, err
 	}
-	if err := do(AggrMin, func(a *aggregator) float64 {
-		return a.min
+	if err := do(AggrMin, func(a sampleAggregator) float64 {
+		return mustGetFloatAggregator(a).min
 	}); err != nil {
 		return chk, err
 	}
-	if err := do(AggrMax, func(a *aggregator) float64 {
-		return a.max
+	if err := do(AggrMax, func(a sampleAggregator) float64 {
+		return mustGetFloatAggregator(a).max
 	}); err != nil {
 		return chk, err
 	}
@@ -567,7 +1074,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 	*buf = (*buf)[:0]
 	it := NewApplyCounterResetsIterator(acs...)
 
-	if err := expandChunkIterator(it, buf); err != nil {
+	if err := expandXorChunkIterator(it, buf); err != nil {
 		return chk, err
 	}
 	if len(*buf) == 0 {
@@ -581,13 +1088,14 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 	// Retain first raw value; see ApplyCounterResetsSeriesIterator.
 	ab.apps[AggrCounter].Append((*buf)[0].t, (*buf)[0].v)
 
-	lastT := downsampleBatch(*buf, resolution, func(t int64, a *aggregator) {
+	lastT := downsampleBatch(*buf, resolution, &floatAggregator{}, func(t int64, a sampleAggregator) {
 		if t < mint {
 			mint = t
-		} else if t > maxt {
+		}
+		if t > maxt {
 			maxt = t
 		}
-		ab.apps[AggrCounter].Append(t, a.counter)
+		ab.apps[AggrCounter].Append(t, mustGetFloatAggregator(a).counter)
 	})
 
 	// Retain last raw value; see ApplyCounterResetsSeriesIterator.
@@ -599,8 +1107,9 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 }
 
 type sample struct {
-	t int64
-	v float64
+	t  int64
+	v  float64
+	fh *histogram.FloatHistogram
 }
 
 // ApplyCounterResetsSeriesIterator generates monotonically increasing values by iterating
@@ -730,30 +1239,44 @@ type AverageChunkIterator struct {
 	t     int64
 	v     float64
 	err   error
+	fh    *histogram.FloatHistogram
 }
 
 func NewAverageChunkIterator(cnt, sum chunkenc.Iterator) *AverageChunkIterator {
 	return &AverageChunkIterator{cntIt: cnt, sumIt: sum}
 }
 
-// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
 func (it *AverageChunkIterator) Next() chunkenc.ValueType {
-	cok, sok := it.cntIt.Next(), it.sumIt.Next()
-	if cok != sok {
+	ct, st := it.cntIt.Next(), it.sumIt.Next()
+
+	if (ct != chunkenc.ValNone && st == chunkenc.ValNone) ||
+		(ct == chunkenc.ValNone && st != chunkenc.ValNone) {
 		it.err = errors.New("sum and count iterator not aligned")
 		return chunkenc.ValNone
 	}
-	if cok == chunkenc.ValNone {
+
+	if ct == chunkenc.ValNone {
 		return chunkenc.ValNone
 	}
 
-	cntT, cntV := it.cntIt.At()
-	sumT, sumV := it.sumIt.At()
+	cntT := it.cntIt.AtT()
+	sumT := it.sumIt.AtT()
 	if cntT != sumT {
 		it.err = errors.New("sum and count timestamps not aligned")
 		return chunkenc.ValNone
 	}
-	it.t, it.v = cntT, sumV/cntV
+
+	it.t = cntT
+	_, cntV := it.cntIt.At()
+
+	if st == chunkenc.ValFloatHistogram {
+		_, sumV := it.sumIt.AtFloatHistogram(nil)
+		it.fh = sumV.Div(cntV)
+		return chunkenc.ValFloatHistogram
+	}
+
+	_, sumV := it.sumIt.At()
+	it.v = sumV / cntV
 	return chunkenc.ValFloat
 }
 
@@ -763,16 +1286,23 @@ func (it *AverageChunkIterator) Seek(t int64) chunkenc.ValueType {
 }
 
 func (it *AverageChunkIterator) At() (int64, float64) {
+	if it.fh != nil {
+		panic("not float histogram iterator")
+	}
 	return it.t, it.v
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
+// This should never be called since the result of an histogram calculation
+// is always a float histogram.
 func (it *AverageChunkIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
-	panic("not implemented")
+	panic("it is always a float histogram")
 }
 
 func (it *AverageChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	if it.fh == nil {
+		panic("not float histogram iterator")
+	}
+	return it.t, it.fh
 }
 
 func (it *AverageChunkIterator) AtT() int64 {

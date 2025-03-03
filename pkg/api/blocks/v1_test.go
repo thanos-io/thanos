@@ -104,7 +104,7 @@ func TestMarkBlockEndpoint(t *testing.T) {
 		labels.FromStrings("a", "3"),
 		labels.FromStrings("a", "4"),
 		labels.FromStrings("b", "1"),
-	}, 100, 0, 1000, labels.FromStrings("ext1", "val1"), 124, metadata.NoneFunc)
+	}, 100, 0, 1000, labels.FromStrings("ext1", "val1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
 	// upload block
