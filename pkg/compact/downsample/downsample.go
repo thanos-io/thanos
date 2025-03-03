@@ -47,6 +47,26 @@ const (
 	ResLevel2DownsampleRange = 10 * 24 * 60 * 60 * 1000 // 10 days.
 )
 
+// cutNewChunk returns true when a new chunk needs to be cut.
+// Float histograms & regular histograms are the same
+// from our point of view (we always write float histograms)
+// so we only need to cut a chunk when we are going from any histogram encoding to non-histogram encoding.
+func cutNewChunk(curEnc, prevEnc chunkenc.Encoding) bool {
+	isHist := func(c chunkenc.Encoding) bool {
+		return c == chunkenc.EncFloatHistogram || c == chunkenc.EncHistogram
+	}
+
+	if isHist(curEnc) && !isHist(prevEnc) {
+		return true
+	}
+
+	if !isHist(curEnc) && isHist(prevEnc) {
+		return true
+	}
+
+	return false
+}
+
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	ctx context.Context,
@@ -153,7 +173,7 @@ func Downsample(
 			var prevEnc chunkenc.Encoding = chks[0].Chunk.Encoding()
 
 			for _, c := range chks {
-				if prevEnc != c.Chunk.Encoding() {
+				if cutNewChunk(c.Chunk.Encoding(), prevEnc) {
 					resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
 					all = all[:0]
 					prevEnc = c.Chunk.Encoding()
@@ -209,7 +229,7 @@ func Downsample(
 			// Downsample a block that contains aggregated chunks already.
 			for i, c := range fixedChks {
 				ac := c.Chunk.(*AggrChunk)
-				if i > 0 && previousIsHistogram != isHistogram(ac) {
+				if i > 0 && previousIsHistogram != isHistogramAggrChunk(ac) {
 					err := downsampleAggr(
 						aggrChunks,
 						&all,
@@ -222,7 +242,7 @@ func Downsample(
 					if err != nil {
 						return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 					}
-					previousIsHistogram = isHistogram(ac)
+					previousIsHistogram = isHistogramAggrChunk(ac)
 					aggrChunks = aggrChunks[:0]
 					mint = c.MinTime
 				}
@@ -230,7 +250,7 @@ func Downsample(
 
 				if i == 0 {
 					mint = c.MinTime
-					previousIsHistogram = isHistogram(ac)
+					previousIsHistogram = isHistogramAggrChunk(ac)
 				}
 				maxt = c.MaxTime
 			}
@@ -831,7 +851,7 @@ func downsampleBatch(data []sample, resolution int64, aggr sampleAggregator, add
 	return nextT
 }
 
-func isHistogram(c *AggrChunk) bool {
+func isHistogramAggrChunk(c *AggrChunk) bool {
 	// If it is an aggregated chunk histogram chunk, the counter will be of the type histogram.
 	cntr, err := c.Get(AggrCounter)
 	if err != nil {
@@ -851,7 +871,7 @@ func downsampleAggr(
 	var numSamples int
 
 	for _, c := range chks {
-		if isHistogram(c) {
+		if isHistogramAggrChunk(c) {
 			hChks = append(hChks, c)
 			numSamples += c.NumSamples()
 		} else {
@@ -977,7 +997,7 @@ func expandHistogramChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	return it.Err()
 }
 
-// expandHistogramChunkIterator reads all histograms from the iterator and appends them to buf.
+// expandFloatHistogramChunkIterator reads all histograms from the iterator and appends them to buf.
 func expandFloatHistogramChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	// For safety reasons, we check for each sample that it does not go back in time.
 	// If it does, we skip it.

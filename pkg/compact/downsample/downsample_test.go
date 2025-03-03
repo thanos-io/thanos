@@ -2864,3 +2864,12 @@ func assertValidChunkTime(t *testing.T, chks []chunks.Meta) {
 		testutil.Assert(t, chk.MaxTime >= chk.MinTime, "chunk MaxTime is not greater equal to  MinTime")
 	}
 }
+
+func TestDownsampleNHCutNewChunk(t *testing.T) {
+	require.False(t, cutNewChunk(chunkenc.EncFloatHistogram, chunkenc.EncHistogram))
+	require.False(t, cutNewChunk(chunkenc.EncHistogram, chunkenc.EncFloatHistogram))
+	require.False(t, cutNewChunk(chunkenc.EncHistogram, chunkenc.EncHistogram))
+	require.False(t, cutNewChunk(chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogram))
+	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncFloatHistogram))
+	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncHistogram))
+}
