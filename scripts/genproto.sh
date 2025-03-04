@@ -26,7 +26,7 @@ PATH=${PATH}:/tmp/protobin
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb"
+DIRS="store/storepb/ store/storepb/prompb/ store/storepb/writev2pb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb"
 echo "generating code"
 pushd "pkg"
 for dir in ${DIRS}; do
@@ -43,6 +43,7 @@ for dir in ${DIRS}; do
   sed -i.bak -E 's/\"store\/storepb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\"/g' *.pb.go
   sed -i.bak -E 's/\"store\/labelpb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/labelpb\"/g' *.pb.go
   sed -i.bak -E 's/\"store\/storepb\/prompb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/prompb\"/g' *.pb.go
+  sed -i.bak -E 's/\"store\/storepb\/writev2pb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/writev2pb\"/g' *.pb.go
   rm -f *.bak
   ${GOIMPORTS_BIN} -w *.pb.go
   popd
