@@ -117,7 +117,7 @@ require (
 )
 
 require (
-	github.com/prometheus/client_golang/exp v0.0.0-20250227122456-ad23ad6d5468
+	github.com/prometheus/client_golang/exp v0.0.0-20250304095000-e84c30512a65
 	github.com/tjhop/slog-gokit v0.1.3
 	go.opentelemetry.io/collector/pdata v1.22.0
 	go.opentelemetry.io/collector/semconv v0.116.0
