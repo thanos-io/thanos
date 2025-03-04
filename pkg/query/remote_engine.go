@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -21,8 +22,6 @@ import (
 	"github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/promql-engine/api"
-
-	"github.com/opentracing/opentracing-go"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -31,13 +30,41 @@ import (
 	grpc_tracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 )
 
+type RemoteEndpointsCreator func(
+	replicaLabels []string,
+	partialResponse bool,
+) api.RemoteEndpoints
+
+func NewRemoteEndpointsCreator(
+	logger log.Logger,
+	getEndpoints func() []Client,
+	partitionLabels []string,
+	timeout time.Duration,
+	queryDistributedWithOverlappingInterval bool,
+	autoDownsample bool,
+) RemoteEndpointsCreator {
+	return func(
+		replicaLabels []string,
+		partialResponse bool,
+	) api.RemoteEndpoints {
+		return NewRemoteEndpoints(logger, getEndpoints, Opts{
+			AutoDownsample:                          autoDownsample,
+			PartialResponse:                         partialResponse,
+			ReplicaLabels:                           replicaLabels,
+			PartitionLabels:                         partitionLabels,
+			Timeout:                                 timeout,
+			QueryDistributedWithOverlappingInterval: queryDistributedWithOverlappingInterval,
+		})
+	}
+}
+
 // Opts are the options for a PromQL query.
 type Opts struct {
 	AutoDownsample                          bool
 	ReplicaLabels                           []string
 	PartitionLabels                         []string
 	Timeout                                 time.Duration
-	EnablePartialResponse                   bool
+	PartialResponse                         bool
 	QueryDistributedWithOverlappingInterval bool
 }
 
@@ -293,16 +320,15 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			QueryPlan:             plan,
 			TimeSeconds:           r.start.Unix(),
 			TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
-			EnablePartialResponse: r.opts.EnablePartialResponse,
-			// TODO (fpetkovski): Allow specifying these parameters at query time.
-			// This will likely require a change in the remote engine interface.
-			ReplicaLabels:        r.opts.ReplicaLabels,
-			MaxResolutionSeconds: maxResolution,
-			EnableDedup:          true,
+			EnablePartialResponse: r.opts.PartialResponse,
+			ReplicaLabels:         r.opts.ReplicaLabels,
+			MaxResolutionSeconds:  maxResolution,
+			EnableDedup:           true,
 		}
 
 		qry, err := r.client.Query(qctx, request)
 		if err != nil {
+			// TODO: handle partial response here
 			return &promql.Result{Err: err}
 		}
 		var (
@@ -317,6 +343,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				break
 			}
 			if err != nil {
+				// TODO: handle partial response here
 				return &promql.Result{Err: err}
 			}
 
@@ -362,12 +389,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		EndTimeSeconds:        r.end.Unix(),
 		IntervalSeconds:       int64(r.interval.Seconds()),
 		TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
-		EnablePartialResponse: r.opts.EnablePartialResponse,
-		// TODO (fpetkovski): Allow specifying these parameters at query time.
-		// This will likely require a change in the remote engine interface.
-		ReplicaLabels:        r.opts.ReplicaLabels,
-		MaxResolutionSeconds: maxResolution,
-		EnableDedup:          true,
+		EnablePartialResponse: r.opts.PartialResponse,
+		ReplicaLabels:         r.opts.ReplicaLabels,
+		MaxResolutionSeconds:  maxResolution,
+		EnableDedup:           true,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {

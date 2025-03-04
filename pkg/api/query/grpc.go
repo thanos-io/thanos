@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 
+	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -27,6 +28,7 @@ type GRPCAPI struct {
 	now                         func() time.Time
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
+	remoteEndpointsCreate       query.RemoteEndpointsCreator
 	queryFactory                *QueryFactory
 	defaultEngine               querypb.EngineType
 	lookbackDeltaCreate         func(int64) time.Duration
@@ -36,7 +38,8 @@ type GRPCAPI struct {
 func NewGRPCAPI(
 	now func() time.Time,
 	replicaLabels []string,
-	creator query.QueryableCreator,
+	queryableCreator query.QueryableCreator,
+	remoteEndpointsCreator query.RemoteEndpointsCreator,
 	queryFactory *QueryFactory,
 	defaultEngine querypb.EngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
@@ -45,7 +48,8 @@ func NewGRPCAPI(
 	return &GRPCAPI{
 		now:                         now,
 		replicaLabels:               replicaLabels,
-		queryableCreate:             creator,
+		queryableCreate:             queryableCreator,
+		remoteEndpointsCreate:       remoteEndpointsCreator,
 		queryFactory:                queryFactory,
 		defaultEngine:               defaultEngine,
 		lookbackDeltaCreate:         lookbackDeltaCreate,
@@ -95,10 +99,15 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		query.NoopSeriesStatsReporter,
 	)
 
+	remoteEndpoints := g.remoteEndpointsCreate(
+		replicaLabels,
+		request.EnablePartialResponse,
+	)
+
 	var qry promql.Query
 	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
 		var err error
-		qry, err = g.getInstantQueryForEngine(ctx, request, queryable, maxResolution)
+		qry, err = g.getInstantQueryForEngine(ctx, request, queryable, remoteEndpoints, maxResolution)
 		return err
 	}); err != nil {
 		return err
@@ -182,10 +191,15 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		query.NoopSeriesStatsReporter,
 	)
 
+	remoteEndpoints := g.remoteEndpointsCreate(
+		replicaLabels,
+		request.EnablePartialResponse,
+	)
+
 	var qry promql.Query
 	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
 		var err error
-		qry, err = g.getRangeQueryForEngine(ctx, request, queryable)
+		qry, err = g.getRangeQueryForEngine(ctx, request, queryable, remoteEndpoints, maxResolution)
 		return err
 	}); err != nil {
 		return err
@@ -260,7 +274,13 @@ func extractQueryStats(qry promql.Query) *querypb.QueryStats {
 	return stats
 }
 
-func (g *GRPCAPI) getInstantQueryForEngine(ctx context.Context, request *querypb.QueryRequest, queryable storage.Queryable, maxResolution int64) (promql.Query, error) {
+func (g *GRPCAPI) getInstantQueryForEngine(
+	ctx context.Context,
+	request *querypb.QueryRequest,
+	queryable storage.Queryable,
+	remoteEndpoints api.RemoteEndpoints,
+	maxResolution int64,
+) (promql.Query, error) {
 	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
@@ -277,8 +297,7 @@ func (g *GRPCAPI) getInstantQueryForEngine(ctx context.Context, request *querypb
 		ts = time.Unix(request.TimeSeconds, 0)
 	}
 	opts := &engine.QueryOpts{
-		LookbackDeltaParam:     lookbackDelta,
-		EnablePartialResponses: request.EnablePartialResponse,
+		LookbackDeltaParam: lookbackDelta,
 	}
 
 	var engineType PromqlEngineType
@@ -297,13 +316,15 @@ func (g *GRPCAPI) getInstantQueryForEngine(ctx context.Context, request *querypb
 	} else {
 		qry = planOrQuery{query: request.Query}
 	}
-	return g.queryFactory.makeInstantQuery(ctx, engineType, queryable, qry, opts, ts)
+	return g.queryFactory.makeInstantQuery(ctx, engineType, queryable, remoteEndpoints, qry, opts, ts)
 }
 
 func (g *GRPCAPI) getRangeQueryForEngine(
 	ctx context.Context,
 	request *querypb.QueryRangeRequest,
 	queryable storage.Queryable,
+	remoteEndpoints api.RemoteEndpoints,
+	maxResolution int64,
 ) (promql.Query, error) {
 	start := time.Unix(request.StartTimeSeconds, 0)
 	end := time.Unix(request.EndTimeSeconds, 0)
@@ -314,17 +335,12 @@ func (g *GRPCAPI) getRangeQueryForEngine(
 		engineParam = g.defaultEngine
 	}
 
-	maxResolution := request.MaxResolutionSeconds
-	if request.MaxResolutionSeconds == 0 {
-		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
-	}
 	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
 	opts := &engine.QueryOpts{
-		LookbackDeltaParam:     lookbackDelta,
-		EnablePartialResponses: request.EnablePartialResponse,
+		LookbackDeltaParam: lookbackDelta,
 	}
 
 	var engineType PromqlEngineType
@@ -343,5 +359,5 @@ func (g *GRPCAPI) getRangeQueryForEngine(
 	} else {
 		qry = planOrQuery{query: request.Query}
 	}
-	return g.queryFactory.makeRangeQuery(ctx, engineType, queryable, qry, opts, start, end, step)
+	return g.queryFactory.makeRangeQuery(ctx, engineType, queryable, remoteEndpoints, qry, opts, start, end, step)
 }
