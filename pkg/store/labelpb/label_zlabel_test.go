@@ -24,6 +24,7 @@ var testLsetMap = map[string]string{
 	"124134235423534534ffdasdfsf": "1",
 	"":                            "",
 	"b":                           "",
+	"label:name":                  "label:value",
 }
 
 func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
@@ -64,6 +65,16 @@ func TestValidateLabels(t *testing.T) {
 			// No labels at all.
 			labelSet:    []ZLabel{},
 			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// utf-8 case.
+			labelSet: []ZLabel{
+				{
+					Name:  "label:name",
+					Value: "label:value",
+				},
+			},
+			expectedErr: nil,
 		},
 		{
 			// Empty label.
