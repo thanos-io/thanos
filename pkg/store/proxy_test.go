@@ -516,6 +516,290 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedErr: errors.New("fetch series for {ext=\"1\"} : error!"),
 		},
 		{
+			title: "partial response disabled with warn response",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseDisabled: true,
+				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			},
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
+		},
+		{
+			title: "group replica strategy; only one replica has failures in each group",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica2",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group2",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group2",
+					ReplicaKeyStr: "replica2",
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_GROUP_REPLICA,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "b"),
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+				},
+			},
+			expectedWarningsLen: 0,
+		},
+		{
+			title: "group replica strategy; multiple replicas have failures in a group",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica2",
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_GROUP_REPLICA,
+			},
+			expectedErr: errors.New("fetch series for {ext=\"1\"} : error!"),
+		},
+		{
+			title: "group replica strategy; a group with single replica has one failure",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_GROUP_REPLICA,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "b"),
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+				},
+			},
+			expectedWarningsLen: 0,
+		},
+		{
+			title: "group replica strategy; a group with single replica has multiple failures",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_GROUP_REPLICA,
+			},
+			expectedErr: errors.New("fetch series for {ext=\"1\"} : error!"),
+		},
+		{
+			// TODO: update this test when we attribute warnings to group and replica
+			title: "group replica strategy; single warning",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_GROUP_REPLICA,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "b"),
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+				},
+			},
+			expectedWarningsLen: 1,
+		},
+		{
+			// TODO: update this test when we attribute warnings to group and replica
+			title: "group replica strategy; multiple warnings",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					ExtLset:       []labels.Labels{labels.FromStrings("ext", "1")},
+					MinTime:       1,
+					MaxTime:       300,
+					GroupKeyStr:   "group1",
+					ReplicaKeyStr: "replica1",
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_GROUP_REPLICA,
+			},
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning; warning"),
+		},
+		{
 			title: "storeAPI available for time range; available series for ext=1 external label matcher; allowed by store debug matcher",
 			storeAPIs: []Client{
 				&storetestutil.TestClient{
@@ -885,9 +1169,9 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			title: "partial response disabled; 1st store is slow, 2nd store is fast;",
 			storeAPIs: []Client{
 				&storetestutil.TestClient{
+					Name: "test",
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
 						RespDuration: 10 * time.Second,
@@ -897,9 +1181,9 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					MaxTime: 300,
 				},
 				&storetestutil.TestClient{
+					Name: "test",
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
 					},
@@ -923,7 +1207,6 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				&storetestutil.TestClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
 					},
@@ -934,7 +1217,6 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				&storetestutil.TestClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
 						RespDuration: 10 * time.Second,
@@ -951,7 +1233,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = failed to receive any data in 4s from : context canceled"),
 		},
 		{
 			title: "partial response disabled; 1st store is slow on 2nd series, 2nd store is fast;",
@@ -998,7 +1280,6 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				&storetestutil.TestClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{3, 1}, {4, 2}, {5, 3}}),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{6, 1}, {7, 2}, {8, 3}}),
@@ -1011,8 +1292,8 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				&storetestutil.TestClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{3, 1}, {4, 2}, {5, 3}}),
 						},
 						RespDuration:    10 * time.Second,
 						SlowSeriesIndex: 2,
@@ -1029,7 +1310,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = failed to receive any data in 4s from : context canceled"),
 		},
 		{
 			title: "partial response enabled; 1st store is slow to respond, 2nd store is fast;",
@@ -1229,6 +1510,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			title: "partial response disabled; all stores respond 3s",
 			storeAPIs: []Client{
 				&storetestutil.TestClient{
+					Name: "test",
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
