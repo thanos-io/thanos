@@ -5,13 +5,11 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"net/http"
 	"strings"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -22,8 +20,6 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/thanos-io/promql-engine/api"
-	"github.com/thanos-io/promql-engine/engine"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -61,13 +57,6 @@ const (
 	queryPushdown        = "query-pushdown"
 )
 
-type queryMode string
-
-const (
-	queryModeLocal       queryMode = "local"
-	queryModeDistributed queryMode = "distributed"
-)
-
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
@@ -93,8 +82,8 @@ func registerQuery(app *extkingpin.App) {
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
 	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
-		Default(string(queryModeLocal)).
-		Enum(string(queryModeLocal), string(queryModeDistributed))
+		Default(string(apiv1.PromqlQueryModeLocal)).
+		Enum(string(apiv1.PromqlQueryModeLocal), string(apiv1.PromqlQueryModeDistributed))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -257,6 +246,11 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
+		if *promqlQueryMode != string(apiv1.PromqlQueryModeLocal) {
+			level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
+			*defaultEngine = string(apiv1.PromqlEngineThanos)
+		}
+
 		endpointSet, err := setupEndpointSet(
 			g,
 			comp,
@@ -325,11 +319,11 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
-			*defaultEngine,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
 			store.NewTSDBSelector(tsdbSelector),
-			queryMode(*promqlQueryMode),
+			apiv1.PromqlEngineType(*defaultEngine),
+			apiv1.PromqlQueryMode(*promqlQueryMode),
 			*tenantHeader,
 			*defaultTenant,
 			*tenantCertField,
@@ -386,11 +380,11 @@ func runQuery(
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []float64,
 	queryTelemetrySeriesQuantiles []float64,
-	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
 	tsdbSelector *store.TSDBSelector,
-	queryMode queryMode,
+	defaultEngine apiv1.PromqlEngineType,
+	queryMode apiv1.PromqlQueryMode,
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
@@ -429,6 +423,14 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
+		remoteEndpointsCreator = query.NewRemoteEndpointsCreator(
+			logger,
+			endpointSet.GetQueryAPIClients,
+			queryPartitionLabels,
+			queryTimeout,
+			queryDistributedWithOverlappingInterval,
+			enableAutodownsampling,
+		)
 	)
 
 	grpcProbe := prober.NewGRPC()
@@ -439,48 +441,25 @@ func runQuery(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	engineOpts := engine.Opts{
-		EngineOpts: promql.EngineOpts{
-			Logger: logutil.GoKitLogToSlog(logger),
-			Reg:    reg,
-			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-			MaxSamples:    math.MaxInt32,
-			Timeout:       queryTimeout,
-			LookbackDelta: lookbackDelta,
-			NoStepSubqueryIntervalFn: func(int64) int64 {
-				return defaultEvaluationInterval.Milliseconds()
-			},
-			EnableNegativeOffset: true,
-			EnableAtModifier:     true,
-		},
-		EnablePartialResponses: enableQueryPartialResponse,
-		EnableXFunctions:       extendedFunctionsEnabled,
-		EnableAnalysis:         true,
-	}
-
 	// An active query tracker will be added only if the user specifies a non-default path.
 	// Otherwise, the nil active query tracker from existing engine options will be used.
+	var activeQueryTracker *promql.ActiveQueryTracker
 	if activeQueryDir != "" {
-		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
+		activeQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
 	}
 
-	var remoteEngineEndpoints api.RemoteEndpoints
-	if queryMode != queryModeLocal {
-		level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
-		defaultEngine = string(apiv1.PromqlEngineThanos)
-		remoteEngineEndpoints = query.NewRemoteEndpoints(logger, endpointSet.GetQueryAPIClients, query.Opts{
-			AutoDownsample:                          enableAutodownsampling,
-			ReplicaLabels:                           queryReplicaLabels,
-			PartitionLabels:                         queryPartitionLabels,
-			Timeout:                                 queryTimeout,
-			EnablePartialResponse:                   enableQueryPartialResponse,
-			QueryDistributedWithOverlappingInterval: queryDistributedWithOverlappingInterval,
-		})
-	}
+	queryCreator := apiv1.NewQueryFactory(
+		reg,
+		logger,
+		queryTimeout,
+		lookbackDelta,
+		defaultEvaluationInterval,
+		extendedFunctionsEnabled,
+		activeQueryTracker,
+		queryMode,
+	)
 
-	engineFactory := apiv1.NewQueryFactory(engineOpts, remoteEngineEndpoints)
-
-	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts.EngineOpts, dynamicLookbackDelta)
+	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
 	{
@@ -510,10 +489,11 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpointSet.GetEndpointStatus,
-			engineFactory,
+			queryCreator,
 			apiv1.PromqlEngineType(defaultEngine),
 			lookbackDeltaCreator,
 			queryableCreator,
+			remoteEndpointsCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
 			targets.NewGRPCClientWithDedup(targetsProxy, queryReplicaLabels),
@@ -600,8 +580,8 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		defaultEngineType := querypb.EngineType(querypb.EngineType_value[defaultEngine])
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engineFactory, defaultEngineType, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		defaultEngineType := querypb.EngineType(querypb.EngineType_value[string(defaultEngine)])
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, remoteEndpointsCreator, queryCreator, defaultEngineType, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(seriesProxy, logger)),
@@ -634,7 +614,7 @@ func runQuery(
 // dynamicLookbackDelta and eo.LookbackDelta and returns a function
 // that returns appropriate lookback delta for given maxSourceResolutionMillis.
 func LookbackDeltaFactory(
-	eo promql.EngineOpts,
+	lookbackDelta time.Duration,
 	dynamicLookbackDelta bool,
 ) func(int64) time.Duration {
 	resolutions := []int64{downsample.ResLevel0}
@@ -643,10 +623,9 @@ func LookbackDeltaFactory(
 	}
 	var (
 		lds = make([]time.Duration, len(resolutions))
-		ld  = eo.LookbackDelta.Milliseconds()
+		ld  = lookbackDelta.Milliseconds()
 	)
 
-	lookbackDelta := eo.LookbackDelta
 	for i, r := range resolutions {
 		if ld < r {
 			lookbackDelta = time.Duration(r) * time.Millisecond
