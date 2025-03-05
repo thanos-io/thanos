@@ -268,7 +268,6 @@ type ConcurrentLister struct {
 }
 
 func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReader) *ConcurrentLister {
-	level.Info(logger).Log("msg", "Using concurrent block lister")
 	return &ConcurrentLister{
 		logger: logger,
 		bkt:    bkt,
