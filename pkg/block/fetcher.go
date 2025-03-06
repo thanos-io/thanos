@@ -223,7 +223,9 @@ type RecursiveLister struct {
 }
 
 func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader) *RecursiveLister {
-	level.Info(logger).Log("msg", "Using recursive block lister")
+	if logger != nil {
+		level.Info(logger).Log("msg", "Using recursive block lister")
+	}
 	return &RecursiveLister{
 		logger: logger,
 		bkt:    bkt,
@@ -231,8 +233,13 @@ func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader
 }
 
 func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
-	level.Info(f.logger).Log("msg", "recursive block lister started")
-	start := time.Now()
+	if f.logger != nil {
+		level.Info(f.logger).Log("msg", "recursive block lister started")
+		start := time.Now()
+		defer func() {
+			level.Info(f.logger).Log("msg", "recursive block lister ended", "duration", time.Since(start))
+		}()
+	}
 	partialBlocks = make(map[ulid.ULID]bool)
 	err = f.bkt.Iter(ctx, "", func(name string) error {
 		parts := strings.Split(name, "/")
@@ -256,7 +263,6 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		}
 		return nil
 	}, objstore.WithRecursiveIter())
-	level.Info(f.logger).Log("msg", "recursive block lister ended", "duration", time.Since(start))
 	return partialBlocks, err
 }
 
@@ -268,6 +274,9 @@ type ConcurrentLister struct {
 }
 
 func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReader) *ConcurrentLister {
+	if logger != nil {
+		level.Info(logger).Log("msg", "Using concurrent block lister")
+	}
 	return &ConcurrentLister{
 		logger: logger,
 		bkt:    bkt,
@@ -275,11 +284,13 @@ func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReade
 }
 
 func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
-	level.Info(f.logger).Log("msg", "concurrent block lister started")
-	start := time.Now()
-	defer func() {
-		level.Info(f.logger).Log("msg", "concurrent block lister end", "duration", time.Since(start))
-	}()
+	if f.logger != nil {
+		level.Info(f.logger).Log("msg", "concurrent block lister started")
+		start := time.Now()
+		defer func() {
+			level.Info(f.logger).Log("msg", "concurrent block lister end", "duration", time.Since(start))
+		}()
+	}
 	const concurrency = 64
 
 	partialBlocks = make(map[ulid.ULID]bool)
