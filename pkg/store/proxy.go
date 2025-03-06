@@ -72,12 +72,13 @@ type Client interface {
 	// represents a local client (server-as-client) and has no remote address.
 	Addr() (addr string, isLocalClient bool)
 
-	// A replica key defines a set of endpoints belong to the same replica.
-	// E.g, "pantheon-db-rep0", "pantheon-db-rep1", "long-range-store".
+	// ReplicaKey returns replica name of the store client. A replica consists of a set of endpoints belong to the
+	// same replica. E.g, "pantheon-db-rep0", "pantheon-db-rep1", "long-range-store".
 	ReplicaKey() string
-	// A group key defines a group of replicas that belong to the same group.
-	// E.g. "pantheon-db" has replicas "pantheon-db-rep0", "pantheon-db-rep1".
-	//		"long-range-store" has only one replica, "long-range-store".
+
+	// GroupKey returns group name of the store client. A group defines a group of replicas that belong to the
+	// same group. E.g. "pantheon-db" has replicas "pantheon-db-rep0", "pantheon-db-rep1".
+	// "long-range-store" has only one replica, "long-range-store".
 	GroupKey() string
 
 	// Matches returns true if provided label matchers are allowed in the store.
