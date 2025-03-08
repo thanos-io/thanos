@@ -176,6 +176,7 @@ func runCompact(
 ) (rerr error) {
 	deleteDelay := time.Duration(conf.deleteDelay)
 	compactMetrics := newCompactMetrics(reg, deleteDelay)
+	progressRegistry := compact.NewProgressRegistry(reg, logger)
 	downsampleMetrics := newDownsampleMetrics(reg)
 
 	httpProbe := prober.NewHTTP()
@@ -325,6 +326,7 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = tracing.ContextWithTracer(ctx, tracer)
+	ctx = objstoretracing.ContextWithTracer(ctx, tracer) // objstore tracing uses a different tracer key in context.
 
 	defer func() {
 		if rerr != nil {
@@ -444,14 +446,16 @@ func runCompact(
 
 	var cleanMtx sync.Mutex
 	// TODO(GiedriusS): we could also apply retention policies here but the logic would be a bit more complex.
-	cleanPartialMarked := func() error {
+	cleanPartialMarked := func(progress *compact.Progress) error {
 		cleanMtx.Lock()
 		defer cleanMtx.Unlock()
-
+		defer progress.Idle()
+		progress.Set(compact.SyncMeta)
 		if err := sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "syncing metas")
 		}
 
+		progress.Set(compact.CleanBlocks)
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "cleaning marked blocks")
@@ -461,19 +465,23 @@ func runCompact(
 		return nil
 	}
 
-	compactMainFn := func() error {
+	compactMainFn := func(progress *compact.Progress) error {
+		defer progress.Idle()
 		// this should happen before any compaction to remove unnecessary process on backlogs beyond retention.
 		if len(retentionByTenant) != 0 && len(sy.Metas()) == 0 {
 			level.Info(logger).Log("msg", "sync before tenant retention due to no blocks")
+			progress.Set(compact.SyncMeta)
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before tenant retention")
 			}
 		}
+
+		progress.Set(compact.ApplyRetention)
 		if err := compact.ApplyRetentionPolicyByTenant(ctx, logger, insBkt, sy.Metas(), retentionByTenant, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, metadata.TenantRetentionExpired)); err != nil {
 			return errors.Wrap(err, "retention by tenant failed")
 		}
 
-		if err := compactor.Compact(ctx); err != nil {
+		if err := compactor.Compact(ctx, progress); err != nil {
 			return errors.Wrap(err, "whole compaction error")
 		}
 
@@ -482,10 +490,11 @@ func runCompact(
 			// We run two passes of this to ensure that the 1h downsampling is generated
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
+			progress.Set(compact.SyncMeta)
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
-
+			progress.Set(compact.DownSampling)
 			filteredMetas := sy.Metas()
 			noDownsampleBlocks := noDownsampleMarkerFilter.NoDownsampleMarkedBlocks()
 			for ul := range noDownsampleBlocks {
@@ -514,6 +523,7 @@ func runCompact(
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
+			progress.Set(compact.SyncMeta)
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
@@ -547,27 +557,29 @@ func runCompact(
 		}
 
 		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
+		progress.Set(compact.SyncMeta)
 		if err := sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync before retention")
 		}
 
+		progress.Set(compact.ApplyRetention)
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, insBkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 
-		return cleanPartialMarked()
+		return cleanPartialMarked(progress)
 	}
 
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 
 		if !conf.wait {
-			return compactMainFn()
+			return compactMainFn(progressRegistry.Get(compact.Main))
 		}
 
 		// --wait=true is specified.
 		return runutil.Repeat(conf.waitInterval, ctx.Done(), func() error {
-			err := compactMainFn()
+			err := compactMainFn(progressRegistry.Get(compact.Main))
 			if err == nil {
 				compactMetrics.iterations.Inc()
 				return nil
@@ -633,9 +645,11 @@ func runCompact(
 				// For /global state make sure to fetch periodically.
 				return runutil.Repeat(conf.blockViewerSyncBlockInterval, ctx.Done(), func() error {
 					return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
+						progress := progressRegistry.Get(compact.Web)
+						defer progress.Idle()
 						iterCtx, iterCancel := context.WithTimeout(ctx, conf.blockViewerSyncBlockTimeout)
 						defer iterCancel()
-
+						progress.Set(compact.SyncMeta)
 						_, _, err := f.Fetch(iterCtx)
 						return err
 					})
@@ -650,7 +664,7 @@ func runCompact(
 		if conf.cleanupBlocksInterval > 0 {
 			g.Add(func() error {
 				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), func() error {
-					err := cleanPartialMarked()
+					err := cleanPartialMarked(progressRegistry.Get(compact.Cleanup))
 					if err != nil && compact.IsRetryError(err) {
 						// The RetryError signals that we hit an retriable error (transient error, no connection).
 						// You should alert on this being triggered too frequently.
@@ -678,7 +692,9 @@ func runCompact(
 				}
 
 				return runutil.Repeat(conf.progressCalculateInterval, ctx.Done(), func() error {
-
+					progress := progressRegistry.Get(compact.Calculate)
+					defer progress.Idle()
+					progress.Set(compact.SyncMeta)
 					if err := sy.SyncMetas(ctx); err != nil {
 						// The RetryError signals that we hit an retriable error (transient error, no connection).
 						// You should alert on this being triggered too frequently.
@@ -693,29 +709,34 @@ func runCompact(
 					}
 
 					metas := sy.Metas()
+					progress.Set(compact.Grouping)
 					groups, err := grouper.Groups(metas)
 					if err != nil {
 						return errors.Wrapf(err, "could not group metadata for compaction")
 					}
-
+					progress.Set(compact.CalculateProgress)
 					if err = ps.ProgressCalculate(ctx, groups); err != nil {
 						return errors.Wrapf(err, "could not calculate compaction progress")
 					}
 
+					progress.Set(compact.Grouping)
 					retGroups, err := grouper.Groups(metas)
 					if err != nil {
 						return errors.Wrapf(err, "could not group metadata for retention")
 					}
 
+					progress.Set(compact.CalculateProgress)
 					if err = rs.ProgressCalculate(ctx, retGroups); err != nil {
 						return errors.Wrapf(err, "could not calculate retention progress")
 					}
 
 					if !conf.disableDownsampling {
+						progress.Set(compact.Grouping)
 						groups, err = grouper.Groups(metas)
 						if err != nil {
 							return errors.Wrapf(err, "could not group metadata into downsample groups")
 						}
+						progress.Set(compact.CalculateProgress)
 						if err := ds.ProgressCalculate(ctx, groups); err != nil {
 							return errors.Wrapf(err, "could not calculate downsampling progress")
 						}

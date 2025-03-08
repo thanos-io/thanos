@@ -75,6 +75,8 @@ type SyncerMetrics struct {
 	GarbageCollectionFailures prometheus.Counter
 	GarbageCollectionDuration prometheus.Observer
 	BlocksMarkedForDeletion   prometheus.Counter
+	SyncMetas                 prometheus.Counter
+	SyncMetasDuration         prometheus.Observer
 }
 
 func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) *SyncerMetrics {
@@ -96,8 +98,20 @@ func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 	})
 
 	m.BlocksMarkedForDeletion = blocksMarkedForDeletion
-
+	m.SyncMetas = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_sync_metas_total",
+		Help: "Total number of synced block metas.",
+	})
+	m.SyncMetasDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_compact_sync_metas_duration_seconds",
+		Help:    "Time it took to sync block metas.",
+		Buckets: []float64{10, 60, 180, 300, 450, 600, 1200, 1800, 3600, 7200, 10800, 21600},
+	})
 	return &m
+}
+
+func measureFuncDuration(duration prometheus.Observer, beginTime time.Time) {
+	duration.Observe(time.Since(beginTime).Seconds())
 }
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
@@ -147,6 +161,8 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 
 // SyncMetas synchronizes local state of block metas with what we have in the bucket.
 func (s *Syncer) SyncMetas(ctx context.Context) error {
+	s.metrics.SyncMetas.Inc()
+	defer measureFuncDuration(s.metrics.SyncMetasDuration, time.Now())
 	var cancel func() = func() {}
 	if s.syncMetasTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, s.syncMetasTimeout)
@@ -197,7 +213,8 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 // block with a higher compaction level.
 // Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
 func (s *Syncer) GarbageCollect(ctx context.Context) error {
-	begin := time.Now()
+	s.metrics.GarbageCollections.Inc()
+	defer measureFuncDuration(s.metrics.GarbageCollectionDuration, time.Now())
 
 	// Ignore filter exists before deduplicate filter.
 	deletionMarkMap := s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
@@ -236,8 +253,6 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 		s.mtx.Unlock()
 		s.metrics.GarbageCollectedBlocks.Inc()
 	}
-	s.metrics.GarbageCollections.Inc()
-	s.metrics.GarbageCollectionDuration.Observe(time.Since(begin).Seconds())
 	return nil
 }
 
@@ -1443,7 +1458,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
+func (c *BucketCompactor) Compact(ctx context.Context, progress *Progress) (rerr error) {
 	if c.concurrency == 0 {
 		level.Warn(c.logger).Log("msg", "compactor is disabled")
 		return nil
@@ -1462,6 +1477,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 	// Loop over bucket and compact until there's no work left.
 	for {
+		SetProgress(progress, Initializing)
 		var (
 			wg                     sync.WaitGroup
 			workCtx, workCtxCancel = context.WithCancel(ctx)
@@ -1521,17 +1537,20 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		}
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
+		SetProgress(progress, SyncMeta)
 		if err := c.sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync")
 		}
 
 		level.Info(c.logger).Log("msg", "start of GC")
+		SetProgress(progress, GarbageCollect)
 		// Blocks that were compacted are garbage collected after each Compaction.
 		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
 			return errors.Wrap(err, "garbage")
 		}
 
+		SetProgress(progress, Grouping)
 		groups, err := c.grouper.Groups(c.sy.Metas())
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
@@ -1544,12 +1563,13 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			}
 		}
 
+		SetProgress(progress, CleanBlocks)
 		if err := runutil.DeleteAll(c.compactDir, ignoreDirs...); err != nil {
 			level.Warn(c.logger).Log("msg", "failed deleting non-compaction group directories/files, some disk space usage might have leaked. Continuing", "err", err, "dir", c.compactDir)
 		}
 
 		level.Info(c.logger).Log("msg", "start of compactions")
-
+		SetProgress(progress, Compacting)
 		// Send all groups found during this pass to the compaction workers.
 		var groupErrs errutil.MultiError
 	groupLoop:
