@@ -21,62 +21,119 @@ package v1
 
 import (
 	"context"
+	"math"
 	"time"
 
+	"github.com/go-kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
-type Engine interface {
-	MakeInstantQuery(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, qs string, ts time.Time) (promql.Query, error)
-	MakeRangeQuery(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, qs string, start, end time.Time, step time.Duration) (promql.Query, error)
-	MakeInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error)
-	MakeRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, root logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error)
-}
+type PromqlEngineType string
 
-type prometheusEngineAdapter struct {
-	engine promql.QueryEngine
-}
+const (
+	PromqlEnginePrometheus PromqlEngineType = "prometheus"
+	PromqlEngineThanos     PromqlEngineType = "thanos"
+)
 
-func (a *prometheusEngineAdapter) MakeInstantQuery(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, qs string, ts time.Time) (promql.Query, error) {
-	return a.engine.NewInstantQuery(ctx, q, opts, qs, ts)
-}
+type PromqlQueryMode string
 
-func (a *prometheusEngineAdapter) MakeRangeQuery(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, qs string, start, end time.Time, step time.Duration) (promql.Query, error) {
-	return a.engine.NewRangeQuery(ctx, q, opts, qs, start, end, step)
-}
+const (
+	PromqlQueryModeLocal       PromqlQueryMode = "local"
+	PromqlQueryModeDistributed PromqlQueryMode = "distributed"
+)
 
-func (a *prometheusEngineAdapter) MakeInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error) {
-	return a.engine.NewInstantQuery(ctx, q, opts, plan.String(), ts)
-}
-
-func (a *prometheusEngineAdapter) MakeRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts *engine.QueryOpts, plan logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error) {
-	return a.engine.NewRangeQuery(ctx, q, opts, plan.String(), start, end, step)
+type queryCreator interface {
+	makeInstantQuery(
+		ctx context.Context,
+		t PromqlEngineType,
+		q storage.Queryable,
+		e api.RemoteEndpoints,
+		qry planOrQuery,
+		opts *engine.QueryOpts,
+		ts time.Time,
+	) (res promql.Query, err error)
+	makeRangeQuery(
+		ctx context.Context,
+		t PromqlEngineType,
+		q storage.Queryable,
+		e api.RemoteEndpoints,
+		qry planOrQuery,
+		opts *engine.QueryOpts,
+		start time.Time,
+		end time.Time,
+		step time.Duration,
+	) (res promql.Query, err error)
 }
 
 type QueryFactory struct {
-	prometheus Engine
-	thanos     Engine
+	mode PromqlQueryMode
+
+	prometheus        *promql.Engine
+	thanosLocal       *engine.Engine
+	thanosDistributed *engine.DistributedEngine
 }
 
 func NewQueryFactory(
-	engineOpts engine.Opts,
-	remoteEngineEndpoints api.RemoteEndpoints,
+	reg *prometheus.Registry,
+	logger log.Logger,
+	queryTimeout time.Duration,
+	lookbackDelta time.Duration,
+	evaluationInterval time.Duration,
+	enableXFunctions bool,
+	activeQueryTracker *promql.ActiveQueryTracker,
+	mode PromqlQueryMode,
 ) *QueryFactory {
-
-	var thanosEngine Engine
-	if remoteEngineEndpoints == nil {
-		thanosEngine = engine.New(engineOpts)
-	} else {
-		thanosEngine = engine.NewDistributedEngine(engineOpts, remoteEngineEndpoints)
+	makeOpts := func(registry prometheus.Registerer) engine.Opts {
+		opts := engine.Opts{
+			EngineOpts: promql.EngineOpts{
+				Logger: logutil.GoKitLogToSlog(logger),
+				Reg:    registry,
+				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+				MaxSamples:    math.MaxInt32,
+				Timeout:       queryTimeout,
+				LookbackDelta: lookbackDelta,
+				NoStepSubqueryIntervalFn: func(int64) int64 {
+					return evaluationInterval.Milliseconds()
+				},
+				EnableNegativeOffset: true,
+				EnableAtModifier:     true,
+			},
+			EnableXFunctions: enableXFunctions,
+			EnableAnalysis:   true,
+		}
+		if activeQueryTracker != nil {
+			opts.ActiveQueryTracker = activeQueryTracker
+		}
+		return opts
 	}
-	promEngine := promql.NewEngine(engineOpts.EngineOpts)
+
+	promEngine := promql.NewEngine(makeOpts(extprom.WrapRegistererWith(
+		map[string]string{
+			"mode":   string(PromqlQueryModeLocal),
+			"engine": string(PromqlEnginePrometheus)}, reg)).EngineOpts)
+
+	thanosLocal := engine.New(makeOpts(extprom.WrapRegistererWith(
+		map[string]string{
+			"mode":   string(PromqlQueryModeLocal),
+			"engine": string(PromqlEngineThanos)}, reg)))
+	thanosDistributed := engine.NewDistributedEngine(makeOpts(extprom.WrapRegistererWith(
+		map[string]string{
+			"mode":   string(PromqlQueryModeDistributed),
+			"engine": string(PromqlEngineThanos)}, reg)))
+
 	return &QueryFactory{
-		prometheus: &prometheusEngineAdapter{promEngine},
-		thanos:     thanosEngine,
+		mode:              mode,
+		prometheus:        promEngine,
+		thanosLocal:       thanosLocal,
+		thanosDistributed: thanosDistributed,
 	}
 }
 
@@ -88,54 +145,86 @@ type planOrQuery struct {
 
 func (f *QueryFactory) makeInstantQuery(
 	ctx context.Context,
-	e PromqlEngineType,
+	t PromqlEngineType,
 	q storage.Queryable,
+	e api.RemoteEndpoints,
 	qry planOrQuery,
 	opts *engine.QueryOpts,
 	ts time.Time,
 ) (res promql.Query, err error) {
-	if e == PromqlEngineThanos {
+	if t == PromqlEngineThanos && f.mode == PromqlQueryModeLocal {
 		if qry.plan != nil {
-			res, err = f.thanos.MakeInstantQueryFromPlan(ctx, q, opts, qry.plan, ts)
+			res, err = f.thanosLocal.MakeInstantQueryFromPlan(ctx, q, opts, qry.plan, ts)
 		} else {
-			res, err = f.thanos.MakeInstantQuery(ctx, q, opts, qry.query, ts)
+			res, err = f.thanosLocal.MakeInstantQuery(ctx, q, opts, qry.query, ts)
 		}
 		if err != nil {
 			if engine.IsUnimplemented(err) {
-				goto fallback
+				// fallback to prometheus
+				return f.prometheus.NewInstantQuery(ctx, q, opts, qry.query, ts)
 			}
 			return nil, err
 		}
 		return res, nil
 	}
-fallback:
-	return f.prometheus.MakeInstantQuery(ctx, q, opts, qry.query, ts)
+	if t == PromqlEngineThanos && f.mode == PromqlQueryModeDistributed {
+		if qry.plan != nil {
+			res, err = f.thanosDistributed.MakeInstantQueryFromPlan(ctx, q, e, opts, qry.plan, ts)
+		} else {
+			res, err = f.thanosDistributed.MakeInstantQuery(ctx, q, e, opts, qry.query, ts)
+		}
+		if err != nil {
+			if engine.IsUnimplemented(err) {
+				// fallback to prometheus
+				return f.prometheus.NewInstantQuery(ctx, q, opts, qry.query, ts)
+			}
+			return nil, err
+		}
+		return res, nil
+	}
+	return f.prometheus.NewInstantQuery(ctx, q, opts, qry.query, ts)
 }
 
 func (f *QueryFactory) makeRangeQuery(
 	ctx context.Context,
-	e PromqlEngineType,
+	t PromqlEngineType,
 	q storage.Queryable,
+	e api.RemoteEndpoints,
 	qry planOrQuery,
 	opts *engine.QueryOpts,
 	start time.Time,
 	end time.Time,
 	step time.Duration,
 ) (res promql.Query, err error) {
-	if e == PromqlEngineThanos {
+	if t == PromqlEngineThanos && f.mode == PromqlQueryModeLocal {
 		if qry.plan != nil {
-			res, err = f.thanos.MakeRangeQueryFromPlan(ctx, q, opts, qry.plan, start, end, step)
+			res, err = f.thanosLocal.MakeRangeQueryFromPlan(ctx, q, opts, qry.plan, start, end, step)
 		} else {
-			res, err = f.thanos.MakeRangeQuery(ctx, q, opts, qry.query, start, end, step)
+			res, err = f.thanosLocal.MakeRangeQuery(ctx, q, opts, qry.query, start, end, step)
 		}
 		if err != nil {
 			if engine.IsUnimplemented(err) {
-				goto fallback
+				// fallback to prometheus
+				return f.prometheus.NewRangeQuery(ctx, q, opts, qry.query, start, end, step)
 			}
 			return nil, err
 		}
 		return res, nil
 	}
-fallback:
-	return f.prometheus.MakeRangeQuery(ctx, q, opts, qry.query, start, end, step)
+	if t == PromqlEngineThanos && f.mode == PromqlQueryModeDistributed {
+		if qry.plan != nil {
+			res, err = f.thanosDistributed.MakeRangeQueryFromPlan(ctx, q, e, opts, qry.plan, start, end, step)
+		} else {
+			res, err = f.thanosDistributed.MakeRangeQuery(ctx, q, e, opts, qry.query, start, end, step)
+		}
+		if err != nil {
+			if engine.IsUnimplemented(err) {
+				// fallback to prometheus
+				return f.prometheus.NewRangeQuery(ctx, q, opts, qry.query, start, end, step)
+			}
+			return nil, err
+		}
+		return res, nil
+	}
+	return f.prometheus.NewRangeQuery(ctx, q, opts, qry.query, start, end, step)
 }
