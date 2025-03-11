@@ -181,10 +181,7 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
-			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
-
-			return labels.Compare(iLbls, jLbls) < 0
+			return labelpb.Compare(a.GetSeries().Labels, b.GetSeries().Labels) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
 			return true
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {
@@ -202,14 +199,6 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 
 func (l *lazyRespSet) StoreID() string {
 	return l.storeName
-}
-
-func (l *lazyRespSet) Labelset() string {
-	return labelpb.PromLabelSetsToString(l.storeLabelSets)
-}
-
-func (l *lazyRespSet) StoreLabels() map[string]struct{} {
-	return l.storeLabels
 }
 
 // lazyRespSet is a lazy storepb.SeriesSet that buffers
@@ -447,12 +436,10 @@ func newAsyncRespSet(
 	logger log.Logger,
 	emptyStreamResponses prometheus.Counter,
 ) (respSet, error) {
-
 	var (
 		span   opentracing.Span
 		cancel context.CancelFunc
 	)
-
 	storeID, storeAddr, isLocalStore := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
@@ -474,7 +461,7 @@ func newAsyncRespSet(
 
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
-		err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
+		err = errors.Wrapf(err, "fetch series for %s", storeID)
 
 		span.SetTag("err", err.Error())
 		span.Finish()
@@ -755,20 +742,10 @@ func (l *eagerRespSet) StoreID() string {
 	return l.storeName
 }
 
-func (l *eagerRespSet) Labelset() string {
-	return labelpb.PromLabelSetsToString(l.storeLabelSets)
-}
-
-func (l *eagerRespSet) StoreLabels() map[string]struct{} {
-	return l.storeLabels
-}
-
 type respSet interface {
 	Close()
 	At() *storepb.SeriesResponse
 	Next() bool
 	StoreID() string
-	Labelset() string
-	StoreLabels() map[string]struct{}
 	Empty() bool
 }
