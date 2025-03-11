@@ -76,7 +76,7 @@ require (
 	go.elastic.co/apm v1.15.0
 	go.elastic.co/apm/module/apmot v1.15.0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.54.0
-	go.opentelemetry.io/contrib/samplers/jaegerremote v0.23.0
+	go.opentelemetry.io/contrib/samplers/jaegerremote v0.29.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.31.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.16.0
@@ -96,7 +96,7 @@ require (
 	golang.org/x/time v0.8.0
 	google.golang.org/grpc v1.69.4
 	google.golang.org/grpc/examples v0.0.0-20211119005141-f45e61797429
-	google.golang.org/protobuf v1.36.3
+	google.golang.org/protobuf v1.36.5
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -153,8 +153,8 @@ require (
 	go.opentelemetry.io/contrib/propagators/ot v1.29.0 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250115164207-1a7da9e5054f // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250212204824-5a70512c5d8b // indirect
 	k8s.io/apimachinery v0.31.3 // indirect
 	k8s.io/client-go v0.31.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
