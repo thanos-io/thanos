@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-kit/log"
@@ -97,6 +98,14 @@ func (r *Relabeller) setRelabelConfig(configs RelabelConfig) {
 }
 
 func (r *Relabeller) loadConfig() error {
+	path := r.configPathOrContent.Path()
+	if len(path) != 0 {
+		_, err := os.ReadFile(path)
+		if err != nil {
+			level.Warn(r.logger).Log("msg", "failed to load relabel config", "path", path, "err", err)
+			return nil
+		}
+	}
 	relabelContentYaml, err := r.configPathOrContent.Content()
 	if err != nil {
 		return errors.Wrap(err, "getting content of relabel config")
