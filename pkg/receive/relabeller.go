@@ -98,16 +98,14 @@ func (r *Relabeller) setRelabelConfig(configs RelabelConfig) {
 }
 
 func (r *Relabeller) loadConfig() error {
-	path := r.configPathOrContent.Path()
-	if len(path) != 0 {
-		_, err := os.ReadFile(path)
-		if err != nil {
-			level.Warn(r.logger).Log("msg", "failed to load relabel config", "path", path, "err", err)
-			return nil
-		}
-	}
 	relabelContentYaml, err := r.configPathOrContent.Content()
 	if err != nil {
+		// If file does not exist, we just set an empty config.
+		if errors.Is(err, os.ErrNotExist) {
+			level.Debug(r.logger).Log("msg", "relabel config file does not exist")
+			r.setRelabelConfig(RelabelConfig{})
+			return nil
+		}
 		return errors.Wrap(err, "getting content of relabel config")
 	}
 	var relabelConfig RelabelConfig
