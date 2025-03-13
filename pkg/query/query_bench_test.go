@@ -18,6 +18,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	deduppkg "github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -89,6 +90,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		logger,
 		math.MinInt64,
 		math.MaxInt64,
+		deduppkg.AlgorithmPenalty,
 		[]string{"a_replica"},
 		nil,
 		newProxyStore(&mockedStoreServer{responses: resps}),
