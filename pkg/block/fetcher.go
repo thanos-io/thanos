@@ -338,9 +338,6 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 		if !ok {
 			return nil
 		}
-		if f.logger != nil {
-			level.Info(f.logger).Log("msg", "concurrent block lister found block", "block", id)
-		}
 		select {
 		case <-gCtx.Done():
 			return gCtx.Err()
