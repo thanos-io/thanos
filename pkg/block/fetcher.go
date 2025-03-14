@@ -308,6 +308,13 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 				metaFile := path.Join(uid.String(), MetaFilename)
 				ok, err := f.bkt.Exists(gCtx, metaFile)
 				if err != nil {
+					if f.logger != nil {
+						level.Error(f.logger).Log(
+							"msg", "concurrent block lister worker failed to check meta.json file existence",
+							"meta_file", metaFile,
+							"err", err,
+						)
+					}
 					return errors.Wrapf(err, "meta.json file exists: %v", uid)
 				}
 				if !ok {
@@ -317,8 +324,8 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 					continue
 				}
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
+				case <-gCtx.Done():
+					return gCtx.Err()
 				case ch <- uid:
 				}
 			}
@@ -331,9 +338,12 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 		if !ok {
 			return nil
 		}
+		if f.logger != nil {
+			level.Info(f.logger).Log("msg", "concurrent block lister found block", "block", id)
+		}
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-gCtx.Done():
+			return gCtx.Err()
 		case metaChan <- id:
 		}
 		return nil
