@@ -106,7 +106,7 @@ external_labels: {cluster="us1", replica="1", receive="true", environment="produ
 external_labels: {cluster="us1", replica="1", receive="true", environment="staging"}
 ```
 
-and set `--deduplication.replica-label="replica"`, Compactor will assume those as:
+and set `--deduplication.replica-label=replica`, Compactor will assume those as:
 
 ```
 external_labels: {cluster="eu1", receive="true", environment="production"} (2 streams, resulted in one)
@@ -151,6 +151,8 @@ message AggrChunk {
 ```
 
 This means that for each series we collect various aggregations with a given interval: 5m or 1h (depending on resolution). This allows us to keep precision on large duration queries, without fetching too many samples.
+
+Native histogram downsampling leverages the fact that one can aggregate & reduce schema i.e. downsample native histograms. Native histograms only store 3 aggregations - counter, count, and sum. Sum and count are used to produce "an average" native histogram. Counter is a counter that is used with functions irate, rate, increase, and resets.
 
 ### ⚠ ️Downsampling: Note About Resolution and Retention ⚠️
 

@@ -18,6 +18,7 @@ The data of each Rule node can be labeled to satisfy the clusters labeling schem
 thanos rule \
     --data-dir             "/path/to/data" \
     --eval-interval        "30s" \
+    --rule-query-offset    "10s" \
     --rule-file            "/path/to/rules/*.rules.yaml" \
     --alert.query-url      "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
     --alertmanagers.url    "http://alert.thanos.io" \
@@ -63,6 +64,9 @@ name: <string>
 
 # How often rules in the group are evaluated.
 [ interval: <duration> | default = global.evaluation_interval ]
+
+# Offset the rule evaluation timestamp of this particular group by the specified duration into the past.
+[ query_offset: <duration> | default = --rule-query-offset flag ]
 
 rules:
   [ - <rule> ... ]
@@ -471,6 +475,8 @@ Flags:
                                  Note that rules are not automatically detected,
                                  use SIGHUP or do HTTP POST /-/reload to re-read
                                  them.
+      --rule-query-offset=0s     The default rule group query_offset duration to
+                                 use.
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
       --shipper.upload-compacted

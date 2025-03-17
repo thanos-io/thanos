@@ -1434,7 +1434,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 		}
 		out.Raw = &storepb.Chunk{
 			Data: b,
-			Type: storepb.Chunk_Encoding(in.Encoding() - 1),
+			Type: chunkToStoreEncoding(in.Encoding()),
 			Hash: hashChunk(hasher, b, calculateChecksum),
 		}
 		return nil
@@ -1457,7 +1457,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Count = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
@@ -1467,7 +1467,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Sum = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -1477,7 +1477,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Min = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
@@ -1487,7 +1487,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Max = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
@@ -1497,10 +1497,23 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Counter = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		}
 	}
 	return nil
+}
+
+func chunkToStoreEncoding(in chunkenc.Encoding) storepb.Chunk_Encoding {
+	switch in {
+	case chunkenc.EncXOR:
+		return storepb.Chunk_XOR
+	case chunkenc.EncHistogram:
+		return storepb.Chunk_HISTOGRAM
+	case chunkenc.EncFloatHistogram:
+		return storepb.Chunk_FLOAT_HISTOGRAM
+	default:
+		panic("unknown chunk encoding")
+	}
 }
 
 func hashChunk(hasher hash.Hash64, b []byte, doHash bool) uint64 {
@@ -2958,6 +2971,16 @@ func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]s
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, []string, error) {
+	// .* regexp matches any string.
+	if m.Type == labels.MatchRegexp && m.Value == ".*" {
+		return newPostingGroup(true, m.Name, nil, nil), nil, nil
+	}
+
+	// .* not regexp doesn't match any string.
+	if m.Type == labels.MatchNotRegexp && m.Value == ".*" {
+		return newPostingGroup(false, m.Name, nil, nil), nil, nil
+	}
+
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
@@ -2991,6 +3014,11 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 			return newPostingGroup(true, m.Name, nil, vals), vals, nil
 		}
 
+		// .+ regexp matches any non-empty string: get postings for all label values and remove them.
+		if m.Type == labels.MatchNotRegexp && m.Value == ".+" {
+			return newPostingGroup(true, m.Name, nil, vals), vals, nil
+		}
+
 		for i, val := range vals {
 			if (i+1)%checkContextEveryNIterations == 0 && ctx.Err() != nil {
 				return nil, nil, ctx.Err()
@@ -3002,6 +3030,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 
 		return newPostingGroup(true, m.Name, nil, toRemove), vals, nil
 	}
+
 	if m.Type == labels.MatchRegexp {
 		if vals := m.SetMatches(); len(vals) > 0 {
 			sort.Strings(vals)
@@ -3022,6 +3051,11 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	// If the matcher is !="" or !~"", it is the same as adding all values for the label.
 	// We can skip calling `Matches` here.
 	if m.Value == "" && (m.Type == labels.MatchNotEqual || m.Type == labels.MatchNotRegexp) {
+		return newPostingGroup(false, m.Name, vals, nil), vals, nil
+	}
+
+	// .+ regexp matches any non-empty string: get postings for all label values.
+	if m.Type == labels.MatchRegexp && m.Value == ".+" {
 		return newPostingGroup(false, m.Name, vals, nil), vals, nil
 	}
 

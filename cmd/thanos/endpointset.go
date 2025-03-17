@@ -320,9 +320,6 @@ func setupEndpointSet(
 		specs := make([]*query.GRPCEndpointSpec, 0)
 		for _, ecfg := range endpointConfig.Endpoints {
 			strict, group, addr := ecfg.Strict, ecfg.Group, ecfg.Address
-			if dns.IsDynamicNode(addr) {
-				continue
-			}
 			if group {
 				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(dialOpts, extgrpc.EndpointGroupGRPCOpts()...)...))
 			} else {

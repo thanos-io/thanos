@@ -32,7 +32,9 @@ import (
 	"github.com/prometheus/prometheus/util/gate"
 	"github.com/thanos-io/thanos/pkg/logutil"
 
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -48,7 +50,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	t.Parallel()
 
 	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second)
+	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second, dedup.AlgorithmPenalty)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
 	queryable := queryableCreator(
@@ -95,6 +97,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		newProxyStore(testProxy),
 		2,
 		timeout,
+		dedup.AlgorithmPenalty,
 	)(false,
 		nil,
 		nil,
@@ -400,7 +403,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+								return newQuerier(nil, mint, maxt, dedup.AlgorithmPenalty, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
 							},
 						}
 						t.Cleanup(func() {
@@ -784,6 +787,7 @@ func TestQuerier_Select(t *testing.T) {
 					nil,
 					tcase.mint,
 					tcase.maxt,
+					dedup.AlgorithmPenalty,
 					tcase.replicaLabels,
 					nil,
 					newProxyStore(tcase.storeEndpoints...),
@@ -1086,7 +1090,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -1156,7 +1160,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -1278,4 +1282,135 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		s.Chunks = append(s.Chunks, ch)
 	}
 	return storepb.NewSeriesResponse(&s)
+}
+
+func TestMaxResolutionFromSelectHints(t *testing.T) {
+	twoMinRange := int64(2 * 60 * 1000)
+	for _, tc := range []struct {
+		name                string
+		maxResolutionMillis int64
+		hints               storage.SelectHints
+		expected            int64
+	}{
+		{
+			name: "no range",
+			hints: storage.SelectHints{
+				Range: 0,
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "no function",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "function doesn't impact resolution",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "max_over_time",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "rate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "rate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "rate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "rate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "irate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "irate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "increase",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "increase",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "delta",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "delta",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "idelta",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "idelta",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "deriv",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "deriv",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "predict_linear",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "predict_linear",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "holt_winters",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "holt_winters",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "double_exponential_smoothing",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "double_exponential_smoothing",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := maxResolutionFromSelectHints(tc.maxResolutionMillis, tc.hints.Range, tc.hints.Func)
+			testutil.Equals(t, tc.expected, res)
+		})
+	}
 }

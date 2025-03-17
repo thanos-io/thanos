@@ -27,6 +27,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+var promqlFuncRequiresTwoSamples = map[string]struct{}{
+	"rate":                         {},
+	"irate":                        {},
+	"increase":                     {},
+	"delta":                        {},
+	"idelta":                       {},
+	"deriv":                        {},
+	"predict_linear":               {},
+	"holt_winters":                 {},
+	"double_exponential_smoothing": {},
+}
+
 type seriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
 
 var NoopSeriesStatsReporter seriesStatsReporter = func(_ storepb.SeriesStatsCounter) {}
@@ -65,6 +77,7 @@ func NewQueryableCreator(
 	proxy storepb.StoreServer,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
+	deduplicationFunc string,
 ) QueryableCreator {
 	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
 
@@ -80,6 +93,7 @@ func NewQueryableCreator(
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
+			deduplicationFunc:   deduplicationFunc,
 			replicaLabels:       replicaLabels,
 			storeDebugMatchers:  storeDebugMatchers,
 			proxy:               proxy,
@@ -100,6 +114,7 @@ func NewQueryableCreator(
 
 type queryable struct {
 	logger               log.Logger
+	deduplicationFunc    string
 	replicaLabels        []string
 	storeDebugMatchers   [][]*labels.Matcher
 	proxy                storepb.StoreServer
@@ -116,12 +131,13 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
+	return newQuerier(q.logger, mint, maxt, q.deduplicationFunc, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
 }
 
 type querier struct {
 	logger                  log.Logger
 	mint, maxt              int64
+	deduplicationFunc       string
 	replicaLabels           []string
 	storeDebugMatchers      [][]*labels.Matcher
 	proxy                   storepb.StoreServer
@@ -141,6 +157,7 @@ func newQuerier(
 	logger log.Logger,
 	mint,
 	maxt int64,
+	deduplicationFunc string,
 	replicaLabels []string,
 	storeDebugMatchers [][]*labels.Matcher,
 	proxy storepb.StoreServer,
@@ -172,6 +189,7 @@ func newQuerier(
 
 		mint:                    mint,
 		maxt:                    maxt,
+		deduplicationFunc:       deduplicationFunc,
 		replicaLabels:           replicaLabels,
 		storeDebugMatchers:      storeDebugMatchers,
 		proxy:                   proxy,
@@ -234,7 +252,7 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	if strings.HasPrefix(f, "sum_") {
 		return []storepb.Aggr{storepb.Aggr_SUM}
 	}
-	if f == "increase" || f == "rate" || f == "irate" || f == "resets" {
+	if f == "increase" || f == "rate" || f == "irate" || f == "resets" || f == "xincrease" || f == "xrate" {
 		return []storepb.Aggr{storepb.Aggr_COUNTER}
 	}
 	// In the default case, we retrieve count and sum to compute an average.
@@ -320,6 +338,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
+	maxResolutionMillis := maxResolutionFromSelectHints(q.maxResolutionMillis, hints.Range, hints.Func)
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
@@ -333,7 +352,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		MaxTime:                 hints.End,
 		Limit:                   int64(hints.Limit),
 		Matchers:                sms,
-		MaxResolutionWindow:     q.maxResolutionMillis,
+		MaxResolutionWindow:     maxResolutionMillis,
 		Aggregates:              aggrs,
 		ShardInfo:               q.shardInfo,
 		PartialResponseStrategy: q.partialResponseStrategy,
@@ -370,7 +389,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns,
 	)
 
-	return dedup.NewSeriesSet(set, hints.Func), resp.seriesSetStats, nil
+	return dedup.NewSeriesSet(set, hints.Func, q.deduplicationFunc), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.
@@ -460,3 +479,13 @@ func (q *querier) LabelNames(ctx context.Context, hints *storage.LabelHints, mat
 }
 
 func (q *querier) Close() error { return nil }
+
+// maxResolutionFromSelectHints finds the max possible resolution by inferring from the promql query.
+func maxResolutionFromSelectHints(maxResolutionMillis int64, hintsRange int64, hintsFunc string) int64 {
+	if hintsRange > 0 {
+		if _, ok := promqlFuncRequiresTwoSamples[hintsFunc]; ok {
+			maxResolutionMillis = min(maxResolutionMillis, hintsRange/2)
+		}
+	}
+	return maxResolutionMillis
+}

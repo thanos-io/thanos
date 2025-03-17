@@ -23,18 +23,6 @@ func Test_parseFlagLabels(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			s:         []string{`label-Name="LabelVal"`}, // Unsupported labelname.
-			expectErr: true,
-		},
-		{
-			s:         []string{`label:Name="LabelVal"`}, // Unsupported labelname.
-			expectErr: true,
-		},
-		{
-			s:         []string{`1abelName="LabelVal"`}, // Unsupported labelname.
-			expectErr: true,
-		},
-		{
 			s:         []string{`label_Name"LabelVal"`}, // Missing "=" separator.
 			expectErr: true,
 		},
