@@ -106,6 +106,8 @@ thanos tools bucket verify --objstore.config-file=bucket.yml
 The content of `bucket.yml`:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""
@@ -678,6 +680,8 @@ thanos tools bucket downsample \
 The content of `bucket.yml`:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""
@@ -782,6 +786,8 @@ thanos tools bucket mark \
 The example content of `bucket.yml`:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""

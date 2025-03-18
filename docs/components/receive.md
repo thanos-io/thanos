@@ -90,6 +90,8 @@ where `<thanos-receive-containter-ip>` is an IP address reachable by Prometheus 
 The example content of `bucket.yml`:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""
