@@ -20,7 +20,7 @@ The simplest way to tell a component about a peer is to use a static flag.
 
 ### Thanos Querier
 
-The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `Thanos Querier` should use.
+The repeatable flag `--endpoint.sd-config=<content>` can be used to specify a `StoreAPI` that `Thanos Querier` should use.
 
 ### Thanos Ruler
 
@@ -54,9 +54,9 @@ As a fallback, the file contents are periodically re-read at an interval that ca
 
 ### Thanos Querier
 
-The repeatable flag `--store.sd-files=<path>` can be used to specify the path to files that contain addresses of `StoreAPI` servers. The `<path>` can be a glob pattern so you can specify several files using a single flag.
+The repeatable flag `--endpoint.sd-config-file` can be used to specify the path to files that contain addresses of `StoreAPI` servers. The `<path>` can be a glob pattern so you can specify several files using a single flag.
 
-The flag `--store.sd-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
+The flag `--endpoint.sd-config-reload-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
 
 ### Thanos Ruler
 
@@ -73,19 +73,19 @@ To use DNS SD, just add one of the following prefixes to the domain name in your
 * `dns+` - the domain name after this prefix will be looked up as an A/AAAA query. *A port is required for this query type*. An example using this lookup with a static flag:
 
 ```
---store=dns+stores.thanos.mycompany.org:9090
+--endpoint.sd-config=dns+stores.thanos.mycompany.org:9090
 ```
 
 * `dnssrv+` - the domain name after this prefix will be looked up as a SRV query, and then each SRV record will be looked up as an A/AAAA query. You do not need to specify a port as the one from the query results will be used. For example:
 
 ```
---store=dnssrv+_thanosstores._tcp.mycompany.org
+--endpoint.sd-config=dnssrv+_thanosstores._tcp.mycompany.org
 ```
 
 DNS SRV record discovery also work well within Kubernetes. Consider the following example:
 
 ```
---store=dnssrv+_grpc._tcp.thanos-store.monitoring.svc
+--endpoint.sd-config=dnssrv+_grpc._tcp.thanos-store.monitoring.svc
 ```
 
 This configuration will instruct Thanos to discover all endpoints within the `thanos-store` service in the `monitoring` namespace and use the declared port named `grpc`.
@@ -93,7 +93,7 @@ This configuration will instruct Thanos to discover all endpoints within the `th
 * `dnssrvnoa+` - the domain name after this prefix will be looked up as a SRV query, with no A/AAAA lookup made after that. Similar to the `dnssrv+` case, you do not need to specify a port. For example:
 
 ```
---store=dnssrvnoa+_thanosstores._tcp.mycompany.org
+--endpoint.sd-config=dnssrvnoa+_thanosstores._tcp.mycompany.org
 ```
 
 The default interval between DNS lookups is 30s. This interval can be changed using the `store.sd-dns-interval` flag for `StoreAPI` configuration in `Thanos Querier`, or `query.sd-dns-interval` for `QueryAPI` configuration in `Thanos Ruler`.

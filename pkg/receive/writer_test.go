@@ -326,6 +326,31 @@ func TestWriter(t *testing.T) {
 				},
 			},
 		},
+		"should succeed on series with utf-8 labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: append(lbls,
+								labelpb.ZLabel{Name: "label:name", Value: "label:value"},   // UTF-8 instance name
+								labelpb.ZLabel{Name: "region:name", Value: "region:value"}, // UTF-8 region name
+							),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels: append(lbls,
+						labelpb.ZLabel{Name: "label:name", Value: "label:value"},
+						labelpb.ZLabel{Name: "region:name", Value: "region:value"},
+					),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
 	}
 
 	for testName, testData := range tests {

@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/prometheus/promql"
-
 	"github.com/efficientgo/core/testutil"
 )
 
@@ -87,7 +85,7 @@ func TestLookbackDeltaFactory(t *testing.T) {
 		}
 	)
 	for _, td := range tData {
-		lookbackCreate := LookbackDeltaFactory(promql.EngineOpts{LookbackDelta: td.lookbackDelta}, td.dynamicLookbackDelta)
+		lookbackCreate := LookbackDeltaFactory(td.lookbackDelta, td.dynamicLookbackDelta)
 		for _, tc := range td.tcs {
 			got := lookbackCreate(tc.stepMillis)
 			testutil.Equals(t, tc.expect, got)

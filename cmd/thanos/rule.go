@@ -99,6 +99,7 @@ type ruleConfig struct {
 
 	resendDelay        time.Duration
 	evalInterval       time.Duration
+	queryOffset        time.Duration
 	outageTolerance    time.Duration
 	forGracePeriod     time.Duration
 	ruleFiles          []string
@@ -150,6 +151,8 @@ func registerRule(app *extkingpin.App) {
 		Default("1m").DurationVar(&conf.resendDelay)
 	cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("1m").DurationVar(&conf.evalInterval)
+	cmd.Flag("rule-query-offset", "The default rule group query_offset duration to use.").
+		Default("0s").DurationVar(&conf.queryOffset)
 	cmd.Flag("for-outage-tolerance", "Max time to tolerate prometheus outage for restoring \"for\" state of alert.").
 		Default("1h").DurationVar(&conf.outageTolerance)
 	cmd.Flag("for-grace-period", "Minimum duration between alert and restored \"for\" state. This is maintained only for alerts with configured \"for\" time greater than grace period.").
@@ -607,14 +610,15 @@ func runRule(
 		}
 
 		managerOpts := rules.ManagerOptions{
-			NotifyFunc:      notifyFunc,
-			Logger:          logutil.GoKitLogToSlog(logger),
-			Appendable:      appendable,
-			ExternalURL:     nil,
-			Queryable:       queryable,
-			ResendDelay:     conf.resendDelay,
-			OutageTolerance: conf.outageTolerance,
-			ForGracePeriod:  conf.forGracePeriod,
+			NotifyFunc:             notifyFunc,
+			Logger:                 logutil.GoKitLogToSlog(logger),
+			Appendable:             appendable,
+			ExternalURL:            nil,
+			Queryable:              queryable,
+			ResendDelay:            conf.resendDelay,
+			OutageTolerance:        conf.outageTolerance,
+			ForGracePeriod:         conf.forGracePeriod,
+			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval

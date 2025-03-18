@@ -162,6 +162,16 @@ groups:
     expr: 1
 `
 
+	testRuleQueryOffset = `
+groups:
+- name: recording_query_offset
+  interval: 1s
+  query_offset: 1s
+  rules:
+  - record: metric_query_offset
+    expr: 1
+`
+
 	amTimeout = model.Duration(10 * time.Second)
 )
 
@@ -609,6 +619,25 @@ func TestRule_KeepFiringFor(t *testing.T) {
 			&model.Sample{
 				Metric: model.Metric{
 					"__name__": "metric_keep_firing_for",
+					"replica":  "1",
+				},
+				Value: model.SampleValue(1),
+			},
+		})
+	})
+
+	t.Run("rule query_offset", func(t *testing.T) {
+		// Create a recording rule that will add the missing metric
+		createRuleFile(t, filepath.Join(rulesPath, "record_metric_query_offset.yaml"), testRuleQueryOffset)
+		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
+
+		// Wait for metric to pop up
+		queryWaitAndAssert(t, ctx, q.Endpoint("http"), func() string { return "metric_query_offset" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"__name__": "metric_query_offset",
 					"replica":  "1",
 				},
 				Value: model.SampleValue(1),

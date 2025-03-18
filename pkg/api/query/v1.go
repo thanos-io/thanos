@@ -85,26 +85,20 @@ const (
 	FileParam                = "file[]"
 )
 
-type PromqlEngineType string
-
-const (
-	PromqlEnginePrometheus PromqlEngineType = "prometheus"
-	PromqlEngineThanos     PromqlEngineType = "thanos"
-)
-
 // QueryAPI is an API used by Thanos Querier.
 type QueryAPI struct {
-	baseAPI             *api.BaseAPI
-	logger              log.Logger
-	gate                gate.Gate
-	queryableCreate     query.QueryableCreator
-	queryFactory        *QueryFactory
-	defaultEngine       PromqlEngineType
-	lookbackDeltaCreate func(int64) time.Duration
-	ruleGroups          rules.UnaryClient
-	targets             targets.UnaryClient
-	metadatas           metadata.UnaryClient
-	exemplars           exemplars.UnaryClient
+	baseAPI               *api.BaseAPI
+	logger                log.Logger
+	gate                  gate.Gate
+	queryableCreate       query.QueryableCreator
+	remoteEndpointsCreate query.RemoteEndpointsCreator
+	queryCreate           queryCreator
+	defaultEngine         PromqlEngineType
+	lookbackDeltaCreate   func(int64) time.Duration
+	ruleGroups            rules.UnaryClient
+	targets               targets.UnaryClient
+	metadatas             metadata.UnaryClient
+	exemplars             exemplars.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
@@ -136,10 +130,11 @@ type QueryAPI struct {
 func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
-	queryFactory *QueryFactory,
+	queryCreate *QueryFactory,
 	defaultEngine PromqlEngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
-	c query.QueryableCreator,
+	queryableCreate query.QueryableCreator,
+	remoteEndpointsCreate query.RemoteEndpointsCreator,
 	ruleGroups rules.UnaryClient,
 	targets targets.UnaryClient,
 	metadatas metadata.UnaryClient,
@@ -171,10 +166,11 @@ func NewQueryAPI(
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
-		queryFactory:                           queryFactory,
+		queryCreate:                            queryCreate,
 		defaultEngine:                          defaultEngine,
 		lookbackDeltaCreate:                    lookbackDeltaCreate,
-		queryableCreate:                        c,
+		queryableCreate:                        queryableCreate,
+		remoteEndpointsCreate:                  remoteEndpointsCreate,
 		gate:                                   gate,
 		ruleGroups:                             ruleGroups,
 		targets:                                targets,
@@ -523,13 +519,16 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
 		queryOpts := &engine.QueryOpts{
-			LookbackDeltaParam:     lookbackDelta,
-			EnablePartialResponses: enablePartialResponse,
+			LookbackDeltaParam: lookbackDelta,
 		}
 
 		var qErr error
-		qry, qErr = qapi.queryFactory.makeInstantQuery(ctx, engineParam, queryable, planOrQuery{query: queryStr}, queryOpts, ts)
+		qry, qErr = qapi.queryCreate.makeInstantQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, ts)
 		return qErr
 
 	}); err != nil {
@@ -628,13 +627,16 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
 		queryOpts := &engine.QueryOpts{
-			LookbackDeltaParam:     lookbackDelta,
-			EnablePartialResponses: enablePartialResponse,
+			LookbackDeltaParam: lookbackDelta,
 		}
 
 		var qErr error
-		qry, qErr = qapi.queryFactory.makeInstantQuery(ctx, engineParam, queryable, planOrQuery{query: queryStr}, queryOpts, ts)
+		qry, qErr = qapi.queryCreate.makeInstantQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, ts)
 		return qErr
 
 	}); err != nil {
@@ -800,13 +802,16 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
 		queryOpts := &engine.QueryOpts{
-			LookbackDeltaParam:     lookbackDelta,
-			EnablePartialResponses: enablePartialResponse,
+			LookbackDeltaParam: lookbackDelta,
 		}
 
 		var qErr error
-		qry, qErr = qapi.queryFactory.makeRangeQuery(ctx, engineParam, queryable, planOrQuery{query: queryStr}, queryOpts, start, end, step)
+		qry, qErr = qapi.queryCreate.makeRangeQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, start, end, step)
 		return qErr
 
 	}); err != nil {
@@ -930,13 +935,16 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
 		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
 		queryOpts := &engine.QueryOpts{
-			LookbackDeltaParam:     lookbackDelta,
-			EnablePartialResponses: enablePartialResponse,
+			LookbackDeltaParam: lookbackDelta,
 		}
 
 		var qErr error
-		qry, qErr = qapi.queryFactory.makeRangeQuery(ctx, engineParam, queryable, planOrQuery{query: queryStr}, queryOpts, start, end, step)
+		qry, qErr = qapi.queryCreate.makeRangeQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, start, end, step)
 		return qErr
 
 	}); err != nil {
