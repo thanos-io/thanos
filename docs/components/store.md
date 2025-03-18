@@ -11,6 +11,8 @@ thanos store \
 The content of `bucket.yml`:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: GCS
 config:
   bucket: ""
@@ -347,6 +349,8 @@ The `in-memory` index cache is enabled by default and its max size can be config
 Alternatively, the `in-memory` index cache can also be configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=storecache.InMemoryIndexCacheConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: IN-MEMORY
 config:
   max_size: 0
@@ -367,6 +371,8 @@ All the settings are **optional**:
 The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.MemcachedClientConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: MEMCACHED
 config:
   addresses: []
@@ -426,6 +432,8 @@ While the remaining settings are **optional**:
 The `redis` index cache allows to use [Redis](https://redis.io) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.RedisClientConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: REDIS
 config:
   addr: ""

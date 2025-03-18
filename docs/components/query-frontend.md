@@ -47,6 +47,8 @@ Query Frontend supports caching query results and reuses them on subsequent quer
 #### In-memory
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=queryfrontend.InMemoryResponseCacheConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: IN-MEMORY
 config:
   max_size: ""
@@ -65,6 +67,8 @@ Example configuration: [kube-thanos](https://github.com/thanos-io/kube-thanos/bl
 #### Memcached
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=queryfrontend.MemcachedResponseCacheConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: MEMCACHED
 config:
   addresses: []
@@ -115,6 +119,8 @@ config:
 The default redis config is:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=queryfrontend.RedisResponseCacheConfig"
+# command-line-arguments
+ld: warning: ignoring duplicate libraries: '-lproc'
 type: REDIS
 config:
   addr: ""
