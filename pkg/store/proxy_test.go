@@ -502,6 +502,7 @@ func TestProxyStore_Series(t *testing.T) {
 					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
 					MinTime: 1,
 					MaxTime: 300,
+					Name:    labels.FromStrings("ext", "1").String(),
 				},
 			},
 			req: &storepb.SeriesRequest{
@@ -511,7 +512,7 @@ func TestProxyStore_Series(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("fetch series for {ext=\"1\"} : error!"),
+			expectedErr: errors.New("fetch series for {ext=\"1\"}: error!"),
 		},
 		{
 			title: "storeAPI available for time range; available series for ext=1 external label matcher; allowed by store debug matcher",
@@ -1801,6 +1802,18 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 
 	for i := range ret {
 		testutil.Equals(t, expected[i], ret[i])
+	}
+}
+
+var buffersPool = &sync.Pool{New: func() interface{} {
+	b := make([]byte, 0, initialBufSize)
+	return &b
+}}
+
+func assertSeriesMatchShard(t *testing.T, set []storepb.Series, info *storepb.ShardInfo) {
+	matcher := info.Matcher(buffersPool)
+	for _, series := range set {
+		testutil.Assert(t, matcher.MatchesZLabels(series.Labels))
 	}
 }
 
