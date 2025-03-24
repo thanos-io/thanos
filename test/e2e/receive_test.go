@@ -22,6 +22,8 @@ import (
 	logkit "github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+
+	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 
 	"github.com/prometheus/prometheus/model/relabel"
@@ -32,7 +34,6 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
-	config_util "github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"

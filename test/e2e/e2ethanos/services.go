@@ -22,9 +22,8 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore/client"
-	"github.com/thanos-io/objstore/providers/s3"
-
 	"github.com/thanos-io/objstore/exthttp"
+	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -62,7 +61,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.41.0"
+	return "quay.io/prometheus/prometheus:v3.2.1"
 }
 
 // DefaultOtelImage sets default Otel image used in e2e service.
@@ -117,6 +116,7 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		"--log.level":                       infoLogLevel,
 		"--web.listen-address":              ":9090",
 	})
+	args = append(args, "--web.enable-remote-write-receiver")
 
 	if len(enableFeatures) > 0 {
 		args = append(args, fmt.Sprintf("--enable-feature=%s", strings.Join(enableFeatures, ",")))
@@ -690,15 +690,16 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 	}
 
 	args := map[string]string{
-		"--debug.name":           r.Name(),
-		"--grpc-address":         ":9091",
-		"--grpc-grace-period":    "0s",
-		"--http-address":         ":8080",
-		"--remote-write.address": ":8081",
-		"--label":                fmt.Sprintf(`receive="%s"`, r.Name()),
-		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
-		"--log.level":            infoLogLevel,
-		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
+		"--debug.name":                         r.Name(),
+		"--grpc-address":                       ":9091",
+		"--grpc-grace-period":                  "0s",
+		"--http-address":                       ":8080",
+		"--remote-write.address":               ":8081",
+		"--label":                              fmt.Sprintf(`receive="%s"`, r.Name()),
+		"--tsdb.path":                          filepath.Join(r.InternalDir(), "data"),
+		"--log.level":                          infoLogLevel,
+		"--tsdb.max-exemplars":                 fmt.Sprintf("%v", r.maxExemplars),
+		"--tsdb.too-far-in-future.time-window": "5m",
 	}
 
 	if r.tenantSplitLabel != "" {
@@ -1264,6 +1265,7 @@ global:
 scrape_configs:
 - job_name: 'myself'
   # Quick scrapes for test purposes.
+  fallback_scrape_protocol: 'PrometheusText0.0.4'
   scrape_interval: 1s
   scrape_timeout: 1s
   static_configs:

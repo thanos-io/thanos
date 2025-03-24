@@ -611,7 +611,7 @@ Flags:
       --tsdb.too-far-in-future.time-window=0s
                                  Configures the allowed time window for
                                  ingesting samples too far in the future.
-                                 Disabled (0s) by defaultPlease note enable
+                                 Disabled (0s) by default. Please note enable
                                  this flag will reject samples in the future of
                                  receive local NTP time + configured duration
                                  due to clock skew in remote write clients.

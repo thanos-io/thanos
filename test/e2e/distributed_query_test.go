@@ -38,8 +38,8 @@ func TestDistributedQueryExecution(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "prom1", e2ethanos.DefaultPromConfig("prom1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "prom2", e2ethanos.DefaultPromConfig("prom2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "prom1", e2ethanos.DefaultPromConfig("prom1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "prom2", e2ethanos.DefaultPromConfig("prom2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, sidecar1, sidecar2))
 
 	qry1 := e2ethanos.NewQuerierBuilder(e, "1").WithStrictEndpoints(sidecar1.InternalEndpoint("grpc")).Init()
