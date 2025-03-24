@@ -320,7 +320,7 @@ func TestQueryWithExtendedFunctions(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// create prom + sidecar
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	// create querier
@@ -1030,9 +1030,9 @@ func TestSidecarQueryDedup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	t.Cleanup(cancel)
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "p3", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "p3", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
 	{
@@ -1220,10 +1220,10 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 
 			endpoints := []string{
@@ -1660,7 +1660,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	endpoints := []string{
@@ -1681,7 +1681,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 		{
 			label:             "test",
 			value:             2,
-			timestampUnixNano: now.Add(time.Hour).UnixNano(),
+			timestampUnixNano: now.Add(5 * time.Minute).UnixNano(),
 		},
 	}
 	ctx := context.Background()
@@ -1700,7 +1700,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 			expectedResult: 1,
 		},
 		{
-			time:           now.Add(time.Hour),
+			time:           now.Add(5 * time.Minute),
 			expectedResult: 2,
 		},
 	}
@@ -1766,7 +1766,7 @@ func TestGrpcQueryRange(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	endpoints := []string{
@@ -1900,7 +1900,7 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
   external_labels:
     region: test`
 
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promCfg, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promCfg, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	endpoints := []string{
@@ -1920,13 +1920,13 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 			"region":   model.LabelValue("foo"),
 		},
 		Value:     model.SampleValue(2),
-		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Minute).UnixNano()),
 	}
 	testutil.Ok(t, synthesizeSamples(ctx, prom, []model.Sample{m}))
 
 	retv := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
 		return "sidecar_test_metric"
-	}, func() time.Time { return now.Add(time.Hour) }, promclient.QueryOptions{}, 1)
+	}, func() time.Time { return now.Add(time.Minute) }, promclient.QueryOptions{}, 1)
 
 	testutil.Equals(t, model.Vector{&model.Sample{
 		Metric: model.Metric{
@@ -1935,7 +1935,7 @@ func TestSidecarPrefersExtLabels(t *testing.T) {
 			"region":   "test",
 		},
 		Value:     model.SampleValue(2),
-		Timestamp: model.TimeFromUnixNano(now.Add(time.Hour).UnixNano()),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Minute).UnixNano()),
 	}}, retv)
 }
 
@@ -1960,7 +1960,7 @@ func TestTenantHTTPMetrics(t *testing.T) {
 	// Query once with default-tenant to ensure everything is ready
 	// for the following requests
 	instantQuery(t, ctx, q.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, 1)
@@ -1968,7 +1968,7 @@ func TestTenantHTTPMetrics(t *testing.T) {
 
 	// Query a few times with tenant 1
 	instantQuery(t, ctx, q.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
@@ -2319,10 +2319,10 @@ func TestQuerySelectWithRelabel(t *testing.T) {
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 
 			endpoints := []string{
