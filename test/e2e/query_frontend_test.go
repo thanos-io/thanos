@@ -1069,7 +1069,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 	// Query once with default-tenant to ensure everything is ready
 	// for the following requests
 	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, 1)
@@ -1077,7 +1077,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 
 	// Query a few times with tenant 1
 	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
