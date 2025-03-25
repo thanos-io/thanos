@@ -74,7 +74,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		r := prometheus.NewRegistry()
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := NewConcurrentLister(noopLogger, insBkt)
+		baseBlockIDsFetcher := NewRecursiveLister(noopLogger, insBkt)
 		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
 		testutil.Ok(t, err)
 
@@ -110,14 +110,20 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
 
 					meta.ULID = ULID(2)
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
 
 					meta.ULID = ULID(3)
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -174,7 +180,10 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			{
 				name: "corrupted meta.json",
 				do: func() {
-					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(5).String(), MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
+					ulid := ULID(5).String()
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid, MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid, "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid, "index"), bytes.NewReader(nil)))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -193,6 +202,9 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+
 				},
 
 				expectedMetas:         ULIDs(1, 3, 6),
@@ -228,11 +240,76 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
 				},
 
 				expectedMetas:         ULIDs(1, 3, 6),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "partial: incomplete chunks",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(8)
+					meta.Thanos.Files = append(meta.Thanos.Files,
+						metadata.File{RelPath: "index"},
+						metadata.File{RelPath: "chunks/000001"},
+						metadata.File{RelPath: "chunks/000005"},
+					)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00005"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+				},
+
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 8),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "partial: no index",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(9)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "chunks/000001"})
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "00001"), bytes.NewReader(nil)))
+				},
+
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 8, 9),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "error: no chunks",
+				do: func() {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(10)
+					meta.Thanos.Files = append(meta.Thanos.Files, metadata.File{RelPath: "index"})
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+				},
+
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 8, 9, 10),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 		} {

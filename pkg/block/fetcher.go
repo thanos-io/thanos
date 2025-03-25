@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -191,30 +192,80 @@ func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader
 }
 
 func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
-	partialBlocks = make(map[ulid.ULID]bool)
+	filesForBlock := make(map[ulid.ULID][]string)
 	err = f.bkt.Iter(ctx, "", func(name string) error {
 		parts := strings.Split(name, "/")
-		dir, file := parts[0], parts[len(parts)-1]
-		id, ok := IsBlockDir(dir)
+		id, ok := IsBlockDir(parts[0])
 		if !ok {
 			return nil
 		}
-		if _, ok := partialBlocks[id]; !ok {
-			partialBlocks[id] = true
-		}
-		if !IsBlockMetaFile(file) {
-			return nil
-		}
-		partialBlocks[id] = false
+		file := strings.TrimLeft(name, parts[0]+"/")
+		filesForBlock[id] = append(filesForBlock[id], file)
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case ch <- id:
+		default:
 		}
 		return nil
 	}, objstore.WithRecursiveIter())
+
+	partialBlocks = make(map[ulid.ULID]bool)
+	for id, files := range filesForBlock {
+		if err := sanityCheckFilesForBlock(files); err != nil {
+			partialBlocks[id] = true
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case ch <- id:
+		}
+	}
+
 	return partialBlocks, err
+}
+
+func sanityCheckFilesForBlock(files []string) error {
+	var (
+		numChunkFiles     int
+		highestChunkFile  int
+		hasIndex, hasMeta bool
+	)
+
+	for _, f := range files {
+		if f == "meta.json" {
+			hasMeta = true
+		}
+		if f == "index" {
+			hasIndex = true
+		}
+		dir, name := path.Split(f)
+		if dir == "chunks/" {
+			numChunkFiles++
+			idx, err := strconv.Atoi(name)
+			if err != nil {
+				return errors.Wrap(err, "unexpected chunk file name")
+			}
+			if idx > highestChunkFile {
+				highestChunkFile = idx
+			}
+		}
+	}
+
+	if !hasMeta {
+		return errors.New("no meta in block")
+	}
+	if !hasIndex {
+		return errors.New("no index file in block")
+	}
+	if numChunkFiles == 0 {
+		return errors.New("no chunk files in block")
+	}
+	if numChunkFiles != highestChunkFile {
+		return errors.New("incomplete chunk files in block")
+	}
+	return nil
 }
 
 // ConcurrentLister lists block IDs by doing a top level iteration of the bucket
