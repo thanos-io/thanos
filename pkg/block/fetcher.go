@@ -263,6 +263,9 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		}
 		return nil
 	}, objstore.WithRecursiveIter())
+	if f.logger != nil {
+		level.Info(f.logger).Log("msg", "recursive block lister ended", "duration", time.Since(start))
+	}
 	return partialBlocks, err
 }
 
@@ -291,6 +294,7 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 			level.Info(f.logger).Log("msg", "concurrent block lister end", "duration", time.Since(start))
 		}()
 	}
+
 	const concurrency = 64
 
 	partialBlocks = make(map[ulid.ULID]bool)
@@ -546,7 +550,9 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		ch  = make(chan ulid.ULID, f.concurrency)
 		mtx sync.Mutex
 	)
-	level.Info(f.logger).Log("msg", "fetching meta data", "concurrency", f.concurrency, "cache_dir", f.cacheDir)
+	if f.logger != nil {
+		level.Info(f.logger).Log("msg", "fetching meta data", "concurrency", f.concurrency, "cache_dir", f.cacheDir)
+	}
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
 			numBlocks := 0
