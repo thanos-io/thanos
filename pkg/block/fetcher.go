@@ -263,9 +263,6 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		}
 		return nil
 	}, objstore.WithRecursiveIter())
-	if f.logger != nil {
-		level.Info(f.logger).Log("msg", "recursive block lister ended", "duration", time.Since(start))
-	}
 	return partialBlocks, err
 }
 
