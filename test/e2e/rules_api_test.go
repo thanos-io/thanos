@@ -84,10 +84,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")}
-	q := qBuilder.
-		WithStoreAddresses(stores...).
-		WithRuleAddresses(stores...).
-		Init()
+	q := qBuilder.WithStoreAddresses(stores...).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
