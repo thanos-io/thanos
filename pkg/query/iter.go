@@ -21,20 +21,22 @@ import (
 type promSeriesSet struct {
 	set storepb.SeriesSet
 
-	mint, maxt int64
-	aggrs      []storepb.Aggr
+	mint, maxt        int64
+	aggrs             []storepb.Aggr
+	deduplicationFunc string
 
 	warns annotations.Annotations
 }
 
 // NewPromSeriesSet constructs a promSeriesSet.
-func NewPromSeriesSet(seriesSet storepb.SeriesSet, mint, maxt int64, aggrs []storepb.Aggr, warns annotations.Annotations) storage.SeriesSet {
+func NewPromSeriesSet(seriesSet storepb.SeriesSet, mint, maxt int64, aggrs []storepb.Aggr, deduplicationFunc string, warns annotations.Annotations) storage.SeriesSet {
 	return &promSeriesSet{
-		set:   seriesSet,
-		mint:  mint,
-		maxt:  maxt,
-		aggrs: aggrs,
-		warns: warns,
+		set:               seriesSet,
+		mint:              mint,
+		maxt:              maxt,
+		aggrs:             aggrs,
+		deduplicationFunc: deduplicationFunc,
+		warns:             warns,
 	}
 }
 
@@ -48,7 +50,7 @@ func (s *promSeriesSet) At() storage.Series {
 	}
 
 	currLset, currChunks := s.set.At()
-	return newChunkSeries(currLset, currChunks, s.mint, s.maxt, s.aggrs)
+	return newChunkSeries(currLset, currChunks, s.mint, s.maxt, s.aggrs, s.deduplicationFunc)
 }
 
 func (s *promSeriesSet) Err() error {
@@ -88,20 +90,22 @@ func (s *storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
 
 // chunkSeries implements storage.Series for a series on storepb types.
 type chunkSeries struct {
-	lset       labels.Labels
-	chunks     []storepb.AggrChunk
-	mint, maxt int64
-	aggrs      []storepb.Aggr
+	lset              labels.Labels
+	chunks            []storepb.AggrChunk
+	mint, maxt        int64
+	aggrs             []storepb.Aggr
+	deduplicationFunc string
 }
 
 // newChunkSeries allows to iterate over samples for each sorted and non-overlapped chunks.
-func newChunkSeries(lset labels.Labels, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
+func newChunkSeries(lset labels.Labels, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr, deduplicationFunc string) *chunkSeries {
 	return &chunkSeries{
-		lset:   lset,
-		chunks: chunks,
-		mint:   mint,
-		maxt:   maxt,
-		aggrs:  aggrs,
+		lset:              lset,
+		chunks:            chunks,
+		mint:              mint,
+		maxt:              maxt,
+		aggrs:             aggrs,
+		deduplicationFunc: deduplicationFunc,
 	}
 }
 
@@ -139,8 +143,13 @@ func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 			for _, c := range s.chunks {
 				its = append(its, getFirstIterator(c.Counter, c.Raw))
 			}
-			// TODO(bwplotka): This breaks resets function. See https://github.com/thanos-io/thanos/issues/3644
-			sit = downsample.NewApplyCounterResetsIterator(its...)
+			// for the chain deduplication, resets cannot be applied individually for each replica but only on an already merged series
+			if s.deduplicationFunc == dedup.AlgorithmChain {
+				sit = newChunkSeriesIterator(its)
+			} else {
+				// TODO(bwplotka): This breaks resets function. See https://github.com/thanos-io/thanos/issues/3644
+				sit = downsample.NewApplyCounterResetsIterator(its...)
+			}
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}

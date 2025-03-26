@@ -2468,3 +2468,82 @@ func TestChainDeduplication(t *testing.T) {
 		},
 	)
 }
+
+func TestChainDeduplicationWithCounterResets(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("chain-dedup-cnt"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	receiver1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	receiver2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver1, receiver2))
+
+	predefTimestamp := time.Date(2025, time.February, 25, 12, 0, 0, 0, time.UTC)
+	series1 := []prompb.Label{
+		{
+			Name: "__name__", Value: "chain_dedup_resets_test",
+		},
+	}
+
+	// an extreme case of counter resets - reset after each sample
+	// missing samples are commented out
+	samplesReplica1 := []prompb.Sample{
+		{Timestamp: timestamp.FromTime(predefTimestamp) + 1, Value: 0.0}, // disables extrapolation
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 15)), Value: 103.0},
+		//{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 30)), Value: 0.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 45)), Value: 102.0},
+		//{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 60)), Value: 0.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 75)), Value: 104.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 90)), Value: 0.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 105)), Value: 102.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 120)), Value: 0.0},
+	}
+	samplesReplica2 := []prompb.Sample{
+		{Timestamp: timestamp.FromTime(predefTimestamp) + 1, Value: 0.0}, // disables extrapolation
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 15)), Value: 103.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 30)), Value: 0.0},
+		//{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 45)), Value: 102.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 60)), Value: 0.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 75)), Value: 104.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 90)), Value: 0.0},
+		//{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 105)), Value: 102.0},
+		{Timestamp: timestamp.FromTime(predefTimestamp.Add(time.Second * 120)), Value: 0.0},
+	}
+
+	testutil.Ok(t, remoteWrite(context.Background(), []prompb.TimeSeries{
+		{
+			Labels:  series1,
+			Samples: samplesReplica1,
+		},
+	}, receiver1.Endpoint("remote-write")))
+
+	testutil.Ok(t, remoteWrite(context.Background(), []prompb.TimeSeries{
+		{
+			Labels:  series1,
+			Samples: samplesReplica2,
+		},
+	}, receiver2.Endpoint("remote-write")))
+
+	q := e2ethanos.NewQuerierBuilder(e, "chain", receiver1.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).WithReplicaLabels("receive").WithDeduplicationFunc(dedup.AlgorithmChain).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	queryFunc := func() string { return "increase(chain_dedup_resets_test[2m])" }
+	timeFunc := func() time.Time { return predefTimestamp.Add(time.Second * 120) }
+
+	// increase should be equal to a sum of all non-zero samples
+	queryAndAssert(t, ctx, q.Endpoint("http"),
+		queryFunc,
+		timeFunc,
+		promclient.QueryOptions{
+			Deduplicate: true,
+		},
+		model.Vector{
+			{Metric: map[model.LabelName]model.LabelValue{"tenant_id": "default-tenant"}, Value: 411},
+		},
+	)
+}
