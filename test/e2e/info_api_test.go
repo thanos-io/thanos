@@ -54,14 +54,10 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(store))
 
 	// Register `sidecar1` in all flags (i.e. '--store', '--rule', '--target', '--metadata', '--exemplar', '--endpoint') to verify
-	// '--endpoint' flag works properly works together with other flags ('--target', '--metadata' etc.).
+	// '--endpoint' flag works properly
 	// Register 2 sidecars and 1 storeGW using '--endpoint'.
 	// Register `sidecar3` twice to verify it is deduplicated.
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).
-		WithTargetAddresses(sidecar1.InternalEndpoint("grpc")).
-		WithMetadataAddresses(sidecar1.InternalEndpoint("grpc")).
-		WithExemplarAddresses(sidecar1.InternalEndpoint("grpc")).
-		WithRuleAddresses(sidecar1.InternalEndpoint("grpc")).
 		WithEndpoints(
 			sidecar1.InternalEndpoint("grpc"),
 			sidecar2.InternalEndpoint("grpc"),

@@ -17,6 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 ### Fixed
+- [#8175](https://github.com/thanos-io/thanos/pull/8175) Query: fix endpointset setup
 
 ## [v0.38.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.38)
 
