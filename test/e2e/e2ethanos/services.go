@@ -272,11 +272,7 @@ type QuerierBuilder struct {
 	proxyStrategy           string
 	disablePartialResponses bool
 	fileSDStoreAddresses    []string
-	ruleAddresses           []string
-	metadataAddresses       []string
 	envVars                 map[string]string
-	targetAddresses         []string
-	exemplarAddresses       []string
 	enableFeatures          []string
 	endpoints               []string
 	strictEndpoints         []string
@@ -337,26 +333,6 @@ func (q *QuerierBuilder) WithStoreAddresses(storeAddresses ...string) *QuerierBu
 
 func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses ...string) *QuerierBuilder {
 	q.fileSDStoreAddresses = fileSDStoreAddresses
-	return q
-}
-
-func (q *QuerierBuilder) WithRuleAddresses(ruleAddresses ...string) *QuerierBuilder {
-	q.ruleAddresses = ruleAddresses
-	return q
-}
-
-func (q *QuerierBuilder) WithTargetAddresses(targetAddresses ...string) *QuerierBuilder {
-	q.targetAddresses = targetAddresses
-	return q
-}
-
-func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses ...string) *QuerierBuilder {
-	q.exemplarAddresses = exemplarAddresses
-	return q
-}
-
-func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses ...string) *QuerierBuilder {
-	q.metadataAddresses = metadataAddresses
 	return q
 }
 
@@ -473,18 +449,6 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		args = append(args, "--query.replica-label="+repl)
 	}
 	for _, addr := range q.storeAddresses {
-		args = append(args, "--endpoint="+addr)
-	}
-	for _, addr := range q.ruleAddresses {
-		args = append(args, "--endpoint="+addr)
-	}
-	for _, addr := range q.targetAddresses {
-		args = append(args, "--endpoint="+addr)
-	}
-	for _, addr := range q.metadataAddresses {
-		args = append(args, "--endpoint="+addr)
-	}
-	for _, addr := range q.exemplarAddresses {
 		args = append(args, "--endpoint="+addr)
 	}
 	for _, feature := range q.enableFeatures {
