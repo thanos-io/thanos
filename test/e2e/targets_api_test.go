@@ -50,9 +50,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
-	q := e2ethanos.NewQuerierBuilder(e, "query", stores...).
-		WithTargetAddresses(stores...).
-		Init()
+	q := e2ethanos.NewQuerierBuilder(e, "query", stores...).Init()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
