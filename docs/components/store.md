@@ -36,6 +36,11 @@ config:
   chunk_size_bytes: 0
   max_retries: 0
 prefix: ""
+custom_config:
+  hedging_config:
+    enabled: false
+    up_to: 0
+    quantile: 0
 ```
 
 In general, an average of 6 MB of local disk space is required per TSDB block stored in the object storage bucket, but for high cardinality blocks with large label set it can even go up to 30MB and more. It is for the pre-computed index, which includes symbols and postings offsets as well as metadata JSON.
