@@ -170,6 +170,33 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
+        g.row('Backlog')
+        .addPanel(
+          g.panel('Compaction', 'Shows the number of blocks waiting for compaction.') +
+          g.queryPanel(
+            'sum by (%(dimensions)s) (thanos_compact_todo_compaction_blocks{%(selector)s})' % thanos.compact.dashboard,
+            '{{job}}'
+          ) +
+          g.stack
+        )
+        .addPanel(
+          g.panel('Downsampling', 'Shows the number of blocks waiting for downsampling.') +
+          g.queryPanel(
+            'sum by (%(dimensions)s) (thanos_compact_todo_downsample_blocks{%(selector)s})' % thanos.compact.dashboard,
+            '{{job}}'
+          ) +
+          g.stack
+        )
+        .addPanel(
+          g.panel('Deletion', 'Shows the number of blocks waiting for deletion.') +
+          g.queryPanel(
+            'sum by (%(dimensions)s) (thanos_compact_todo_deletion_blocks{%(selector)s})' % thanos.compact.dashboard,
+            '{{job}}'
+          ) +
+          g.stack
+        )
+      )
+      .addRow(
         g.resourceUtilizationRow(thanos.compact.dashboard.selector, thanos.compact.dashboard.dimensions)
       ),
 

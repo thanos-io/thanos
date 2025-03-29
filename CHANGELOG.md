@@ -37,6 +37,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8131](https://github.com/thanos-io/thanos/pull/8131) Store Gateway: Optimize regex matchers for .* and .+. #8131
 - [#7808](https://github.com/thanos-io/thanos/pull/7808) Query: Support chain deduplication algorithm.
 - [#8158](https://github.com/thanos-io/thanos/pull/8158) Rule: Add support for query offset.
+- [#8062](https://github.com/thanos-io/thanos/pull/8062) Mixin: Add compact todo/backlog metrics to dashboard.
 
 ### Changed
 
