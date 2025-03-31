@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
 
 ### Changed
+- [#8181](https://github.com/thanos-io/thanos/pull/8181) Deps: bump promql engine
 
 - [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
 
