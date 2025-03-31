@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 ### Changed
+- [#8181](https://github.com/thanos-io/thanos/pull/8181) Deps: bump promql engine
 
 ### Removed
 
