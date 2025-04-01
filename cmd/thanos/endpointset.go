@@ -298,8 +298,7 @@ func setupEndpointSet(
 
 				addresses := make([]string, 0, len(endpointConfig.Endpoints))
 				for _, ecfg := range endpointConfig.Endpoints {
-					if addr := ecfg.Address; !ecfg.Group && !ecfg.Strict {
-						// originally only "--endpoint" addresses got resolved
+					if addr := ecfg.Address; dns.IsDynamicNode(addr) && !ecfg.Group {
 						addresses = append(addresses, addr)
 					}
 				}
@@ -318,14 +317,16 @@ func setupEndpointSet(
 		endpointConfig := configProvider.config()
 
 		specs := make([]*query.GRPCEndpointSpec, 0)
+		// groups and non dynamic endpoints
 		for _, ecfg := range endpointConfig.Endpoints {
 			strict, group, addr := ecfg.Strict, ecfg.Group, ecfg.Address
 			if group {
 				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(dialOpts, extgrpc.EndpointGroupGRPCOpts()...)...))
-			} else {
+			} else if !dns.IsDynamicNode(addr) {
 				specs = append(specs, query.NewGRPCEndpointSpec(addr, strict, dialOpts...))
 			}
 		}
+		// dynamic endpoints
 		for _, addr := range dnsEndpointProvider.Addresses() {
 			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dialOpts...))
 		}
