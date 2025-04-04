@@ -10,8 +10,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 - [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
-- [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
-- [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
 - [#8136](https://github.com/thanos-io/thanos/pull/8279) docs: legacy --store flags + alerts examples legacy metrics
 
 ### Added
@@ -26,7 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-## [v0.38.0] https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
+## [v0.38.0](https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
 
 ### Fixed
 - [#8091](https://github.com/thanos-io/thanos/pull/8091) *: Add POST into allowed CORS methods header
