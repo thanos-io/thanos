@@ -9,6 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
 
 ### Added
 
@@ -18,7 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-## [v0.38.0] https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
+## [v0.38.0](https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
 
 ### Fixed
 - [#8091](https://github.com/thanos-io/thanos/pull/8091) *: Add POST into allowed CORS methods header
