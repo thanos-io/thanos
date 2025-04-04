@@ -13,14 +13,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 ### Changed
-- [#8181](https://github.com/thanos-io/thanos/pull/8181) Deps: bump promql engine
 
 ### Removed
 
 ### Fixed
-- [#8175](https://github.com/thanos-io/thanos/pull/8175) Query: fix endpointset setup
 
-## [v0.38.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.38)
+## [v0.38.0] https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
 
 ### Fixed
 - [#8091](https://github.com/thanos-io/thanos/pull/8091) *: Add POST into allowed CORS methods header
@@ -38,6 +36,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8131](https://github.com/thanos-io/thanos/pull/8131) Store Gateway: Optimize regex matchers for .* and .+. #8131
 - [#7808](https://github.com/thanos-io/thanos/pull/7808) Query: Support chain deduplication algorithm.
 - [#8158](https://github.com/thanos-io/thanos/pull/8158) Rule: Add support for query offset.
+- [#8110](https://github.com/thanos-io/thanos/pull/8110) Compact: implement native histogram downsampling.
+- [#7996](https://github.com/thanos-io/thanos/pull/7996) Receive: Add OTLP endpoint.
 
 ### Changed
 
@@ -45,6 +45,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#7012](https://github.com/thanos-io/thanos/pull/7012) Query: Automatically adjust `max_source_resolution` based on promql query to avoid querying data from higher resolution resulting empty results.
 - [#8118](https://github.com/thanos-io/thanos/pull/8118) Query: Bumped promql-engine
 - [#8135](https://github.com/thanos-io/thanos/pull/8135) Query: respect partial response in distributed engine
+- [#8181](https://github.com/thanos-io/thanos/pull/8181) Deps: bump promql engine
 
 ### Removed
 
@@ -54,6 +55,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#7970](https://github.com/thanos-io/thanos/pull/7970) Sidecar: Respect min-time setting.
 - [#7962](https://github.com/thanos-io/thanos/pull/7962) Store: Fix potential deadlock in hedging request.
+- [#8175](https://github.com/thanos-io/thanos/pull/8175) Query: fix endpointset setup
 
 ### Added
 
