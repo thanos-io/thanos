@@ -211,8 +211,7 @@ type EndpointSet struct {
 
 	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
 	// accessible and we close gRPC client for it, unless it is strict.
-	endpointSpec             func() map[string]*GRPCEndpointSpec
-	dialOpts                 []grpc.DialOption
+	endpointSpecs            func() map[string]*GRPCEndpointSpec
 	endpointInfoTimeout      time.Duration
 	unhealthyEndpointTimeout time.Duration
 
@@ -235,7 +234,6 @@ func NewEndpointSet(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	endpointSpecs func() []*GRPCEndpointSpec,
-	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
 	endpointMetricLabels ...string,
@@ -254,19 +252,17 @@ func NewEndpointSet(
 	}
 
 	return &EndpointSet{
-		now:             now,
-		logger:          log.With(logger, "component", "endpointset"),
-		endpointsMetric: endpointsMetric,
-
-		dialOpts:                 dialOpts,
+		now:                      now,
+		logger:                   log.With(logger, "component", "endpointset"),
+		endpointsMetric:          endpointsMetric,
 		endpointInfoTimeout:      endpointInfoTimeout,
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
-		endpointSpec: func() map[string]*GRPCEndpointSpec {
-			specs := make(map[string]*GRPCEndpointSpec)
+		endpointSpecs: func() map[string]*GRPCEndpointSpec {
+			res := make(map[string]*GRPCEndpointSpec)
 			for _, s := range endpointSpecs() {
-				specs[s.addr] = s
+				res[s.addr] = s
 			}
-			return specs
+			return res
 		},
 		endpoints: make(map[string]*endpointRef),
 	}
@@ -288,7 +284,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		mu sync.Mutex
 	)
 
-	for _, spec := range e.endpointSpec() {
+	for _, spec := range e.endpointSpecs() {
 		spec := spec
 
 		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
@@ -370,7 +366,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		if er.HasStoreAPI() && (er.ComponentType() == component.Sidecar || er.ComponentType() == component.Rule) &&
 			stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset] > 0 {
 
-			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
+			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advised as it will malform data in in the same bucket",
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset]+1))
 		}
 		stats[er.ComponentType().String()][extLset]++
@@ -515,7 +511,7 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
 				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
-				LabelSets:       labelpb.LabelpbLabelSetsToPromLabels(er.metadata.LabelSets...),
+				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
 			})
 		}
 	}
@@ -571,11 +567,7 @@ type endpointRef struct {
 // newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(spec *GRPCEndpointSpec) (*endpointRef, error) {
-	var dialOpts []grpc.DialOption
-
-	dialOpts = append(dialOpts, e.dialOpts...)
-	dialOpts = append(dialOpts, spec.dialOpts...)
-	conn, err := grpc.NewClient(spec.Addr(), dialOpts...)
+	conn, err := grpc.NewClient(spec.Addr(), spec.dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
 	}
@@ -710,7 +702,7 @@ func (er *endpointRef) labelSets() []labels.Labels {
 	}
 
 	labelSet := make([]labels.Labels, 0, len(er.metadata.LabelSets))
-	for _, ls := range labelpb.LabelpbLabelSetsToPromLabels(er.metadata.LabelSets...) {
+	for _, ls := range labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...) {
 		if ls.Len() == 0 {
 			continue
 		}
@@ -726,7 +718,7 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	return er.timeRange()
 }
 
-func (er *endpointRef) TSDBInfos() []*infopb.TSDBInfo {
+func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
@@ -782,7 +774,7 @@ func (er *endpointRef) Addr() (string, bool) {
 }
 
 func (er *endpointRef) Close() {
-	runutil.CloseWithLogOnErr(er.logger, er.cc, fmt.Sprintf("endpoint %v connection closed", er.addr))
+	runutil.CloseWithLogOnErr(er.logger, er.cc, "endpoint %v connection closed", er.addr)
 }
 
 func (er *endpointRef) apisPresent() []string {
@@ -813,6 +805,10 @@ func (er *endpointRef) apisPresent() []string {
 	}
 
 	return apisPresent
+}
+
+func (er *endpointRef) Matches(matchers []*labels.Matcher) bool {
+	return true
 }
 
 type endpointMetadata struct {

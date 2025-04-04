@@ -6,11 +6,11 @@ package storecache
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
-	"golang.org/x/exp/slices"
 )
 
 type FilteredIndexCache struct {

@@ -14,6 +14,8 @@ import (
 )
 
 func TestValidateConfig(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name string
 		cfg  interface{}
@@ -73,14 +75,51 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestUnmarshalEndpointSlice(t *testing.T) {
-	t.Run("Endpoints as string slice", func(t *testing.T) {
-		var endpoints []Endpoint
-		testutil.Ok(t, json.Unmarshal([]byte(`["node-1"]`), &endpoints))
-		testutil.Equals(t, endpoints, []Endpoint{{Address: "node-1"}})
-	})
-	t.Run("Endpoints as endpoints slice", func(t *testing.T) {
-		var endpoints []Endpoint
-		testutil.Ok(t, json.Unmarshal([]byte(`[{"address": "node-1", "az": "az-1"}]`), &endpoints))
-		testutil.Equals(t, endpoints, []Endpoint{{Address: "node-1", AZ: "az-1"}})
-	})
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		json      string
+		endpoints []Endpoint
+		expectErr bool
+	}{
+		{
+			name:      "Endpoint with empty address",
+			json:      `[{"az": "az-1"}]`,
+			endpoints: []Endpoint{{Address: "node-1", CapNProtoAddress: "node-1:19391"}},
+			expectErr: true,
+		},
+		{
+			name:      "Endpoints as string slice",
+			json:      `["node-1"]`,
+			endpoints: []Endpoint{{Address: "node-1", CapNProtoAddress: "node-1:19391"}},
+		},
+		{
+			name:      "Endpoints as endpoints slice",
+			json:      `[{"address": "node-1", "az": "az-1"}]`,
+			endpoints: []Endpoint{{Address: "node-1", CapNProtoAddress: "node-1:19391", AZ: "az-1"}},
+		},
+		{
+			name:      "Endpoints as string slice with port",
+			json:      `["node-1:80"]`,
+			endpoints: []Endpoint{{Address: "node-1:80", CapNProtoAddress: "node-1:19391"}},
+		},
+		{
+			name:      "Endpoints as string slice with capnproto port",
+			json:      `[{"address": "node-1", "capnproto_address": "node-1:81"}]`,
+			endpoints: []Endpoint{{Address: "node-1", CapNProtoAddress: "node-1:81"}},
+		},
+	}
+	for _, tcase := range cases {
+		t.Run(tcase.name, func(t *testing.T) {
+			var endpoints []Endpoint
+			err := json.Unmarshal([]byte(tcase.json), &endpoints)
+			if tcase.expectErr {
+				testutil.NotOk(t, err)
+				return
+			}
+			testutil.Ok(t, err)
+			testutil.Equals(t, tcase.endpoints, endpoints)
+		})
+	}
 }

@@ -18,6 +18,7 @@ The data of each Rule node can be labeled to satisfy the clusters labeling schem
 thanos rule \
     --data-dir             "/path/to/data" \
     --eval-interval        "30s" \
+    --rule-query-offset    "10s" \
     --rule-file            "/path/to/rules/*.rules.yaml" \
     --alert.query-url      "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
     --alertmanagers.url    "http://alert.thanos.io" \
@@ -63,6 +64,9 @@ name: <string>
 
 # How often rules in the group are evaluated.
 [ interval: <duration> | default = global.evaluation_interval ]
+
+# Offset the rule evaluation timestamp of this particular group by the specified duration into the past.
+[ query_offset: <duration> | default = --rule-query-offset flag ]
 
 rules:
   [ - <rule> ... ]
@@ -352,6 +356,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
@@ -458,11 +467,16 @@ Flags:
                                  Label names to be ignored when restoring alerts
                                  from the remote storage. This is only used in
                                  stateless mode.
+      --rule-concurrent-evaluation=1
+                                 How many rules can be evaluated concurrently.
+                                 Default is 1.
       --rule-file=rules/ ...     Rule files that should be used by rule
                                  manager. Can be in glob format (repeated).
                                  Note that rules are not automatically detected,
                                  use SIGHUP or do HTTP POST /-/reload to re-read
                                  them.
+      --rule-query-offset=0s     The default rule group query_offset duration to
+                                 use.
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
       --shipper.retry-init       If true, shipper will retry to initialize

@@ -251,7 +251,7 @@ func (c *memcachedClient) updateMemcacheServers() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := c.provider.Resolve(ctx, c.addresses); err != nil {
+		if err := c.provider.Resolve(ctx, c.addresses, true); err != nil {
 			return err
 		}
 		servers = c.provider.Addresses()

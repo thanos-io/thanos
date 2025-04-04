@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -29,6 +30,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+)
+
+var (
+	dummyHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "duration_seconds",
+	})
 )
 
 func TestReaders(t *testing.T) {
@@ -60,7 +67,7 @@ func TestReaders(t *testing.T) {
 		labels.FromStrings("cluster", "a-eu-west-1"),
 		labels.FromStrings("cluster", "b-eu-west-1"),
 		labels.FromStrings("cluster", "c-eu-west-1"),
-	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
@@ -104,7 +111,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn)
+				_, err := WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 				testutil.Ok(t, err)
 
 				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
@@ -228,7 +235,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("lazy binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn)
+				_, err := WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 				testutil.Ok(t, err)
 
 				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil, false)
@@ -246,7 +253,7 @@ func TestReaders(t *testing.T) {
 func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerReader Reader) {
 	ctx := context.Background()
 
-	indexReader, err := index.NewReader(indexByteSlice)
+	indexReader, err := index.NewReader(indexByteSlice, index.DecodePostingsRaw)
 	testutil.Ok(t, err)
 	defer func() { _ = indexReader.Close() }()
 
@@ -405,7 +412,7 @@ func BenchmarkBinaryWrite(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		_, err := WriteBinary(ctx, bkt, m.ULID, fn)
+		_, err := WriteBinary(ctx, bkt, m.ULID, fn, dummyHistogram)
 		testutil.Ok(t, err)
 	}
 }
@@ -419,7 +426,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn, dummyHistogram)
 	testutil.Ok(t, err)
 
 	t.ResetTimer()
@@ -457,7 +464,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	}
 
 	// Create a block.
-	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(b, err)
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
@@ -591,13 +598,13 @@ func TestReaderPostingsOffsets(t *testing.T) {
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
-	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id.String()), metadata.NoneFunc))
 
 	fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, id, fn)
+	_, err = WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 	testutil.Ok(t, err)
 
 	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))

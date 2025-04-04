@@ -20,9 +20,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/histogram"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 
 	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -49,8 +48,8 @@ func TestQueryNativeHistograms(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms", "remote-write-receiver")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms", "remote-write-receiver")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	querier := e2ethanos.NewQuerierBuilder(e, "querier", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
@@ -163,8 +162,8 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms", "remote-write-receiver")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms", "remote-write-receiver")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	querier := e2ethanos.NewQuerierBuilder(e, "querier", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).Init()
@@ -369,10 +368,10 @@ func TestRuleNativeHistograms(t *testing.T) {
 	histograms := tsdbutil.GenerateTestHistograms(4)
 	ts := time.Now().Add(-2 * time.Minute)
 	rawRemoteWriteURL1 := "http://" + receiver.Endpoint("remote-write") + "/api/v1/receive"
-	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL1, &labelpb.Label{Name: "series", Value: "one"})
+	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL1, prompb.Label{Name: "series", Value: "one"})
 	testutil.Ok(t, err)
 	rawRemoteWriteURL2 := "http://" + receiver2.Endpoint("remote-write") + "/api/v1/receive"
-	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2, &labelpb.Label{Name: "series", Value: "two"})
+	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2, prompb.Label{Name: "series", Value: "two"})
 	testutil.Ok(t, err)
 
 	r := rFuture.InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
@@ -395,72 +394,29 @@ func TestRuleNativeHistograms(t *testing.T) {
 	queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return expectedRecordedName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(expectedRecordedName, nil, expectedRecordedHistogram, map[string]string{"tenant_id": "default-tenant"}))
 }
 
-func spansToSpansProto(s []histogram.Span) []*prompb.BucketSpan {
-	spans := make([]*prompb.BucketSpan, len(s))
-	for i := 0; i < len(s); i++ {
-		spans[i] = &prompb.BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
-	}
-
-	return spans
-}
-
-// fromFloatHistogram returns remote Histogram from the float Histogram.
-func fromFloatHistogram(timestamp int64, fh *histogram.FloatHistogram) *prompb.Histogram {
-	return &prompb.Histogram{
-		Count:          &prompb.Histogram_CountFloat{CountFloat: fh.Count},
-		Sum:            fh.Sum,
-		Schema:         fh.Schema,
-		ZeroThreshold:  fh.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: fh.ZeroCount},
-		NegativeSpans:  spansToSpansProto(fh.NegativeSpans),
-		NegativeCounts: fh.NegativeBuckets,
-		PositiveSpans:  spansToSpansProto(fh.PositiveSpans),
-		PositiveCounts: fh.PositiveBuckets,
-		ResetHint:      prompb.Histogram_ResetHint(fh.CounterResetHint),
-		Timestamp:      timestamp,
-	}
-}
-
-// fromIntHistogram returns remote Histogram from the integer Histogram.
-func fromIntHistogram(timestamp int64, h *histogram.Histogram) *prompb.Histogram {
-	return &prompb.Histogram{
-		Count:          &prompb.Histogram_CountInt{CountInt: h.Count},
-		Sum:            h.Sum,
-		Schema:         h.Schema,
-		ZeroThreshold:  h.ZeroThreshold,
-		ZeroCount:      &prompb.Histogram_ZeroCountInt{ZeroCountInt: h.ZeroCount},
-		NegativeSpans:  spansToSpansProto(h.NegativeSpans),
-		NegativeDeltas: h.NegativeBuckets,
-		PositiveSpans:  spansToSpansProto(h.PositiveSpans),
-		PositiveDeltas: h.PositiveBuckets,
-		ResetHint:      prompb.Histogram_ResetHint(h.CounterResetHint),
-		Timestamp:      timestamp,
-	}
-}
-
-func writeHistograms(ctx context.Context, now time.Time, name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, rawRemoteWriteURL string, labels ...*labelpb.Label) (time.Time, error) {
+func writeHistograms(ctx context.Context, now time.Time, name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, rawRemoteWriteURL string, labels ...prompb.Label) (time.Time, error) {
 	startTime := now.Add(time.Duration(len(histograms)-1) * -30 * time.Second).Truncate(30 * time.Second)
-	prompbHistograms := make([]*prompb.Histogram, 0, len(histograms))
+	prompbHistograms := make([]prompb.Histogram, 0, len(histograms))
 
 	for i, fh := range floatHistograms {
 		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
-		prompbHistograms = append(prompbHistograms, fromFloatHistogram(ts, fh))
+		prompbHistograms = append(prompbHistograms, prompb.FromFloatHistogram(ts, fh))
 	}
 
 	for i, h := range histograms {
 		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
-		prompbHistograms = append(prompbHistograms, fromIntHistogram(ts, h))
+		prompbHistograms = append(prompbHistograms, prompb.FromIntHistogram(ts, h))
 	}
 
-	timeSeriespb := &prompb.TimeSeries{
-		Labels: append([]*labelpb.Label{
+	timeSeriespb := prompb.TimeSeries{
+		Labels: append([]prompb.Label{
 			{Name: model.MetricNameLabel, Value: name},
 		}, labels...),
 		Histograms: prompbHistograms,
 	}
 
 	return startTime, storeWriteRequest(ctx, rawRemoteWriteURL, &prompb.WriteRequest{
-		Timeseries: []*prompb.TimeSeries{timeSeriespb},
+		Timeseries: []prompb.TimeSeries{timeSeriespb},
 	})
 }
 

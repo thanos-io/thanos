@@ -17,17 +17,23 @@ GO     ?= $(shell which go)
 #	@echo "Running alertmanager"
 #	@$(ALERTMANAGER) <flags/args..>
 #
-ALERTMANAGER := $(GOBIN)/alertmanager-v0.24.0
+ALERTMANAGER := $(GOBIN)/alertmanager-v0.27.0
 $(ALERTMANAGER): $(BINGO_DIR)/alertmanager.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/alertmanager-v0.24.0"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.24.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
+	@echo "(re)installing $(GOBIN)/alertmanager-v0.27.0"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.27.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
 
 BINGO := $(GOBIN)/bingo-v0.9.0
 $(BINGO): $(BINGO_DIR)/bingo.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/bingo-v0.9.0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.9.0 "github.com/bwplotka/bingo"
+
+CAPNPC_GO := $(GOBIN)/capnpc-go-v3.0.1-alpha.2.0.20240830165715-46ccd63a72af
+$(CAPNPC_GO): $(BINGO_DIR)/capnpc-go.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/capnpc-go-v3.0.1-alpha.2.0.20240830165715-46ccd63a72af"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=capnpc-go.mod -o=$(GOBIN)/capnpc-go-v3.0.1-alpha.2.0.20240830165715-46ccd63a72af "capnproto.org/go/capnp/v3/capnpc-go"
 
 FAILLINT := $(GOBIN)/faillint-v1.13.0
 $(FAILLINT): $(BINGO_DIR)/faillint.mod
@@ -47,11 +53,11 @@ $(GOJSONTOYAML): $(BINGO_DIR)/gojsontoyaml.mod
 	@echo "(re)installing $(GOBIN)/gojsontoyaml-v0.1.0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=gojsontoyaml.mod -o=$(GOBIN)/gojsontoyaml-v0.1.0 "github.com/brancz/gojsontoyaml"
 
-GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.59.1
+GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.64.5
 $(GOLANGCI_LINT): $(BINGO_DIR)/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/golangci-lint-v1.59.1"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.59.1 "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	@echo "(re)installing $(GOBIN)/golangci-lint-v1.64.5"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.64.5 "github.com/golangci/golangci-lint/cmd/golangci-lint"
 
 GOTESPLIT := $(GOBIN)/gotesplit-v0.2.1
 $(GOTESPLIT): $(BINGO_DIR)/gotesplit.mod
@@ -95,11 +101,11 @@ $(MDOX): $(BINGO_DIR)/mdox.mod
 	@echo "(re)installing $(GOBIN)/mdox-v0.9.1-0.20220713110358-25b9abcf90a0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=mdox.mod -o=$(GOBIN)/mdox-v0.9.1-0.20220713110358-25b9abcf90a0 "github.com/bwplotka/mdox"
 
-MINIO := $(GOBIN)/minio-v0.0.0-20220720015624-ce8397f7d944
+MINIO := $(GOBIN)/minio-v0.0.0-20241014163537-3da7c9cce3de
 $(MINIO): $(BINGO_DIR)/minio.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20220720015624-ce8397f7d944"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20220720015624-ce8397f7d944 "github.com/minio/minio"
+	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20241014163537-3da7c9cce3de"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20241014163537-3da7c9cce3de "github.com/minio/minio"
 
 PROMDOC := $(GOBIN)/promdoc-v0.8.0
 $(PROMDOC): $(BINGO_DIR)/promdoc.mod
@@ -107,11 +113,11 @@ $(PROMDOC): $(BINGO_DIR)/promdoc.mod
 	@echo "(re)installing $(GOBIN)/promdoc-v0.8.0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=promdoc.mod -o=$(GOBIN)/promdoc-v0.8.0 "github.com/plexsystems/promdoc"
 
-PROMETHEUS := $(GOBIN)/prometheus-v0.37.0
+PROMETHEUS := $(GOBIN)/prometheus-v0.54.1
 $(PROMETHEUS): $(BINGO_DIR)/prometheus.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/prometheus-v0.37.0"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v0.37.0 "github.com/prometheus/prometheus/cmd/prometheus"
+	@echo "(re)installing $(GOBIN)/prometheus-v0.54.1"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v0.54.1 "github.com/prometheus/prometheus/cmd/prometheus"
 
 PROMTOOL := $(GOBIN)/promtool-v0.47.0
 $(PROMTOOL): $(BINGO_DIR)/promtool.mod
@@ -125,35 +131,11 @@ $(PROMU): $(BINGO_DIR)/promu.mod
 	@echo "(re)installing $(GOBIN)/promu-v0.5.0"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=promu.mod -o=$(GOBIN)/promu-v0.5.0 "github.com/prometheus/promu"
 
-PROTOC_GEN_GO_GRPC := $(GOBIN)/protoc-gen-go-grpc-v1.5.1
-$(PROTOC_GEN_GO_GRPC): $(BINGO_DIR)/protoc-gen-go-grpc.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/protoc-gen-go-grpc-v1.5.1"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=protoc-gen-go-grpc.mod -o=$(GOBIN)/protoc-gen-go-grpc-v1.5.1 "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
-
-PROTOC_GEN_GO_VTPROTO := $(GOBIN)/protoc-gen-go-vtproto-v0.6.1-0.20240319094008-0393e58bdf10
-$(PROTOC_GEN_GO_VTPROTO): $(BINGO_DIR)/protoc-gen-go-vtproto.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/protoc-gen-go-vtproto-v0.6.1-0.20240319094008-0393e58bdf10"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=protoc-gen-go-vtproto.mod -o=$(GOBIN)/protoc-gen-go-vtproto-v0.6.1-0.20240319094008-0393e58bdf10 "github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto"
-
-PROTOC_GEN_GO := $(GOBIN)/protoc-gen-go-v1.34.2
-$(PROTOC_GEN_GO): $(BINGO_DIR)/protoc-gen-go.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/protoc-gen-go-v1.34.2"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=protoc-gen-go.mod -o=$(GOBIN)/protoc-gen-go-v1.34.2 "google.golang.org/protobuf/cmd/protoc-gen-go"
-
 PROTOC_GEN_GOGOFAST := $(GOBIN)/protoc-gen-gogofast-v1.3.2
 $(PROTOC_GEN_GOGOFAST): $(BINGO_DIR)/protoc-gen-gogofast.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.2"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.2 "github.com/gogo/protobuf/protoc-gen-gogofast"
-
-PROTOC_GO_INJECT_TAG := $(GOBIN)/protoc-go-inject-tag-v1.4.0
-$(PROTOC_GO_INJECT_TAG): $(BINGO_DIR)/protoc-go-inject-tag.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/protoc-go-inject-tag-v1.4.0"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=protoc-go-inject-tag.mod -o=$(GOBIN)/protoc-go-inject-tag-v1.4.0 "github.com/favadi/protoc-go-inject-tag"
 
 SHFMT := $(GOBIN)/shfmt-v3.8.0
 $(SHFMT): $(BINGO_DIR)/shfmt.mod

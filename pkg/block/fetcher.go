@@ -213,7 +213,7 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		case ch <- id:
 		}
 		return nil
-	}, objstore.WithRecursiveIter)
+	}, objstore.WithRecursiveIter())
 	return partialBlocks, err
 }
 
@@ -258,8 +258,8 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 					continue
 				}
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
+				case <-gCtx.Done():
+					return gCtx.Err()
 				case ch <- uid:
 				}
 			}
@@ -273,8 +273,8 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 			return nil
 		}
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-gCtx.Done():
+			return gCtx.Err()
 		case metaChan <- id:
 		}
 		return nil

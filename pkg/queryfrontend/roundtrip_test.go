@@ -13,17 +13,17 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/atomic"
-
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
+	"go.uber.org/atomic"
 
-	"github.com/efficientgo/core/testutil"
 	cortexcache "github.com/thanos-io/thanos/internal/cortex/chunk/cache"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
+	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -186,6 +186,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
 					QueryRangeConfig: QueryRangeConfig{
 						MaxRetries:             tc.maxRetries,
 						Limits:                 defaultLimits,
@@ -357,6 +358,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
 					QueryRangeConfig: QueryRangeConfig{
 						Limits:                 defaultLimits,
 						SplitQueriesByInterval: tc.splitInterval,
@@ -461,6 +463,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 
 	tpw, err := NewTripperware(
 		Config{
+			CortexHandlerConfig: &transport.HandlerConfig{},
 			QueryRangeConfig: QueryRangeConfig{
 				Limits:                 defaultLimits,
 				ResultsCacheConfig:     cacheConf,
@@ -558,6 +561,7 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
+			CortexHandlerConfig: &transport.HandlerConfig{},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
@@ -682,6 +686,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
+			CortexHandlerConfig: &transport.HandlerConfig{},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
@@ -790,6 +795,7 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 
 	tpw, err := NewTripperware(
 		Config{
+			CortexHandlerConfig: &transport.HandlerConfig{},
 			LabelsConfig: LabelsConfig{
 				Limits:                 defaultLimits,
 				ResultsCacheConfig:     cacheConf,
@@ -838,14 +844,14 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 func promqlResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
-	q := &queryrange.PrometheusResponse{
+	q := queryrange.PrometheusResponse{
 		Status: "success",
-		Data: &queryrange.PrometheusData{
+		Data: queryrange.PrometheusData{
 			ResultType: string(parser.ValueTypeMatrix),
-			Result: []*queryrange.SampleStream{
+			Result: []queryrange.SampleStream{
 				{
-					Labels: []*cortexpb.LabelPair{},
-					Samples: []*cortexpb.Sample{
+					Labels: []cortexpb.LabelAdapter{},
+					Samples: []cortexpb.Sample{
 						{Value: 0, TimestampMs: 0},
 						{Value: 1, TimestampMs: 1},
 					},
@@ -874,14 +880,14 @@ func promqlResults(fail bool) (*int, http.Handler) {
 func promqlResultsWithFailures(numFailures int) (*atomic.Int64, http.Handler) {
 	count := &atomic.Int64{}
 	var lock sync.Mutex
-	q := &queryrange.PrometheusResponse{
+	q := queryrange.PrometheusResponse{
 		Status: "success",
-		Data: &queryrange.PrometheusData{
+		Data: queryrange.PrometheusData{
 			ResultType: string(parser.ValueTypeMatrix),
-			Result: []*queryrange.SampleStream{
+			Result: []queryrange.SampleStream{
 				{
-					Labels: []*cortexpb.LabelPair{},
-					Samples: []*cortexpb.Sample{
+					Labels: []cortexpb.LabelAdapter{},
+					Samples: []cortexpb.Sample{
 						{Value: 0, TimestampMs: 0},
 						{Value: 1, TimestampMs: 1},
 					},
@@ -924,7 +930,7 @@ func promqlResultsWithFailures(numFailures int) (*atomic.Int64, http.Handler) {
 func labelsResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
-	q := &ThanosLabelsResponse{
+	q := ThanosLabelsResponse{
 		Status: "success",
 		Data:   []string{"__name__", "job"},
 	}
@@ -948,9 +954,9 @@ func labelsResults(fail bool) (*int, http.Handler) {
 func seriesResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
-	q := &ThanosSeriesResponse{
+	q := ThanosSeriesResponse{
 		Status: "success",
-		Data:   []*labelpb.LabelSet{{Labels: []*labelpb.Label{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
+		Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
 	}
 
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

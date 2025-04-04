@@ -18,6 +18,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	deduppkg "github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -28,6 +29,8 @@ import (
 // this many times and within different interval e.g
 // TODO(bwplotka): Add benchmarks with PromQL involvement.
 func TestQuerySelect(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchQuerySelect(t, samplesPerSeries, series, true)
@@ -70,11 +73,11 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		testutil.Ok(t, head.Close())
 		for i := 0; i < len(created); i++ {
 			if !dedup || j == 0 {
-				b := labels.NewBuilder(labelpb.LabelpbLabelsToPromLabels(created[i].Labels))
+				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
-					b.Del("a_replica")
+					lset = lset[1:]
 				}
-				expectedSeries = append(expectedSeries, b.Labels())
+				expectedSeries = append(expectedSeries, lset)
 			}
 
 			resps = append(resps, storepb.NewSeriesResponse(created[i]))
@@ -87,6 +90,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		logger,
 		math.MinInt64,
 		math.MaxInt64,
+		deduppkg.AlgorithmPenalty,
 		[]string{"a_replica"},
 		nil,
 		newProxyStore(&mockedStoreServer{responses: resps}),

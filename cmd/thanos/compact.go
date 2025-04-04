@@ -42,10 +42,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
@@ -205,7 +207,7 @@ func runCompact(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, component.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -254,10 +256,11 @@ func runCompact(
 	}
 
 	enableVerticalCompaction := conf.enableVerticalCompaction
-	if len(conf.dedupReplicaLabels) > 0 {
+	dedupReplicaLabels := strutil.ParseFlagLabels(conf.dedupReplicaLabels)
+	if len(dedupReplicaLabels) > 0 {
 		enableVerticalCompaction = true
 		level.Info(logger).Log(
-			"msg", "deduplication.replica-label specified, enabling vertical compaction", "dedupReplicaLabels", strings.Join(conf.dedupReplicaLabels, ","),
+			"msg", "deduplication.replica-label specified, enabling vertical compaction", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","),
 		)
 	}
 	if enableVerticalCompaction {
@@ -275,7 +278,7 @@ func runCompact(
 			labelShardedMetaFilter,
 			consistencyDelayMetaFilter,
 			ignoreDeletionMarkFilter,
-			block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
+			block.NewReplicaLabelRemover(logger, dedupReplicaLabels),
 			duplicateBlocksFilter,
 			noCompactMarkerFilter,
 		}
@@ -288,6 +291,11 @@ func runCompact(
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			api.SetLoaded(blocks, err)
 		})
+
+		var syncMetasTimeout = conf.waitInterval
+		if !conf.wait {
+			syncMetasTimeout = 0
+		}
 		sy, err = compact.NewMetaSyncer(
 			logger,
 			reg,
@@ -297,6 +305,7 @@ func runCompact(
 			ignoreDeletionMarkFilter,
 			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
 			compactMetrics.garbageCollectedBlocks,
+			syncMetasTimeout,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
@@ -326,7 +335,7 @@ func runCompact(
 	case compact.DedupAlgorithmPenalty:
 		mergeFunc = dedup.NewChunkSeriesMerger()
 
-		if len(conf.dedupReplicaLabels) == 0 {
+		if len(dedupReplicaLabels) == 0 {
 			return errors.New("penalty based deduplication needs at least one replica label specified")
 		}
 	case "":
@@ -338,7 +347,7 @@ func runCompact(
 
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logutil.GoKitLogToSlog(logger), levels, downsample.NewPool(), mergeFunc)
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -818,8 +827,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"When set to penalty, penalty based deduplication algorithm will be used. At least one replica label has to be set via --deduplication.replica-label flag.").
 		Default("").EnumVar(&cc.dedupFunc, compact.DedupAlgorithmPenalty, "")
 
-	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
-		"Experimental. When one or more labels are set, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
+	cmd.Flag("deduplication.replica-label", "Experimental. Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible. "+
+		"Flag may be specified multiple times as well as a comma separated list of labels. "+
+		"When one or more labels are set, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
 		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
 		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
 		StringsVar(&cc.dedupReplicaLabels)

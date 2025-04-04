@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -49,9 +50,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
-	q := e2ethanos.NewQuerierBuilder(e, "query", stores...).
-		WithTargetAddresses(stores...).
-		Init()
+	q := e2ethanos.NewQuerierBuilder(e, "query", stores...).Init()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -63,7 +62,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:9090"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -72,7 +71,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
 				}},
-				Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "instance", Value: "localhost:9090"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
@@ -84,7 +83,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -119,7 +118,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		}
 
 		for it := range res.ActiveTargets {
-			res.ActiveTargets[it].LastScrape = nil
+			res.ActiveTargets[it].LastScrape = time.Time{}
 			res.ActiveTargets[it].LastScrapeDuration = 0
 			res.ActiveTargets[it].GlobalUrl = ""
 		}
@@ -127,7 +126,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		sort.Slice(res.ActiveTargets, func(i, j int) bool { return res.ActiveTargets[i].Compare(res.ActiveTargets[j]) < 0 })
 		sort.Slice(res.DroppedTargets, func(i, j int) bool { return res.DroppedTargets[i].Compare(res.DroppedTargets[j]) < 0 })
 
-		if !want.EqualVT(res) {
+		if !reflect.DeepEqual(want, res) {
 			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
 		}
 

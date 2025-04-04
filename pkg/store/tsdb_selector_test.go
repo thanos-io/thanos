@@ -14,22 +14,24 @@ import (
 )
 
 func TestMatchersForLabelSets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		labelSets []labels.Labels
-		want      []*storepb.LabelMatcher
+		want      []storepb.LabelMatcher
 	}{
 		{
 			name:      "empty label sets",
 			labelSets: nil,
-			want:      []*storepb.LabelMatcher{},
+			want:      []storepb.LabelMatcher{},
 		},
 		{
 			name: "single label set with single label",
 			labelSets: []labels.Labels{
 				labels.FromStrings("a", "1"),
 			},
-			want: []*storepb.LabelMatcher{
+			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
 			},
 		},
@@ -39,7 +41,7 @@ func TestMatchersForLabelSets(t *testing.T) {
 				labels.FromStrings("a", "1"),
 				labels.FromStrings("a", "2"),
 			},
-			want: []*storepb.LabelMatcher{
+			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 		},
@@ -48,7 +50,7 @@ func TestMatchersForLabelSets(t *testing.T) {
 			labelSets: []labels.Labels{
 				labels.FromStrings("a", "1", "b", "2"),
 			},
-			want: []*storepb.LabelMatcher{
+			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
 				{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2"},
 			},
@@ -59,7 +61,7 @@ func TestMatchersForLabelSets(t *testing.T) {
 				labels.FromStrings("a", "1"),
 				labels.FromStrings("a", "2"),
 			},
-			want: []*storepb.LabelMatcher{
+			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 		},
@@ -69,7 +71,7 @@ func TestMatchersForLabelSets(t *testing.T) {
 				labels.FromStrings("a", "1"),
 				labels.FromStrings("b", "2"),
 			},
-			want: []*storepb.LabelMatcher{
+			want: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|^$"},
 				{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2|^$"},
 			},

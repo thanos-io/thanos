@@ -4,13 +4,10 @@
 package store
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"hash"
-	"hash/crc32"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,22 +19,24 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -59,8 +58,6 @@ type PrometheusStore struct {
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
 	framesRead prometheus.Histogram
-
-	storepb.UnimplementedStoreServer
 }
 
 // Label{Values,Names} call with matchers is supported for Prometheus versions >= 2.24.0.
@@ -129,7 +126,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -167,7 +164,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 			finalExtLset.Range(func(l labels.Label) {
 				b.Set(l.Name, l.Value)
 			})
-			lset := labelpb.PromLabelsToLabelpbLabels(b.Labels())
+			lset := labelpb.ZLabelsFromPromLabels(b.Labels())
 			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
@@ -243,7 +240,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166
 		// MergeLabels() prefers local labels over external labels but we prefer
 		// external labels hence we need to do this:
-		lset := rmLabels(labelpb.ExtendSortedLabels(labelpb.LabelpbLabelsToPromLabels(e.Labels), extLset), extLsetToRemove)
+		lset := rmLabels(labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLset), extLsetToRemove)
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
@@ -263,7 +260,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.PromLabelsToLabelpbLabels(lset),
+			Labels: labelpb.ZLabelsFromPromLabels(lset),
 			Chunks: aggregatedChunks,
 		})); err != nil {
 			return err
@@ -300,7 +297,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	seriesStats := &storepb.SeriesStatsCounter{}
 
 	// TODO(bwplotka): Put read limit as a flag.
-	stream := NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
+	stream := remote.NewChunkedReader(bodySizer, config.DefaultChunkedReadLimit, *data)
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 	for {
@@ -322,17 +319,17 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			// MergeLabels() prefers local labels over external labels but we prefer
 			// external labels hence we need to do this:
 			// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/codec.go#L210.
-			completeLabelset := rmLabels(labelpb.ExtendSortedLabels(labelpb.LabelpbLabelsToPromLabels(series.Labels), extLset), extLsetToRemove)
-			if !shardMatcher.MatchesLabels(labelpb.PromLabelsToLabelpbLabels(completeLabelset)) {
+			completeLabelset := rmLabels(labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset), extLsetToRemove)
+			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}
 
 			seriesStats.CountSeries(series.Labels)
-			thanosChks := make([]*storepb.AggrChunk, len(series.Chunks))
+			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 
 			for i, chk := range series.Chunks {
 				chkHash := hashChunk(hasher, chk.Data, calculateChecksums)
-				thanosChks[i] = &storepb.AggrChunk{
+				thanosChks[i] = storepb.AggrChunk{
 					MaxTime: chk.MaxTimeMs,
 					MinTime: chk.MinTimeMs,
 					Raw: &storepb.Chunk{
@@ -352,7 +349,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.PromLabelsToLabelpbLabels(completeLabelset),
+				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {
@@ -423,7 +420,7 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	return &data, nil
 }
 
-func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []*storepb.AggrChunk, err error) {
+func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []storepb.AggrChunk, err error) {
 	samples := series.Samples
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
@@ -440,7 +437,7 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 		}
 
 		chkHash := hashChunk(hasher, cb, calculateChecksums)
-		chks = append(chks, &storepb.AggrChunk{
+		chks = append(chks, storepb.AggrChunk{
 			MinTime: samples[0].Timestamp,
 			MaxTime: samples[chunkSize-1].Timestamp,
 			Raw:     &storepb.Chunk{Type: enc, Data: cb, Hash: chkHash},
@@ -492,8 +489,13 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(ms []*storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
-	tms, err := storepb.MatchersToPromMatchers(ms...)
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels, cache storecache.MatchersCache) (bool, []*labels.Matcher, error) {
+	var (
+		tms []*labels.Matcher
+		err error
+	)
+
+	tms, err = storecache.MatchersToPromMatchersCached(cache, ms...)
 	if err != nil {
 		return false, nil, err
 	}
@@ -524,7 +526,7 @@ func matchesExternalLabels(ms []*storepb.LabelMatcher, externalLabels labels.Lab
 
 // encodeChunk translates the sample pairs into a chunk.
 // TODO(kakkoyun): Linter - result 0 (github.com/thanos-io/thanos/pkg/store/storepb.Chunk_Encoding) is always 0.
-func (p *PrometheusStore) encodeChunk(ss []*prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
+func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
 	c := chunkenc.NewXORChunk()
 
 	a, err := c.Appender()
@@ -541,7 +543,7 @@ func (p *PrometheusStore) encodeChunk(ss []*prompb.Sample) (storepb.Chunk_Encodi
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -604,7 +606,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -659,12 +661,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }
 
-func (p *PrometheusStore) LabelSet() []*labelpb.LabelSet {
-	labels := labelpb.PromLabelsToLabelpbLabels(p.externalLabelsFn())
+func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
+	labels := labelpb.ZLabelsFromPromLabels(p.externalLabelsFn())
 
-	labelset := []*labelpb.LabelSet{}
+	labelset := []labelpb.ZLabelSet{}
 	if len(labels) > 0 {
-		labelset = append(labelset, &labelpb.LabelSet{
+		labelset = append(labelset, labelpb.ZLabelSet{
 			Labels: labels,
 		})
 	}
@@ -672,16 +674,16 @@ func (p *PrometheusStore) LabelSet() []*labelpb.LabelSet {
 	return labelset
 }
 
-func (p *PrometheusStore) TSDBInfos() []*infopb.TSDBInfo {
+func (p *PrometheusStore) TSDBInfos() []infopb.TSDBInfo {
 	labels := p.LabelSet()
 	if len(labels) == 0 {
-		return []*infopb.TSDBInfo{}
+		return []infopb.TSDBInfo{}
 	}
 
 	mint, maxt := p.Timestamps()
-	return []*infopb.TSDBInfo{
+	return []infopb.TSDBInfo{
 		{
-			Labels: &labelpb.LabelSet{
+			Labels: labelpb.ZLabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
@@ -692,82 +694,4 @@ func (p *PrometheusStore) TSDBInfos() []*infopb.TSDBInfo {
 
 func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {
 	return p.timestamps()
-}
-
-// NewChunkedReader constructs a ChunkedReader.
-// It allows passing data slice for byte slice reuse, which will be increased to needed size if smaller.
-func NewChunkedReader(r io.Reader, sizeLimit uint64, data []byte) *ChunkedReader {
-	return &ChunkedReader{b: bufio.NewReader(r), sizeLimit: sizeLimit, data: data, crc32: crc32.New(castagnoliTable)}
-}
-
-// Next returns the next length-delimited record from the input, or io.EOF if
-// there are no more records available. Returns io.ErrUnexpectedEOF if a short
-// record is found, with a length of n but fewer than n bytes of data.
-// Next also verifies the given checksum with Castagnoli polynomial CRC-32 checksum.
-//
-// NOTE: The slice returned is valid only until a subsequent call to Next. It's a caller's responsibility to copy the
-// returned slice if needed.
-func (r *ChunkedReader) Next() ([]byte, error) {
-	size, err := binary.ReadUvarint(r.b)
-	if err != nil {
-		return nil, err
-	}
-
-	if size > r.sizeLimit {
-		return nil, fmt.Errorf("chunkedReader: message size exceeded the limit %v bytes; got: %v bytes", r.sizeLimit, size)
-	}
-
-	if cap(r.data) < int(size) {
-		r.data = make([]byte, size)
-	} else {
-		r.data = r.data[:size]
-	}
-
-	var crc32 uint32
-	if err := binary.Read(r.b, binary.BigEndian, &crc32); err != nil {
-		return nil, err
-	}
-
-	r.crc32.Reset()
-	if _, err := io.ReadFull(io.TeeReader(r.b, r.crc32), r.data); err != nil {
-		return nil, err
-	}
-
-	if r.crc32.Sum32() != crc32 {
-		return nil, errors.New("chunkedReader: corrupted frame; checksum mismatch")
-	}
-	return r.data, nil
-}
-
-// NextProto consumes the next available record by calling r.Next, and decodes
-// it into the protobuf with proto.Unmarshal.
-func (r *ChunkedReader) NextProto(pb proto.Message) error {
-	rec, err := r.Next()
-	if err != nil {
-		return err
-	}
-	return proto.Unmarshal(rec, pb)
-}
-
-// ChunkedReader is a buffered reader that expects uvarint delimiter and checksum before each message.
-// It will allocate as much as the biggest frame defined by delimiter (on top of bufio.Reader allocations).
-type ChunkedReader struct {
-	b         *bufio.Reader
-	data      []byte
-	sizeLimit uint64
-
-	crc32 hash.Hash32
-}
-
-// DefaultChunkedReadLimit is the default value for the maximum size of the protobuf frame client allows.
-// 50MB is the default. This is equivalent to ~100k full XOR chunks and average labelset.
-const DefaultChunkedReadLimit = 5e+7
-
-// The table gets initialized with sync.Once but may still cause a race
-// with any other use of the crc32 package anywhere. Thus we initialize it
-// before.
-var castagnoliTable *crc32.Table
-
-func init() {
-	castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 }

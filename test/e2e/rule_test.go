@@ -162,6 +162,16 @@ groups:
     expr: 1
 `
 
+	testRuleQueryOffset = `
+groups:
+- name: recording_query_offset
+  interval: 1s
+  query_offset: 1s
+  rules:
+  - record: metric_query_offset
+    expr: 1
+`
+
 	amTimeout = model.Duration(10 * time.Second)
 )
 
@@ -272,7 +282,7 @@ func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
 
 	for _, g := range data.Data.Groups {
 		testutil.Assert(t, g.EvaluationDurationSeconds > 0, "expected it to take more than zero seconds to evaluate")
-		testutil.Assert(t, !rulespb.TimestampToTime(g.LastEvaluation).IsZero(), "expected the rule group to be evaluated at least once")
+		testutil.Assert(t, !g.LastEvaluation.IsZero(), "expected the rule group to be evaluated at least once")
 	}
 }
 
@@ -616,6 +626,25 @@ func TestRule_KeepFiringFor(t *testing.T) {
 		})
 	})
 
+	t.Run("rule query_offset", func(t *testing.T) {
+		// Create a recording rule that will add the missing metric
+		createRuleFile(t, filepath.Join(rulesPath, "record_metric_query_offset.yaml"), testRuleQueryOffset)
+		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
+
+		// Wait for metric to pop up
+		queryWaitAndAssert(t, ctx, q.Endpoint("http"), func() string { return "metric_query_offset" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"__name__": "metric_query_offset",
+					"replica":  "1",
+				},
+				Value: model.SampleValue(1),
+			},
+		})
+	})
+
 	t.Run("keep_firing_for should continue triggering", func(t *testing.T) {
 		// Alert should still be firing
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
@@ -831,7 +860,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 			if alerts[0].State == rulespb.AlertState_FIRING {
 				// The second ruler alert's active at time is the same as the previous one,
 				// which means the alert state is restored successfully.
-				if rulespb.TimestampToTime(alertActiveAt).Unix() == rulespb.TimestampToTime(alerts[0].ActiveAt).Unix() {
+				if alertActiveAt.Unix() == alerts[0].ActiveAt.Unix() {
 					return nil
 				} else {
 					return fmt.Errorf("alert active time is not restored")

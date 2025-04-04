@@ -27,6 +27,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -42,7 +43,7 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v0.37.0"
+	defaultPrometheusVersion   = "v0.54.1"
 	defaultAlertmanagerVersion = "v0.20.0"
 	defaultMinioVersion        = "RELEASE.2022-07-30T05-21-40Z"
 
@@ -429,8 +430,9 @@ func CreateBlock(
 	extLset labels.Labels,
 	resolution int64,
 	hashFunc metadata.HashFunc,
+	sampleTypes []chunkenc.ValueType,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, chunkenc.ValFloat)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, sampleTypes)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
@@ -443,8 +445,9 @@ func CreateBlockWithTombstone(
 	extLset labels.Labels,
 	resolution int64,
 	hashFunc metadata.HashFunc,
+	sampleTypes []chunkenc.ValueType,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc, chunkenc.ValFloat)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc, sampleTypes)
 }
 
 // CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
@@ -460,8 +463,9 @@ func CreateBlockWithBlockDelay(
 	extLset labels.Labels,
 	resolution int64,
 	hashFunc metadata.HashFunc,
+	sampleTypes []chunkenc.ValueType,
 ) (ulid.ULID, error) {
-	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValFloat)
+	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, sampleTypes)
 }
 
 // CreateHistogramBlockWithDelay writes a block with the given native histogram series and numSamples samples each.
@@ -477,7 +481,7 @@ func CreateHistogramBlockWithDelay(
 	resolution int64,
 	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValHistogram)
+	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, []chunkenc.ValueType{chunkenc.ValHistogram})
 }
 
 // CreateFloatHistogramBlockWithDelay writes a block with the given float native histogram series and numSamples samples each.
@@ -493,11 +497,11 @@ func CreateFloatHistogramBlockWithDelay(
 	resolution int64,
 	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValFloatHistogram)
+	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, []chunkenc.ValueType{chunkenc.ValFloatHistogram})
 }
 
-func createBlockWithDelay(ctx context.Context, dir string, series []labels.Labels, numSamples int, mint int64, maxt int64, blockDelay time.Duration, extLset labels.Labels, resolution int64, hashFunc metadata.HashFunc, samplesType chunkenc.ValueType) (ulid.ULID, error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, samplesType)
+func createBlockWithDelay(ctx context.Context, dir string, series []labels.Labels, numSamples int, mint int64, maxt int64, blockDelay time.Duration, extLset labels.Labels, resolution int64, hashFunc metadata.HashFunc, sampleTypes []chunkenc.ValueType) (ulid.ULID, error) {
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, sampleTypes)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "block creation")
 	}
@@ -533,7 +537,7 @@ func createBlock(
 	resolution int64,
 	tombstones bool,
 	hashFunc metadata.HashFunc,
-	sampleType chunkenc.ValueType,
+	sampleTypes []chunkenc.ValueType,
 ) (id ulid.ULID, err error) {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
@@ -556,7 +560,11 @@ func createBlock(
 	r := rand.New(rand.NewSource(int64(numSamples)))
 	var randMutex sync.Mutex
 
-	for len(series) > 0 {
+	if sampleTypes == nil {
+		sampleTypes = []chunkenc.ValueType{chunkenc.ValFloat}
+	}
+
+	for si := atomic.NewInt64(-1); len(series) > 0; {
 		l := batchSize
 		if len(series) < 1000 {
 			l = len(series)
@@ -572,6 +580,9 @@ func createBlock(
 
 				for _, lset := range batch {
 					var err error
+
+					var sampleType = sampleTypes[si.Add(1)%int64(len(sampleTypes))]
+
 					if sampleType == chunkenc.ValFloat {
 						randMutex.Lock()
 						_, err = app.Append(0, lset, t, r.Float64())
@@ -600,7 +611,7 @@ func createBlock(
 	if err := g.Wait(); err != nil {
 		return id, err
 	}
-	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, promslog.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -666,7 +677,7 @@ func createBlock(
 }
 
 func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
-	r, err := index.NewFileReader(fn)
+	r, err := index.NewFileReader(fn, index.DecodePostingsRaw)
 	if err != nil {
 		return 0, errors.Wrap(err, "open index file")
 	}
@@ -764,7 +775,7 @@ func CreateBlockWithChurn(
 		return id, errors.Wrap(err, "commit")
 	}
 
-	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, promslog.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}

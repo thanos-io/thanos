@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/weaveworks/common/httpgrpc"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type contextKey int
@@ -18,9 +17,7 @@ var ctxKey = contextKey(0)
 
 // ContextWithEmptyStats returns a context with empty stats.
 func ContextWithEmptyStats(ctx context.Context) (*Stats, context.Context) {
-	stats := &Stats{
-		WallTime: &durationpb.Duration{},
-	}
+	stats := &Stats{}
 	ctx = context.WithValue(ctx, ctxKey, stats)
 	return stats, ctx
 }
@@ -48,8 +45,7 @@ func (s *Stats) AddWallTime(t time.Duration) {
 		return
 	}
 
-	atomic.AddInt64((*int64)(&s.WallTime.Seconds), int64(t/time.Second))
-	atomic.AddInt32((*int32)(&s.WallTime.Nanos), int32(t%time.Second))
+	atomic.AddInt64((*int64)(&s.WallTime), int64(t))
 }
 
 // LoadWallTime returns current wall time.
@@ -58,7 +54,7 @@ func (s *Stats) LoadWallTime() time.Duration {
 		return 0
 	}
 
-	return time.Duration(atomic.LoadInt64((*int64)(&s.WallTime.Seconds))*int64(time.Second) + int64(atomic.LoadInt32((*int32)(&s.WallTime.Nanos))))
+	return time.Duration(atomic.LoadInt64((*int64)(&s.WallTime)))
 }
 
 func (s *Stats) AddFetchedSeries(series uint64) {
@@ -91,6 +87,38 @@ func (s *Stats) LoadFetchedChunkBytes() uint64 {
 	}
 
 	return atomic.LoadUint64(&s.FetchedChunkBytes)
+}
+
+func (s *Stats) SetPeakSamples(peakSamples int32) {
+	if s == nil {
+		return
+	}
+
+	atomic.StoreInt32(&s.PeakLoadedSamples, peakSamples)
+}
+
+func (s *Stats) LoadPeakSamples() int32 {
+	if s == nil {
+		return 0
+	}
+
+	return atomic.LoadInt32(&s.PeakLoadedSamples)
+}
+
+func (s *Stats) AddTotalSamples(totalSamples int64) {
+	if s == nil {
+		return
+	}
+
+	atomic.AddInt64(&s.TotalLoadedSamples, totalSamples)
+}
+
+func (s *Stats) LoadTotalSamples() int64 {
+	if s == nil {
+		return 0
+	}
+
+	return atomic.LoadInt64(&s.TotalLoadedSamples)
 }
 
 // Merge the provide Stats into this one.

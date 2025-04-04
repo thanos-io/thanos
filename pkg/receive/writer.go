@@ -16,7 +16,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"go4.org/intern"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -73,23 +72,8 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage, opts *WriterOptions) 
 	}
 }
 
-func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
+func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeSeries) error {
 	tLogger := log.With(r.logger, "tenant", tenantID)
-
-	var (
-		numLabelsOutOfOrder = 0
-		numLabelsDuplicates = 0
-		numLabelsEmpty      = 0
-
-		numSamplesOutOfOrder  = 0
-		numSamplesDuplicates  = 0
-		numSamplesOutOfBounds = 0
-		numSamplesTooOld      = 0
-
-		numExemplarsOutOfOrder  = 0
-		numExemplarsDuplicate   = 0
-		numExemplarsLabelLength = 0
-	)
 
 	s, err := r.multiTSDB.TenantAppendable(tenantID)
 	if err != nil {
@@ -105,75 +89,43 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 	getRef := app.(storage.GetRef)
 	var (
-		ref  storage.SeriesRef
-		errs writeErrors
+		ref          storage.SeriesRef
+		errorTracker writeErrorTracker
 	)
 	app = &ReceiveAppender{
 		tLogger:        tLogger,
 		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
 		Appender:       app,
 	}
-	for _, t := range wreq.Timeseries {
+
+	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
 		if err := labelpb.ValidateLabels(t.Labels); err != nil {
-			lset := &labelpb.LabelSet{Labels: t.Labels}
-			switch err {
-			case labelpb.ErrOutOfOrderLabels:
-				numLabelsOutOfOrder++
-				level.Debug(tLogger).Log("msg", "Out of order labels in the label set", "lset", lset.String())
-			case labelpb.ErrDuplicateLabels:
-				numLabelsDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate labels in the label set", "lset", lset.String())
-			case labelpb.ErrEmptyLabels:
-				numLabelsEmpty++
-				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", lset.String())
-			default:
-				level.Debug(tLogger).Log("msg", "Error validating labels", "err", err)
-			}
-
+			lset := &labelpb.ZLabelSet{Labels: t.Labels}
+			errorTracker.addLabelsError(err, lset, tLogger)
 			continue
 		}
 
-		lset := labelpb.LabelpbLabelsToPromLabels(t.Labels)
+		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(lset, lset.Hash())
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			lset = labelpb.LabelpbLabelsToPromLabels(t.Labels)
-
-			if r.opts.Intern {
-				for i := range t.Labels {
-					t.Labels[i].Name = intern.GetByString(t.Labels[i].Name).Get().(string)
-					t.Labels[i].Value = intern.GetByString(t.Labels[i].Value).Get().(string)
-				}
-			}
+			labelpb.ReAllocZLabelsStrings(&t.Labels, r.opts.Intern)
+			lset = labelpb.ZLabelsToPromLabels(t.Labels)
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
 			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
-			switch err {
-			case storage.ErrOutOfOrderSample:
-				numSamplesOutOfOrder++
-				level.Debug(tLogger).Log("msg", "Out of order sample", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
-			case storage.ErrDuplicateSampleForTimestamp:
-				numSamplesDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
-			case storage.ErrOutOfBounds:
-				numSamplesOutOfBounds++
-				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
-			case storage.ErrTooOldSample:
-				numSamplesTooOld++
-				level.Debug(tLogger).Log("msg", "Sample is too old", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
-			default:
-				if err != nil {
-					level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
-				}
-			}
+			errorTracker.addSampleError(err, tLogger, lset, s.Timestamp, s.Value)
 		}
+
+		b := labels.ScratchBuilder{}
+		b.Labels()
 
 		for _, hp := range t.Histograms {
 			var (
@@ -188,31 +140,14 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			}
 
 			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, fh)
-			switch err {
-			case storage.ErrOutOfOrderSample:
-				numSamplesOutOfOrder++
-				level.Debug(tLogger).Log("msg", "Out of order histogram", "lset", lset, "timestamp", hp.Timestamp)
-			case storage.ErrDuplicateSampleForTimestamp:
-				numSamplesDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate histogram for timestamp", "lset", lset, "timestamp", hp.Timestamp)
-			case storage.ErrOutOfBounds:
-				numSamplesOutOfBounds++
-				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "timestamp", hp.Timestamp)
-			case storage.ErrTooOldSample:
-				numSamplesTooOld++
-				level.Debug(tLogger).Log("msg", "Histogram is too old", "lset", lset, "timestamp", hp.Timestamp)
-			default:
-				if err != nil {
-					level.Debug(tLogger).Log("msg", "Error ingesting histogram", "err", err)
-				}
-			}
+			errorTracker.addHistogramError(err, tLogger, lset, hp.Timestamp)
 		}
 
 		// Current implementation of app.AppendExemplar doesn't create a new series, so it must be already present.
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
-				exLset := labelpb.LabelpbLabelsToPromLabels(ex.Labels)
+				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
 				exLogger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
 
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
@@ -221,67 +156,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 					Ts:     ex.Timestamp,
 					HasTs:  true,
 				}); err != nil {
-					switch err {
-					case storage.ErrOutOfOrderExemplar:
-						numExemplarsOutOfOrder++
-						level.Debug(exLogger).Log("msg", "Out of order exemplar")
-					case storage.ErrDuplicateExemplar:
-						numExemplarsDuplicate++
-						level.Debug(exLogger).Log("msg", "Duplicate exemplar")
-					case storage.ErrExemplarLabelLength:
-						numExemplarsLabelLength++
-						level.Debug(exLogger).Log("msg", "Label length for exemplar exceeds max limit", "limit", exemplar.ExemplarMaxLabelSetLength)
-					default:
-						level.Debug(exLogger).Log("msg", "Error ingesting exemplar", "err", err)
-					}
+					errorTracker.addExemplarError(err, exLogger)
 				}
 			}
 		}
 	}
 
-	if numLabelsOutOfOrder > 0 {
-		level.Info(tLogger).Log("msg", "Error on series with out-of-order labels", "numDropped", numLabelsOutOfOrder)
-		errs.Add(errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add %d series", numLabelsOutOfOrder))
-	}
-	if numLabelsDuplicates > 0 {
-		level.Info(tLogger).Log("msg", "Error on series with duplicate labels", "numDropped", numLabelsDuplicates)
-		errs.Add(errors.Wrapf(labelpb.ErrDuplicateLabels, "add %d series", numLabelsDuplicates))
-	}
-	if numLabelsEmpty > 0 {
-		level.Info(tLogger).Log("msg", "Error on series with empty label name or value", "numDropped", numLabelsEmpty)
-		errs.Add(errors.Wrapf(labelpb.ErrEmptyLabels, "add %d series", numLabelsEmpty))
-	}
-
-	if numSamplesOutOfOrder > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting out-of-order samples", "numDropped", numSamplesOutOfOrder)
-		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "add %d samples", numSamplesOutOfOrder))
-	}
-	if numSamplesDuplicates > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting samples with different value but same timestamp", "numDropped", numSamplesDuplicates)
-		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "add %d samples", numSamplesDuplicates))
-	}
-	if numSamplesOutOfBounds > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numSamplesOutOfBounds)
-		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numSamplesOutOfBounds))
-	}
-	if numSamplesTooOld > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting samples that are outside of the allowed out-of-order time window", "numDropped", numSamplesTooOld)
-		errs.Add(errors.Wrapf(storage.ErrTooOldSample, "add %d samples", numSamplesTooOld))
-	}
-
-	if numExemplarsOutOfOrder > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
-		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d exemplars", numExemplarsOutOfOrder))
-	}
-	if numExemplarsDuplicate > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting duplicate exemplars", "numDropped", numExemplarsDuplicate)
-		errs.Add(errors.Wrapf(storage.ErrDuplicateExemplar, "add %d exemplars", numExemplarsDuplicate))
-	}
-	if numExemplarsLabelLength > 0 {
-		level.Info(tLogger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
-		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", numExemplarsLabelLength))
-	}
-
+	errs := errorTracker.collectErrors(tLogger)
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}

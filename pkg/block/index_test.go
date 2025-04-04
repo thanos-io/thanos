@@ -34,10 +34,10 @@ func TestRewrite(t *testing.T) {
 		labels.New(labels.Label{Name: "a", Value: "4"}),
 		labels.New(labels.Label{Name: "a", Value: "1"}),
 		labels.New(labels.Label{Name: "b", Value: "1"}),
-	}, 150, 0, 1000, labels.EmptyLabels(), 124, metadata.NoneFunc)
+	}, 150, 0, 1000, labels.EmptyLabels(), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
-	ir, err := index.NewFileReader(filepath.Join(tmpDir, b.String(), IndexFilename))
+	ir, err := index.NewFileReader(filepath.Join(tmpDir, b.String(), IndexFilename), index.DecodePostingsRaw)
 	testutil.Ok(t, err)
 
 	defer func() { testutil.Ok(t, ir.Close()) }()
@@ -69,7 +69,7 @@ func TestRewrite(t *testing.T) {
 	testutil.Ok(t, iw.Close())
 	testutil.Ok(t, cw.Close())
 
-	ir2, err := index.NewFileReader(filepath.Join(tmpDir, m.ULID.String(), IndexFilename))
+	ir2, err := index.NewFileReader(filepath.Join(tmpDir, m.ULID.String(), IndexFilename), index.DecodePostingsRaw)
 	testutil.Ok(t, err)
 
 	defer func() { testutil.Ok(t, ir2.Close()) }()

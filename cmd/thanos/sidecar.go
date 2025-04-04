@@ -111,14 +111,18 @@ func initShipper(
 	confContentYaml []byte,
 	m *promMetadata,
 ) (*shipper.Shipper, error) {
-	bkt, err := client.NewBucket(logger, confContentYaml, component.Sidecar.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, component.Sidecar.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 	bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
-	level.Debug(logger).Log("msg", "Bucket created")
 
-	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		}
+	}()
 
 	uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
 
@@ -255,6 +259,14 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 				defer iterCancel()
 
+				if err := m.UpdateTimestamps(iterCtx); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch timestamps. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
 				if err := m.UpdateLabels(iterCtx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
@@ -286,16 +298,21 @@ func runSidecar(
 			return runutil.Repeat(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 				defer iterCancel()
-
-				if err := m.UpdateLabels(iterCtx); err != nil {
-					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
+				if err := m.UpdateTimestamps(iterCtx); err != nil {
+					level.Warn(logger).Log("msg", "updating timestamps failed", "err", err)
 					promUp.Set(0)
 					statusProber.NotReady(err)
-				} else {
-					promUp.Set(1)
-					statusProber.Ready()
+					return nil
 				}
 
+				if err := m.UpdateLabels(iterCtx); err != nil {
+					level.Warn(logger).Log("msg", "updating labels failed", "err", err)
+					promUp.Set(0)
+					statusProber.NotReady(err)
+					return nil
+				}
+				promUp.Set(1)
+				statusProber.Ready()
 				return nil
 			})
 		}, func(error) {
@@ -323,7 +340,7 @@ func runSidecar(
 		}
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"),
-			conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
+			conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA, conf.grpc.tlsMinVersion)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -332,12 +349,12 @@ func runSidecar(
 
 		infoSrv := info.NewInfoServer(
 			component.Sidecar.String(),
-			info.WithLabelSetFunc(func() []*labelpb.LabelSet {
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 				return promStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
-					mint, maxt := promStore.Timestamps()
+					mint, maxt := m.Timestamps()
 					return &infopb.StoreInfo{
 						MinTime:                      mint,
 						MaxTime:                      maxt,
@@ -391,12 +408,12 @@ func runSidecar(
 		})
 		shipperUp.Set(0)
 
-		if !conf.shipper.retryInit {
-			// We don't want to retry shipper initialization, therefore we do it here and crash if it fails.
+		if !conf.shipper.retryInit { // We don't want to retry shipper initialization.
 			if m.shipper, err = initShipper(logger, reg, conf, confContentYaml, m); err != nil {
 				level.Error(logger).Log("err", err, "msg", "Failed to initialize shipper.")
 				return err
 			}
+
 			shipperUp.Set(1)
 		}
 
@@ -420,8 +437,7 @@ func runSidecar(
 			}
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if conf.shipper.retryInit && m.shipper == nil {
-					// We want to retry shipper initialization and it's not initialized yet.
+				if conf.shipper.retryInit && m.shipper == nil { // We want to retry shipper initialization.
 					if m.shipper, err = initShipper(logger, reg, conf, confContentYaml, m); err != nil {
 						level.Warn(logger).Log("err", err, "msg", "Failed to create bucket. Sidecar will start without upload feature and will retry later.")
 						return nil // Allow sidecar to start without shipper
@@ -434,13 +450,6 @@ func runSidecar(
 				if uploaded, err := m.shipper.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
-
-				minTime, _, err := m.shipper.Timestamps()
-				if err != nil {
-					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
-					return nil
-				}
-				m.UpdateTimestamps(minTime, math.MaxInt64)
 				return nil
 			})
 		}, func(error) {
@@ -516,16 +525,19 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
+func (s *promMetadata) UpdateTimestamps(ctx context.Context) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	if mint < s.limitMinTime.PrometheusTimestamp() {
-		mint = s.limitMinTime.PrometheusTimestamp()
+	mint, err := s.client.LowestTimestamp(ctx, s.promURL)
+	if err != nil {
+		return err
 	}
 
-	s.mint = mint
-	s.maxt = maxt
+	s.mint = max(s.limitMinTime.PrometheusTimestamp(), mint)
+	s.maxt = math.MaxInt64
+
+	return nil
 }
 
 func (s *promMetadata) Labels() labels.Labels {

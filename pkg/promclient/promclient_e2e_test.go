@@ -6,6 +6,7 @@ package promclient
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path"
@@ -83,6 +84,20 @@ func TestConfiguredFlags_e2e(t *testing.T) {
 	})
 }
 
+func TestLowestTimestamp_e2e(t *testing.T) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
+		testutil.Ok(t, p.Start(context.Background(), log.NewNopLogger()))
+
+		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+		testutil.Ok(t, err)
+
+		ts, err := NewDefaultClient().LowestTimestamp(context.Background(), u)
+		testutil.Ok(t, err)
+
+		testutil.Equals(t, math.MinInt64, int(ts))
+	})
+}
+
 func TestSnapshot_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		now := time.Now()
@@ -98,7 +113,7 @@ func TestSnapshot_e2e(t *testing.T) {
 			timestamp.FromTime(now.Add(-4*time.Hour)),
 			labels.EmptyLabels(),
 			0,
-			metadata.NoneFunc,
+			metadata.NoneFunc, nil,
 		)
 		testutil.Ok(t, err)
 
@@ -169,7 +184,7 @@ func TestQueryRange_e2e(t *testing.T) {
 			timestamp.FromTime(now),
 			labels.EmptyLabels(),
 			0,
-			metadata.NoneFunc,
+			metadata.NoneFunc, nil,
 		)
 		testutil.Ok(t, err)
 

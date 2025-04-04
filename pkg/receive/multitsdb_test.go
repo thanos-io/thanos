@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -39,25 +40,20 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("run fresh", func(t *testing.T) {
-		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:      (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
-				RetentionDuration:     (6 * time.Hour).Milliseconds(),
-				NoLockfile:            true,
-				MaxExemplars:          100,
-				EnableExemplarStorage: true,
-			},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+			RetentionDuration:     (6 * time.Hour).Milliseconds(),
+			NoLockfile:            true,
+			MaxExemplars:          100,
+			EnableExemplarStorage: true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, metadata.NoneFunc)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
@@ -172,26 +168,19 @@ func TestMultiTSDB(t *testing.T) {
 
 	t.Run("flush with one sample produces a block", func(t *testing.T) {
 		const testTenant = "test_tenant"
-		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
-				NoLockfile:        true,
-			},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			NoLockfile:        true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, metadata.NoneFunc)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
 		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
 
-		tenant := m.tenants[testTenant]
+		tenant := m.testGetTenant(testTenant)
 		db := tenant.readyStorage().Get()
 
 		testutil.Equals(t, 0, len(db.Blocks()))
@@ -202,12 +191,12 @@ func TestMultiTSDB(t *testing.T) {
 
 var (
 	expectedFooResp = &storepb.Series{
-		Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
-		Chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
+		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
 	}
 	expectedBarResp = &storepb.Series{
-		Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
-		Chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
+		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
 	}
 )
 
@@ -262,7 +251,7 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 	sc, err := storeClient.Series(context.Background(), &storepb.SeriesRequest{
 		MinTime:  0,
 		MaxTime:  10,
-		Matchers: []*storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+		Matchers: []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
 	})
 	if err != nil {
 		return err
@@ -287,21 +276,21 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 var (
 	expectedFooRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
 			Exemplars: []*exemplarspb.Exemplar{
-				{Labels: &labelpb.LabelSet{}, Value: 1, Ts: 1},
-				{Labels: &labelpb.LabelSet{}, Value: 2.1212, Ts: 2},
-				{Labels: &labelpb.LabelSet{}, Value: 3.1313, Ts: 3},
+				{Value: 1, Ts: 1},
+				{Value: 2.1212, Ts: 2},
+				{Value: 3.1313, Ts: 3},
 			},
 		},
 	}
 	expectedBarRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
 			Exemplars: []*exemplarspb.Exemplar{
-				{Value: 11, Ts: 1, Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "traceID", Value: "abc"}}}},
-				{Value: 22.1212, Ts: 2, Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "traceID", Value: "def"}}}},
-				{Value: 33.1313, Ts: 3, Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "traceID", Value: "ghi"}}}},
+				{Value: 11, Ts: 1, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "abc"}}}},
+				{Value: 22.1212, Ts: 2, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "def"}}}},
+				{Value: 33.1313, Ts: 3, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "ghi"}}}},
 			},
 		},
 	}
@@ -384,7 +373,7 @@ func newExemplarsServer(ctx context.Context) *exemplarsServer {
 }
 
 func (e *exemplarsServer) Send(r *exemplarspb.ExemplarsResponse) error {
-	e.Size += int64(r.SizeVT())
+	e.Size += int64(r.Size())
 
 	if r.GetWarning() != "" {
 		e.Warnings = append(e.Warnings, r.GetWarning())
@@ -410,12 +399,14 @@ func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarD
 		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)
 		testutil.Equals(t, len(expected[i].Exemplars), len(data[i].Exemplars))
 		for j := range data[i].Exemplars {
-			testutil.Equals(t, expected[i].Exemplars[j], data[i].Exemplars[j])
+			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
 		}
 	}
 }
 
 func TestMultiTSDBPrune(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		bucket          objstore.Bucket
@@ -511,6 +502,8 @@ func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error 
 }
 
 func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -535,7 +528,50 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 	testutil.Equals(t, 1, len(m.TSDBLocalClients()))
 }
 
+func TestMultiTSDBAddNewTenant(t *testing.T) {
+	t.Parallel()
+	const iterations = 10
+	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
+	for i := 0; i < iterations; i++ {
+		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
+			dir := t.TempDir()
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				objstore.NewInMemBucket(),
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			concurrency := 50
+			var wg sync.WaitGroup
+			for i := 0; i < concurrency; i++ {
+				wg.Add(1)
+				// simulate remote write with new tenant concurrently
+				go func(i int) {
+					defer wg.Done()
+					testutil.Ok(t, appendSample(m, fmt.Sprintf("tenant-%d", i), time.UnixMilli(int64(10))))
+				}(i)
+				// simulate read request concurrently
+				go func() {
+					m.TSDBLocalClients()
+				}()
+			}
+			wg.Wait()
+			testutil.Equals(t, concurrency, len(m.TSDBLocalClients()))
+		})
+	}
+}
+
 func TestAlignedHeadFlush(t *testing.T) {
+	t.Parallel()
+
 	hourInSeconds := int64(1 * 60 * 60)
 
 	tests := []struct {
@@ -617,6 +653,8 @@ func TestAlignedHeadFlush(t *testing.T) {
 }
 
 func TestMultiTSDBStats(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tenants       []string
@@ -675,6 +713,8 @@ func TestMultiTSDBStats(t *testing.T) {
 
 // Regression test for https://github.com/thanos-io/thanos/issues/6047.
 func TestMultiTSDBWithNilStore(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -716,6 +756,8 @@ func (s *slowClient) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 }
 
 func TestProxyLabelValues(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	m := NewMultiTSDB(
 		dir, nil, prometheus.NewRegistry(), &tsdb.Options{
@@ -787,7 +829,10 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 
 func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
 	proxy := store.NewProxyStore(nil, nil, func() []store.Client {
-		clients := m.TSDBLocalClients()
+		m.mtx.Lock()
+		defer m.mtx.Unlock()
+		clients := make([]store.Client, len(m.tsdbClients))
+		copy(clients, m.tsdbClients)
 		if len(clients) > 0 {
 			clients[0] = &slowClient{clients[0]}
 		}
@@ -848,6 +893,8 @@ func BenchmarkMultiTSDB(b *testing.B) {
 }
 
 func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
+	t.Parallel()
+
 	tenant := &tenant{
 		mtx: &sync.RWMutex{},
 	}

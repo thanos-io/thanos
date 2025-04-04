@@ -156,7 +156,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	// Create bucket.
 	logger := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "tools")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "tools", nil)
 	testutil.Ok(t, err)
 
 	// Create share dir for upload.
@@ -190,7 +190,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		t.Cleanup(cancel)
 
-		id, err := b.Create(ctx, dir, 0, b.hashFunc, 120)
+		id, err := b.Create(ctx, dir, 0, b.hashFunc, 120, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())

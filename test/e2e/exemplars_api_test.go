@@ -69,7 +69,6 @@ config:
 
 	qBuilder = qBuilder.
 		WithStoreAddresses(stores...).
-		WithExemplarAddresses(stores...).
 		WithTracingConfig(tracingCfg)
 
 	q := qBuilder.Init()
@@ -82,7 +81,6 @@ config:
 	t.Cleanup(cancel)
 
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_query_exemplar_apis_dns_provider_results"}, e2emon.WaitMissingMetrics()))
 
 	now := time.Now()
 	start := timestamp.FromTime(now.Add(-time.Hour))
@@ -131,7 +129,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 		}
 
 		// Compare series labels.
-		seriesLabels := labelpb.LabelpbLabelSetsToPromLabels(data[0].SeriesLabels)
+		seriesLabels := labelpb.ZLabelSetsToPromLabelSets(data[0].SeriesLabels)
 		for _, lbls := range seriesLabels {
 			for k, v := range requiredSeriesLabels {
 				if lbls.Get(k) != v {
@@ -142,7 +140,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 
 		// Make sure the exemplar contains the correct traceID label.
 		for _, exemplar := range data[0].Exemplars {
-			for _, lbls := range labelpb.LabelpbLabelSetsToPromLabels(exemplar.Labels) {
+			for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
 				if !lbls.Has(traceIDLabel) {
 					return errors.Errorf("unexpected labels in exemplar, expected %v, got: %v", traceIDLabel, exemplar.Labels)
 				}

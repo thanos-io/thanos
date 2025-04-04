@@ -27,13 +27,12 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/stretchr/testify/require"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -70,15 +69,15 @@ func TestQueryFrontend(t *testing.T) {
 	t.Cleanup(cancel)
 
 	// Writing a custom Timeseries into the receiver
-	testutil.Ok(t, remoteWrite(ctx, []*prompb.TimeSeries{{
-		Labels: []*labelpb.Label{
+	testutil.Ok(t, remoteWrite(ctx, []prompb.TimeSeries{{
+		Labels: []prompb.Label{
 			{Name: "__name__", Value: "up"},
 			{Name: "instance", Value: "localhost:9090"},
 			{Name: "job", Value: "myself"},
 			{Name: "prometheus", Value: "test"},
 			{Name: "replica", Value: "0"},
 		},
-		Samples: []*prompb.Sample{
+		Samples: []prompb.Sample{
 			{Value: float64(1), Timestamp: timestamp.FromTime(predefTimestamp)},
 		}}},
 		i.Endpoint("remote-write"),
@@ -473,15 +472,15 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, remoteWrite(ctx, []*prompb.TimeSeries{{
-		Labels: []*labelpb.Label{
+	testutil.Ok(t, remoteWrite(ctx, []prompb.TimeSeries{{
+		Labels: []prompb.Label{
 			{Name: "__name__", Value: "up"},
 			{Name: "instance", Value: "localhost:9090"},
 			{Name: "job", Value: "myself"},
 			{Name: "prometheus", Value: "test"},
 			{Name: "replica", Value: "0"},
 		},
-		Samples: []*prompb.Sample{
+		Samples: []prompb.Sample{
 			{Value: float64(1), Timestamp: timestamp.FromTime(predefTimestamp)},
 		}}},
 		i.Endpoint("remote-write")))
@@ -609,18 +608,18 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 		})
 	}
 
-	samplespb := make([]*prompb.TimeSeries, 0, len(timeSeries))
+	samplespb := make([]prompb.TimeSeries, 0, len(timeSeries))
 	for _, labels := range timeSeries {
-		labelspb := make([]*labelpb.Label, 0, len(labels))
+		labelspb := make([]prompb.Label, 0, len(labels))
 		for _, label := range labels {
-			labelspb = append(labelspb, &labelpb.Label{
+			labelspb = append(labelspb, prompb.Label{
 				Name:  string(label.Name),
 				Value: string(label.Value),
 			})
 		}
-		samplespb = append(samplespb, &prompb.TimeSeries{
+		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
-			Samples: []*prompb.Sample{
+			Samples: []prompb.Sample{
 				{
 					Value:     float64(1),
 					Timestamp: timestamp.FromTime(predefTimestamp.Time()),
@@ -707,15 +706,15 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, remoteWrite(ctx, []*prompb.TimeSeries{{
-		Labels: []*labelpb.Label{
+	testutil.Ok(t, remoteWrite(ctx, []prompb.TimeSeries{{
+		Labels: []prompb.Label{
 			{Name: "__name__", Value: "up"},
 			{Name: "instance", Value: "localhost:9090"},
 			{Name: "job", Value: "myself"},
 			{Name: "prometheus", Value: "test"},
 			{Name: "replica", Value: "0"},
 		},
-		Samples: []*prompb.Sample{
+		Samples: []prompb.Sample{
 			{Value: float64(1), Timestamp: timestamp.FromTime(predefTimestamp)},
 		}}},
 		i.Endpoint("remote-write")))
@@ -765,7 +764,7 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	// make sure that we don't break cortex cache code.
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "cortex_cache_fetched_keys_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_added_new_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_added_new_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_added_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_misses_total"))
 
@@ -814,18 +813,18 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 		})
 	}
 
-	samplespb := make([]*prompb.TimeSeries, 0, len(timeSeries))
+	samplespb := make([]prompb.TimeSeries, 0, len(timeSeries))
 	for _, labels := range timeSeries {
-		labelspb := make([]*labelpb.Label, 0, len(labels))
+		labelspb := make([]prompb.Label, 0, len(labels))
 		for _, label := range labels {
-			labelspb = append(labelspb, &labelpb.Label{
+			labelspb = append(labelspb, prompb.Label{
 				Name:  string(label.Name),
 				Value: string(label.Value),
 			})
 		}
-		samplespb = append(samplespb, &prompb.TimeSeries{
+		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
-			Samples: []*prompb.Sample{
+			Samples: []prompb.Sample{
 				{
 					Value:     float64(1),
 					Timestamp: timestamp.FromTime(predefTimestamp.Time()),
@@ -1070,7 +1069,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 	// Query once with default-tenant to ensure everything is ready
 	// for the following requests
 	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, 1)
@@ -1078,7 +1077,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 
 	// Query a few times with tenant 1
 	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},

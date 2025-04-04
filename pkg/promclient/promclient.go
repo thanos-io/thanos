@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,8 +25,8 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -199,13 +200,15 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 		return labels.EmptyLabels(), errors.Wrapf(err, "unmarshal response: %v", string(body))
 	}
 	var cfg struct {
-		GlobalConfig config.GlobalConfig `yaml:"global"`
+		GlobalConfig struct {
+			ExternalLabels map[string]string `yaml:"external_labels"`
+		} `yaml:"global"`
 	}
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
 		return labels.EmptyLabels(), errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
 
-	return cfg.GlobalConfig.ExternalLabels, nil
+	return labels.FromMap(cfg.GlobalConfig.ExternalLabels), nil
 }
 
 type Flags struct {
@@ -687,6 +690,48 @@ func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error
 	return b.Data.Version, nil
 }
 
+// LowestTimestamp returns the lowest timestamp in the TSDB by parsing the /metrics endpoint
+// and extracting the prometheus_tsdb_lowest_timestamp_seconds metric from it.
+func (c *Client) LowestTimestamp(ctx context.Context, base *url.URL) (int64, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/metrics")
+
+	level.Debug(c.logger).Log("msg", "lowest timestamp", "url", u.String())
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "create request")
+	}
+
+	span, ctx := tracing.StartSpan(ctx, "/lowest_timestamp HTTP[client]")
+	defer span.Finish()
+
+	resp, err := c.Do(req.WithContext(ctx))
+	if err != nil {
+		return 0, errors.Wrapf(err, "request metric against %s", u.String())
+	}
+	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "request body")
+
+	var parser expfmt.TextParser
+	families, err := parser.TextToMetricFamilies(resp.Body)
+	if err != nil {
+		return 0, errors.Wrapf(err, "parsing metric families against %s", u.String())
+	}
+	mf, ok := families["prometheus_tsdb_lowest_timestamp_seconds"]
+	if !ok {
+		return 0, errors.Wrapf(err, "metric families did not contain 'prometheus_tsdb_lowest_timestamp_seconds'")
+	}
+	val := 1000 * mf.GetMetric()[0].GetGauge().GetValue()
+
+	// in the case that we dont have cut a block yet, TSDB lowest timestamp is math.MaxInt64
+	// but its represented as float and truncated so we need to do this weird comparison.
+	// Since we use this for fan-out pruning we use min timestamp here to include this prometheus.
+	if val == float64(math.MaxInt64) {
+		return math.MinInt64, nil
+	}
+	return int64(val), nil
+}
+
 func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
@@ -742,7 +787,9 @@ func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*la
 	q.Add("match[]", storepb.PromMatchersToString(matchers...))
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	q.Add("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
 	u.RawQuery = q.Encode()
 
 	var m struct {
@@ -764,7 +811,9 @@ func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers [
 	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	q.Add("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
 	u.RawQuery = q.Encode()
 
 	var m struct {
@@ -785,7 +834,9 @@ func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label str
 	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
-	q.Add("limit", strconv.Itoa(limit))
+	if limit > 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
 	u.RawQuery = q.Encode()
 
 	var m struct {
@@ -845,7 +896,7 @@ func (c *Client) AlertsInGRPC(ctx context.Context, base *url.URL) ([]*rulespb.Al
 }
 
 // MetricMetadataInGRPC returns the metadata from Prometheus metric metadata API. It uses gRPC errors.
-func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]*metadatapb.Meta, error) {
+func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/metadata")
 	q := u.Query()
@@ -853,7 +904,6 @@ func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric
 	if metric != "" {
 		q.Add("metric", metric)
 	}
-	// We only set limit when it is >= 0.
 	if limit >= 0 {
 		q.Add("limit", strconv.Itoa(limit))
 	}
@@ -861,7 +911,7 @@ func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric
 	u.RawQuery = q.Encode()
 
 	var v struct {
-		Data map[string][]*metadatapb.Meta `json:"data"`
+		Data map[string][]metadatapb.Meta `json:"data"`
 	}
 	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_metric_metadata HTTP[client]", &u, &v)
 }

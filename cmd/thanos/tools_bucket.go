@@ -54,6 +54,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -327,7 +328,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -346,7 +347,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			}
 		} else {
 			// nil Prometheus registerer: don't create conflicting metrics.
-			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, component.Bucket.String())
+			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, component.Bucket.String(), nil)
 			if err != nil {
 				return err
 			}
@@ -411,7 +412,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -519,7 +520,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -629,7 +630,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return errors.Wrap(err, "bucket client")
 		}
@@ -826,7 +827,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Cleanup.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Cleanup.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -870,6 +871,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
+				0,
 			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
@@ -1083,7 +1085,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Mark.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Mark.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -1163,7 +1165,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Rewrite.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Rewrite.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -1232,7 +1234,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				if err != nil {
 					return errors.Wrapf(err, "read meta of %v", id)
 				}
-				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), chunkPool)
+				b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), filepath.Join(tbc.tmpDir, id.String()), chunkPool, nil)
 				if err != nil {
 					return errors.Wrapf(err, "open block %v", id)
 				}
@@ -1371,7 +1373,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Retention.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Retention.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -1413,6 +1415,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
+				0,
 			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
@@ -1460,7 +1463,7 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 			return errors.Wrap(err, "unable to parse objstore config")
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Upload.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Upload.String(), nil)
 		if err != nil {
 			return errors.Wrap(err, "unable to create bucket")
 		}

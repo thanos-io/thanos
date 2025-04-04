@@ -32,6 +32,8 @@ import (
 )
 
 func TestHaltError(t *testing.T) {
+	t.Parallel()
+
 	err := errors.New("test")
 	testutil.Assert(t, !IsHaltError(err), "halt error")
 
@@ -46,6 +48,8 @@ func TestHaltError(t *testing.T) {
 }
 
 func TestHaltMultiError(t *testing.T) {
+	t.Parallel()
+
 	haltErr := halt(errors.New("halt error"))
 	nonHaltErr := errors.New("not a halt error")
 
@@ -59,6 +63,8 @@ func TestHaltMultiError(t *testing.T) {
 }
 
 func TestRetryMultiError(t *testing.T) {
+	t.Parallel()
+
 	retryErr := retry(errors.New("retry error"))
 	nonRetryErr := errors.New("not a retry error")
 
@@ -75,6 +81,8 @@ func TestRetryMultiError(t *testing.T) {
 }
 
 func TestRetryError(t *testing.T) {
+	t.Parallel()
+
 	err := errors.New("test")
 	testutil.Assert(t, !IsRetryError(err), "retry error")
 
@@ -91,7 +99,50 @@ func TestRetryError(t *testing.T) {
 	testutil.Assert(t, IsHaltError(err), "not a halt error. Retry should not hide halt error")
 }
 
+func TestGroupKey(t *testing.T) {
+	t.Parallel()
+
+	for _, tcase := range []struct {
+		input    metadata.Thanos
+		expected string
+	}{
+		{
+			input:    metadata.Thanos{},
+			expected: "0@17241709254077376921",
+		},
+		{
+			input: metadata.Thanos{
+				Labels:     map[string]string{},
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+			},
+			expected: "0@17241709254077376921",
+		},
+		{
+			input: metadata.Thanos{
+				Labels:     map[string]string{"foo": "bar", "foo1": "bar2"},
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+			},
+			expected: "0@2124638872457683483",
+		},
+		{
+			input: metadata.Thanos{
+				Labels:     map[string]string{`foo/some..thing/some.thing/../`: `a_b_c/bar-something-a\metric/a\x`},
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+			},
+			expected: "0@16590761456214576373",
+		},
+	} {
+		if ok := t.Run("", func(t *testing.T) {
+			testutil.Equals(t, tcase.expected, tcase.input.GroupKey())
+		}); !ok {
+			return
+		}
+	}
+}
+
 func TestGroupMaxMinTime(t *testing.T) {
+	t.Parallel()
+
 	g := &Group{
 		metasByMinTime: []*metadata.Meta{
 			{BlockMeta: tsdb.BlockMeta{MinTime: 0, MaxTime: 10}},
@@ -168,6 +219,8 @@ func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string
 }
 
 func TestRetentionProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
 
@@ -289,6 +342,8 @@ func TestRetentionProgressCalculate(t *testing.T) {
 }
 
 func TestCompactProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
 	}
@@ -394,6 +449,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 }
 
 func TestDownsampleProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
 
@@ -493,6 +550,8 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 }
 
 func TestNoMarkFilterAtomic(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.TODO()
 	logger := log.NewLogfmtLogger(io.Discard)
 

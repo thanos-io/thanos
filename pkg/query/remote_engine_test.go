@@ -14,10 +14,10 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/promql-engine/logicalplan"
-	"github.com/thanos-io/promql-engine/query"
 	"google.golang.org/grpc"
 
+	"github.com/thanos-io/promql-engine/logicalplan"
+	"github.com/thanos-io/promql-engine/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -25,7 +25,9 @@ import (
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
-	client := NewClient(&warnClient{}, "", nil)
+	t.Parallel()
+
+	client := NewClient(&warnClient{}, "testclient", nil)
 	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
 	})
@@ -57,48 +59,87 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 		testutil.Ok(t, res.Err)
 		testutil.Equals(t, 1, len(res.Warnings))
 	})
+}
 
+func TestRemoteEngine_PartialResponse(t *testing.T) {
+	t.Parallel()
+
+	client := NewClient(&errClient{}, "testclient", nil)
+	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
+		Timeout:         1 * time.Second,
+		PartialResponse: true,
+	})
+	var (
+		start = time.Unix(0, 0)
+		end   = time.Unix(120, 0)
+		step  = 30 * time.Second
+	)
+	qryExpr, err := extpromql.ParseExpr("up")
+	testutil.Ok(t, err)
+
+	plan := logicalplan.NewFromAST(qryExpr, &query.Options{
+		Start: time.Now(),
+		End:   time.Now().Add(2 * time.Hour),
+	}, logicalplan.PlanOptions{})
+
+	t.Run("instant_query", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)
+		testutil.Ok(t, err)
+		res := qry.Exec(context.Background())
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, 1, len(res.Warnings))
+	})
+
+	t.Run("range_query", func(t *testing.T) {
+		qry, err := engine.NewRangeQuery(context.Background(), nil, plan.Root(), start, end, step)
+		testutil.Ok(t, err)
+		res := qry.Exec(context.Background())
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, 1, len(res.Warnings))
+	})
 }
 
 func TestRemoteEngine_LabelSets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
-		tsdbInfos       []*infopb.TSDBInfo
+		tsdbInfos       []infopb.TSDBInfo
 		replicaLabels   []string
-		partitionLabels []string
 		expected        []labels.Labels
+		partitionLabels []string
 	}{
 		{
 			name:      "empty label sets",
-			tsdbInfos: []*infopb.TSDBInfo{},
+			tsdbInfos: []infopb.TSDBInfo{},
 			expected:  []labels.Labels{},
 		},
 		{
 			name:          "empty label sets with replica labels",
-			tsdbInfos:     []*infopb.TSDBInfo{},
+			tsdbInfos:     []infopb.TSDBInfo{},
 			replicaLabels: []string{"replica"},
 			expected:      []labels.Labels{},
 		},
 		{
 			name: "non-empty label sets",
-			tsdbInfos: []*infopb.TSDBInfo{{
-				Labels: labelSetFromStrings("a", "1"),
+			tsdbInfos: []infopb.TSDBInfo{{
+				Labels: zLabelSetFromStrings("a", "1"),
 			}},
 			expected: []labels.Labels{labels.FromStrings("a", "1")},
 		},
 		{
 			name: "non-empty label sets with replica labels",
-			tsdbInfos: []*infopb.TSDBInfo{{
-				Labels: labelSetFromStrings("a", "1", "b", "2"),
+			tsdbInfos: []infopb.TSDBInfo{{
+				Labels: zLabelSetFromStrings("a", "1", "b", "2"),
 			}},
 			replicaLabels: []string{"a"},
 			expected:      []labels.Labels{labels.FromStrings("b", "2")},
 		},
 		{
 			name: "replica labels not in label sets",
-			tsdbInfos: []*infopb.TSDBInfo{
+			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels: labelSetFromStrings("a", "1", "c", "2"),
+					Labels: zLabelSetFromStrings("a", "1", "c", "2"),
 				},
 			},
 			replicaLabels: []string{"a", "b"},
@@ -106,9 +147,9 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 		},
 		{
 			name: "non-empty label sets with partition labels",
-			tsdbInfos: []*infopb.TSDBInfo{
+			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels: labelSetFromStrings("a", "1", "c", "2"),
+					Labels: zLabelSetFromStrings("a", "1", "c", "2"),
 				},
 			},
 			partitionLabels: []string{"a"},
@@ -130,35 +171,37 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 }
 
 func TestRemoteEngine_MinT(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
-		tsdbInfos     []*infopb.TSDBInfo
+		tsdbInfos     []infopb.TSDBInfo
 		replicaLabels []string
 		expected      int64
 	}{
 		{
 			name:      "empty label sets",
-			tsdbInfos: []*infopb.TSDBInfo{},
+			tsdbInfos: []infopb.TSDBInfo{},
 			expected:  math.MaxInt64,
 		},
 		{
 			name:          "empty label sets with replica labels",
-			tsdbInfos:     []*infopb.TSDBInfo{},
+			tsdbInfos:     []infopb.TSDBInfo{},
 			replicaLabels: []string{"replica"},
 			expected:      math.MaxInt64,
 		},
 		{
 			name: "non-empty label sets",
-			tsdbInfos: []*infopb.TSDBInfo{{
-				Labels:  labelSetFromStrings("a", "1"),
+			tsdbInfos: []infopb.TSDBInfo{{
+				Labels:  zLabelSetFromStrings("a", "1"),
 				MinTime: 30,
 			}},
 			expected: 30,
 		},
 		{
 			name: "non-empty label sets with replica labels",
-			tsdbInfos: []*infopb.TSDBInfo{{
-				Labels:  labelSetFromStrings("a", "1", "b", "2"),
+			tsdbInfos: []infopb.TSDBInfo{{
+				Labels:  zLabelSetFromStrings("a", "1", "b", "2"),
 				MinTime: 30,
 			}},
 			replicaLabels: []string{"a"},
@@ -166,13 +209,13 @@ func TestRemoteEngine_MinT(t *testing.T) {
 		},
 		{
 			name: "replicated labelsets with different mint",
-			tsdbInfos: []*infopb.TSDBInfo{
+			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels:  labelSetFromStrings("a", "1", "replica", "1"),
+					Labels:  zLabelSetFromStrings("a", "1", "replica", "1"),
 					MinTime: 30,
 				},
 				{
-					Labels:  labelSetFromStrings("a", "1", "replica", "2"),
+					Labels:  zLabelSetFromStrings("a", "1", "replica", "2"),
 					MinTime: 60,
 				},
 			},
@@ -181,21 +224,21 @@ func TestRemoteEngine_MinT(t *testing.T) {
 		},
 		{
 			name: "multiple replicated labelsets with different mint",
-			tsdbInfos: []*infopb.TSDBInfo{
+			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels:  labelSetFromStrings("a", "1", "replica", "1"),
+					Labels:  zLabelSetFromStrings("a", "1", "replica", "1"),
 					MinTime: 30,
 				},
 				{
-					Labels:  labelSetFromStrings("a", "1", "replica", "2"),
+					Labels:  zLabelSetFromStrings("a", "1", "replica", "2"),
 					MinTime: 60,
 				},
 				{
-					Labels:  labelSetFromStrings("a", "2", "replica", "1"),
+					Labels:  zLabelSetFromStrings("a", "2", "replica", "1"),
 					MinTime: 80,
 				},
 				{
-					Labels:  labelSetFromStrings("a", "2", "replica", "2"),
+					Labels:  zLabelSetFromStrings("a", "2", "replica", "2"),
 					MinTime: 120,
 				},
 			},
@@ -216,9 +259,9 @@ func TestRemoteEngine_MinT(t *testing.T) {
 	}
 }
 
-func labelSetFromStrings(ss ...string) *labelpb.LabelSet {
-	return &labelpb.LabelSet{
-		Labels: labelpb.PromLabelsToLabelpbLabels(labels.FromStrings(ss...)),
+func zLabelSetFromStrings(ss ...string) labelpb.ZLabelSet {
+	return labelpb.ZLabelSet{
+		Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings(ss...)),
 	}
 }
 
@@ -258,4 +301,42 @@ func (m *queryWarnClient) Recv() (*querypb.QueryResponse, error) {
 	}
 	m.warnSent = true
 	return querypb.NewQueryWarningsResponse(errors.New("warning")), nil
+}
+
+type errClient struct {
+	querypb.QueryClient
+}
+
+func (m errClient) Query(ctx context.Context, in *querypb.QueryRequest, opts ...grpc.CallOption) (querypb.Query_QueryClient, error) {
+	return &queryErrClient{}, nil
+}
+
+func (m errClient) QueryRange(ctx context.Context, in *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
+	return &queryRangeErrClient{}, nil
+}
+
+type queryRangeErrClient struct {
+	querypb.Query_QueryRangeClient
+	errSent bool
+}
+
+func (m *queryRangeErrClient) Recv() (*querypb.QueryRangeResponse, error) {
+	if m.errSent {
+		return nil, io.EOF
+	}
+	m.errSent = true
+	return nil, errors.New("error")
+}
+
+type queryErrClient struct {
+	querypb.Query_QueryClient
+	errSent bool
+}
+
+func (m *queryErrClient) Recv() (*querypb.QueryResponse, error) {
+	if m.errSent {
+		return nil, io.EOF
+	}
+	m.errSent = true
+	return nil, errors.New("error")
 }

@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/common/model"
-	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	"github.com/stretchr/testify/require"
@@ -263,37 +261,12 @@ func TestSplitQuery(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			days, err := splitQuery(tc.input, tc.interval)
 			require.NoError(t, err)
-
-			for i, r := range tc.expected {
-				require.Equal(t, true, r.(*PrometheusRequest).EqualVT(days[i].(*PrometheusRequest)))
-			}
-			require.Equal(t, len(tc.expected), len(days))
+			require.Equal(t, tc.expected, days)
 		})
 	}
 }
 
 func TestSplitByDay(t *testing.T) {
-	// NOTE(GiedriusS): we need to copy this because the original is modified.
-	parsedResponse := &PrometheusResponse{
-		Status: "success",
-		Data: &PrometheusData{
-			ResultType: model.ValMatrix.String(),
-			Analysis:   (*Analysis)(nil),
-			Result: []*SampleStream{
-				{
-					Labels: []*cortexpb.LabelPair{
-						{Name: []byte("foo"), Value: []byte("bar")},
-					},
-					Samples: []*cortexpb.Sample{
-						{Value: 137, TimestampMs: 1536673680000},
-						{Value: 137, TimestampMs: 1536673780000},
-					},
-				},
-			},
-		},
-		Warnings: []string{"test-warn"},
-	}
-
 	mergedResponse, err := PrometheusCodec.MergeResponse(nil, parsedResponse, parsedResponse)
 	require.NoError(t, err)
 
@@ -400,6 +373,14 @@ func Test_evaluateAtModifier(t *testing.T) {
 					[5m:1m])
 				[2m:])
 			[10m:])`,
+		},
+		{
+			in:       `irate(kube_pod_info{namespace="test"}[1h:1m] @ start())`,
+			expected: `irate(kube_pod_info{namespace="test"}[1h:1m] @ 1546300.800)`,
+		},
+		{
+			in:       `irate(kube_pod_info{namespace="test"} @ end()[1h:1m] @ start())`,
+			expected: `irate(kube_pod_info{namespace="test"} @ 1646300.800 [1h:1m] @ 1546300.800)`,
 		},
 		{
 			// parse error: @ modifier must be preceded by an instant vector selector or range vector selector or a subquery

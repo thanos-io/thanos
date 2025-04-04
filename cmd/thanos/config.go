@@ -14,11 +14,17 @@ import (
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/go-kit/log"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/shipper"
 )
@@ -28,6 +34,7 @@ type grpcConfig struct {
 	tlsSrvCert       string
 	tlsSrvKey        string
 	tlsSrvClientCA   string
+	tlsMinVersion    string
 	gracePeriod      time.Duration
 	maxConnectionAge time.Duration
 }
@@ -45,6 +52,9 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-server-tls-client-ca",
 		"TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").
 		Default("").StringVar(&gc.tlsSrvClientCA)
+	cmd.Flag("grpc-server-tls-min-version",
+		"TLS supported minimum version for gRPC server. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
+		Default("1.3").StringVar(&gc.tlsMinVersion)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
@@ -52,6 +62,38 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		Default("2m").DurationVar(&gc.gracePeriod)
 
 	return gc
+}
+
+type grpcClientConfig struct {
+	secure            bool
+	skipVerify        bool
+	cert, key, caCert string
+	serverName        string
+	compression       string
+}
+
+func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
+	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").BoolVar(&gc.secure)
+	cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").BoolVar(&gc.skipVerify)
+	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").StringVar(&gc.cert)
+	cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").StringVar(&gc.key)
+	cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").StringVar(&gc.caCert)
+	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&gc.serverName)
+	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
+	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
+
+	return gc
+}
+
+func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer) ([]grpc.DialOption, error) {
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, gc.secure, gc.skipVerify, gc.cert, gc.key, gc.caCert, gc.serverName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "building gRPC client")
+	}
+	if gc.compression != compressionNone {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(gc.compression)))
+	}
+	return dialOpts, nil
 }
 
 type httpConfig struct {

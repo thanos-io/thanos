@@ -8,57 +8,13 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.22-node
+      - image: cimg/go:1.24.0-node
   golang-test:
-    resource_class: 'large'
     docker:
-      - image: cimg/go:1.22-node
+      - image: cimg/go:1.24.0-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
-  test:
-    executor: golang-test
-    environment:
-      GO111MODULE: "on"
-    steps:
-      - git-shallow-clone/checkout
-      - go/load-cache
-      - go/mod-download
-      - run:
-          name: Download bingo modules
-          command: |
-            make install-tool-deps
-      - go/save-cache
-      - setup_remote_docker:
-          version: docker24
-      - run:
-          name: Create Secret if PR is not forked
-          # GCS integration tests are run only for author's PR that have write access, because these tests
-          # require credentials. Env variables that sets up these tests will work only for these kind of PRs.
-          command: |
-            if ! [ -z ${GCP_PROJECT} ]; then
-              echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > $GOOGLE_APPLICATION_CREDENTIALS
-              echo "Awesome! GCS and S3 AWS integration tests are enabled."
-            fi
-      - run:
-          name: "Run unit tests."
-          no_output_timeout: "30m"
-          environment:
-            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS
-            # Variables for Swift testing.
-            OS_AUTH_URL: http://127.0.0.1:5000/v2.0
-            OS_PASSWORD: s3cr3t
-            OS_PROJECT_NAME: admin
-            OS_REGION_NAME: RegionOne
-            OS_USERNAME: admin
-          # taskset sets CPU affinity to 2 (current CPU limit).
-          command: |
-            if [ -z ${GCP_PROJECT} ]; then
-              export THANOS_TEST_OBJSTORE_SKIP=${THANOS_TEST_OBJSTORE_SKIP}
-            fi
-            echo "Skipping tests for object storages: ${THANOS_TEST_OBJSTORE_SKIP}"
-            taskset 2 make test
-
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:
     machine: true
@@ -128,19 +84,11 @@ workflows:
   version: 2
   thanos:
     jobs:
-      - test:
-          filters:
-            tags:
-              only: /.*/
       - publish_main:
-          requires:
-            - test
           filters:
             branches:
               only: main
       - cross_build:
-          requires:
-            - test
           filters:
             tags:
               only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
@@ -148,7 +96,6 @@ workflows:
               ignore: /.*/
       - publish_release:
           requires:
-            - test
             - cross_build
           filters:
             tags:

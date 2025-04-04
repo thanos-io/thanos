@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 
 	"github.com/pkg/errors"
@@ -26,22 +26,23 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestPrometheusStore_Series_e2e(t *testing.T) {
+	t.Parallel()
+
 	testPrometheusStoreSeriesE2e(t, "")
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/478.
 func TestPrometheusStore_Series_promOnPath_e2e(t *testing.T) {
+	t.Parallel()
+
 	testPrometheusStoreSeriesE2e(t, "/prometheus/sub/path")
 }
 
 func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
-	defer custom.TolerantVerifyLeak(t)
-
 	p, err := e2eutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
@@ -82,14 +83,14 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 			MinTime: baseT + 101,
 			MaxTime: baseT + 300,
-			Matchers: []*storepb.LabelMatcher{
+			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			},
 		}, srv))
 
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
-		testutil.Equals(t, []*labelpb.Label{
+		testutil.Equals(t, []labelpb.ZLabel{
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
 		}, srv.SeriesSet[0].Labels)
@@ -113,7 +114,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: baseT + 300,
-			Matchers: []*storepb.LabelMatcher{
+			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			},
 		}, srv))
@@ -122,7 +123,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
-		testutil.Equals(t, []*labelpb.Label{
+		testutil.Equals(t, []labelpb.ZLabel{
 			{Name: "a", Value: "b"},
 			{Name: "region", Value: "eu-west"},
 		}, srv.SeriesSet[0].Labels)
@@ -146,7 +147,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		err = proxy.Series(&storepb.SeriesRequest{
 			MinTime: baseT + 101,
 			MaxTime: baseT + 300,
-			Matchers: []*storepb.LabelMatcher{
+			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 			},
 		}, srv)
@@ -170,7 +171,7 @@ func expandChunk(cit chunkenc.Iterator) (res []sample) {
 }
 
 func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -206,13 +207,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 
 	for _, tcase := range []struct {
 		req         *storepb.SeriesRequest
-		expected    []*storepb.Series
+		expected    []storepb.Series
 		expectedErr error
 	}{
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers:   []*storepb.LabelMatcher{},
+				Matchers:   []storepb.LabelMatcher{},
 				MinTime:    baseT - 10000000000,
 				MaxTime:    baseT + 10000000000,
 			},
@@ -221,7 +222,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "non_existing", Value: "something"},
 				},
 				MinTime: baseT - 10000000000,
@@ -231,22 +232,22 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 				},
 				MinTime: baseT,
 				MaxTime: baseT + 300,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "foo"},
 				},
 				MinTime: baseT,
@@ -256,73 +257,73 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "b"},
 					{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
 				},
 				MinTime: baseT,
 				MaxTime: baseT + 300,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
 				},
 				MinTime: baseT,
 				MaxTime: baseT + 300,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
 				},
 				MinTime: baseT + 400,
 				MaxTime: baseT + 400,
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
 		{
 			req: &storepb.SeriesRequest{
 				SkipChunks: true,
-				Matchers: []*storepb.LabelMatcher{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
 				},
 				MinTime: func() int64 { minTime, _ := promStore.timestamps(); return minTime }(),
 				MaxTime: func() int64 { _, maxTime := promStore.timestamps(); return maxTime }(),
 			},
-			expected: []*storepb.Series{
+			expected: []storepb.Series{
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 				{
-					Labels: []*labelpb.Label{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
 				},
 			},
 		},
@@ -337,16 +338,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			}
 			testutil.Ok(t, err)
 			testutil.Equals(t, []string(nil), srv.Warnings)
-			testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
-			for i := range tcase.expected {
-				testutil.Equals(t, true, tcase.expected[i].EqualVT(srv.SeriesSet[i]))
-			}
+			testutil.Equals(t, tcase.expected, srv.SeriesSet)
 		})
 	}
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -381,14 +379,14 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
-		Matchers: []*storepb.LabelMatcher{
+		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 		},
 	}, srv))
 	testutil.Equals(t, 1, len(srv.SeriesSet))
 
-	testutil.Equals(t, []*labelpb.Label{
+	testutil.Equals(t, []labelpb.ZLabel{
 		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
 	}, srv.SeriesSet[0].Labels)
@@ -398,7 +396,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
-		Matchers: []*storepb.LabelMatcher{
+		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west2"}, // Non existing label value.
 		},
@@ -409,7 +407,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -444,7 +442,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
-		Matchers: []*storepb.LabelMatcher{
+		Matchers: []storepb.LabelMatcher{
 			{Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 		},

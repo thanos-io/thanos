@@ -103,6 +103,15 @@ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
+### Deduplication Algorithms
+
+Thanos Querier supports different algorithms for deduplicating overlapping series. You can choose the deduplication algorithm using the `--deduplication.func` flag. The available options are:
+
+* `penalty` (default): This is the default deduplication algorithm used by Thanos. It fills gaps only after a certain penalty window. This helps avoid flapping between replicas due to minor differences or delays.
+* `chain`: This algorithm performs 1:1 deduplication for samples. It merges all available data points from the replicas without applying any penalty. This is useful in deployments based on receivers, where each replica is populated by the same data. In such cases, using the penalty algorithm may cause gaps even when data is available in other replicas.
+
+Note that deduplication of HA groups is not supported by the `chain` algorithm.
+
 ## Thanos PromQL Engine (experimental)
 
 By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
@@ -297,29 +306,49 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
+      --deduplication.func=penalty
+                                 Experimental. Deduplication algorithm for
+                                 merging overlapping series. Possible values
+                                 are: "penalty", "chain". If no value is
+                                 specified, penalty based deduplication
+                                 algorithm will be used. When set to chain, the
+                                 default compact deduplication merger is used,
+                                 which performs 1:1 deduplication for samples.
+                                 At least one replica label has to be set via
+                                 --query.replica-label flag.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
-      --endpoint=<endpoint> ...  Addresses of statically configured Thanos
-                                 API servers (repeatable). The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
-                                 Thanos API servers through respective DNS
-                                 lookups.
+      --endpoint=<endpoint> ...  (Deprecated): Addresses of statically
+                                 configured Thanos API servers (repeatable).
+                                 The scheme may be prefixed with 'dns+' or
+                                 'dnssrv+' to detect Thanos API servers through
+                                 respective DNS lookups.
       --endpoint-group=<endpoint-group> ...
-                                 Experimental: DNS name of statically configured
-                                 Thanos API server groups (repeatable). Targets
-                                 resolved from the DNS name will be queried in
-                                 a round-robin, instead of a fanout manner.
-                                 This flag should be used when connecting a
-                                 Thanos Query to HA groups of Thanos components.
+                                 (Deprecated, Experimental): DNS name of
+                                 statically configured Thanos API server groups
+                                 (repeatable). Targets resolved from the DNS
+                                 name will be queried in a round-robin, instead
+                                 of a fanout manner. This flag should be used
+                                 when connecting a Thanos Query to HA groups of
+                                 Thanos components.
       --endpoint-group-strict=<endpoint-group-strict> ...
-                                 Experimental: DNS name of statically configured
-                                 Thanos API server groups (repeatable) that are
-                                 always used, even if the health check fails.
-      --endpoint-strict=<staticendpoint> ...
-                                 Addresses of only statically configured Thanos
-                                 API servers that are always used, even if
-                                 the health check fails. Useful if you have a
-                                 caching layer on top.
+                                 (Deprecated, Experimental): DNS name of
+                                 statically configured Thanos API server groups
+                                 (repeatable) that are always used, even if the
+                                 health check fails.
+      --endpoint-strict=<endpoint-strict> ...
+                                 (Deprecated): Addresses of only statically
+                                 configured Thanos API servers that are always
+                                 used, even if the health check fails. Useful if
+                                 you have a caching layer on top.
+      --endpoint.sd-config=<content>
+                                 Alternative to 'endpoint.sd-config-file' flag
+                                 (mutually exclusive). Content of Config File
+                                 with endpoint definitions
+      --endpoint.sd-config-file=<file-path>
+                                 Path to Config File with endpoint definitions
+      --endpoint.sd-config-reload-interval=5m
+                                 Interval between endpoint config refreshes
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -353,6 +382,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -444,6 +478,8 @@ Flags:
                                  be able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+                                 Flag may be specified multiple times as well as
+                                 a comma separated list of labels.
       --query.telemetry.request-duration-seconds-quantiles=0.1... ...
                                  The quantiles for exporting metrics about the
                                  request duration quantiles.
@@ -493,19 +529,6 @@ Flags:
                                  It follows the Thanos sharding relabel-config
                                  syntax. For format details see:
                                  https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --store=<store> ...        Deprecation Warning - This flag is deprecated
-                                 and replaced with `endpoint`. Addresses of
-                                 statically configured store API servers
-                                 (repeatable). The scheme may be prefixed with
-                                 'dns+' or 'dnssrv+' to detect store API servers
-                                 through respective DNS lookups.
-      --store-strict=<staticstore> ...
-                                 Deprecation Warning - This flag is deprecated
-                                 and replaced with `endpoint-strict`. Addresses
-                                 of only statically configured store API servers
-                                 that are always used, even if the health check
-                                 fails. Useful if you have a caching layer on
-                                 top.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
@@ -525,11 +548,11 @@ Flags:
       --store.sd-dns-interval=30s
                                  Interval between DNS resolutions.
       --store.sd-files=<path> ...
-                                 Path to files that contain addresses of store
-                                 API servers. The path can be a glob pattern
-                                 (repeatable).
-      --store.sd-interval=5m     Refresh interval to re-read file SD files.
-                                 It is used as a resync fallback.
+                                 (Deprecated) Path to files that contain
+                                 addresses of store API servers. The path can be
+                                 a glob pattern (repeatable).
+      --store.sd-interval=5m     (Deprecated) Refresh interval to re-read file
+                                 SD files. It is used as a resync fallback.
       --store.unhealthy-timeout=5m
                                  Timeout before an unhealthy store is cleaned
                                  from the store UI page.

@@ -12,16 +12,16 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -40,8 +40,6 @@ type LocalStore struct {
 	// For small debug purposes, this is good enough.
 	series       []*storepb.Series
 	sortedChunks [][]int
-
-	storepb.UnimplementedStoreServer
 }
 
 // TODO(bwplotka): Add remote read so Prometheus users can use this. Potentially after streaming will be added
@@ -82,9 +80,9 @@ func NewLocalStoreFromJSONMmappableFile(
 	}
 
 	skanner := NewNoCopyScanner(content, split)
-	resp := storepb.SeriesResponse{}
+	resp := &storepb.SeriesResponse{}
 	for skanner.Scan() {
-		if err := protojson.Unmarshal(skanner.Bytes(), &resp); err != nil {
+		if err := jsonpb.Unmarshal(bytes.NewReader(skanner.Bytes()), resp); err != nil {
 			return nil, errors.Wrapf(err, "unmarshal storepb.SeriesResponse frame for file %s", path)
 		}
 		series := resp.GetSeries()
@@ -133,7 +131,7 @@ func ScanGRPCCurlProtoStreamMessages(data []byte, atEOF bool) (advance int, toke
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLabels)
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLabels, storecache.NoopMatchersCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -146,7 +144,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	var chosen []int
 	for si, series := range s.series {
-		lbls := labelpb.LabelpbLabelsToPromLabels(series.Labels)
+		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
 		var noMatch bool
 		for _, m := range matchers {
 			extValue := lbls.Get(m.Name)
@@ -165,8 +163,8 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		chosen = chosen[:0]
 		resp := &storepb.Series{
 			// Copy labels as in-process clients like proxy tend to work on same memory for labels.
-			Labels: series.Labels,
-			Chunks: make([]*storepb.AggrChunk, 0, len(s.sortedChunks[si])),
+			Labels: labelpb.DeepCopy(series.Labels),
+			Chunks: make([]storepb.AggrChunk, 0, len(s.sortedChunks[si])),
 		}
 
 		for _, ci := range s.sortedChunks[si] {
@@ -181,7 +179,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		sort.Ints(chosen)
 		for _, ci := range chosen {
-			resp.Chunks = append(resp.Chunks, proto.Clone(series.Chunks[ci]).(*storepb.AggrChunk))
+			resp.Chunks = append(resp.Chunks, series.Chunks[ci])
 		}
 
 		if err := srv.Send(storepb.NewSeriesResponse(resp)); err != nil {
@@ -215,7 +213,7 @@ func (s *LocalStore) LabelValues(_ context.Context, r *storepb.LabelValuesReques
 ) {
 	vals := map[string]struct{}{}
 	for _, series := range s.series {
-		lbls := labelpb.LabelpbLabelsToPromLabels(series.Labels)
+		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
 		val := lbls.Get(r.Label)
 		if val == "" {
 			continue

@@ -43,16 +43,7 @@ func ParseMetricSelector(input string) ([]*labels.Matcher, error) {
 		return nil, fmt.Errorf("expected type *parser.VectorSelector, got %T", expr)
 	}
 
-	matchers := make([]*labels.Matcher, len(vs.LabelMatchers))
-	for i, lm := range vs.LabelMatchers {
-		matchers[i] = &labels.Matcher{
-			Type:  lm.Type,
-			Name:  lm.Name,
-			Value: lm.Value,
-		}
-	}
-
-	return matchers, nil
+	return vs.LabelMatchers, nil
 }
 
 func isEmptyNameMatcherErr(err error) bool {

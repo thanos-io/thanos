@@ -7,11 +7,42 @@ on:
     tags:
   pull_request:
 
-# TODO(bwplotka): Add tests here.
 permissions:  
   contents: read
 
 jobs:
+  unit:
+    runs-on: ubuntu-latest
+    name: Thanos unit tests
+    env:
+      THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS,SWIFT
+      OS_AUTH_URL: http://127.0.0.1:5000/v2.0
+      OS_PASSWORD: s3cr3t
+      OS_PROJECT_NAME: admin
+      OS_REGION_NAME: RegionOne
+      OS_USERNAME: admin
+      GOBIN: /tmp/.bin
+    services:
+      swift:
+        image: 'quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1'
+        ports:
+          - 5000:5000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install Go.
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: 1.24.x
+
+      - name: Install bingo modules
+        run: make install-tool-deps
+      - name: Add GOBIN to path
+        run: echo "/tmp/.bin" >> $GITHUB_PATH
+      - name: Run unit tests
+        run: make test
+
   cross-build-check:
     runs-on: ubuntu-latest
     name: Go build for different platforms
@@ -24,9 +55,9 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version: 1.22.x
+          go-version: 1.24.x
 
-      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
           path: |
             ~/.cache/go-build
@@ -51,9 +82,9 @@ jobs:
     - name: Install Go
       uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
       with:
-        go-version: 1.22.x
+        go-version: 1.24.x
 
-    - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+    - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
       with:
         path: |
           ~/.cache/go-build
@@ -78,9 +109,9 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version: 1.22.x
+          go-version: 1.24.x
 
-      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
           path: |
             ~/.cache/go-build
@@ -108,7 +139,7 @@ jobs:
           check_filenames: false
           check_hidden: true
           skip: ./pkg/ui/*,./pkg/store/6545postingsrepro,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
-          ignore_words_list: intrumentation,mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te
+          ignore_words_list: intrumentation,mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te,ans
 
   e2e:
     strategy:
@@ -116,7 +147,7 @@ jobs:
       matrix:
         parallelism: [8]
         index: [0, 1, 2, 3, 4, 5, 6, 7]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Thanos end-to-end tests
     env:
       GOBIN: /tmp/.bin
@@ -127,9 +158,9 @@ jobs:
       - name: Install Go.
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version: 1.22.x
+          go-version: 1.24.x
 
-      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
           path: |
             ~/.cache/go-build

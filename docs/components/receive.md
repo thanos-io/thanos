@@ -26,6 +26,24 @@ If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the si
 
 This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
 
+### Replication protocols
+
+By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'N Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
+
+In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+
+```json
+[
+    {
+        "endpoints": [
+          {"address": "node-1:10901", "capnproto_address": "node-1:19391"},
+          {"address": "node-2:10901", "capnproto_address": "node-2:19391"},
+          {"address": "node-3:10901", "capnproto_address": "node-3:19391"}
+        ]
+    }
+]
+```
+
 ### Hashring management and autoscaling in Kubernetes
 
 The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-controller) project aims to automate hashring management when running Thanos in Kubernetes. In combination with the Ketama hashring algorithm, this controller can also be used to keep hashrings up to date when Receivers are scaled automatically using an HPA or [Keda](https://keda.sh/).
@@ -95,6 +113,7 @@ config:
       insecure_skip_verify: false
     disable_compression: false
   chunk_size_bytes: 0
+  max_retries: 0
 prefix: ""
 ```
 
@@ -312,7 +331,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '997,1007p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1029,1039p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -341,6 +360,9 @@ Flags:
                                  detected maximum container or system memory.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --enable-feature= ...      Comma separated experimental feature names
+                                 to enable. The current list of features is
+                                 metric-names-filter.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -359,6 +381,11 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC server.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
@@ -380,6 +407,8 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
+      --matcher-cache-size=0     Max number of cached matchers items. Using 0
+                                 disables caching.
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
@@ -390,6 +419,8 @@ Flags:
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --receive.capnproto-address="0.0.0.0:19391"
+                                 Address for the Cap'n Proto server.
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
@@ -400,6 +431,10 @@ Flags:
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
                                  none
+      --receive.grpc-service-config=<content>
+                                 gRPC service configuration file
+                                 or content in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains
@@ -423,6 +458,13 @@ Flags:
                                  configuration. If it's empty AND hashring
                                  configuration was provided, it means that
                                  receive will run in RoutingOnly mode.
+      --receive.otlp-enable-target-info
+                                 Enables target information in OTLP metrics
+                                 ingested by Receive. If enabled, it converts
+                                 the resource to the target info metric
+      --receive.otlp-promote-resource-attributes= ...
+                                 (Repeatable) Resource attributes to include in
+                                 OTLP metrics ingested by Receive.
       --receive.relabel-config=<content>
                                  Alternative to 'receive.relabel-config-file'
                                  flag (mutually exclusive). Content of YAML file
@@ -436,6 +478,10 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.replication-protocol=protobuf
+                                 The protocol to use for replicating
+                                 remote-write requests. One of protobuf,
+                                 capnproto
       --receive.split-tenant-label-name=""
                                  Label name through which the request will
                                  be split into multiple tenants. This takes
@@ -481,6 +527,10 @@ Flags:
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
                                  disable TLS.
+      --remote-write.server-tls-min-version="1.3"
+                                 TLS version for the gRPC server, leave blank
+                                 to default to TLS 1.3, allow values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
@@ -515,6 +565,12 @@ Flags:
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.
                                  Does not do anything, enabled all the time.
+      --tsdb.block.expanded-postings-cache-size=0
+                                 [EXPERIMENTAL] If non-zero, enables expanded
+                                 postings cache for compacted blocks.
+      --tsdb.head.expanded-postings-cache-size=0
+                                 [EXPERIMENTAL] If non-zero, enables expanded
+                                 postings cache for the head block.
       --tsdb.max-exemplars=0     Enables support for ingesting exemplars and
                                  sets the maximum number of exemplars that will
                                  be stored per tenant. In case the exemplar
@@ -531,6 +587,18 @@ Flags:
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
+      --tsdb.out-of-order.cap-max=0
+                                 [EXPERIMENTAL] Configures the maximum capacity
+                                 for out-of-order chunks (in samples). If set to
+                                 <=0, default value 32 is assumed.
+      --tsdb.out-of-order.time-window=0s
+                                 [EXPERIMENTAL] Configures the allowed time
+                                 window for ingestion of out-of-order samples.
+                                 Disabled (0s) by defaultPlease note if you
+                                 enable this option and you use compactor, make
+                                 sure you have the --enable-vertical-compaction
+                                 flag enabled, otherwise you might risk
+                                 compactor halt.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables the retention
@@ -543,7 +611,7 @@ Flags:
       --tsdb.too-far-in-future.time-window=0s
                                  Configures the allowed time window for
                                  ingesting samples too far in the future.
-                                 Disabled (0s) by defaultPlease note enable
+                                 Disabled (0s) by default. Please note enable
                                  this flag will reject samples in the future of
                                  receive local NTP time + configured duration
                                  due to clock skew in remote write clients.

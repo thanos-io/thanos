@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 )
 
 func TestLimiter(t *testing.T) {
+	t.Parallel()
+
 	c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 	l := NewLimiter(10, c)
 
@@ -35,6 +38,8 @@ func TestLimiter(t *testing.T) {
 }
 
 func TestRateLimitedServer(t *testing.T) {
+	t.Parallel()
+
 	numSamples := 60
 	series := []*storepb.SeriesResponse{
 		storeSeriesResponse(t, labels.FromStrings("series", "1"), makeSamples(numSamples)),
@@ -96,8 +101,19 @@ func TestRateLimitedServer(t *testing.T) {
 			defer cancel()
 
 			store := NewLimitedStoreServer(newStoreServerStub(test.series), prometheus.NewRegistry(), test.limits)
-			seriesServer := storepb.NewInProcessStream(ctx, 10)
-			err := store.Series(&storepb.SeriesRequest{}, seriesServer)
+			client := storepb.ServerAsClient(store)
+			seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{})
+			testutil.Ok(t, err)
+			for {
+				_, err = seriesClient.Recv()
+				if err == io.EOF {
+					err = nil
+					break
+				}
+				if err != nil {
+					break
+				}
+			}
 			if test.err == "" {
 				testutil.Ok(t, err)
 			} else {
