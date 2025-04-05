@@ -88,6 +88,7 @@ func NewQueryFactory(
 	lookbackDelta time.Duration,
 	evaluationInterval time.Duration,
 	enableXFunctions bool,
+	enableQueryExperimentalFunctions bool,
 	activeQueryTracker *promql.ActiveQueryTracker,
 	mode PromqlQueryMode,
 ) *QueryFactory {
@@ -106,8 +107,9 @@ func NewQueryFactory(
 				EnableNegativeOffset: true,
 				EnableAtModifier:     true,
 			},
-			EnableXFunctions: enableXFunctions,
-			EnableAnalysis:   true,
+			EnableXFunctions:           		enableXFunctions,
+			EnableQueryExperimentalFunctions:   enableQueryExperimentalFunctions,
+			EnableAnalysis:              		true,
 		}
 		if activeQueryTracker != nil {
 			opts.ActiveQueryTracker = activeQueryTracker

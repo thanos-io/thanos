@@ -282,6 +282,7 @@ type QuerierBuilder struct {
 	queryDistributedWithOverlappingInterval bool
 	enableXFunctions                        bool
 	deduplicationFunc                       string
+	enableQueryExperimentalFunctions		bool
 
 	replicaLabels []string
 	tracingConfig string
@@ -388,6 +389,11 @@ func (q *QuerierBuilder) WithDistributedOverlap(overlap bool) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithEnableXFunctions() *QuerierBuilder {
 	q.enableXFunctions = true
+	return q
+}
+
+func (q *QuerierBuilder) WithEnableExperimentalFunctions() *QuerierBuilder {
+	q.enableQueryExperimentalFunctions = true
 	return q
 }
 
