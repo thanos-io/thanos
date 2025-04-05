@@ -282,7 +282,7 @@ type QuerierBuilder struct {
 	queryDistributedWithOverlappingInterval bool
 	enableXFunctions                        bool
 	deduplicationFunc                       string
-	enableQueryExperimentalFunctions		bool
+	enableQueryExperimentalFunctions        bool
 
 	replicaLabels []string
 	tracingConfig string

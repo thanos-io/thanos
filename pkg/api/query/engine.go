@@ -107,9 +107,9 @@ func NewQueryFactory(
 				EnableNegativeOffset: true,
 				EnableAtModifier:     true,
 			},
-			EnableXFunctions:           		enableXFunctions,
-			EnableQueryExperimentalFunctions:   enableQueryExperimentalFunctions,
-			EnableAnalysis:              		true,
+			EnableXFunctions:                 enableXFunctions,
+			EnableQueryExperimentalFunctions: enableQueryExperimentalFunctions,
+			EnableAnalysis:                   true,
 		}
 		if activeQueryTracker != nil {
 			opts.ActiveQueryTracker = activeQueryTracker
