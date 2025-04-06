@@ -21,7 +21,7 @@ import (
 func TestPreCompactionCallback(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
-	callback := NewOverlappingCompactionLifecycleCallback(reg, true)
+	callback := NewOverlappingCompactionLifecycleCallback(reg, logger, true)
 	for _, tcase := range []struct {
 		testName      string
 		input         []*metadata.Meta
@@ -142,6 +142,28 @@ func TestPreCompactionCallback(t *testing.T) {
 		}); !ok {
 			return
 		}
+	}
+}
+
+func TestHandleError(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	logger := log.NewNopLogger()
+	callback := NewOverlappingCompactionLifecycleCallback(reg, logger, true)
+	for _, tcase := range []struct {
+		testName string
+		input    []*metadata.Meta
+		err      error
+	}{
+		{
+			testName: "empty error",
+		},
+	} {
+		t.Run(tcase.testName, func(t *testing.T) {
+			ctx := context.Background()
+			bkt := objstore.NewInMemBucket()
+			group := &Group{logger: log.NewNopLogger(), bkt: bkt}
+			callback.HandleError(ctx, logger, group, tcase.input, tcase.err)
+		})
 	}
 }
 

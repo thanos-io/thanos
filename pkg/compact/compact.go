@@ -842,6 +842,7 @@ type CompactionLifecycleCallback interface {
 	PreCompactionCallback(ctx context.Context, logger log.Logger, group *Group, toCompactBlocks []*metadata.Meta) error
 	PostCompactionCallback(ctx context.Context, logger log.Logger, group *Group, blockID ulid.ULID) error
 	GetBlockPopulator(ctx context.Context, logger log.Logger, group *Group) (tsdb.BlockPopulator, error)
+	HandleError(ctx context.Context, logger log.Logger, group *Group, toCompactBlocks []*metadata.Meta, err error)
 }
 
 type DefaultCompactionLifecycleCallback struct {
@@ -871,6 +872,9 @@ func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ context.Con
 
 func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
 	return tsdb.DefaultBlockPopulator{}, nil
+}
+
+func (c DefaultCompactionLifecycleCallback) HandleError(_ context.Context, _ log.Logger, _ *Group, _ []*metadata.Meta, err error) {
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
@@ -1253,6 +1257,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		compIDs, e = comp.CompactWithBlockPopulator(dir, toCompactDirs, nil, populateBlockFunc)
 		return e
 	}); err != nil {
+		compactionLifecycleCallback.HandleError(ctx, cg.logger, cg, toCompact, err)
 		return false, nil, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
 	}
 	if len(compIDs) == 0 {
