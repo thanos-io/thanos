@@ -69,7 +69,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.10.0
 	github.com/thanos-io/objstore v0.0.0-20241111205755-d1dd89d41f97
-	github.com/thanos-io/promql-engine v0.0.0-20250302135832-accbf0891a16
+	github.com/thanos-io/promql-engine v0.0.0-20250329215917-4055a112d1ea
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
 	github.com/weaveworks/common v0.0.0-20230728070032-dd9e68f319d5
@@ -89,10 +89,10 @@ require (
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/goleak v1.3.0
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
-	golang.org/x/crypto v0.32.0
-	golang.org/x/net v0.34.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/text v0.21.0
+	golang.org/x/crypto v0.36.0
+	golang.org/x/net v0.37.0
+	golang.org/x/sync v0.12.0
+	golang.org/x/text v0.23.0
 	golang.org/x/time v0.8.0
 	google.golang.org/grpc v1.69.4
 	google.golang.org/grpc/examples v0.0.0-20211119005141-f45e61797429
@@ -269,11 +269,11 @@ require (
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8 // indirect
-	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/tools v0.28.0 // indirect
-	gonum.org/v1/gonum v0.15.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/tools v0.31.0 // indirect
+	gonum.org/v1/gonum v0.15.1 // indirect
 	google.golang.org/api v0.213.0 // indirect
 	google.golang.org/genproto v0.0.0-20240823204242-4ba0660f739c // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
