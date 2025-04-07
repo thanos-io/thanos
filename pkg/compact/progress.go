@@ -10,6 +10,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+const ParallelLimit = 1024
+
 type CompactorState int64
 
 // Use a gauge to track the state of a compactor pod.
