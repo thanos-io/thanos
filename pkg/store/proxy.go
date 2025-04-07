@@ -25,6 +25,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/responseset"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -305,7 +306,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
-	storeResponses := make([]respSet, 0, len(stores))
+	storeResponses := make([]responseset.ResponseSet[storepb.SeriesResponse], 0, len(stores))
 	for _, st := range stores {
 		st := st
 
@@ -352,7 +353,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		}
 	}
 
-	return nil
+	return respHeap.Error()
 }
 
 // LabelNames returns all known label names.
