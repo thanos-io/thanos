@@ -15,6 +15,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
+
 ### Removed
 
 ### Fixed

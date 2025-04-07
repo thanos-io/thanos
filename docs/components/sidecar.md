@@ -161,7 +161,7 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --prometheus.get_config_interval=30s
                                  How often to get Prometheus config
-      --prometheus.get_config_timeout=5s
+      --prometheus.get_config_timeout=30s
                                  Timeout for getting Prometheus config
       --prometheus.http-client=<content>
                                  Alternative to 'prometheus.http-client-file'

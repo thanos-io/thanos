@@ -136,7 +136,7 @@ func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusC
 		Default("30s").DurationVar(&pc.getConfigInterval)
 	cmd.Flag("prometheus.get_config_timeout",
 		"Timeout for getting Prometheus config").
-		Default("5s").DurationVar(&pc.getConfigTimeout)
+		Default("30s").DurationVar(&pc.getConfigTimeout)
 	pc.httpClient = extflag.RegisterPathOrContent(
 		cmd,
 		"prometheus.http-client",
