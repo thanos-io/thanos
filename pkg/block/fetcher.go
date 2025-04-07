@@ -345,7 +345,7 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 		case metaChan <- id:
 		}
 		return nil
-	}); err != nil {
+	}, objstore.WithUpdatedAt()); err != nil {
 		return nil, err
 	}
 	close(metaChan)

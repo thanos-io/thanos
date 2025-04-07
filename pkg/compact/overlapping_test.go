@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -21,7 +22,7 @@ import (
 func TestPreCompactionCallback(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
-	callback := NewOverlappingCompactionLifecycleCallback(reg, true)
+	callback := NewOverlappingCompactionLifecycleCallback(reg, logger, true)
 	for _, tcase := range []struct {
 		testName      string
 		input         []*metadata.Meta
@@ -142,6 +143,57 @@ func TestPreCompactionCallback(t *testing.T) {
 		}); !ok {
 			return
 		}
+	}
+}
+
+func TestHandleError(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	logger := log.NewNopLogger()
+	callback := NewOverlappingCompactionLifecycleCallback(reg, logger, true)
+	for _, tcase := range []struct {
+		testName    string
+		input       []*metadata.Meta
+		err         error
+		handledErrs int
+		errBlockIdx int
+	}{
+		{
+			testName: "empty error",
+			input:    []*metadata.Meta{},
+		},
+		{
+			testName: "non empty error but not handled",
+			input: []*metadata.Meta{
+				createCustomBlockMeta(1, 1, 2, metadata.ReceiveSource, 1),
+				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 1),
+			},
+			err:         errors.New("some error"),
+			handledErrs: 0,
+		},
+		{
+			testName: "non empty error symbol table size exceeds",
+			input: []*metadata.Meta{
+				createCustomBlockMeta(1, 1, 2, metadata.ReceiveSource, 1),
+				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 1),
+				createCustomBlockMeta(3, 1, 6, metadata.ReceiveSource, 1024*1024),
+			},
+			err:         errors.New(symbolTableSizeExceedsError + " 1024*1024"),
+			handledErrs: 1,
+			errBlockIdx: 2,
+		},
+	} {
+		t.Run(tcase.testName, func(t *testing.T) {
+			ctx := context.Background()
+			bkt := objstore.NewInMemBucket()
+			group := &Group{logger: log.NewNopLogger(), bkt: bkt}
+			require.Equal(t, tcase.handledErrs, callback.HandleError(ctx, logger, group, tcase.input, tcase.err))
+			if tcase.handledErrs > 0 {
+				for i := 0; i < len(tcase.input); i++ {
+					ok, _ := bkt.Exists(ctx, path.Join(tcase.input[i].ULID.String(), metadata.NoCompactMarkFilename))
+					require.Equal(t, i == tcase.errBlockIdx, ok)
+				}
+			}
+		})
 	}
 }
 

@@ -404,7 +404,7 @@ func runCompact(
 		planner,
 		comp,
 		compact.DefaultBlockDeletableChecker{},
-		compact.NewOverlappingCompactionLifecycleCallback(reg, conf.enableOverlappingRemoval),
+		compact.NewOverlappingCompactionLifecycleCallback(reg, logger, conf.enableOverlappingRemoval),
 		compactDir,
 		insBkt,
 		conf.compactionConcurrency,
