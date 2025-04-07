@@ -5,6 +5,7 @@ package compact
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -39,6 +40,8 @@ func BestEffortCleanAbortedPartialUploads(
 	// * being uploaded and started after their partialUploadThresholdAge
 	// can be assumed in this case. Keep partialUploadThresholdAge long for now.
 	// Mitigate this by adding ModifiedTime to bkt and check that instead of ULID (block creation time).
+	wg := &sync.WaitGroup{}
+	sem := make(chan struct{}, ParallelLimit)
 	for id := range partial {
 		if ulid.Now()-id.Time() <= uint64(PartialUploadThresholdAge/time.Millisecond) {
 			// Minimum delay has not expired, ignore for now.
@@ -50,13 +53,20 @@ func BestEffortCleanAbortedPartialUploads(
 		// We don't gather any information about deletion marks for partial blocks, so let's simply remove it. We waited
 		// long PartialUploadThresholdAge already.
 		// TODO(bwplotka): Fix some edge cases: https://github.com/thanos-io/thanos/issues/2470 .
-		if err := block.Delete(ctx, logger, bkt, id); err != nil {
-			blockCleanupFailures.Inc()
-			level.Warn(logger).Log("msg", "failed to delete aborted partial upload; will retry in next iteration", "block", id, "thresholdAge", PartialUploadThresholdAge, "err", err)
-			continue
-		}
-		blockCleanups.Inc()
+		sem <- struct{}{} // acquire BEFORE spawning goroutine
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, sem chan struct{}, id ulid.ULID) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
+			if err := block.Delete(ctx, logger, bkt, id); err != nil {
+				blockCleanupFailures.Inc()
+				level.Warn(logger).Log("msg", "failed to delete aborted partial upload; will retry in next iteration", "block", id, "thresholdAge", PartialUploadThresholdAge, "err", err)
+				return
+			}
+			blockCleanups.Inc()
+		}(wg, sem, id)
 		level.Info(logger).Log("msg", "deleted aborted partial upload", "block", id, "thresholdAge", PartialUploadThresholdAge)
 	}
+	wg.Wait()
 	level.Info(logger).Log("msg", "cleaning of aborted partial uploads done")
 }

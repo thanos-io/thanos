@@ -5,11 +5,12 @@ package compact
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/objstore"
 
@@ -44,17 +45,26 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
 	level.Info(s.logger).Log("msg", "started cleaning of blocks marked for deletion")
 
 	deletionMarkMap := s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
+	wg := &sync.WaitGroup{}
+	sem := make(chan struct{}, ParallelLimit)
 	for _, deletionMark := range deletionMarkMap {
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > s.deleteDelay.Seconds() {
-			if err := block.Delete(ctx, s.logger, s.bkt, deletionMark.ID); err != nil {
-				s.blockCleanupFailures.Inc()
-				return errors.Wrap(err, "delete block")
-			}
-			s.blocksCleaned.Inc()
+			sem <- struct{}{} // acquire BEFORE spawning goroutine
+			wg.Add(1)
+			go func(wg *sync.WaitGroup, sem chan struct{}, id ulid.ULID) {
+				defer wg.Done()
+				defer func() { <-sem }() // release
+				if err := block.Delete(ctx, s.logger, s.bkt, id); err != nil {
+					s.blockCleanupFailures.Inc()
+					level.Error(s.logger).Log("msg", "failed to delete block marked for deletion", "block", deletionMark.ID, "err", err)
+					return
+				}
+				s.blocksCleaned.Inc()
+			}(wg, sem, deletionMark.ID)
 			level.Info(s.logger).Log("msg", "deleted block marked for deletion", "block", deletionMark.ID)
 		}
 	}
-
+	wg.Wait()
 	level.Info(s.logger).Log("msg", "cleaning of blocks marked for deletion done")
 	return nil
 }

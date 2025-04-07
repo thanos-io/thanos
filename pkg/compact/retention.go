@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -38,6 +39,8 @@ func ApplyRetentionPolicyByResolution(
 	blocksMarkedForDeletion prometheus.Counter,
 ) error {
 	level.Info(logger).Log("msg", "start optional retention")
+	wg := &sync.WaitGroup{}
+	sem := make(chan struct{}, ParallelLimit)
 	for id, m := range metas {
 		retentionDuration := retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
 		if retentionDuration.Seconds() == 0 {
@@ -47,11 +50,18 @@ func ApplyRetentionPolicyByResolution(
 		maxTime := time.Unix(m.MaxTime/1000, 0)
 		if time.Now().After(maxTime.Add(retentionDuration)) {
 			level.Info(logger).Log("msg", "applying retention: marking block for deletion", "id", id, "maxTime", maxTime.String())
-			if err := block.MarkForDeletion(ctx, logger, bkt, id, fmt.Sprintf("block exceeding retention of %v", retentionDuration), blocksMarkedForDeletion); err != nil {
-				return errors.Wrap(err, "delete block")
-			}
+			sem <- struct{}{} // acquire BEFORE spawning goroutine
+			wg.Add(1)
+			go func(wg *sync.WaitGroup, sem chan struct{}, id ulid.ULID, retentionDuration time.Duration) {
+				defer wg.Done()
+				defer func() { <-sem }() // release
+				if err := block.MarkForDeletion(ctx, logger, bkt, id, fmt.Sprintf("block exceeding retention of %v", retentionDuration), blocksMarkedForDeletion); err != nil {
+					level.Error(logger).Log("msg", "failed to mark block for deletion", "id", id, "err", err)
+				}
+			}(wg, sem, id, retentionDuration)
 		}
 	}
+	wg.Wait()
 	level.Info(logger).Log("msg", "optional retention apply done")
 	return nil
 }
