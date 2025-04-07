@@ -374,7 +374,6 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 			q.mint,
 			q.maxt,
 			aggrs,
-			q.deduplicationFunc,
 			warns,
 		), resp.seriesSetStats, nil
 	}
@@ -387,7 +386,6 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		q.mint,
 		q.maxt,
 		aggrs,
-		q.deduplicationFunc,
 		warns,
 	)
 
