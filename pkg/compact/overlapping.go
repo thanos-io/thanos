@@ -23,7 +23,7 @@ const (
 	overlappingReason = "blocks-overlapping"
 
 	symbolTableSizeExceedsError = "symbol table size exceeds"
-	symbolTableSizeLimit        = 1024 * 1024
+	symbolTableSizeLimit        = 128 * 1024
 )
 
 type OverlappingCompactionLifecycleCallback struct {
@@ -130,7 +130,11 @@ func (o OverlappingCompactionLifecycleCallback) GetBlockPopulator(_ context.Cont
 	return tsdb.DefaultBlockPopulator{}, nil
 }
 
-func (o OverlappingCompactionLifecycleCallback) HandleError(ctx context.Context, logger log.Logger, g *Group, toCompact []*metadata.Meta, compactErr error) {
+func (o OverlappingCompactionLifecycleCallback) HandleError(ctx context.Context, logger log.Logger, g *Group, toCompact []*metadata.Meta, compactErr error) int {
+	handledErrs := 0
+	if compactErr == nil {
+		return handledErrs
+	}
 	level.Error(logger).Log("msg", "failed to compact blocks", "err", compactErr)
 	if strings.Contains(compactErr.Error(), symbolTableSizeExceedsError) {
 		for _, m := range toCompact {
@@ -142,10 +146,12 @@ func (o OverlappingCompactionLifecycleCallback) HandleError(ctx context.Context,
 				level.Warn(logger).Log("msg", "bypass small blocks", "block", m.String(), "series", m.Stats.NumSeries)
 				continue
 			}
+			handledErrs++
 			if err := block.MarkForNoCompact(ctx, logger, g.bkt, m.ULID, symbolTableSizeExceedsError,
 				fmt.Sprintf("failed to compact blocks: %s", m.ULID.String()), o.noCompaction); err != nil {
 				level.Error(logger).Log("msg", "failed to mark block for no compact", "block", m.String(), "err", err)
 			}
 		}
 	}
+	return handledErrs
 }
