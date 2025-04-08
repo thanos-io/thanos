@@ -211,6 +211,11 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 //     only if they don't have meta.json. If meta.json is present Thanos assumes valid block.
 //   - This avoids deleting empty dir (whole bucket) by mistake.
 func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) error {
+	if strings.Contains(bkt.Name(), AzureBlobGen2Name) {
+		level.Debug(logger).Log("msg", "deleting block using Azure DataLake Gen2 SDK", "bkt", bkt.Name(), "id", id.String())
+		return bkt.Delete(ctx, id.String())
+	}
+
 	metaFile := path.Join(id.String(), MetaFilename)
 	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
 

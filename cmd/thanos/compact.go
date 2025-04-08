@@ -208,6 +208,10 @@ func runCompact(
 	}
 
 	bkt, err := client.NewBucket(logger, confContentYaml, component.String(), nil)
+	if conf.enableFolderDeletion {
+		bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt)
+		level.Info(logger).Log("msg", "azdatalake sdk wrapper enabled", "name", bkt.Name())
+	}
 	if err != nil {
 		return err
 	}
@@ -787,6 +791,7 @@ type compactConfig struct {
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
 	enableOverlappingRemoval                       bool
+	enableFolderDeletion                           bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
@@ -869,6 +874,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("compact.enable-overlapping-removal", "In house flag to remove overlapping blocks. Turn this on to fix https://github.com/thanos-io/thanos/issues/6775.").
 		Default("false").BoolVar(&cc.enableOverlappingRemoval)
+
+	cmd.Flag("compact.enable-folder-deletion", "Support Azure Blob HNS folder deletion. This is a workaround for Azure Blob HNS folder deletion issue.").
+		Default("false").BoolVar(&cc.enableFolderDeletion)
 
 	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
 		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
