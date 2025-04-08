@@ -138,10 +138,6 @@ func (o OverlappingCompactionLifecycleCallback) HandleError(ctx context.Context,
 	level.Error(logger).Log("msg", "failed to compact blocks", "err", compactErr)
 	if strings.Contains(compactErr.Error(), symbolTableSizeExceedsError) {
 		for _, m := range toCompact {
-			if m.Thanos.Source != metadata.ReceiveSource {
-				level.Debug(logger).Log("msg", "bypass blocks that are already compacted", "block", m.String())
-				continue
-			}
 			if m.Stats.NumSeries < symbolTableSizeLimit {
 				level.Warn(logger).Log("msg", "bypass small blocks", "block", m.String(), "series", m.Stats.NumSeries)
 				continue
