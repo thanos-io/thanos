@@ -23,7 +23,7 @@ const (
 	overlappingReason = "blocks-overlapping"
 
 	symbolTableSizeExceedsError = "symbol table size exceeds"
-	symbolTableSizeLimit        = 128 * 1024
+	symbolTableSizeLimit        = 1024 * 1024
 )
 
 type OverlappingCompactionLifecycleCallback struct {

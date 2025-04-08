@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"runtime"
 	"sync"
 	"time"
 
@@ -40,7 +41,7 @@ func ApplyRetentionPolicyByResolution(
 ) error {
 	level.Info(logger).Log("msg", "start optional retention")
 	wg := &sync.WaitGroup{}
-	sem := make(chan struct{}, ParallelLimit)
+	sem := make(chan struct{}, runtime.NumCPU())
 	for id, m := range metas {
 		retentionDuration := retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
 		if retentionDuration.Seconds() == 0 {

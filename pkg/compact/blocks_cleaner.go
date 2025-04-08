@@ -5,6 +5,7 @@ package compact
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -46,7 +47,7 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
 
 	deletionMarkMap := s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
 	wg := &sync.WaitGroup{}
-	sem := make(chan struct{}, ParallelLimit)
+	sem := make(chan struct{}, runtime.NumCPU())
 	for _, deletionMark := range deletionMarkMap {
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > s.deleteDelay.Seconds() {
 			sem <- struct{}{} // acquire BEFORE spawning goroutine
