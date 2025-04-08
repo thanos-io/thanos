@@ -175,9 +175,9 @@ func TestHandleError(t *testing.T) {
 			input: []*metadata.Meta{
 				createCustomBlockMeta(1, 1, 2, metadata.ReceiveSource, 1),
 				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 1),
-				createCustomBlockMeta(3, 1, 6, metadata.ReceiveSource, 1024*1024),
+				createCustomBlockMeta(3, 1, 6, metadata.ReceiveSource, 2*1024*1024),
 			},
-			err:         errors.New(symbolTableSizeExceedsError + " 1024*1024"),
+			err:         errors.New(symbolTableSizeExceedsError + " 2*1024*1024"),
 			handledErrs: 1,
 			errBlockIdx: 2,
 		},

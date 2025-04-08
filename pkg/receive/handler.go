@@ -1031,6 +1031,7 @@ func (h *Handler) sendRemoteWrite(
 		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
 		Replica: realReplicationIndex,
 	}, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+		defer wg.Done()
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -1045,7 +1046,6 @@ func (h *Handler) sendRemoteWrite(
 				}
 			}
 		}
-		wg.Done()
 	})
 }
 

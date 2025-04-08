@@ -5,6 +5,7 @@ package compact
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -41,7 +42,7 @@ func BestEffortCleanAbortedPartialUploads(
 	// can be assumed in this case. Keep partialUploadThresholdAge long for now.
 	// Mitigate this by adding ModifiedTime to bkt and check that instead of ULID (block creation time).
 	wg := &sync.WaitGroup{}
-	sem := make(chan struct{}, ParallelLimit)
+	sem := make(chan struct{}, runtime.NumCPU())
 	for id := range partial {
 		if ulid.Now()-id.Time() <= uint64(PartialUploadThresholdAge/time.Millisecond) {
 			// Minimum delay has not expired, ignore for now.
