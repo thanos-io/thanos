@@ -416,7 +416,11 @@ func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
 
 func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType) (queryTelemetry, error) {
 	if eq, ok := query.(engine.ExplainableQuery); ok {
-		return processAnalysis(eq.Analyze()), nil
+		if analyze := eq.Analyze(); analyze != nil {
+			return processAnalysis(analyze), nil
+		} else {
+			return queryTelemetry{}, errors.Errorf("Query: %v not analyzable", query)
+		}
 	}
 
 	var warning error
@@ -1619,3 +1623,4 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 		return t, warnings.AsErrors(), nil, func() {}
 	}
 }
+
