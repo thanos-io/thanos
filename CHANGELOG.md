@@ -20,6 +20,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 ### Fixed
+- [#8199](https://github.com/thanos-io/thanos/pull/8199) Query: handle panics or nil pointer dereference in querier gracefully when query analyze returns nil
 
 ## [v0.38.0](https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
 
