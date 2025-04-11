@@ -1045,7 +1045,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("tsdb.enable-native-histograms",
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
-		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
+		Default("false").BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("writer.intern",
 		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").

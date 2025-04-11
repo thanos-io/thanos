@@ -568,6 +568,9 @@ Flags:
       --tsdb.block.expanded-postings-cache-size=0
                                  [EXPERIMENTAL] If non-zero, enables expanded
                                  postings cache for compacted blocks.
+      --tsdb.enable-native-histograms
+                                 [EXPERIMENTAL] Enables the ingestion of native
+                                 histograms.
       --tsdb.head.expanded-postings-cache-size=0
                                  [EXPERIMENTAL] If non-zero, enables expanded
                                  postings cache for the head block.
