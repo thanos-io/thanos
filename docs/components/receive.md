@@ -625,6 +625,12 @@ Flags:
       --tsdb.block.expanded-postings-cache-size=0
                                  [EXPERIMENTAL] If non-zero, enables expanded
                                  postings cache for compacted blocks.
+      --tsdb.enable-native-histograms
+                                 [EXPERIMENTAL] Enables the ingestion of native
+                                 histograms.
+      --tsdb.head.expanded-postings-cache-size=0
+                                 [EXPERIMENTAL] If non-zero, enables expanded
+                                 postings cache for the head block.
       --tsdb.max-exemplars=0     Enables support for ingesting exemplars and
                                  sets the maximum number of exemplars that will
                                  be stored per tenant. In case the exemplar
