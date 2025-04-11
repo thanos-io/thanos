@@ -273,6 +273,9 @@ func extractQueryStats(qry promql.Query) *querypb.QueryStats {
 	}
 	if explQry, ok := qry.(engine.ExplainableQuery); ok {
 		analyze := explQry.Analyze()
+		if analyze == nil {
+			return stats
+		}
 		stats.SamplesTotal = analyze.TotalSamples()
 		stats.PeakSamples = analyze.PeakSamples()
 	}
