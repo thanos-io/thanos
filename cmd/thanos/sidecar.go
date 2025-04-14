@@ -58,9 +58,7 @@ func registerSidecar(app *extkingpin.App) {
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-
 		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(conf.reqLogConfig)
-
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -106,6 +104,33 @@ func registerSidecar(app *extkingpin.App) {
 	})
 }
 
+func initShipper(
+	logger log.Logger,
+	reg *prometheus.Registry,
+	conf sidecarConfig,
+	confContentYaml []byte,
+	m *promMetadata,
+) (*shipper.Shipper, error) {
+	bkt, err := client.NewBucket(logger, confContentYaml, component.Sidecar.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		}
+	}()
+
+	uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
+
+	return shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
+		uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc),
+		conf.shipper.metaFileName), nil
+}
+
 func runSidecar(
 	g *run.Group,
 	logger log.Logger,
@@ -118,8 +143,7 @@ func runSidecar(
 	grpcLogOpts []grpc_logging.Option,
 	logFilterMethods []string,
 ) error {
-
-	var m = &promMetadata{
+	m := &promMetadata{
 		promURL: conf.prometheus.url,
 		// Start out with the full time range. The shipper will constrain it later.
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
@@ -128,6 +152,7 @@ func runSidecar(
 
 		limitMinTime: conf.limitMinTime,
 		client:       promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
+		shipper:      nil,
 	}
 
 	confContentYaml, err := conf.objStore.Content()
@@ -135,7 +160,7 @@ func runSidecar(
 		return errors.Wrap(err, "getting object store config")
 	}
 
-	var uploads = len(confContentYaml) != 0
+	uploads := len(confContentYaml) != 0
 	if !uploads {
 		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 	}
@@ -160,7 +185,6 @@ func runSidecar(
 			statusProber.Healthy()
 			return srv.ListenAndServe()
 		}, func(err error) {
-
 			statusProber.NotReady(err)
 			defer statusProber.NotHealthy(err)
 
@@ -378,20 +402,20 @@ func runSidecar(
 		})
 	}
 	if uploads {
-		// The background shipper continuously scans the data directory and uploads
-		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Sidecar.String(), nil)
-		if err != nil {
-			return err
-		}
-		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+		shipperUp := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_sidecar_shipper_up",
+			Help: "Boolean indicator whether the sidecar shipper is running.",
+		})
+		shipperUp.Set(0)
 
-		// Ensure we close up everything properly.
-		defer func() {
-			if err != nil {
-				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		if !conf.shipper.retryInit { // We don't want to retry shipper initialization.
+			if m.shipper, err = initShipper(logger, reg, conf, confContentYaml, m); err != nil {
+				level.Error(logger).Log("err", err, "msg", "Failed to initialize shipper.")
+				return err
 			}
-		}()
+
+			shipperUp.Set(1)
+		}
 
 		if err := promclient.IsWALDirAccessible(conf.tsdb.path); err != nil {
 			level.Error(logger).Log("err", err)
@@ -399,8 +423,6 @@ func runSidecar(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
 			promReadyTimeout := conf.prometheus.readyTimeout
 			extLabelsCtx, cancel := context.WithTimeout(ctx, promReadyTimeout)
 			defer cancel()
@@ -414,12 +436,18 @@ func runSidecar(
 				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
 			}
 
-			uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
-			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
-				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
-
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if uploaded, err := s.Sync(ctx); err != nil {
+				if conf.shipper.retryInit && m.shipper == nil { // We want to retry shipper initialization.
+					if m.shipper, err = initShipper(logger, reg, conf, confContentYaml, m); err != nil {
+						level.Warn(logger).Log("err", err, "msg", "Failed to create bucket. Sidecar will start without upload feature and will retry later.")
+						return nil // Allow sidecar to start without shipper
+					}
+					shipperUp.Set(1)
+				}
+
+				// The background shipper continuously scans the data directory and uploads
+				// new blocks to Google Cloud Storage or an S3-compatible storage service.
+				if uploaded, err := m.shipper.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
 				return nil
@@ -480,7 +508,8 @@ type promMetadata struct {
 	promVersion  string
 	limitMinTime thanosmodel.TimeOrDurationValue
 
-	client *promclient.Client
+	client  *promclient.Client
+	shipper *shipper.Shipper
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context) error {
