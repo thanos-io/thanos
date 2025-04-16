@@ -4,12 +4,15 @@ FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
 LABEL maintainer="The Thanos Authors"
 
 COPY /thanos_tmp_for_docker /bin/thanos
+COPY entrypoint.sh /entrypoint.sh
 
 RUN adduser \
     -D `#Dont assign a password` \
     -H `#Dont create home directory` \
     -u 1001 `#User id`\
     thanos && \
-    chown thanos /bin/thanos
+    chown thanos /bin/thanos && \
+    chown thanos /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 USER 1001
-ENTRYPOINT [ "/bin/thanos" ]
+ENTRYPOINT [ "/entrypoint.sh" ]

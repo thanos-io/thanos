@@ -8,12 +8,15 @@ ARG ARCH="amd64"
 ARG OS="linux"
 
 COPY .build/${OS}-${ARCH}/thanos /bin/thanos
+COPY entrypoint.sh /entrypoint.sh
 
 RUN adduser \
     -D `#Dont assign a password` \
     -H `#Dont create home directory` \
     -u 1001 `#User id`\
     thanos && \
-    chown thanos /bin/thanos
+    chown thanos /bin/thanos && \
+    chown thanos /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 USER 1001
-ENTRYPOINT [ "/bin/thanos" ]
+ENTRYPOINT [ "/entrypoint.sh" ]
