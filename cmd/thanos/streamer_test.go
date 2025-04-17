@@ -45,9 +45,15 @@ func TestConvertToSeriesReq(t *testing.T) {
 		MaxTime:    streamerReq.EndTimestampMs,
 		SkipChunks: streamerReq.SkipChunks,
 	}
+	config := &StreamerConfig{}
 
-	actualReq := convertToSeriesReq(streamerReq)
+	actualReq := convertToSeriesReq(config, streamerReq)
 	assert.Equal(t, expectedReq, actualReq, "Expected SeriesRequest to match")
+
+	config.replicaLabel = "replica"
+	expectedReq.WithoutReplicaLabels = []string{"replica"}
+	actualReq = convertToSeriesReq(config, streamerReq)
+	assert.Equal(t, expectedReq, actualReq, "Expected SeriesRequest to match with replica label removed")
 }
 
 type grpcServer struct {
