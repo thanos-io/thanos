@@ -38,6 +38,7 @@ type StreamerConfig struct {
 	socketPath           string
 	storeAddrPort        string
 	streamTimeoutSeconds int
+	replicaLabel         string
 }
 
 func registerStreamer(app *extkingpin.App) {
@@ -46,6 +47,7 @@ func registerStreamer(app *extkingpin.App) {
 	cmd.Flag("socket.path", "Path to the Unix socket").Default("/tmp/thanos-streamer.sock").StringVar(&config.socketPath)
 	cmd.Flag("store", "Thanos Store API gRPC endpoint").Default("localhost:10901").StringVar(&config.storeAddrPort)
 	cmd.Flag("stream.timeout_seconds", "One stream's overall timeout in seconds ").Default("36000").IntVar(&config.streamTimeoutSeconds)
+	cmd.Flag("stream.replica_label", "Drop this replica label from all returns time series and dedup them.").Default("").StringVar(&config.replicaLabel)
 
 	hc := &httpConfig{}
 	hc = hc.registerFlag(cmd)
@@ -129,13 +131,16 @@ func (c aggrChunkByTimestamp) Less(i, j int) bool {
 		(c[i].MinTime == c[j].MinTime && c[i].MaxTime > c[j].MaxTime)
 }
 
-func convertToSeriesReq(streamerReq *streamer.StreamerRequest) *storepb.SeriesRequest {
+func convertToSeriesReq(config *StreamerConfig, streamerReq *streamer.StreamerRequest) *storepb.SeriesRequest {
 	req := &storepb.SeriesRequest{
 		Aggregates: []storepb.Aggr{storepb.Aggr_RAW},
 		Matchers:   make([]storepb.LabelMatcher, 0),
 		MinTime:    streamerReq.StartTimestampMs,
 		MaxTime:    streamerReq.EndTimestampMs,
 		SkipChunks: streamerReq.SkipChunks,
+	}
+	if config.replicaLabel != "" {
+		req.WithoutReplicaLabels = []string{config.replicaLabel}
 	}
 	for _, labelMatcher := range streamerReq.LabelMatchers {
 		req.Matchers = append(req.Matchers, storepb.LabelMatcher{
@@ -176,7 +181,8 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 	outOfTimeRangeSampleTotal := 0
 	outOfOrderSampleTotal := 0
 	duplicateSampleTotal := 0
-	storeReq := convertToSeriesReq(request)
+	duplicateChunks := 0
+	storeReq := convertToSeriesReq(&s.config, request)
 	responseSeq := 0
 
 	// Write on a socket connection can be blocked until the overall stream timeout (config.streamTimeoutSeconds)
@@ -234,6 +240,7 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 				"out_of_time_range_samples", outOfTimeRangeSampleTotal,
 				"out_of_order_samples", outOfOrderSampleTotal,
 				"duplicate_samples", duplicateSampleTotal,
+				"dupliate_chunks", duplicateChunks,
 			)
 		}
 	}()
@@ -309,6 +316,8 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 				"is_duplicate_chunk", prevChunkMinTime == chunk.MinTime,
 			)
 			if prevChunkMinTime == chunk.MinTime {
+				// Chunks are sorted by MinTime.
+				duplicateChunks++
 				continue
 			}
 			prevChunkMinTime = chunk.MinTime

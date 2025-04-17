@@ -71,13 +71,6 @@ func runStreamerTool(conf *streamerToolConfig, logger log.Logger) error {
 		EndTimestampMs:   startMs + 4*3600*1000,
 		SkipChunks:       conf.skipChunks,
 		Metric:           conf.metric,
-		LabelMatchers: []streamer_pkg.LabelMatcher{
-			{
-				Name:  "__replica__",
-				Value: "",
-				Type:  streamer_pkg.LabelMatcher_EQ,
-			},
-		},
 	}
 
 	level.Info(logger).Log(
