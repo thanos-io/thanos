@@ -129,12 +129,13 @@ require (
 	github.com/bboreham/go-loser v0.0.0-20230920113527-fcc2c21820a3 // indirect
 	github.com/elastic/go-licenser v0.4.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/go-openapi/runtime v0.28.0 // indirect
-	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/go-openapi/runtime v0.27.1 // indirect
+	github.com/goccy/go-json v0.10.3 // indirect
+	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
-	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.25.4+incompatible // indirect
-	github.com/jcchavezs/porto v0.7.0 // indirect
+	github.com/google/s2a-go v0.1.8 // indirect
+	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
+	github.com/jcchavezs/porto v0.1.0 // indirect
 	github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mdlayher/vsock v1.2.1 // indirect
