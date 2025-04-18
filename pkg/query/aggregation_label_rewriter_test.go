@@ -17,6 +17,7 @@ func TestAggregationLabelRewriter_Rewrite(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
 		desiredLabelValue  string // Empty means disabled
+		strategy           RewriterStrategy
 		inputMatchers      []*labels.Matcher
 		expectedMatchers   []*labels.Matcher
 		expectedSkipCount  float64
@@ -25,7 +26,19 @@ func TestAggregationLabelRewriter_Rewrite(t *testing.T) {
 	}{
 		{
 			name:              "disabled rewriter should not modify label matchers",
+			desiredLabelValue: "v1",
+			strategy:          NoopLabelRewriter,
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
+			},
+			expectedMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
+			},
+		},
+		{
+			name:              "no desired label value makes a disabled rewriter and should not modify label matchers",
 			desiredLabelValue: "",
+			strategy:          UpsertLabelRewriter,
 			inputMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
 			},
@@ -36,31 +49,48 @@ func TestAggregationLabelRewriter_Rewrite(t *testing.T) {
 		{
 			name:              "should add label for aggregated metric if no existing aggregation label",
 			desiredLabelValue: "5m",
+			strategy:          UpsertLabelRewriter,
 			inputMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
 			},
 			expectedMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
-				labels.MustNewMatcher(labels.MatchEqual, "__rollup__", "5m"),
+				labels.MustNewMatcher(labels.MatchRegexp, aggregationLabelName, "5m"),
 			},
 			expectedAddCount: 1,
 		},
 		{
-			name:              "should rewrite existing aggregation label for aggregated metric",
+			name:              "should rewrite existing equal aggregation label for aggregated metric",
 			desiredLabelValue: "5m",
+			strategy:          UpsertLabelRewriter,
 			inputMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
-				labels.MustNewMatcher(labels.MatchEqual, "__rollup__", "1h"),
+				labels.MustNewMatcher(labels.MatchEqual, aggregationLabelName, "1h"),
 			},
 			expectedMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
-				labels.MustNewMatcher(labels.MatchEqual, "__rollup__", "5m"),
+				labels.MustNewMatcher(labels.MatchRegexp, aggregationLabelName, "5m"),
+			},
+			expectedRewriteMap: map[string]float64{"1h": 1},
+		},
+		{
+			name:              "should rewrite existing regex aggregation label for aggregated metric",
+			desiredLabelValue: "5m",
+			strategy:          UpsertLabelRewriter,
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
+				labels.MustNewMatcher(labels.MatchRegexp, aggregationLabelName, "1h"),
+			},
+			expectedMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
+				labels.MustNewMatcher(labels.MatchRegexp, aggregationLabelName, "5m"),
 			},
 			expectedRewriteMap: map[string]float64{"1h": 1},
 		},
 		{
 			name:              "should skip non-aggregated metric",
 			desiredLabelValue: "5m",
+			strategy:          UpsertLabelRewriter,
 			inputMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test_metric"),
 			},
@@ -72,6 +102,7 @@ func TestAggregationLabelRewriter_Rewrite(t *testing.T) {
 		{
 			name:              "should skip non-equal name matcher",
 			desiredLabelValue: "5m",
+			strategy:          UpsertLabelRewriter,
 			inputMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchRegexp, "__name__", "test:sum"),
 			},
@@ -83,11 +114,26 @@ func TestAggregationLabelRewriter_Rewrite(t *testing.T) {
 		{
 			name:              "should skip when no name matcher",
 			desiredLabelValue: "5m",
+			strategy:          UpsertLabelRewriter,
 			inputMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "job", "prometheus"),
 			},
 			expectedMatchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "job", "prometheus"),
+			},
+			expectedSkipCount: 1,
+		},
+		{
+			name:              "if insert only, should NOT rewrite existing aggregation label for aggregated metric",
+			desiredLabelValue: "5m",
+			strategy:          InsertOnlyLabelRewriter,
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
+				labels.MustNewMatcher(labels.MatchEqual, aggregationLabelName, "1h"),
+			},
+			expectedMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "test:sum"),
+				labels.MustNewMatcher(labels.MatchEqual, aggregationLabelName, "1h"),
 			},
 			expectedSkipCount: 1,
 		},
@@ -97,6 +143,7 @@ func TestAggregationLabelRewriter_Rewrite(t *testing.T) {
 			rewriter := NewAggregationLabelRewriter(
 				nil,
 				reg,
+				tc.strategy,
 				tc.desiredLabelValue,
 			)
 
