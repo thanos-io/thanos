@@ -133,7 +133,7 @@ func registerQuery(app *extkingpin.App) {
 
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
-	
+
 	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
 	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is: promql-experimental-functions (enables experimental PromQL functions).").Hidden().Default("").Strings()
@@ -318,6 +318,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			false,
 			*activeQueryDir,
 			time.Duration(*instantDefaultMaxSourceResolution),
 			*defaultMetadataTimeRange,
@@ -466,6 +467,7 @@ func runQuery(
 		lookbackDelta,
 		defaultEvaluationInterval,
 		extendedFunctionsEnabled,
+		enableQueryExperimentalFunctions,
 		activeQueryTracker,
 		queryMode,
 	)
@@ -515,7 +517,6 @@ func runQuery(
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
-			enableQueryExperimentalFunctions,
 			enableExemplarPartialResponse,
 			queryReplicaLabels,
 			flagsMap,

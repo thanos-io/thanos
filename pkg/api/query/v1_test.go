@@ -97,6 +97,7 @@ var (
 		5*time.Minute,
 		30*time.Second,
 		true,
+		false,
 		nil,
 		PromqlQueryModeLocal,
 	)
