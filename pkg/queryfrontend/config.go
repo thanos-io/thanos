@@ -202,17 +202,18 @@ type Config struct {
 	LabelsConfig
 	DownstreamTripperConfig
 
-	CortexHandlerConfig    *transport.HandlerConfig
-	CompressResponses      bool
-	CacheCompression       string
-	RequestLoggingDecision string
-	DownstreamURL          string
-	ForwardHeaders         []string
-	NumShards              int
-	TenantHeader           string
-	DefaultTenant          string
-	TenantCertField        string
-	EnableXFunctions       bool
+	CortexHandlerConfig              *transport.HandlerConfig
+	CompressResponses                bool
+	CacheCompression                 string
+	RequestLoggingDecision           string
+	DownstreamURL                    string
+	ForwardHeaders                   []string
+	NumShards                        int
+	TenantHeader                     string
+	DefaultTenant                    string
+	TenantCertField                  string
+	EnableXFunctions                 bool
+	EnableQueryExperimentalFunctions bool
 }
 
 // QueryRangeConfig holds the config for query range tripperware.

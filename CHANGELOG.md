@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#8191](https://github.com/thanos-io/thanos/pull/8191) Query: Add `--enable-feature=promql-experimental-functions` flag to enable experimental functions in query.
+
 ### Changed
 
 - [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
