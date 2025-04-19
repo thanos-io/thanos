@@ -347,6 +347,11 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		ShardInfo:               originalRequest.ShardInfo,
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
+	if originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+		// Do not forward this field as it might cause data loss.
+		r.PartialResponseDisabled = true
+		r.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
+	}
 
 	storeResponses := make([]respSet, 0, len(stores))
 
@@ -395,14 +400,14 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			s.metrics.storeFailureCount.WithLabelValues(st.GroupKey(), st.ReplicaKey()).Inc()
 			bumpCounter(st.GroupKey(), st.ReplicaKey(), failedStores)
 			totalFailedStores++
-			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+			if originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
 				if checkGroupReplicaErrors(st, err) != nil {
 					return err
 				}
 				continue
 			}
 			level.Error(reqLogger).Log("err", err)
-			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			if !originalRequest.PartialResponseDisabled || originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
@@ -438,7 +443,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			level.Error(s.logger).Log("msg", "Store failure with warning", "warning", warning)
 			// Don't have group/replica keys here, so we can't attribute the warning to a specific store.
 			s.metrics.storeFailureCount.WithLabelValues("", "").Inc()
-			if r.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+			if originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
 				// The first error message is from AWS S3 and the second one is from Azure Blob Storage.
 				if strings.Contains(resp.GetWarning(), "The specified key does not exist") || strings.Contains(resp.GetWarning(), "The specified blob does not exist") {
 					level.Warn(s.logger).Log("msg", "Ignore 'the specified key/blob does not exist' error from Store")
@@ -459,7 +464,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 					}
 					firstWarning = &warning
 				}
-			} else if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
+			} else if originalRequest.PartialResponseDisabled || originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return status.Error(codes.Aborted, resp.GetWarning())
 			}
 		}
