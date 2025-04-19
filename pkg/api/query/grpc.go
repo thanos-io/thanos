@@ -120,7 +120,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	})
 	if result.Err != nil {
 		if request.EnablePartialResponse {
-			if err := server.Send(querypb.NewQueryWarningsResponse(err)); err != nil {
+			if err := server.Send(querypb.NewQueryWarningsResponse(result.Err)); err != nil {
 				return err
 			}
 			return nil

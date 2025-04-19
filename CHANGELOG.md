@@ -10,6 +10,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 - [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
+- [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
 
 ### Added
 
@@ -22,6 +23,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 ### Fixed
+
+- [#8211](https://github.com/thanos-io/thanos/pull/8211) Query: fix panic on nested partial response in distributed instant query
 
 ## [v0.38.0](https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
 
