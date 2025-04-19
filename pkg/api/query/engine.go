@@ -27,6 +27,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/promql-engine/api"
@@ -88,11 +89,14 @@ func NewQueryFactory(
 	lookbackDelta time.Duration,
 	evaluationInterval time.Duration,
 	enableXFunctions bool,
-	enableQueryExperimentalFunctions bool,
+	enablePromQLExperimentalFunctions bool,
 	activeQueryTracker *promql.ActiveQueryTracker,
 	mode PromqlQueryMode,
 ) *QueryFactory {
 	makeOpts := func(registry prometheus.Registerer) engine.Opts {
+		// Set global experimental functions flag
+		parser.EnableExperimentalFunctions = enablePromQLExperimentalFunctions
+
 		opts := engine.Opts{
 			EngineOpts: promql.EngineOpts{
 				Logger: logutil.GoKitLogToSlog(logger),
@@ -107,9 +111,8 @@ func NewQueryFactory(
 				EnableNegativeOffset: true,
 				EnableAtModifier:     true,
 			},
-			EnableXFunctions:                 enableXFunctions,
-			EnableQueryExperimentalFunctions: enableQueryExperimentalFunctions,
-			EnableAnalysis:                   true,
+			EnableXFunctions: enableXFunctions,
+			EnableAnalysis:   true,
 		}
 		if activeQueryTracker != nil {
 			opts.ActiveQueryTracker = activeQueryTracker
