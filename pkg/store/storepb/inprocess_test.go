@@ -152,6 +152,30 @@ func TestServerAsClient(t *testing.T) {
 				s.seriesLastReq = nil
 			}
 		})
+		t.Run("race", func(t *testing.T) {
+			s.err = nil
+			for i := 0; i < 20; i++ {
+				r := &SeriesRequest{
+					MinTime:                 -214,
+					MaxTime:                 213,
+					Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
+					PartialResponseStrategy: PartialResponseStrategy_ABORT,
+				}
+				client, err := ServerAsClient(s).Series(ctx, r)
+				testutil.Ok(t, err)
+				go func() {
+					for {
+						_, err := client.Recv()
+						if err == io.EOF {
+							break
+						}
+						testutil.Ok(t, err)
+					}
+				}()
+				testutil.Ok(t, client.CloseSend())
+				s.seriesLastReq = nil
+			}
+		})
 	})
 	t.Run("LabelNames", func(t *testing.T) {
 		s := &testStoreServer{}
