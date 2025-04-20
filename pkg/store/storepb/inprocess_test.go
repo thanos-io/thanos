@@ -6,6 +6,7 @@ package storepb
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
@@ -163,16 +164,23 @@ func TestServerAsClient(t *testing.T) {
 				}
 				client, err := ServerAsClient(s).Series(ctx, r)
 				testutil.Ok(t, err)
+				var wg sync.WaitGroup
+				wg.Add(1)
 				go func() {
+					defer wg.Done()
 					for {
 						_, err := client.Recv()
 						if err == io.EOF {
 							break
 						}
-						testutil.Ok(t, err)
+						if err != nil {
+							t.Error(err)
+							break
+						}
 					}
 				}()
 				testutil.Ok(t, client.CloseSend())
+				wg.Wait()
 				s.seriesLastReq = nil
 			}
 		})
