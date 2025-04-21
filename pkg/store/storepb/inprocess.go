@@ -41,7 +41,7 @@ type inProcessClient struct {
 	ctx  context.Context
 	next func() (*SeriesResponse, error, bool)
 	stop func()
-	mu   sync.Mutex
+	mu   sync.Mutex // protects next and stop
 }
 
 func newInProcessClient(ctx context.Context, next func() (*SeriesResponse, error, bool), stop func()) *inProcessClient {
