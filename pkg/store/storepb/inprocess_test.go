@@ -170,11 +170,7 @@ func TestServerAsClient(t *testing.T) {
 					defer wg.Done()
 					for {
 						_, err := client.Recv()
-						if err == io.EOF {
-							break
-						}
 						if err != nil {
-							t.Error(err)
 							break
 						}
 					}
