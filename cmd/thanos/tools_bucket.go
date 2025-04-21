@@ -1234,6 +1234,10 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				if err != nil {
 					return errors.Wrapf(err, "read meta of %v", id)
 				}
+
+				if meta.Thanos.Downsample.Resolution != 0 {
+					chunkPool = downsample.NewPool()
+				}
 				b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), filepath.Join(tbc.tmpDir, id.String()), chunkPool, nil)
 				if err != nil {
 					return errors.Wrapf(err, "open block %v", id)

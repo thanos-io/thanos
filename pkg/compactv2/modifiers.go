@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/dedup"
 )
 
 type Modifier interface {
@@ -410,7 +411,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 
 			lbStr := processedLabels.String()
 			if _, ok := chunkSeriesMap[lbStr]; !ok {
-				chunkSeriesMap[lbStr] = newChunkSeriesBuilder(processedLabels)
+				chunkSeriesMap[lbStr] = newMergeChunkSeries(processedLabels)
 			}
 			cs := chunkSeriesMap[lbStr]
 
@@ -419,7 +420,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 			// will be overwritten at set.Next() call.
 			for chksIter.Next() {
 				c := chksIter.At()
-				cs.addIter(c.Chunk.Iterator(nil))
+				cs.AddChunk(c)
 			}
 			if err := chksIter.Err(); err != nil {
 				return errorOnlyStringIter{err}, nil
@@ -439,7 +440,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 
 	chunkSeriesSet := make([]storage.ChunkSeries, 0, len(chunkSeriesMap))
 	for _, chunkSeries := range chunkSeriesMap {
-		chunkSeriesSet = append(chunkSeriesSet, chunkSeries)
+		chunkSeriesSet = append(chunkSeriesSet, &storage.ChunkSeriesEntry{Lset: chunkSeries.lset, ChunkIteratorFn: chunkSeries.Iterator})
 	}
 	sort.Slice(chunkSeriesSet, func(i, j int) bool {
 		return labels.Compare(chunkSeriesSet[i].Labels(), chunkSeriesSet[j].Labels()) < 0
@@ -447,40 +448,17 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 	return index.NewStringListIter(symbolsSlice), newListChunkSeriesSet(chunkSeriesSet...)
 }
 
-// mergeChunkSeries build storage.ChunkSeries from several chunkenc.Iterator.
+// mergeChunkSeries build storage.ChunkSeries from dedup.OverlappingMerger.
 type mergeChunkSeries struct {
 	lset labels.Labels
-	ss   []storage.Series
+	*dedup.OverlappingMerger
 }
 
-func newChunkSeriesBuilder(lset labels.Labels) *mergeChunkSeries {
+func newMergeChunkSeries(lset labels.Labels) *mergeChunkSeries {
 	return &mergeChunkSeries{
-		lset: lset,
-		ss:   make([]storage.Series, 0),
+		lset:              lset,
+		OverlappingMerger: dedup.NewOverlappingMerger(storage.ChainSampleIteratorFromIterators),
 	}
-}
-
-func (s *mergeChunkSeries) addIter(iter chunkenc.Iterator) {
-	s.ss = append(s.ss, &storage.SeriesEntry{
-		SampleIteratorFn: func(iterator chunkenc.Iterator) chunkenc.Iterator {
-			return iter
-		},
-	})
-}
-
-func (s *mergeChunkSeries) Labels() labels.Labels {
-	return s.lset
-}
-
-func (s *mergeChunkSeries) Iterator(iterator chunks.Iterator) chunks.Iterator {
-	if len(s.ss) == 0 {
-		return nil
-	}
-	if len(s.ss) == 1 {
-		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator(iterator)
-	}
-
-	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator(iterator)
 }
 
 type errorOnlyStringIter struct {
