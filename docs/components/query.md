@@ -281,7 +281,7 @@ Example file SD file in YAML:
 
 ### Tenant Metrics
 
-Tenant information is captured in relevant Thanos exported metrics in the Querier, Query Frontend and Store. In order make use of this functionality requests to the Query/Query Frontend component should include the tenant-id in the appropriate HTTP request header as configured with `--query.tenant-header`. The tenant information is passed through components (including Query Frontend), down to the Thanos Store, enabling per-tenant metrics in these components also. If no tenant header is set to requests to the query component, the default tenant as defined by `--query.tenant-default-id` will be used.
+Tenant information is captured in relevant Thanos exported metrics in the Querier, Query Frontend and Store. In order make use of this functionality requests to the Query/Query Frontend component should include the tenant-id in the appropriate HTTP request header as configured with `--query.tenant-header`. The tenant information is passed through components (including Query Frontend), down to the Thanos Store, enabling per-tenant metrics in these components also. If no tenant header is set to requests to the query component, the default tenant as defined by `--query.default-tenant-id` will be used.
 
 ### Tenant Enforcement
 
