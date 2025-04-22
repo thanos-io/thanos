@@ -1015,6 +1015,11 @@ func (h *Handler) sendRemoteWrite(
 			}
 			h.peers.markPeerAvailable(endpoint)
 		} else {
+			h.forwardRequests.WithLabelValues(labelError).Inc()
+			if !alreadyReplicated {
+				h.replications.WithLabelValues(labelError).Inc()
+			}
+
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
 				if st.Code() == codes.Unavailable {
