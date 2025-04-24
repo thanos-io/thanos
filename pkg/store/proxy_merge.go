@@ -168,7 +168,7 @@ func (d *responseDeduplicator) At() *storepb.SeriesResponse {
 // NewProxyResponseLoserTree returns heap that k-way merge series together.
 // It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
 func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.SeriesResponse, respSet] {
-	var maxVal *storepb.SeriesResponse = storepb.NewSeriesResponse(nil)
+	var maxVal = storepb.NewSeriesResponse(nil)
 
 	less := func(a, b *storepb.SeriesResponse) bool {
 		if a == maxVal && b != maxVal {
@@ -665,10 +665,8 @@ func newEagerRespSet(
 			defer t.Stop()
 		}
 
-		for {
-			if !handleRecvResponse(t) {
-				break
-			}
+		for handleRecvResponse(t) {
+
 		}
 
 		// This should be used only for stores that does not support doing this on server side.

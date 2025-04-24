@@ -25,14 +25,14 @@ import (
 )
 
 type GRPCAPI struct {
-	now                         func() time.Time
-	replicaLabels               []string
-	queryableCreate             query.QueryableCreator
-	remoteEndpointsCreate       query.RemoteEndpointsCreator
-	queryCreator                queryCreator
-	defaultEngine               querypb.EngineType
-	lookbackDeltaCreate         func(int64) time.Duration
-	defaultMaxResolutionSeconds time.Duration
+	now                   func() time.Time
+	replicaLabels         []string
+	queryableCreate       query.QueryableCreator
+	remoteEndpointsCreate query.RemoteEndpointsCreator
+	queryCreator          queryCreator
+	defaultEngine         querypb.EngineType
+	lookbackDeltaCreate   func(int64) time.Duration
+	defaultMaxResolution  time.Duration
 }
 
 func NewGRPCAPI(
@@ -43,17 +43,17 @@ func NewGRPCAPI(
 	queryCreator queryCreator,
 	defaultEngine querypb.EngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
-	defaultMaxResolutionSeconds time.Duration,
+	defaultMaxResolution time.Duration,
 ) *GRPCAPI {
 	return &GRPCAPI{
-		now:                         now,
-		replicaLabels:               replicaLabels,
-		queryableCreate:             queryableCreator,
-		remoteEndpointsCreate:       remoteEndpointsCreator,
-		queryCreator:                queryCreator,
-		defaultEngine:               defaultEngine,
-		lookbackDeltaCreate:         lookbackDeltaCreate,
-		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
+		now:                   now,
+		replicaLabels:         replicaLabels,
+		queryableCreate:       queryableCreator,
+		remoteEndpointsCreate: remoteEndpointsCreator,
+		queryCreator:          queryCreator,
+		defaultEngine:         defaultEngine,
+		lookbackDeltaCreate:   lookbackDeltaCreate,
+		defaultMaxResolution:  defaultMaxResolution,
 	}
 }
 
@@ -75,7 +75,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 
 	maxResolution := request.MaxResolutionSeconds
 	if request.MaxResolutionSeconds == 0 {
-		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
+		maxResolution = g.defaultMaxResolution.Milliseconds() / 1000
 	}
 
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
@@ -173,7 +173,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 
 	maxResolution := request.MaxResolutionSeconds
 	if request.MaxResolutionSeconds == 0 {
-		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
+		maxResolution = g.defaultMaxResolution.Milliseconds() / 1000
 	}
 
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
