@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	notShardableErr = fmt.Errorf("expressions are not shardable")
+	errNotShardable = fmt.Errorf("expressions are not shardable")
 )
 
 type Analyzer interface {
@@ -104,13 +104,14 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		switch n := node.(type) {
 		case *parser.Call:
 			if n.Func != nil {
-				if n.Func.Name == "label_join" || n.Func.Name == "label_replace" {
+				switch n.Func.Name {
+				case "label_join", "label_replace":
 					dstLabel := stringFromArg(n.Args[1])
 					dynamicLabels = append(dynamicLabels, dstLabel)
-				} else if n.Func.Name == "absent_over_time" || n.Func.Name == "absent" || n.Func.Name == "scalar" {
+				case "absent_over_time", "absent", "scalar":
 					isShardable = false
-					return notShardableErr
-				} else if n.Func.Name == "histogram_quantile" {
+					return errNotShardable
+				case "histogram_quantile":
 					analysis = analysis.scopeToLabels([]string{"le"}, false)
 				}
 			}

@@ -138,9 +138,10 @@ func (s *OpentracingSuite) assertTracesCreated(methodName string) (clientSpan *m
 		assert.Contains(s.T(), span.String(), traceIdAssert, "not part of the fake parent trace: %v", span)
 		if span.OperationName == methodName {
 			kind := fmt.Sprintf("%v", span.Tag("span.kind"))
-			if kind == "client" {
+			switch kind {
+			case "client":
 				clientSpan = span
-			} else if kind == "server" {
+			case "server":
 				serverSpan = span
 			}
 			assert.EqualValues(s.T(), span.Tag("component"), "gRPC", "span must be tagged with gRPC component")
@@ -232,8 +233,8 @@ func (jaegerFormatExtractor) Extract(carrier interface{}) (mocktracer.MockSpanCo
 	}
 	err := reader.ForeachKey(func(key, val string) error {
 		lowerKey := strings.ToLower(key)
-		switch {
-		case lowerKey == traceHeaderName:
+		switch lowerKey {
+		case traceHeaderName:
 			parts := strings.Split(val, ":")
 			if len(parts) != 4 {
 				return errors.New("invalid trace id format")
