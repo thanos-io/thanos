@@ -324,7 +324,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	r.samplesStats = stats.NewQuerySamples(false)
 
 	// Instant query.
-	if r.start == r.end {
+	if r.start.Equal(r.end) {
 		request := &querypb.QueryRequest{
 			Query:                 r.plan.String(),
 			QueryPlan:             plan,
