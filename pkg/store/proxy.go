@@ -92,6 +92,8 @@ type ProxyStore struct {
 	tsdbSelector      *TSDBSelector
 	matcherCache      storecache.MatchersCache
 	enableDedup       bool
+
+	lazyRetrievalMaxBufferedResponses int
 }
 
 type proxyStoreMetrics struct {
@@ -117,6 +119,12 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 
 // ProxyStoreOption are functions that configure the ProxyStore.
 type ProxyStoreOption func(s *ProxyStore)
+
+func WithLazyRetrievalMaxBufferedResponsesForProxy(bufferSize int) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.lazyRetrievalMaxBufferedResponses = bufferSize
+	}
+}
 
 // WithProxyStoreDebugLogging toggles debug logging.
 func WithProxyStoreDebugLogging(enable bool) ProxyStoreOption {
@@ -183,7 +191,6 @@ func NewProxyStore(
 	for _, option := range options {
 		option(s)
 	}
-
 	return s
 }
 
@@ -309,7 +316,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for _, st := range stores {
 		st := st
 
-		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
