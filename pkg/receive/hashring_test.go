@@ -201,7 +201,7 @@ func TestHashringGet(t *testing.T) {
 		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
 		require.NoError(t, err)
 
-		h, err := hs.Get(tc.tenant, ts)
+		h, err := hs.GetN(tc.tenant, ts, 0)
 		if tc.nodes != nil {
 			if err != nil {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
