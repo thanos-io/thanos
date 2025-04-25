@@ -51,8 +51,6 @@ func (i *insufficientNodesError) Error() string {
 // for a specified tenant.
 // It returns the node and any error encountered.
 type Hashring interface {
-	// Get returns the first node that should handle the given tenant and time series.
-	Get(tenant string, timeSeries *prompb.TimeSeries) (Endpoint, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
 	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (Endpoint, error)
 	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
@@ -62,11 +60,6 @@ type Hashring interface {
 
 // SingleNodeHashring always returns the same node.
 type SingleNodeHashring string
-
-// Get implements the Hashring interface.
-func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
-	return s.GetN(tenant, ts, 0)
-}
 
 func (s SingleNodeHashring) Nodes() []Endpoint {
 	return []Endpoint{{Address: string(s), CapNProtoAddress: string(s)}}
