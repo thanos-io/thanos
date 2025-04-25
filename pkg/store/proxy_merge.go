@@ -255,8 +255,20 @@ type lazyRespSet struct {
 	frameTimeout   time.Duration
 
 	// Internal bookkeeping.
-	dataOrFinishEvent    *sync.Cond
-	bufferedResponses    []*storepb.SeriesResponse
+	dataOrFinishEvent *sync.Cond
+	// This event firing means the buffer has a slot for more data.
+	bufferSlotEvent *sync.Cond
+	fixedBufferSize int
+	// This a ring buffer of size fixedBufferSize.
+	// A ring buffer of size N can hold N - 1 elements at most in order to distinguish being empty from being full.
+	bufferedResponses []*storepb.SeriesResponse
+	// ringHead points to the first element in the ring buffer.
+	// ringTail points to the slot after the last element in the ring buffer.
+	// if ringHead == ringTail then the buffer is empty.
+	// if ringHead == (ringTail + 1) % fixedBufferSize then the buffer is full.
+	ringHead             int
+	ringTail             int
+	closed               bool
 	bufferedResponsesMtx *sync.Mutex
 	lastResp             *storepb.SeriesResponse
 
@@ -266,24 +278,32 @@ type lazyRespSet struct {
 	shardMatcher *storepb.ShardMatcher
 }
 
+func (l *lazyRespSet) isEmpty() bool {
+	return l.ringHead == l.ringTail
+}
+
+func (l *lazyRespSet) isFull() bool {
+	return (l.ringTail+1)%l.fixedBufferSize == l.ringHead
+}
+
 func (l *lazyRespSet) Empty() bool {
 	l.bufferedResponsesMtx.Lock()
 	defer l.bufferedResponsesMtx.Unlock()
 
 	// NOTE(GiedriusS): need to wait here for at least one
 	// response so that we could build the heap properly.
-	if l.noMoreData && len(l.bufferedResponses) == 0 {
+	if l.noMoreData && l.isEmpty() {
 		return true
 	}
 
-	for len(l.bufferedResponses) == 0 {
+	for l.isEmpty() {
 		l.dataOrFinishEvent.Wait()
-		if l.noMoreData && len(l.bufferedResponses) == 0 {
+		if l.noMoreData && l.isEmpty() {
 			break
 		}
 	}
 
-	return len(l.bufferedResponses) == 0 && l.noMoreData
+	return l.isEmpty() && l.noMoreData
 }
 
 // Next either blocks until more data is available or reads
@@ -295,23 +315,24 @@ func (l *lazyRespSet) Next() bool {
 
 	l.initialized = true
 
-	if l.noMoreData && len(l.bufferedResponses) == 0 {
+	if l.noMoreData && l.isEmpty() {
 		l.lastResp = nil
 
 		return false
 	}
 
-	for len(l.bufferedResponses) == 0 {
+	for l.isEmpty() {
 		l.dataOrFinishEvent.Wait()
-		if l.noMoreData && len(l.bufferedResponses) == 0 {
+		if l.noMoreData && l.isEmpty() {
 			break
 		}
 	}
 
-	if len(l.bufferedResponses) > 0 {
-		l.lastResp = l.bufferedResponses[0]
+	if !l.isEmpty() {
+		l.lastResp = l.bufferedResponses[l.ringHead]
 		if l.initialized {
-			l.bufferedResponses = l.bufferedResponses[1:]
+			l.ringHead = (l.ringHead + 1) % l.fixedBufferSize
+			l.bufferSlotEvent.Signal()
 		}
 		return true
 	}
@@ -338,8 +359,12 @@ func newLazyRespSet(
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
+	fixedBufferSize int,
 ) respSet {
-	bufferedResponses := []*storepb.SeriesResponse{}
+	// A ring buffer of size N can hold N - 1 elements at most in order to distinguish being empty from being full.
+	// That's why the size is increased by 1 internally.
+	fixedBufferSize++
+	bufferedResponses := make([]*storepb.SeriesResponse, fixedBufferSize)
 	bufferedResponsesMtx := &sync.Mutex{}
 	dataAvailable := sync.NewCond(bufferedResponsesMtx)
 
@@ -351,9 +376,14 @@ func newLazyRespSet(
 		closeSeries:          closeSeries,
 		span:                 span,
 		dataOrFinishEvent:    dataAvailable,
+		bufferSlotEvent:      sync.NewCond(bufferedResponsesMtx),
 		bufferedResponsesMtx: bufferedResponsesMtx,
 		bufferedResponses:    bufferedResponses,
 		shardMatcher:         shardMatcher,
+		fixedBufferSize:      fixedBufferSize,
+		ringHead:             0,
+		ringTail:             0,
+		closed:               false,
 	}
 	respSet.storeLabels = make(map[string]struct{})
 	for _, ls := range storeLabelSets {
@@ -406,11 +436,16 @@ func newLazyRespSet(
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", st)
 				}
-
 				l.span.SetTag("err", rerr.Error())
 
 				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
+				for l.isFull() && !l.closed {
+					l.bufferSlotEvent.Wait()
+				}
+				if !l.closed {
+					l.bufferedResponses[l.ringTail] = storepb.NewWarnSeriesResponse(rerr)
+					l.ringTail = (l.ringTail + 1) % l.fixedBufferSize
+				}
 				l.noMoreData = true
 				l.dataOrFinishEvent.Signal()
 				l.bufferedResponsesMtx.Unlock()
@@ -429,8 +464,14 @@ func newLazyRespSet(
 			}
 
 			l.bufferedResponsesMtx.Lock()
-			l.bufferedResponses = append(l.bufferedResponses, resp)
-			l.dataOrFinishEvent.Signal()
+			for l.isFull() && !l.closed {
+				l.bufferSlotEvent.Wait()
+			}
+			if !l.closed {
+				l.bufferedResponses[l.ringTail] = resp
+				l.ringTail = (l.ringTail + 1) % l.fixedBufferSize
+				l.dataOrFinishEvent.Signal()
+			}
 			l.bufferedResponsesMtx.Unlock()
 			return true
 		}
@@ -474,6 +515,7 @@ func newAsyncRespSet(
 	shardInfo *storepb.ShardInfo,
 	logger log.Logger,
 	emptyStreamResponses prometheus.Counter,
+	lazyRetrievalMaxBufferedResponses int,
 ) (respSet, error) {
 
 	var (
@@ -525,6 +567,11 @@ func newAsyncRespSet(
 	switch retrievalStrategy {
 	case LazyRetrieval:
 		span.SetTag("retrival_strategy", LazyRetrieval)
+		if lazyRetrievalMaxBufferedResponses < 1 {
+			// Some unit and e2e tests hit this path.
+			lazyRetrievalMaxBufferedResponses = 1
+		}
+
 		return newLazyRespSet(
 			span,
 			frameTimeout,
@@ -535,6 +582,7 @@ func newAsyncRespSet(
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
+			lazyRetrievalMaxBufferedResponses,
 		), nil
 	case EagerRetrieval:
 		span.SetTag("retrival_strategy", EagerRetrieval)
@@ -560,6 +608,8 @@ func (l *lazyRespSet) Close() {
 	defer l.bufferedResponsesMtx.Unlock()
 
 	l.closeSeries()
+	l.closed = true
+	l.bufferSlotEvent.Signal()
 	l.noMoreData = true
 	l.dataOrFinishEvent.Signal()
 

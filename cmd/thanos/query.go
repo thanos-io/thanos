@@ -248,6 +248,9 @@ func registerQuery(app *extkingpin.App) {
 	rewriteAggregationLabelStrategy := cmd.Flag("query.aggregation-label-strategy", "The strategy to use when rewriting aggregation labels. Used during aggregator migration only.").Default(string(query.NoopLabelRewriter)).Hidden().Enum(string(query.NoopLabelRewriter), string(query.UpsertLabelRewriter), string(query.InsertOnlyLabelRewriter))
 	rewriteAggregationLabelTo := cmd.Flag("query.aggregation-label-value-override", "The value override for aggregation label. If set to x, all queries on aggregated metrics will have a `__agg_rule_type__=x` matcher. If empty, this behavior is disabled. Default is empty.").Hidden().Default("").String()
 
+	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
+		Default("20").Int()
+
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -389,6 +392,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableGroupReplicaPartialStrategy,
 			*rewriteAggregationLabelStrategy,
 			*rewriteAggregationLabelTo,
+			*lazyRetrievalMaxBufferedResponses,
 		)
 	})
 }
@@ -475,6 +479,7 @@ func runQuery(
 	groupReplicaPartialResponseStrategy bool,
 	rewriteAggregationLabelStrategy string,
 	rewriteAggregationLabelTo string,
+	lazyRetrievalMaxBufferedResponses int,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -562,6 +567,7 @@ func runQuery(
 		store.WithTSDBSelector(tsdbSelector),
 		store.WithProxyStoreDebugLogging(debugLogging),
 		store.WithQuorumChunkDedup(queryDeduplicationFunc == dedup.AlgorithmQuorum),
+		store.WithLazyRetrievalMaxBufferedResponsesForProxy(lazyRetrievalMaxBufferedResponses),
 	}
 
 	// Parse and sanitize the provided replica labels flags.

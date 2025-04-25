@@ -1587,6 +1587,10 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			expectedWarningsLen: 2,
 		},
 	} {
+
+		options := []ProxyStoreOption{
+			WithLazyRetrievalMaxBufferedResponsesForProxy(1),
+		}
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 				if ok := t.Run(string(strategy), func(t *testing.T) {
@@ -1596,6 +1600,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 						component.Query,
 						tc.selectorLabels,
 						4*time.Second, strategy,
+						options...,
 					)
 
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

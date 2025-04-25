@@ -93,14 +93,15 @@ type ProxyStore struct {
 	selectorLabels labels.Labels
 	buffers        sync.Pool
 
-	responseTimeout   time.Duration
-	metrics           *proxyStoreMetrics
-	retrievalStrategy RetrievalStrategy
-	debugLogging      bool
-	tsdbSelector      *TSDBSelector
-	quorumChunkDedup  bool
-	enableDedup       bool
-	matcherConverter  *storepb.MatcherConverter
+	responseTimeout                   time.Duration
+	metrics                           *proxyStoreMetrics
+	retrievalStrategy                 RetrievalStrategy
+	debugLogging                      bool
+	tsdbSelector                      *TSDBSelector
+	quorumChunkDedup                  bool
+	enableDedup                       bool
+	matcherConverter                  *storepb.MatcherConverter
+	lazyRetrievalMaxBufferedResponses int
 }
 
 type proxyStoreMetrics struct {
@@ -136,6 +137,12 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 
 // BucketStoreOption are functions that configure BucketStore.
 type ProxyStoreOption func(s *ProxyStore)
+
+func WithLazyRetrievalMaxBufferedResponsesForProxy(buferSize int) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.lazyRetrievalMaxBufferedResponses = buferSize
+	}
+}
 
 // WithProxyStoreDebugLogging toggles debug logging.
 func WithProxyStoreDebugLogging(enable bool) ProxyStoreOption {
@@ -390,11 +397,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		}
 	}
 	defer logGroupReplicaErrors()
-
 	for _, st := range stores {
 		st := st
 
-		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "Store failure", "group", st.GroupKey(), "replica", st.ReplicaKey(), "err", err)
 			s.metrics.storeFailureCount.WithLabelValues(st.GroupKey(), st.ReplicaKey()).Inc()
