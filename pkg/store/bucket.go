@@ -446,6 +446,8 @@ type BucketStore struct {
 	postingGroupMaxKeySeriesRatio float64
 
 	sortingStrategy sortingStrategy
+	// This flag limits memory usage when lazy retrieval strategy, newLazyRespSet(), is used.
+	lazyRetrievalMaxBufferedResponses int
 
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
@@ -610,6 +612,14 @@ func WithDontResort(true bool) BucketStoreOption {
 	}
 }
 
+func WithLazyRetrievalMaxBufferedResponsesForBucket(n int) BucketStoreOption {
+	return func(s *BucketStore) {
+		if true {
+			s.lazyRetrievalMaxBufferedResponses = n
+		}
+	}
+}
+
 // WithIndexHeaderLazyDownloadStrategy specifies what block to lazy download its index header.
 // Only used when lazy mmap is enabled at the same time.
 func WithIndexHeaderLazyDownloadStrategy(strategy indexheader.LazyDownloadIndexHeaderFunc) BucketStoreOption {
@@ -683,6 +693,8 @@ func NewBucketStore(
 		indexHeaderLazyDownloadStrategy: indexheader.AlwaysEagerDownloadIndexHeader,
 		requestLoggerFunc:               NoopRequestLoggerFunc,
 		blockLifecycleCallback:          &noopBlockLifecycleCallback{},
+
+		lazyRetrievalMaxBufferedResponses: 1,
 	}
 
 	for _, option := range options {
@@ -1718,6 +1730,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						nil,
 					)
 				} else {
+					lazyRetrievalMaxBufferedResponses := s.lazyRetrievalMaxBufferedResponses
+					if lazyRetrievalMaxBufferedResponses < 1 {
+						// Some unit and e2e tests hit this path.
+						lazyRetrievalMaxBufferedResponses = 1
+					}
 					resp = newLazyRespSet(
 						span,
 						10*time.Minute,
@@ -1728,6 +1745,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						shardMatcher,
 						false,
 						s.metrics.emptyPostingCount.WithLabelValues(tenant),
+						lazyRetrievalMaxBufferedResponses,
 					)
 				}
 
