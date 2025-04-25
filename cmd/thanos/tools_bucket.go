@@ -110,8 +110,11 @@ type bucketVerifyConfig struct {
 }
 
 type bucketLsConfig struct {
-	output        string
-	excludeDelete bool
+	output              string
+	excludeDelete       bool
+	selectorRelabelConf extflag.PathOrContent
+	filterConf          *store.FilterConfig
+	timeout             time.Duration
 }
 
 type bucketWebConfig struct {
@@ -181,10 +184,18 @@ func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClaus
 }
 
 func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *bucketLsConfig {
+	tbc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+	tbc.filterConf = &store.FilterConfig{}
+
 	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").StringVar(&tbc.output)
 	cmd.Flag("exclude-delete", "Exclude blocks marked for deletion.").
 		Default("false").BoolVar(&tbc.excludeDelete)
+	cmd.Flag("min-time", "Start of time range limit to compact. Thanos Compactor will compact only blocks, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z").SetValue(&tbc.filterConf.MinTime)
+	cmd.Flag("max-time", "End of time range limit to compact. Thanos Compactor will compact only blocks, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
+	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 	return tbc
 }
 
@@ -418,12 +429,30 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		var filters []block.MetadataFilter
+		if tbc.timeout < time.Minute {
+			level.Warn(logger).Log("msg", "Timeout less than 1m could lead to frequent failures")
+		}
+
+		relabelContentYaml, err := tbc.selectorRelabelConf.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of relabel configuration")
+		}
+
+		relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
+		if err != nil {
+			return err
+		}
+
+		filters := []block.MetadataFilter{
+			block.NewLabelShardedMetaFilter(relabelConfig),
+			block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
+		}
 
 		if tbc.excludeDelete {
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
+
 		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
@@ -435,7 +464,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 
 		defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), tbc.timeout)
 		defer cancel()
 
 		var (
