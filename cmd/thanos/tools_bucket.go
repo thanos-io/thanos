@@ -191,9 +191,9 @@ func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *buck
 		Short('o').Default("").StringVar(&tbc.output)
 	cmd.Flag("exclude-delete", "Exclude blocks marked for deletion.").
 		Default("false").BoolVar(&tbc.excludeDelete)
-	cmd.Flag("min-time", "Start of time range limit to compact. Thanos Compactor will compact only blocks, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	cmd.Flag("min-time", "Start of time range limit to list blocks. Thanos Tools will list blocks, which were created later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&tbc.filterConf.MinTime)
-	cmd.Flag("max-time", "End of time range limit to compact. Thanos Compactor will compact only blocks, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	cmd.Flag("max-time", "End of time range limit to list. Thanos Tools will list only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 	return tbc
