@@ -12,7 +12,7 @@ FROM golang:1.24.0
 LABEL maintainer="The Thanos Authors"
 
 COPY --from=builder $GOBIN/thanos /bin/thanos
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker-entrypoint-test.sh /docker-entrypoint.sh
 
 ENV GORACE="halt_on_error=1"
 
