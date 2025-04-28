@@ -524,7 +524,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-            <UncontrolledAlert isOpen={this.state.error || false} toggle={this.handleToggleAlert} color="danger">
+            <UncontrolledAlert isOpen={!!this.state.error} toggle={this.handleToggleAlert} color="danger">
               {this.state.error}
             </UncontrolledAlert>
           </Col>

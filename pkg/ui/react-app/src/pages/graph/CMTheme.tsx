@@ -231,7 +231,6 @@ export const darkTheme = EditorView.theme(
 );
 
 export const promqlHighlighter = HighlightStyle.define([
-  { tag: tags.name, color: '#000' },
   { tag: tags.number, color: '#09885a' },
   { tag: tags.string, color: '#a31515' },
   { tag: tags.keyword, color: '#008080' },
@@ -244,4 +243,19 @@ export const promqlHighlighter = HighlightStyle.define([
   { tag: tags.brace },
   { tag: tags.invalid, color: 'red' },
   { tag: tags.comment, color: '#888', fontStyle: 'italic' },
+]);
+
+export const darkPromqlHighlighter = HighlightStyle.define([
+  { tag: tags.number, color: '#22c55e' },
+  { tag: tags.string, color: '#fca5a5' },
+  { tag: tags.keyword, color: '#14bfad' },
+  { tag: tags.function(tags.variableName), color: '#14bfad' },
+  { tag: tags.labelName, color: '#ff8585' },
+  { tag: tags.operator },
+  { tag: tags.modifier, color: '#14bfad' },
+  { tag: tags.paren },
+  { tag: tags.squareBracket },
+  { tag: tags.brace },
+  { tag: tags.invalid, color: '#ff3d3d' },
+  { tag: tags.comment, color: '#9ca3af', fontStyle: 'italic' },
 ]);
