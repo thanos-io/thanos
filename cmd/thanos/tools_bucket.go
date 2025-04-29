@@ -149,6 +149,7 @@ type bucketCleanupConfig struct {
 	consistencyDelay     time.Duration
 	blockSyncConcurrency int
 	deleteDelay          time.Duration
+	filterConf           *store.FilterConfig
 }
 
 type bucketRetentionConfig struct {
@@ -278,11 +279,17 @@ func (tbc *bucketMarkBlockConfig) registerBucketMarkBlockFlag(cmd extkingpin.Fla
 }
 
 func (tbc *bucketCleanupConfig) registerBucketCleanupFlag(cmd extkingpin.FlagClause) *bucketCleanupConfig {
+	tbc.filterConf = &store.FilterConfig{}
+
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket.").Default("48h").DurationVar(&tbc.deleteDelay)
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&tbc.consistencyDelay)
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").IntVar(&tbc.blockSyncConcurrency)
+	cmd.Flag("min-time", "Start of time range limit to cleanup blocks. Thanos Tools will cleanup blocks, which were created later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z").SetValue(&tbc.filterConf.MinTime)
+	cmd.Flag("max-time", "End of time range limit to cleanup. Thanos Tools will cleanup only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
 	return tbc
 }
 
@@ -885,6 +892,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			}
 			cf := baseMetaFetcher.NewMetaFetcher(
 				extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{
+					block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
 					block.NewLabelShardedMetaFilter(relabelConfig),
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					ignoreDeletionMarkFilter,
