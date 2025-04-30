@@ -618,6 +618,8 @@ Flags:
                                 level will be replicated.
       --compaction-min=1        Only blocks with at least this compaction level
                                 will be replicated.
+      --concurrency=1           The concurrency with which to replicate blocks
+                                from the source to the destination bucket.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
                                 consumption.
   -h, --help                    Show context-sensitive help (also try
