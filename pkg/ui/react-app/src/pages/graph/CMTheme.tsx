@@ -40,6 +40,7 @@ export const baseTheme = EditorView.theme({
       padding: '2px 1em 2px 3px',
     },
     minWidth: '30%',
+    maxWidth: '65%',
   },
 
   '.cm-completionDetail': {
