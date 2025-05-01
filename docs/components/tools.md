@@ -797,6 +797,87 @@ Flags:
 
 ```
 
+### Bucket cleanup
+
+`tools bucket cleanup` can be used to manually clean up blocks in the bucket which have been marked for deletion.
+
+```$ mdox-exec="thanos tools bucket cleanup --help"
+usage: thanos tools bucket cleanup [<flags>]
+
+Cleans up all blocks marked for deletion.
+
+Flags:
+      --auto-gomemlimit.ratio=0.9
+                                The ratio of reserved GOMEMLIMIT memory to the
+                                detected maximum container or system memory.
+      --block-sync-concurrency=20
+                                Number of goroutines to use when syncing block
+                                metadata from object storage.
+      --consistency-delay=30m   Minimum age of fresh (non-compacted)
+                                blocks before they are being processed.
+                                Malformed blocks older than the maximum of
+                                consistency-delay and 48h0m0s will be removed.
+      --delete-delay=48h        Time before a block marked for deletion is
+                                deleted from bucket.
+      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
+                                consumption.
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
+      --max-time=9999-12-31T23:59:59Z
+                                End of time range limit to cleanup. Thanos
+                                Tools will cleanup only blocks, which were
+                                created earlier than this value. Option can be a
+                                constant time in RFC3339 format or time duration
+                                relative to current time, such as -1d or 2h45m.
+                                Valid duration units are ms, s, m, h, d, w, y.
+      --min-time=0000-01-01T00:00:00Z
+                                Start of time range limit to cleanup blocks.
+                                Thanos Tools will cleanup blocks, which were
+                                created later than this value. Option can be a
+                                constant time in RFC3339 format or time duration
+                                relative to current time, such as -1d or 2h45m.
+                                Valid duration units are ms, s, m, h, d, w, y.
+      --objstore.config=<content>
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config-file=<file-path>
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --selector.relabel-config=<content>
+                                Alternative to 'selector.relabel-config-file'
+                                flag (mutually exclusive). Content of YAML
+                                file with relabeling configuration that allows
+                                selecting blocks to act on based on their
+                                external labels. It follows thanos sharding
+                                relabel-config syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
+      --selector.relabel-config-file=<file-path>
+                                Path to YAML file with relabeling
+                                configuration that allows selecting blocks
+                                to act on based on their external labels.
+                                It follows thanos sharding relabel-config
+                                syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
+      --tracing.config=<content>
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tracing.config-file=<file-path>
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
+
+```
+
 ### Bucket mark
 
 `tools bucket mark` can be used to manually mark block for deletion.
