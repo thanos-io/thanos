@@ -29,8 +29,9 @@ import (
 type HashringAlgorithm string
 
 const (
-	AlgorithmHashmod HashringAlgorithm = "hashmod"
-	AlgorithmKetama  HashringAlgorithm = "ketama"
+	AlgorithmHashmod       HashringAlgorithm = "hashmod"
+	AlgorithmKetama        HashringAlgorithm = "ketama"
+	AlgorithmAlignedKetama HashringAlgorithm = "aligned_ketama"
 
 	// SectionsPerNode is the number of sections in the ring assigned to each node
 	// in the ketama hashring. A higher number yields a better series distribution,
@@ -375,6 +376,8 @@ func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationF
 		return newSimpleHashring(endpoints)
 	case AlgorithmKetama:
 		return newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
+	case AlgorithmAlignedKetama:
+		return newAlignedKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
 	default:
 		l := log.NewNopLogger()
 		level.Warn(l).Log("msg", "Unrecognizable hashring algorithm. Fall back to hashmod algorithm.",
