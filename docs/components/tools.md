@@ -463,6 +463,9 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
+      --compaction=COMPACTION ...
+                                If set, only blocks with these compaction levels
+                                will be listed. Repeated flag.
       --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
                                 consumption.
       --exclude-delete          Exclude blocks marked for deletion.
@@ -498,6 +501,9 @@ Flags:
   -o, --output=""               Optional format in which to print each block's
                                 information. Options are 'json', 'wide' or a
                                 custom template.
+      --resolution=0s... ...    Only blocks with these resolutions will be
+                                listed. Defaults to all resolutions. Repeated
+                                flag.
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
                                 flag (mutually exclusive). Content of YAML
