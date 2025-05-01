@@ -114,6 +114,8 @@ type bucketLsConfig struct {
 	excludeDelete       bool
 	selectorRelabelConf extflag.PathOrContent
 	filterConf          *store.FilterConfig
+	resolutions         []time.Duration
+	compactions         []int
 	timeout             time.Duration
 }
 
@@ -197,6 +199,8 @@ func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *buck
 	cmd.Flag("max-time", "End of time range limit to list. Thanos Tools will list only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
+	cmd.Flag("resolution", "Only blocks with these resolutions will be listed. Defaults to all resolutions. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationListVar(&tbc.resolutions)
+	cmd.Flag("compaction", "If set, only blocks with these compaction levels will be listed. Repeated flag.").Default().IntsVar(&tbc.compactions)
 	return tbc
 }
 
@@ -453,6 +457,18 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		filters := []block.MetadataFilter{
 			block.NewLabelShardedMetaFilter(relabelConfig),
 			block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
+		}
+
+		if len(tbc.compactions) > 0 {
+			filters = append(filters, block.NewCompactionMetaFilter(logger, tbc.compactions))
+		}
+
+		if len(tbc.resolutions) > 0 {
+			var resolutionLevels []int64
+			for _, lvl := range tbc.resolutions {
+				resolutionLevels = append(resolutionLevels, lvl.Milliseconds())
+			}
+			filters = append(filters, block.NewResolutionMetaFilter(logger, resolutionLevels))
 		}
 
 		if tbc.excludeDelete {
