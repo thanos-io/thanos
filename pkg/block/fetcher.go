@@ -1063,6 +1063,73 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	return nil
 }
 
+var _ MetadataFilter = &ResolutionMetaFilter{}
+
+// ResolutionMetaFilter is a BaseFetcher filter that filters out blocks that are not in the specified resolution range.
+// Not go-routine safe.
+type ResolutionMetaFilter struct {
+	resolutions []int64
+	logger      log.Logger
+}
+
+// NewResolutionMetaFilter creates ResolutionMetaFilter.
+func NewResolutionMetaFilter(logger log.Logger, resolutions []int64) *ResolutionMetaFilter {
+	return &ResolutionMetaFilter{resolutions: resolutions, logger: logger}
+}
+
+// Filter filters out blocks that are not in the specified resolution range.
+func (f *ResolutionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+	if len(f.resolutions) == 0 {
+		return nil
+	}
+	for id, m := range metas {
+		var found bool
+		for _, resolution := range f.resolutions {
+			if m.Thanos.Downsample.Resolution == resolution {
+				found = true
+				break
+			}
+		}
+		if !found {
+			delete(metas, id)
+		}
+	}
+	return nil
+}
+
+// CompactionMetaFilter is a BaseFetcher filter that filters out blocks that are not in the specified compaction range.
+// Not go-routine safe.
+type CompactionMetaFilter struct {
+	compactions []int
+	logger      log.Logger
+}
+
+// NewCompactionMetaFilter creates CompactionMetaFilter.
+func NewCompactionMetaFilter(logger log.Logger, compactions []int) *CompactionMetaFilter {
+	return &CompactionMetaFilter{compactions: compactions, logger: logger}
+}
+
+// Filter filters out blocks that are not in the specified compaction range.
+func (f *CompactionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+	if len(f.compactions) == 0 {
+		return nil
+	}
+
+	for id, m := range metas {
+		var found bool
+		for _, compactionLevel := range f.compactions {
+			if m.Compaction.Level == compactionLevel {
+				found = true
+				break
+			}
+		}
+		if !found {
+			delete(metas, id)
+		}
+	}
+	return nil
+}
+
 var (
 	SelectorSupportedRelabelActions = map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}}
 )
