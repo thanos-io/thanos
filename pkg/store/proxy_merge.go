@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -450,6 +451,11 @@ func newLazyRespSet(
 				l.dataOrFinishEvent.Signal()
 				l.bufferedResponsesMtx.Unlock()
 				return false
+			}
+			if t != nil {
+				// frameTimeout only applies to cl.Recv() gRPC call because the goroutine may be blocked on waiting for an empty buffer slot.
+				// Set the timeout to the largest possible value to void triggering it.
+				t.Reset(time.Duration(math.MaxInt64))
 			}
 
 			numResponses++

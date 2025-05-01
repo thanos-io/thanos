@@ -25,10 +25,12 @@ import (
 )
 
 type rawMetricConfig struct {
-	storeAddr  string
-	metric     string
-	hoursAgo   int
-	skipChunks bool
+	storeAddr            string
+	metric               string
+	hoursAgo             int
+	skipChunks           bool
+	equalLabelMatcher    string
+	notEqualLabelMatcher string
 }
 
 func registerFlags(cmd extkingpin.FlagClause) *rawMetricConfig {
@@ -37,6 +39,8 @@ func registerFlags(cmd extkingpin.FlagClause) *rawMetricConfig {
 	cmd.Flag("metric", "The metric name to stream time series for this metric").Default("node_cpu_seconds_total").StringVar(&conf.metric)
 	cmd.Flag("hours_ago", "Stream the metric from this number of hours ago").Default("16").IntVar(&conf.hoursAgo)
 	cmd.Flag("skip_chunks", "Skip chunks in the response").Default("false").BoolVar(&conf.skipChunks)
+	cmd.Flag("eq_label_matcher", "One label matcher using equal").Default("").StringVar(&conf.equalLabelMatcher)
+	cmd.Flag("neq_label_matcher", "One label matcher using not equal").Default("").StringVar(&conf.notEqualLabelMatcher)
 	return conf
 }
 
@@ -72,6 +76,20 @@ func streamMetric(conf *rawMetricConfig, logger log.Logger) error {
 	labelMatchers := []storepb.LabelMatcher{
 		{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: conf.metric},
 	}
+	addMatcher := func(mtype storepb.LabelMatcher_Type, matcher string) {
+		parts := strings.Split(matcher, "=")
+		if len(parts) != 2 {
+			level.Error(logger).Log("msg", "ignoring an invalid label matcher", "matcher", matcher)
+			return
+		}
+		labelMatchers = append(labelMatchers, storepb.LabelMatcher{
+			Type:  mtype,
+			Name:  parts[0],
+			Value: parts[1],
+		})
+	}
+	addMatcher(storepb.LabelMatcher_EQ, conf.equalLabelMatcher)
+	addMatcher(storepb.LabelMatcher_NEQ, conf.notEqualLabelMatcher)
 	storeReq := &storepb.SeriesRequest{
 		Aggregates: []storepb.Aggr{storepb.Aggr_RAW},
 		Matchers:   labelMatchers,
@@ -103,9 +121,9 @@ func streamMetric(conf *rawMetricConfig, logger log.Logger) error {
 		}
 		series := resPtr.GetSeries()
 		if series == nil {
-			return fmt.Errorf("Got a nil series")
+			return fmt.Errorf("got a nil series")
 		}
-		if 0 == (seq % 1000) {
+		if (seq % 1000) == 0 {
 			level.Info(logger).Log("msg", "streaming time series", "seq", seq)
 		}
 		metric := ""

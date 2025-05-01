@@ -251,6 +251,9 @@ func registerQuery(app *extkingpin.App) {
 	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").Int()
 
+	grpcStoreClientKeepAlivePingInterval := extkingpin.ModelDuration(cmd.Flag("query.grcp-store-client-keep-alive-ping-interval", "This value defines how often a store client sends a keepalive ping on an established gRPC stream. 0 means not to set. NB: a client is keeping a long‐running gRPC stream open. It still has active RPCs on the wire—even if Recv() is not called in a while. Setting PermitWithoutStream=false only stops pings when no streams exist; it does not suppress pings during an open stream").
+		Default("0s"))
+
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -393,6 +396,7 @@ func registerQuery(app *extkingpin.App) {
 			*rewriteAggregationLabelStrategy,
 			*rewriteAggregationLabelTo,
 			*lazyRetrievalMaxBufferedResponses,
+			time.Duration(*grpcStoreClientKeepAlivePingInterval),
 		)
 	})
 }
@@ -480,6 +484,7 @@ func runQuery(
 	rewriteAggregationLabelStrategy string,
 	rewriteAggregationLabelTo string,
 	lazyRetrievalMaxBufferedResponses int,
+	grpcStoreClientKeepAlivePingInterval time.Duration,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -498,6 +503,11 @@ func runQuery(
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
+	}
+	if grpcStoreClientKeepAlivePingInterval > 0 {
+		clientParameters := extgrpc.GetDefaultKeepaliveClientParameters()
+		clientParameters.Time = grpcStoreClientKeepAlivePingInterval
+		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientParameters))
 	}
 	if grpcCompression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(grpcCompression)))

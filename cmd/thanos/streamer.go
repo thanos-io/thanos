@@ -39,6 +39,7 @@ type StreamerConfig struct {
 	storeAddrPort        string
 	streamTimeoutSeconds int
 	replicaLabel         string
+	ignoreWarnings       bool
 }
 
 func registerStreamer(app *extkingpin.App) {
@@ -48,6 +49,7 @@ func registerStreamer(app *extkingpin.App) {
 	cmd.Flag("store", "Thanos Store API gRPC endpoint").Default("localhost:10901").StringVar(&config.storeAddrPort)
 	cmd.Flag("stream.timeout_seconds", "One stream's overall timeout in seconds ").Default("36000").IntVar(&config.streamTimeoutSeconds)
 	cmd.Flag("stream.replica_label", "Drop this replica label from all returns time series and dedup them.").Default("").StringVar(&config.replicaLabel)
+	cmd.Flag("stream.ignore_warnings", "Don't return an error when a warning response is received. --no-stream.ignore_warnings to disable").Default("true").BoolVar(&config.ignoreWarnings)
 
 	hc := &httpConfig{}
 	hc = hc.registerFlag(cmd)
@@ -262,10 +264,14 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 			return writeResponse(&streamer.StreamerResponse{Err: err.Error()})
 		}
 		if warning := response.GetWarning(); warning != "" {
-			level.Error(s.logger).Log(
-				"warning", warning,
+			level.Warn(s.logger).Log(
 				"msg", "warning response from Store gRPC stream",
+				"warning", warning,
+				"ignore_warnings", s.config.ignoreWarnings,
 				"request_id", request.RequestId)
+			if s.config.ignoreWarnings {
+				continue
+			}
 			return writeResponse(&streamer.StreamerResponse{Err: fmt.Sprintf("warning response from Store gRPC stream: %s", warning)})
 		}
 		seriesResp := response.GetSeries()

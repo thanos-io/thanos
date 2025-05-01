@@ -44,6 +44,10 @@ func EndpointGroupGRPCOpts() []grpc.DialOption {
 	}
 }
 
+func GetDefaultKeepaliveClientParameters() keepalive.ClientParameters {
+	return keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}
+}
+
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
 func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, secure, skipVerify bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics(
@@ -71,7 +75,7 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 			grpcMets.StreamClientInterceptor(),
 			tracing.StreamClientInterceptor(tracer),
 		),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
+		grpc.WithKeepaliveParams(GetDefaultKeepaliveClientParameters()),
 	}
 	if reg != nil {
 		reg.MustRegister(grpcMets)

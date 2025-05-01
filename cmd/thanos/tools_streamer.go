@@ -23,10 +23,13 @@ import (
 )
 
 type streamerToolConfig struct {
-	socketPath string
-	metric     string
-	hoursAgo   int
-	skipChunks bool
+	socketPath           string
+	metric               string
+	hoursAgo             int
+	skipChunks           bool
+	equalLabelMatcher    string
+	notEqualLabelMatcher string
+	sleepSeconds         int
 }
 
 func registerStreamerTool(app extkingpin.AppClause) {
@@ -37,6 +40,9 @@ func registerStreamerTool(app extkingpin.AppClause) {
 	cmd.Flag("metric", "The metric name to stream time series for this metric").Default("node_cpu_seconds_total").StringVar(&conf.metric)
 	cmd.Flag("hours_ago", "Stream the metric from this number of hours ago").Default("16").IntVar(&conf.hoursAgo)
 	cmd.Flag("skip_chunks", "Skip chunks in the response").Default("false").BoolVar(&conf.skipChunks)
+	cmd.Flag("eq_label_matcher", "One label matcher using equal").Default("").StringVar(&conf.equalLabelMatcher)
+	cmd.Flag("neq_label_matcher", "One label matcher using not equal").Default("").StringVar(&conf.notEqualLabelMatcher)
+	cmd.Flag("sleep_seconds_between_calls", "Sleep this amount of seconds between calling two gRPC").Default("0").IntVar(&conf.sleepSeconds)
 
 	cmd.Setup(func(
 		g *run.Group,
@@ -72,6 +78,20 @@ func runStreamerTool(conf *streamerToolConfig, logger log.Logger) error {
 		SkipChunks:       conf.skipChunks,
 		Metric:           conf.metric,
 	}
+	addMatcher := func(mtype streamer_pkg.LabelMatcher_Type, matcher string) {
+		parts := strings.Split(matcher, "=")
+		if len(parts) != 2 {
+			level.Error(logger).Log("msg", "ignoring an invalid label matcher", "matcher", matcher)
+			return
+		}
+		request.LabelMatchers = append(request.LabelMatchers, streamer_pkg.LabelMatcher{
+			Type:  mtype,
+			Name:  parts[0],
+			Value: parts[1],
+		})
+	}
+	addMatcher(streamer_pkg.LabelMatcher_EQ, conf.equalLabelMatcher)
+	addMatcher(streamer_pkg.LabelMatcher_NEQ, conf.notEqualLabelMatcher)
 
 	level.Info(logger).Log(
 		"msg", "sending a socket request to Thanos streamer",
@@ -120,7 +140,7 @@ func runStreamerTool(conf *streamerToolConfig, logger log.Logger) error {
 			level.Error(logger).Log("msg", "error in response", "err", resp.Err)
 			return nil
 		}
-		if 0 == (seq % 1000) {
+		if (seq % 1000) == 0 {
 			level.Info(logger).Log("msg", "streaming time series", "seq", seq)
 		}
 		series := resp.Data
@@ -147,6 +167,9 @@ func runStreamerTool(conf *streamerToolConfig, logger log.Logger) error {
 			order++
 		}
 		fmt.Printf("\n")
+		if conf.sleepSeconds > 0 {
+			time.Sleep(time.Duration(conf.sleepSeconds) * time.Second)
+		}
 	}
 	return fmt.Errorf("unexpected interruption: %w", scanner.Err())
 }
