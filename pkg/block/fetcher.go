@@ -1068,65 +1068,99 @@ var _ MetadataFilter = &ResolutionMetaFilter{}
 // ResolutionMetaFilter is a BaseFetcher filter that filters out blocks that are not in the specified resolution range.
 // Not go-routine safe.
 type ResolutionMetaFilter struct {
-	resolutions []int64
+	resolutions map[int64]struct{}
 	logger      log.Logger
 }
 
 // NewResolutionMetaFilter creates ResolutionMetaFilter.
 func NewResolutionMetaFilter(logger log.Logger, resolutions []int64) *ResolutionMetaFilter {
-	return &ResolutionMetaFilter{resolutions: resolutions, logger: logger}
+	resolutionLevels := make(map[int64]struct{}, len(resolutions))
+	for _, resolutionLevel := range resolutions {
+		resolutionLevels[resolutionLevel] = struct{}{}
+	}
+	return &ResolutionMetaFilter{resolutions: resolutionLevels, logger: logger}
 }
 
 // Filter filters out blocks that are not in the specified resolution range.
+// If no resolutions are specified, all blocks are kept.
 func (f *ResolutionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	if len(f.resolutions) == 0 {
 		return nil
 	}
+
 	for id, m := range metas {
-		var found bool
-		for _, resolution := range f.resolutions {
-			if m.Thanos.Downsample.Resolution == resolution {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, ok := f.resolutions[m.Thanos.Downsample.Resolution]; !ok {
 			delete(metas, id)
 		}
 	}
+
 	return nil
 }
+
+var _ MetadataFilter = &ResolutionMetaFilter{}
 
 // CompactionMetaFilter is a BaseFetcher filter that filters out blocks that are not in the specified compaction range.
 // Not go-routine safe.
 type CompactionMetaFilter struct {
-	compactions []int
+	compactions map[int]struct{}
 	logger      log.Logger
 }
 
 // NewCompactionMetaFilter creates CompactionMetaFilter.
 func NewCompactionMetaFilter(logger log.Logger, compactions []int) *CompactionMetaFilter {
-	return &CompactionMetaFilter{compactions: compactions, logger: logger}
+	compactionLevels := make(map[int]struct{}, len(compactions))
+	for _, compactionLevel := range compactions {
+		compactionLevels[compactionLevel] = struct{}{}
+	}
+	return &CompactionMetaFilter{compactions: compactionLevels, logger: logger}
 }
 
 // Filter filters out blocks that are not in the specified compaction range.
+// If no compactions are specified, all blocks are kept.
 func (f *CompactionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	if len(f.compactions) == 0 {
 		return nil
 	}
 
 	for id, m := range metas {
-		var found bool
-		for _, compactionLevel := range f.compactions {
-			if m.Compaction.Level == compactionLevel {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, ok := f.compactions[m.Compaction.Level]; !ok {
 			delete(metas, id)
 		}
 	}
+	return nil
+}
+
+var _ MetadataFilter = &ResolutionMetaFilter{}
+
+// IDMetaFilter BlockIDMetaFilter is a BaseFetcher filter that filters out blocks that are not in the list of specified ID.
+// Not go-routine safe.
+type IDMetaFilter struct {
+	ids    map[ulid.ULID]struct{}
+	logger log.Logger
+}
+
+// NewIDMetaFilter creates BlockIDMetaFilter.
+func NewIDMetaFilter(logger log.Logger, ids []ulid.ULID) *IDMetaFilter {
+	metaIDS := make(map[ulid.ULID]struct{}, len(ids))
+	for _, id := range ids {
+		metaIDS[id] = struct{}{}
+	}
+	return &IDMetaFilter{ids: metaIDS, logger: logger}
+}
+
+// Filter filters out blocks that are not in the specified ID list.
+// If no IDs are specified, all blocks are kept.
+func (f *IDMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+	if len(f.ids) == 0 {
+		return nil
+	}
+
+	for metaID, _ := range metas {
+		if _, ok := f.ids[metaID]; !ok {
+			delete(metas, metaID)
+		}
+	}
+
 	return nil
 }
 

@@ -1337,3 +1337,65 @@ func TestResolutionMetaFilter_Filter(t *testing.T) {
 		})
 	}
 }
+
+func TestIDMetaFilter_Filter(t *testing.T) {
+	testCases := []struct {
+		name     string
+		ids      []ulid.ULID
+		input    map[ulid.ULID]*metadata.Meta
+		expected map[ulid.ULID]*metadata.Meta
+	}{
+		{
+			name: "filters out blocks not in ID list",
+			ids:  []ulid.ULID{ULID(1), ULID(2)},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"key3": "value3"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+			},
+		},
+		{
+			name: "keeps all blocks when all IDs match",
+			ids:  []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"key3": "value3"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"key3": "value3"}}},
+			},
+		},
+		{
+			name:     "handles empty input gracefully",
+			ids:      []ulid.ULID{ULID(1), ULID(2)},
+			input:    map[ulid.ULID]*metadata.Meta{},
+			expected: map[ulid.ULID]*metadata.Meta{},
+		},
+		{
+			name: "filters out all blocks when no IDs match",
+			ids:  []ulid.ULID{ULID(4), ULID(5)},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := NewIDMetaFilter(log.NewNopLogger(), tc.ids)
+
+			m := newTestFetcherMetrics()
+			testutil.Ok(t, filter.Filter(context.Background(), tc.input, m.Synced, nil))
+			testutil.Equals(t, tc.expected, tc.input)
+		})
+	}
+}
