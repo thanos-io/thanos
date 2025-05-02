@@ -556,6 +556,10 @@ Flags:
                                 consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
+      --id=ID ...               ID (ULID) of the blocks to be marked for
+                                inspection (repeated flag). If none are
+                                specified, all matching blocks will be
+                                inspected.
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
@@ -829,6 +833,8 @@ Flags:
                                 consumption.
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
+      --id=ID ...               ID (ULID) of the blocks to be marked for cleanup
+                                (repeated flag)
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
