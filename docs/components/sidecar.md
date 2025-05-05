@@ -208,6 +208,11 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
+      --shipper.retry-init       If true, shipper will retry to initialize
+                                 itself until success which allows sidecar to
+                                 start without shipper. If false, on shipper
+                                 initialization error, sidecar crashes at
+                                 startup.
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
