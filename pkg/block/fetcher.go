@@ -299,8 +299,8 @@ type GaugeVec interface {
 	WithLabelValues(lvs ...string) prometheus.Gauge
 }
 
-// Filter allows filtering or modifying metas from the provided map or returns error.
 type MetadataFilter interface {
+	// Filter allows filtering or modifying metas from the provided map or returns error.
 	Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error
 }
 
@@ -1154,13 +1154,13 @@ func (f *IDMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.M
 	if len(f.ids) == 0 {
 		return nil
 	}
-
+	level.Debug(f.logger).Log("msg", "count before block ID meta filter ", "count", len(metas))
 	for metaID, _ := range metas {
 		if _, ok := f.ids[metaID]; !ok {
 			delete(metas, metaID)
 		}
 	}
-
+	level.Debug(f.logger).Log("msg", "count after block ID meta filter", "count", len(metas))
 	return nil
 }
 

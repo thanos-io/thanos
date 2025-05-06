@@ -154,6 +154,7 @@ type bucketCleanupConfig struct {
 	deleteDelay          time.Duration
 	filterConf           *store.FilterConfig
 	blockIDs             []string
+	dryRun               bool
 }
 
 type bucketRetentionConfig struct {
@@ -297,7 +298,8 @@ func (tbc *bucketCleanupConfig) registerBucketCleanupFlag(cmd extkingpin.FlagCla
 		Default("0000-01-01T00:00:00Z").SetValue(&tbc.filterConf.MinTime)
 	cmd.Flag("max-time", "End of time range limit to cleanup. Thanos Tools will cleanup only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
-	cmd.Flag("id", "ID (ULID) of the blocks to be marked for cleanup (repeated flag)").Default().StringsVar(&tbc.blockIDs)
+	cmd.Flag("id", "ID (ULID) of the blocks to be marked for cleanup (repeated flag). If none provided no block will be filtered by ID").Default().StringsVar(&tbc.blockIDs)
+	cmd.Flag("dry-run", "Prints the blocks to be cleaned, that match any provided filters instead of cleaning them. Defaults to true, for user to double check").Default("false").BoolVar(&tbc.dryRun)
 	return tbc
 }
 
@@ -914,27 +916,26 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, tbc.deleteDelay/2, tbc.blockSyncConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(tbc.blockSyncConcurrency)
-		blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
 		ctx := context.Background()
-
 		var sy *compact.Syncer
 		{
 			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
-			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "/tmp", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
 			}
 			cf := baseMetaFetcher.NewMetaFetcher(
 				extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{
+					block.NewIDMetaFilter(logger, ids),
 					block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
 					block.NewLabelShardedMetaFilter(relabelConfig),
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					ignoreDeletionMarkFilter,
 					duplicateBlocksFilter,
-					block.NewIDMetaFilter(logger, ids),
 				},
 			)
+
 			sy, err = compact.NewMetaSyncer(
 				logger,
 				reg,
@@ -955,9 +956,24 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		if err := sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync blocks")
 		}
-
 		level.Info(logger).Log("msg", "synced blocks done")
 
+		var filteredIDS []ulid.ULID
+		for i, _ := range sy.Metas() {
+			filteredIDS = append(filteredIDS, i)
+		}
+
+		if tbc.dryRun {
+			compact.DryRunCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt)
+			blocksCleaner := compact.NewDryRunBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, filteredIDS...)
+			if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+				return errors.Wrap(err, "error cleaning blocks")
+			}
+			level.Info(logger).Log("msg", "finished cleanup dry-run")
+			return nil
+		}
+
+		blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter, filteredIDS...)
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "error cleaning blocks")
