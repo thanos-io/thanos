@@ -171,7 +171,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
   const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
   const queryMode = flagsRes?.data?.['query.mode'];
-  const defaultEngine = queryMode == 'distributed' ? 'thanos' : flagsRes?.data?.['query.promql-engine'];
+  const defaultEngine = queryMode === 'distributed' ? 'thanos' : flagsRes?.data?.['query.promql-engine'];
   const usePartialResponse = flagsRes?.data?.['query.partial-response'] || true;
 
   const browserTime = new Date().getTime() / 1000;

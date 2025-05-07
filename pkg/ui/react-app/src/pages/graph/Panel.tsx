@@ -524,7 +524,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-            <UncontrolledAlert isOpen={this.state.error || false} toggle={this.handleToggleAlert} color="danger">
+            <UncontrolledAlert isOpen={!!this.state.error} toggle={this.handleToggleAlert} color="danger">
               {this.state.error}
             </UncontrolledAlert>
           </Col>
@@ -545,7 +545,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           <Col>
             <div className="float-left">
               <Checkbox
-                disabled={this.props.queryMode != 'local' && this.props.options.engine != 'prometheus'}
+                disabled={this.props.queryMode !== 'local' && this.props.options.engine !== 'prometheus'}
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`use-deduplication-checkbox-${id}`}
                 onChange={this.handleChangeDeduplication}
@@ -554,7 +554,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 Use Deduplication
               </Checkbox>
               <Checkbox
-                disabled={this.props.queryMode != 'local' && this.props.options.engine != 'prometheus'}
+                disabled={this.props.queryMode !== 'local' && this.props.options.engine !== 'prometheus'}
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`use-partial-resp-checkbox-${id}`}
                 onChange={this.handleChangePartialResponse}
