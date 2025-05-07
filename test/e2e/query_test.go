@@ -660,9 +660,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		}
 	}
 
-	storeGW := e2ethanos.NewStoreGW(
-		e,
-		"s1",
+	storeGW := e2ethanos.NewStoreGWBuilder(e, "s1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
@@ -811,9 +809,7 @@ func TestQueryStoreDedup(t *testing.T) {
 	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
-	storeGW := e2ethanos.NewStoreGW(
-		e,
-		"s1",
+	storeGW := e2ethanos.NewStoreGWBuilder(e, "s1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
@@ -2097,9 +2093,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID2.String()), blockID2.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID3.String()), blockID3.String()))
 
-	storeGW := e2ethanos.NewStoreGW(
-		e,
-		"s1",
+	storeGW := e2ethanos.NewStoreGWBuilder(e, "s1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
