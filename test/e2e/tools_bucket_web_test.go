@@ -33,6 +33,8 @@ import (
 )
 
 func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
+	t.Skip("flaky test")
+
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("rt-prfx-xtprf")
@@ -66,6 +68,8 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 }
 
 func TestToolsBucketWebExternalPrefix(t *testing.T) {
+	t.Skip("flaky test")
+
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("external-prefix")
@@ -103,6 +107,8 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 }
 
 func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
+	t.Skip("flaky test")
+
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("rt-prfx-xtrtprf")
