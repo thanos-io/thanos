@@ -1066,6 +1066,10 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		flags["--query-frontend.default-tenant"] = config.DefaultTenant
 	}
 
+	if len(config.EnableFeatures) > 0 {
+		flags["--enable-feature"] = fmt.Sprintf("%s", config.EnableFeatures)
+	}
+
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).
 		WithPorts(map[string]int{"http": 8080}).
 		Init(e2e.StartOptions{
