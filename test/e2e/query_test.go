@@ -358,7 +358,7 @@ func TestQueryWithExtendedFunctions(t *testing.T) {
 func TestQueryWithExperimentalFunctions(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.New(e2e.WithName("e2e-qry-experimental-func"))
+	e, err := e2e.New(e2e.WithName("e2e-qry-exp-func"))
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -383,17 +383,19 @@ func TestQueryWithExperimentalFunctions(t *testing.T) {
 	testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom, samples))
 
 	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
-		return `limitk(2, http_requests_total) by (pod)`
+		return `limitk(1, http_requests_total) by (pod)`
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
+			"__name__":   "http_requests_total",
 			"pod":        "nginx-1",
 			"instance":   "1",
 			"prometheus": "prom",
 			"replica":    "0",
 		},
 		{
+			"__name__":   "http_requests_total",
 			"pod":        "nginx-2",
 			"instance":   "1",
 			"prometheus": "prom",

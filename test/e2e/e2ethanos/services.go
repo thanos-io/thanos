@@ -1067,7 +1067,7 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 	}
 
 	if len(config.EnableFeatures) > 0 {
-		flags["--enable-feature"] = fmt.Sprintf("%s", config.EnableFeatures)
+		flags["--enable-feature"] = strings.Join(config.EnableFeatures, ",")
 	}
 
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).

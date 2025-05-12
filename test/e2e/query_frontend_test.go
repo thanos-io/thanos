@@ -835,7 +835,8 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 
 	testutil.Ok(t, remoteWrite(ctx, samplespb, i.Endpoint("remote-write")))
 
-	q1 := e2ethanos.NewQuerierBuilder(e, "q1", i.InternalEndpoint("grpc")).Init()
+	enableFeature := []string{"promql-experimental-functions"}
+	q1 := e2ethanos.NewQuerierBuilder(e, "q1", i.InternalEndpoint("grpc")).WithEnabledFeatures(enableFeature).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q1))
 
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
@@ -850,7 +851,7 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 			AlignRangeWithStep: false,
 		},
 		NumShards:      2,
-		EnableFeatures: []string{"promql-experimental-functions"},
+		EnableFeatures: enableFeature,
 	}
 	qfe := e2ethanos.NewQueryFrontend(e, "query-frontend", "http://"+q1.InternalEndpoint("http"), config, inMemoryCacheConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
