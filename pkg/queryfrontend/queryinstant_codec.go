@@ -380,19 +380,19 @@ func sortPlanForQuery(q string) (sortPlan, error) {
 	if err != nil {
 		return 0, err
 	}
-	// Check if the root expression is topk or bottomk
+	// Check if the root expression is topk, bottomk, limitk or limit_ratio
 	if aggr, ok := expr.(*parser.AggregateExpr); ok {
-		if aggr.Op == parser.TOPK || aggr.Op == parser.BOTTOMK {
+		if aggr.Op == parser.TOPK || aggr.Op == parser.BOTTOMK || aggr.Op == parser.LIMITK || aggr.Op == parser.LIMIT_RATIO {
 			return mergeOnly, nil
 		}
 	}
 	checkForSort := func(expr parser.Expr) (sortAsc, sortDesc bool) {
 		if n, ok := expr.(*parser.Call); ok {
 			if n.Func != nil {
-				if n.Func.Name == "sort" {
+				if n.Func.Name == "sort" || n.Func.Name == "sort_by_label" {
 					sortAsc = true
 				}
-				if n.Func.Name == "sort_desc" {
+				if n.Func.Name == "sort_desc" || n.Func.Name == "sort_by_label_desc" {
 					sortDesc = true
 				}
 			}
