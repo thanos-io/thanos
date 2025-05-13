@@ -210,6 +210,10 @@ Flags:
                                  compression).
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --enable-feature= ...      Comma separated feature names to enable. Valid
+                                 options for now: promql-experimental-functions
+                                 (enables promql experimental functions in
+                                 query-frontend)
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
