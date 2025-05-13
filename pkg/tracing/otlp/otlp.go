@@ -26,8 +26,6 @@ import (
 )
 
 const (
-	TracingClientGRPC                  string = "grpc"
-	TracingClientHTTP                  string = "http"
 	AlwaysSample                       string = "alwayssample"
 	NeverSample                        string = "neversample"
 	TraceIDRatioBasedSample            string = "traceidratiobased"
@@ -45,7 +43,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 
 	var exporter *otlptrace.Exporter
 	var err error
-	switch strings.ToLower(config.ClientType) {
+	switch config.ClientType {
 	case TracingClientHTTP:
 		options := traceHTTPOptions(config)
 
