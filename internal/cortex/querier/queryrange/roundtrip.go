@@ -20,6 +20,8 @@ package queryrange
 
 import (
 	"context"
+	"fmt"
+	"github.com/opentracing/opentracing-go/ext"
 	"io"
 	"net/http"
 	"strings"
@@ -253,18 +255,54 @@ func (q roundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // Do implements Handler.
 func (q roundTripper) Do(ctx context.Context, r Request) (Response, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "HTTP Request", ext.SpanKindRPCClient)
+	defer span.Finish()
+
 	request, err := q.codec.EncodeRequest(ctx, r)
+
 	if err != nil {
+		span.SetTag("error", true)
+		span.LogKV("event", "error", "message", err.Error())
 		return nil, err
 	}
+
+	span.SetOperationName(fmt.Sprintf("HTTP %s %s", request.Method, request.URL.String()))
+	span.SetTag("http.method", request.Method)
+	span.SetTag("http.url", request.URL.String())
 
 	if err := user.InjectOrgIDIntoHTTPRequest(ctx, request); err != nil {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, "%s", err.Error())
 	}
 
+	newReqCtx := opentracing.ContextWithSpan(request.Context(), span)
+	request = request.WithContext(newReqCtx)
+
 	response, err := q.next.RoundTrip(request)
+
+	span.SetTag("http.host", request.URL.Host)
+
 	if err != nil {
+		span.SetTag("error", true)
+		span.LogKV(
+			"event", "error",
+			"message", err.Error(),
+		)
 		return nil, err
+	}
+
+	if response.StatusCode >= 400 {
+		span.SetTag("error", true)
+		span.LogKV(
+			"event", "error",
+			"http.status_code", response.StatusCode,
+			"message", response.Status,
+			"http.response_size", response.ContentLength,
+		)
+	} else {
+		span.LogKV(
+			"http.status_code", response.StatusCode,
+			"http.response_size", response.ContentLength,
+		)
 	}
 	defer func() {
 		io.Copy(io.Discard, io.LimitReader(response.Body, 1024))
