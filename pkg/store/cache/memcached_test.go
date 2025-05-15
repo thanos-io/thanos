@@ -37,15 +37,15 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 		mockedErr      error
 		fetchBlockID   ulid.ULID
 		fetchLabels    []labels.Label
-		expectedHits   map[labels.Label][]byte
-		expectedMisses []labels.Label
+		expectedHits   [][]byte
+		expectedMisses []uint64
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedPostings{},
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
-			expectedHits:   nil,
-			expectedMisses: []labels.Label{label1, label2},
+			expectedHits:   [][]byte{nil, nil},
+			expectedMisses: []uint64{0, 1},
 		},
 		"should return no misses on 100% hit ratio": {
 			setup: []mockedPostings{
@@ -53,13 +53,10 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 				{block: block1, label: label2, value: value2},
 				{block: block2, label: label1, value: value3},
 			},
-			fetchBlockID: block1,
-			fetchLabels:  []labels.Label{label1, label2},
-			expectedHits: map[labels.Label][]byte{
-				label1: value1,
-				label2: value2,
-			},
-			expectedMisses: nil,
+			fetchBlockID:   block1,
+			fetchLabels:    []labels.Label{label1, label2},
+			expectedHits:   [][]byte{value1, value2},
+			expectedMisses: []uint64{},
 		},
 		"should return hits and misses on partial hits": {
 			setup: []mockedPostings{
@@ -68,8 +65,8 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			},
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
-			expectedHits:   map[labels.Label][]byte{label1: value1},
-			expectedMisses: []labels.Label{label2},
+			expectedHits:   [][]byte{value1, nil},
+			expectedMisses: []uint64{1},
 		},
 		"should return no hits on memcached error": {
 			setup: []mockedPostings{
@@ -80,8 +77,8 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			mockedErr:      errors.New("mocked error"),
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
-			expectedHits:   nil,
-			expectedMisses: []labels.Label{label1, label2},
+			expectedHits:   [][]byte{nil, nil},
+			expectedMisses: []uint64{0, 1},
 		},
 	}
 
@@ -104,7 +101,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 
 			// Assert on metrics.
 			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
+			testutil.Equals(t, float64(len(testData.fetchLabels)-len(testData.expectedMisses)), prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypePostings, tenancy.DefaultTenant)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requestTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hitsTotal.WithLabelValues(CacheTypeSeries, tenancy.DefaultTenant)))
 		})
