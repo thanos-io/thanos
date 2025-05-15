@@ -318,6 +318,10 @@ Flags:
                                  --query.replica-label flag.
       --enable-auto-gomemlimit   Enable go runtime to automatically limit memory
                                  consumption.
+      --enable-feature= ...      Comma separated feature names to enable. Valid
+                                 options for now: promql-experimental-functions
+                                 (enables promql experimental functions in
+                                 query)
       --endpoint=<endpoint> ...  (Deprecated): Addresses of statically
                                  configured Thanos API servers (repeatable).
                                  The scheme may be prefixed with 'dns+' or
