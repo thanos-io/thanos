@@ -100,6 +100,7 @@ type bucketRewriteConfig struct {
 type bucketInspectConfig struct {
 	selector []string
 	sortBy   []string
+	blockIDs []string
 	timeout  time.Duration
 }
 
@@ -114,6 +115,8 @@ type bucketLsConfig struct {
 	excludeDelete       bool
 	selectorRelabelConf extflag.PathOrContent
 	filterConf          *store.FilterConfig
+	resolutions         []time.Duration
+	compactions         []int
 	timeout             time.Duration
 }
 
@@ -149,6 +152,9 @@ type bucketCleanupConfig struct {
 	consistencyDelay     time.Duration
 	blockSyncConcurrency int
 	deleteDelay          time.Duration
+	filterConf           *store.FilterConfig
+	blockIDs             []string
+	dryRun               bool
 }
 
 type bucketRetentionConfig struct {
@@ -196,6 +202,8 @@ func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *buck
 	cmd.Flag("max-time", "End of time range limit to list. Thanos Tools will list only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
+	cmd.Flag("resolution", "Only blocks with these resolutions will be listed. Defaults to all resolutions. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationListVar(&tbc.resolutions)
+	cmd.Flag("compaction", "If set, only blocks with these compaction levels will be listed. Repeated flag.").Default().IntsVar(&tbc.compactions)
 	return tbc
 }
 
@@ -204,6 +212,7 @@ func (tbc *bucketInspectConfig) registerBucketInspectFlag(cmd extkingpin.FlagCla
 		PlaceHolder("<name>=\\\"<value>\\\"").StringsVar(&tbc.selector)
 	cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
 		Default("FROM", "UNTIL").EnumsVar(&tbc.sortBy, inspectColumns...)
+	cmd.Flag("id", "ID (ULID) of the blocks to be marked for inspection (repeated flag). If none are specified, all matching blocks will be inspected.").Default().StringsVar(&tbc.blockIDs)
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 
 	return tbc
@@ -278,11 +287,19 @@ func (tbc *bucketMarkBlockConfig) registerBucketMarkBlockFlag(cmd extkingpin.Fla
 }
 
 func (tbc *bucketCleanupConfig) registerBucketCleanupFlag(cmd extkingpin.FlagClause) *bucketCleanupConfig {
+	tbc.filterConf = &store.FilterConfig{}
+
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket.").Default("48h").DurationVar(&tbc.deleteDelay)
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&tbc.consistencyDelay)
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").IntVar(&tbc.blockSyncConcurrency)
+	cmd.Flag("min-time", "Start of time range limit to cleanup blocks. Thanos Tools will cleanup blocks, which were created later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z").SetValue(&tbc.filterConf.MinTime)
+	cmd.Flag("max-time", "End of time range limit to cleanup. Thanos Tools will cleanup only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
+	cmd.Flag("id", "ID (ULID) of the blocks to be marked for cleanup (repeated flag). If none provided no block will be filtered by ID").Default().StringsVar(&tbc.blockIDs)
+	cmd.Flag("dry-run", "Prints the blocks to be cleaned, that match any provided filters instead of cleaning them. Defaults to true, for user to double check").Default("false").BoolVar(&tbc.dryRun)
 	return tbc
 }
 
@@ -339,6 +356,11 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
+		ids, err := parseBlockIDS(tbc.ids)
+		if err != nil {
+			return err
+		}
+
 		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
@@ -376,7 +398,10 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		}
 
 		// We ignore any block that has the deletion marker file.
-		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)}
+		filters := []block.MetadataFilter{
+			block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency),
+			block.NewIDMetaFilter(logger, ids),
+		}
 		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
@@ -384,13 +409,9 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
-		if len(tbc.ids) > 0 {
-			idsMap := map[string]struct{}{}
-			for _, bid := range tbc.ids {
-				id, err := ulid.Parse(bid)
-				if err != nil {
-					return errors.Wrap(err, "invalid ULID found in --id flag")
-				}
+		if len(ids) > 0 {
+			idsMap := make(map[string]struct{}, len(ids))
+			for _, id := range ids {
 				idsMap[id.String()] = struct{}{}
 			}
 
@@ -446,6 +467,18 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		filters := []block.MetadataFilter{
 			block.NewLabelShardedMetaFilter(relabelConfig),
 			block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
+		}
+
+		if len(tbc.compactions) > 0 {
+			filters = append(filters, block.NewCompactionMetaFilter(logger, tbc.compactions))
+		}
+
+		if len(tbc.resolutions) > 0 {
+			var resolutionLevels []int64
+			for _, lvl := range tbc.resolutions {
+				resolutionLevels = append(resolutionLevels, lvl.Milliseconds())
+			}
+			filters = append(filters, block.NewResolutionMetaFilter(logger, resolutionLevels))
 		}
 
 		if tbc.excludeDelete {
@@ -544,6 +577,15 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return errors.Wrap(err, "error parsing selector flag")
 		}
 
+		ids, err := parseBlockIDS(tbc.blockIDs)
+		if err != nil {
+			return err
+		}
+
+		filters := []block.MetadataFilter{
+			block.NewIDMetaFilter(logger, ids),
+		}
+
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
@@ -556,7 +598,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
 		}
@@ -576,9 +618,6 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		}
 
 		blockMetas := make([]*metadata.Meta, 0, len(metas))
-		for _, meta := range metas {
-			blockMetas = append(blockMetas, meta)
-		}
 
 		var opPrinter tablePrinter
 		op := outputType(*output)
@@ -867,30 +906,36 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 
+		ids, err := parseBlockIDS(tbc.blockIDs)
+		if err != nil {
+			return err
+		}
+
 		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, tbc.deleteDelay/2, tbc.blockSyncConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(tbc.blockSyncConcurrency)
-		blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
 		ctx := context.Background()
-
 		var sy *compact.Syncer
 		{
 			baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
-			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, insBkt, baseBlockIDsFetcher, "/tmp", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
 			}
 			cf := baseMetaFetcher.NewMetaFetcher(
 				extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{
+					block.NewIDMetaFilter(logger, ids),
+					block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
 					block.NewLabelShardedMetaFilter(relabelConfig),
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					ignoreDeletionMarkFilter,
 					duplicateBlocksFilter,
 				},
 			)
+
 			sy, err = compact.NewMetaSyncer(
 				logger,
 				reg,
@@ -911,9 +956,24 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		if err := sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync blocks")
 		}
-
 		level.Info(logger).Log("msg", "synced blocks done")
 
+		var filteredIDS []ulid.ULID
+		for i, _ := range sy.Metas() {
+			filteredIDS = append(filteredIDS, i)
+		}
+
+		if tbc.dryRun {
+			compact.DryRunCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt)
+			blocksCleaner := compact.NewDryRunBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, filteredIDS...)
+			if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+				return errors.Wrap(err, "error cleaning blocks")
+			}
+			level.Info(logger).Log("msg", "finished cleanup dry-run")
+			return nil
+		}
+
+		blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter, filteredIDS...)
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "error cleaning blocks")
@@ -1231,13 +1291,9 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return errors.New("rewrite configuration should be provided")
 		}
 
-		var ids []ulid.ULID
-		for _, id := range tbc.blockIDs {
-			u, err := ulid.Parse(id)
-			if err != nil {
-				return errors.Errorf("id is not a valid block ULID, got: %v", id)
-			}
-			ids = append(ids, u)
+		ids, err := parseBlockIDS(tbc.blockIDs)
+		if err != nil {
+			return err
 		}
 
 		if err := os.RemoveAll(tbc.tmpDir); err != nil {
@@ -1517,4 +1573,16 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 
 		return nil
 	})
+}
+
+func parseBlockIDS(ids []string) ([]ulid.ULID, error) {
+	var ulids []ulid.ULID
+	for _, id := range ids {
+		u, err := ulid.Parse(id)
+		if err != nil {
+			return nil, errors.Errorf("block.id is not a valid UUID, got: %v", id)
+		}
+		ulids = append(ulids, u)
+	}
+	return ulids, nil
 }

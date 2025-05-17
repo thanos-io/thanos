@@ -167,7 +167,9 @@ func (s *Syncer) SyncMetas(ctx context.Context) error {
 	}
 	s.mtx.Lock()
 	s.blocks = container.(metasContainer).metas
+	level.Debug(s.logger).Log("msg", "syncing metas", "count", len(s.blocks))
 	s.partial = container.(metasContainer).partial
+	level.Debug(s.logger).Log("msg", "syncing partial", "count", len(s.partial))
 	s.mtx.Unlock()
 	return nil
 }
