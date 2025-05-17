@@ -62,7 +62,7 @@ func TestBadClusterConfigs(t *testing.T) {
 			errors.New("failed to read nodes: EOF"),
 		},
 		{"CONFIG cluster 0 0\r\n100\r\ndns-1|ip-1|11211\r\nEND\r\n",
-			errors.New("expected 0 in config payload, but got 23 instead."),
+			errors.New("expected 0 in config payload, but got 23 instead"),
 		},
 		{"CONFIG cluster 0 17\r\n100\r\ndns-1|ip-1\r\nEND\r\n",
 			errors.New("node not in expected format: [dns-1 ip-1]"),
