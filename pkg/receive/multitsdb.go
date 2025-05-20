@@ -61,6 +61,7 @@ type MultiTSDB struct {
 	mtx                   *sync.RWMutex
 	tenants               map[string]*tenant
 	allowOutOfOrderUpload bool
+	skipCorruptedBlocks   bool
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
@@ -114,6 +115,7 @@ func NewMultiTSDB(
 	tenantLabelName string,
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
+	skipCorruptedBlocks bool,
 	hashFunc metadata.HashFunc,
 	options ...MultiTSDBOption,
 ) *MultiTSDB {
@@ -134,6 +136,7 @@ func NewMultiTSDB(
 		tenantLabelName:       tenantLabelName,
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
+		skipCorruptedBlocks:   skipCorruptedBlocks,
 		hashFunc:              hashFunc,
 		matcherCache:          storecache.NoopMatchersCache,
 	}
@@ -761,6 +764,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			metadata.ReceiveSource,
 			nil,
 			t.allowOutOfOrderUpload,
+			t.skipCorruptedBlocks,
 			t.hashFunc,
 			shipper.DefaultMetaFilename,
 		)

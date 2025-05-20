@@ -11,10 +11,13 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/client_golang/prometheus"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -61,9 +64,49 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
-	metas, err := shipper.blockMetasFromOldest()
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	metas, failedBlocks, err := shipper.blockMetasFromOldest()
 	testutil.Ok(t, err)
+	testutil.Equals(t, 0, len(failedBlocks))
+	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
+		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+	}), true)
+}
+
+func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
+	dir := t.TempDir()
+
+	id1 := ulid.MustNew(1, nil)
+	testutil.Ok(t, os.Mkdir(path.Join(dir, id1.String()), os.ModePerm))
+	testutil.Ok(t, metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id1,
+			MaxTime: 2000,
+			MinTime: 1000,
+			Version: 1,
+		},
+	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id1.String())))
+
+	id2 := ulid.MustNew(2, nil)
+	testutil.Ok(t, os.Mkdir(path.Join(dir, id2.String()), os.ModePerm))
+
+	id3 := ulid.MustNew(3, nil)
+	testutil.Ok(t, os.Mkdir(path.Join(dir, id3.String()), os.ModePerm))
+	testutil.Ok(t, metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id3,
+			MaxTime: 3000,
+			MinTime: 2000,
+			Version: 1,
+		},
+	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
+
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	metas, failedBlocks, err := shipper.blockMetasFromOldest()
+	testutil.NotOk(t, err)
+	testutil.Equals(t, 1, len(failedBlocks))
+	testutil.Equals(t, id2.String(), failedBlocks[0])
+	testutil.Equals(t, 2, len(metas))
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
 		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
 	}), true)
@@ -92,9 +135,9 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
 
-	_, err := shipper.blockMetasFromOldest()
+	_, _, err := shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
 }
 
@@ -104,7 +147,7 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	inmemory := objstore.NewInMemBucket()
 
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())
@@ -135,6 +178,80 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []string{segmentFile}, meta.Thanos.SegmentFiles)
+}
+
+func TestShipperSkipCorruptedBlocks(t *testing.T) {
+	dir := t.TempDir()
+
+	inmemory := objstore.NewInMemBucket()
+
+	metrics := prometheus.NewRegistry()
+	lbls := labels.FromStrings("test", "test")
+	s := New(nil, metrics, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, true, metadata.NoneFunc, DefaultMetaFilename)
+
+	id1 := ulid.MustNew(1, nil)
+	blockDir1 := path.Join(dir, id1.String())
+	chunksDir1 := path.Join(blockDir1, block.ChunksDirname)
+	testutil.Ok(t, os.MkdirAll(chunksDir1, os.ModePerm))
+	testutil.Ok(t, metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id1,
+			MaxTime: 2000,
+			MinTime: 1000,
+			Version: 1,
+			Stats: tsdb.BlockStats{
+				NumSamples: 1000, // Not really, but shipper needs nonzero value.
+			},
+		},
+	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id1.String())))
+	testutil.Ok(t, os.WriteFile(filepath.Join(blockDir1, "index"), []byte("index file"), 0666))
+	segmentFile := "00001"
+	testutil.Ok(t, os.WriteFile(filepath.Join(chunksDir1, segmentFile), []byte("hello world"), 0666))
+
+	id2 := ulid.MustNew(2, nil)
+	blockDir2 := path.Join(dir, id2.String())
+	chunksDir2 := path.Join(blockDir2, block.ChunksDirname)
+	testutil.Ok(t, os.MkdirAll(chunksDir2, os.ModePerm))
+	testutil.Ok(t, os.WriteFile(filepath.Join(blockDir2, "index"), []byte("index file"), 0666))
+	testutil.Ok(t, os.WriteFile(filepath.Join(chunksDir2, segmentFile), []byte("hello world"), 0666))
+
+	uploaded, err := s.Sync(context.Background())
+	testutil.NotOk(t, err)
+	testutil.Equals(t, 1, uploaded)
+
+	testutil.Ok(t, promtest.GatherAndCompare(metrics, strings.NewReader(`
+				# HELP thanos_shipper_upload_failures_total Total number of block upload failures
+				# TYPE thanos_shipper_upload_failures_total counter
+				thanos_shipper_upload_failures_total{} 1
+				`), `thanos_shipper_upload_failures_total`))
+}
+
+func TestShipperNotSkipCorruptedBlocks(t *testing.T) {
+	dir := t.TempDir()
+
+	inmemory := objstore.NewInMemBucket()
+
+	metrics := prometheus.NewRegistry()
+	lbls := labels.FromStrings("test", "test")
+	s := New(nil, metrics, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+
+	id := ulid.MustNew(2, nil)
+	blockDir := path.Join(dir, id.String())
+	chunksDir := path.Join(blockDir, block.ChunksDirname)
+	segmentFile := "00001"
+	testutil.Ok(t, os.MkdirAll(chunksDir, os.ModePerm))
+	testutil.Ok(t, os.WriteFile(filepath.Join(blockDir, "index"), []byte("index file"), 0666))
+	testutil.Ok(t, os.WriteFile(filepath.Join(chunksDir, segmentFile), []byte("hello world"), 0666))
+
+	uploaded, err := s.Sync(context.Background())
+	testutil.NotOk(t, err)
+	testutil.Equals(t, 0, uploaded)
+
+	testutil.Ok(t, promtest.GatherAndCompare(metrics, strings.NewReader(`
+				# HELP thanos_shipper_dir_sync_failures_total Total number of failed dir syncs
+				# TYPE thanos_shipper_dir_sync_failures_total counter
+				thanos_shipper_dir_sync_failures_total{} 1
+				`), `thanos_shipper_dir_sync_failures_total`))
 }
 
 func TestReadMetaFile(t *testing.T) {
@@ -174,7 +291,7 @@ func TestShipperExistingThanosLabels(t *testing.T) {
 	inmemory := objstore.NewInMemBucket()
 
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
 
 	id := ulid.MustNew(1, nil)
 	id2 := ulid.MustNew(2, nil)
