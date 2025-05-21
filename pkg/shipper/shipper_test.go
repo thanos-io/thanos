@@ -229,8 +229,13 @@ func TestShipperSkipCorruptedBlocks(t *testing.T) {
 	testutil.Ok(t, promtest.GatherAndCompare(metrics, strings.NewReader(`
 				# HELP thanos_shipper_upload_failures_total Total number of block upload failures
 				# TYPE thanos_shipper_upload_failures_total counter
-				thanos_shipper_upload_failures_total{} 1
+				thanos_shipper_upload_failures_total{} 0
 				`), `thanos_shipper_upload_failures_total`))
+	testutil.Ok(t, promtest.GatherAndCompare(metrics, strings.NewReader(`
+				# HELP thanos_shipper_corrupted_blocks_total Total number of corrupted blocks
+				# TYPE thanos_shipper_corrupted_blocks_total counter
+				thanos_shipper_corrupted_blocks_total{} 1
+				`), `thanos_shipper_corrupted_blocks_total`))
 }
 
 func TestShipperNotSkipCorruptedBlocks(t *testing.T) {

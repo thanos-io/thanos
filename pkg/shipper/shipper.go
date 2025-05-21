@@ -37,6 +37,7 @@ type metrics struct {
 	dirSyncFailures   prometheus.Counter
 	uploads           prometheus.Counter
 	uploadFailures    prometheus.Counter
+	corruptedBlocks   prometheus.Counter
 	uploadedCompacted prometheus.Gauge
 }
 
@@ -58,6 +59,10 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 	m.uploadFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_upload_failures_total",
 		Help: "Total number of block upload failures",
+	})
+	m.corruptedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_shipper_corrupted_blocks_total",
+		Help: "Total number of corrupted blocks",
 	})
 	m.uploadedCompacted = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_shipper_upload_compacted_done",
@@ -84,6 +89,10 @@ type Shipper struct {
 	labels func() labels.Labels
 	mtx    sync.RWMutex
 }
+
+var (
+	ErrorSyncBlockCorrupted = errors.New("corrupted blocks found")
+)
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
 // remote if necessary. It attaches the Thanos metadata section in each meta JSON file.
@@ -255,8 +264,8 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 
 	uploadCompacted := s.uploadCompactedFunc()
 	metas, failedBlocks, err := s.blockMetasFromOldest()
-	// Ignore error when there are failed blocks and we should ignore them
-	if err != nil {
+	// Ignore error when we should ignore failed blocks
+	if err != nil && (!errors.Is(errors.Cause(err), ErrorSyncBlockCorrupted) || !s.skipCorruptedBlocks) {
 		return 0, err
 	}
 	for _, m := range metas {
@@ -318,7 +327,8 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 
 	failedExecution = false
 	if uploadErrs > 0 || len(failedBlocks) > 0 {
-		s.metrics.uploadFailures.Add(float64(uploadErrs + len(failedBlocks)))
+		s.metrics.uploadFailures.Add(float64(uploadErrs))
+		s.metrics.corruptedBlocks.Add(float64(len(failedBlocks)))
 		return uploaded, errors.Errorf("failed to sync %v/%v blocks", uploadErrs, len(failedBlocks))
 	}
 
@@ -429,7 +439,10 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks [
 		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
 	})
 
-	return metas, failedBlocks, nil
+	if len(failedBlocks) > 0 {
+		err = ErrorSyncBlockCorrupted
+	}
+	return metas, failedBlocks, err
 }
 
 func hardlinkBlock(src, dst string) error {
