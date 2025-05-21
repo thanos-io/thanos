@@ -6,7 +6,6 @@ package shipper
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -25,66 +24,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
-
-func TestShipperTimestamps(t *testing.T) {
-	dir := t.TempDir()
-
-	s := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
-
-	// Missing thanos meta file.
-	_, _, err := s.Timestamps()
-	testutil.NotOk(t, err)
-
-	meta := &Meta{Version: MetaVersion1}
-	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), s.metadataFilePath, meta))
-
-	// Nothing uploaded, nothing in the filesystem. We assume that
-	// we are still waiting for TSDB to dump first TSDB block.
-	mint, maxt, err := s.Timestamps()
-	testutil.Ok(t, err)
-	testutil.Equals(t, int64(0), mint)
-	testutil.Equals(t, int64(math.MinInt64), maxt)
-
-	id1 := ulid.MustNew(1, nil)
-	testutil.Ok(t, os.Mkdir(path.Join(dir, id1.String()), os.ModePerm))
-	testutil.Ok(t, metadata.Meta{
-		BlockMeta: tsdb.BlockMeta{
-			ULID:    id1,
-			MaxTime: 2000,
-			MinTime: 1000,
-			Version: 1,
-		},
-	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id1.String())))
-	mint, maxt, err = s.Timestamps()
-	testutil.Ok(t, err)
-	testutil.Equals(t, int64(1000), mint)
-	testutil.Equals(t, int64(math.MinInt64), maxt)
-
-	id2 := ulid.MustNew(2, nil)
-	testutil.Ok(t, os.Mkdir(path.Join(dir, id2.String()), os.ModePerm))
-	testutil.Ok(t, metadata.Meta{
-		BlockMeta: tsdb.BlockMeta{
-			ULID:    id2,
-			MaxTime: 4000,
-			MinTime: 2000,
-			Version: 1,
-		},
-	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id2.String())))
-	mint, maxt, err = s.Timestamps()
-	testutil.Ok(t, err)
-	testutil.Equals(t, int64(1000), mint)
-	testutil.Equals(t, int64(math.MinInt64), maxt)
-
-	meta = &Meta{
-		Version:  MetaVersion1,
-		Uploaded: []ulid.ULID{id1},
-	}
-	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), s.metadataFilePath, meta))
-	mint, maxt, err = s.Timestamps()
-	testutil.Ok(t, err)
-	testutil.Equals(t, int64(1000), mint)
-	testutil.Equals(t, int64(2000), maxt)
-}
 
 func TestIterBlockMetas(t *testing.T) {
 	dir := t.TempDir()

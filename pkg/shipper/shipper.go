@@ -8,7 +8,6 @@ package shipper
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -134,42 +133,6 @@ func (s *Shipper) SetLabels(lbls labels.Labels) {
 	defer s.mtx.Unlock()
 
 	s.labels = func() labels.Labels { return lbls }
-}
-
-// Timestamps returns the minimum timestamp for which data is available and the highest timestamp
-// of blocks that were successfully uploaded.
-func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
-	meta, err := ReadMetaFile(s.metadataFilePath)
-	if err != nil {
-		return 0, 0, errors.Wrap(err, "read shipper meta file")
-	}
-	// Build a map of blocks we already uploaded.
-	hasUploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
-	for _, id := range meta.Uploaded {
-		hasUploaded[id] = struct{}{}
-	}
-
-	minTime = math.MaxInt64
-	maxSyncTime = math.MinInt64
-
-	metas, err := s.blockMetasFromOldest()
-	if err != nil {
-		return 0, 0, err
-	}
-	for _, m := range metas {
-		if m.MinTime < minTime {
-			minTime = m.MinTime
-		}
-		if _, ok := hasUploaded[m.ULID]; ok && m.MaxTime > maxSyncTime {
-			maxSyncTime = m.MaxTime
-		}
-	}
-
-	if minTime == math.MaxInt64 {
-		// No block yet found. We cannot assume any min block size so propagate 0 minTime.
-		minTime = 0
-	}
-	return minTime, maxSyncTime, nil
 }
 
 type lazyOverlapChecker struct {
