@@ -97,6 +97,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.enable-x-functions", "Enable experimental x- functions in query-frontend. --no-query-frontend.enable-x-functions for disabling.").
 		Default("false").BoolVar(&cfg.EnableXFunctions)
 
+	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions in query-frontend)").Default("").StringsVar(&cfg.EnableFeatures)
+
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
 		Default("0").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxQueryLength))
 
@@ -298,6 +300,15 @@ func runQueryFrontend(
 	if cfg.EnableXFunctions {
 		for fname, v := range parse.XFunctions {
 			parser.Functions[fname] = v
+		}
+	}
+
+	if len(cfg.EnableFeatures) > 0 {
+		for _, feature := range cfg.EnableFeatures {
+			if feature == promqlExperimentalFunctions {
+				parser.EnableExperimentalFunctions = true
+				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+			}
 		}
 	}
 

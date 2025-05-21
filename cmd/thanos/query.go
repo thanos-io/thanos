@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -53,9 +54,10 @@ import (
 )
 
 const (
-	promqlNegativeOffset = "promql-negative-offset"
-	promqlAtModifier     = "promql-at-modifier"
-	queryPushdown        = "query-pushdown"
+	promqlNegativeOffset        = "promql-negative-offset"
+	promqlAtModifier            = "promql-at-modifier"
+	queryPushdown               = "query-pushdown"
+	promqlExperimentalFunctions = "promql-experimental-functions"
 )
 
 // registerQuery registers a query command.
@@ -135,7 +137,7 @@ func registerQuery(app *extkingpin.App) {
 
 	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is empty.").Hidden().Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions in query)").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -208,6 +210,10 @@ func registerQuery(app *extkingpin.App) {
 		}
 
 		for _, feature := range *featureList {
+			if feature == promqlExperimentalFunctions {
+				parser.EnableExperimentalFunctions = true
+				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+			}
 			if feature == promqlAtModifier {
 				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlAtModifier)
 			}
@@ -225,7 +231,6 @@ func registerQuery(app *extkingpin.App) {
 		}
 
 		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(reqLogConfig)
-
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
