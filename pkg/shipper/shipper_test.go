@@ -101,9 +101,9 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, true, metadata.NoneFunc, DefaultMetaFilename)
 	metas, failedBlocks, err := shipper.blockMetasFromOldest()
-	testutil.NotOk(t, err)
+	testutil.Ok(t, err)
 	testutil.Equals(t, 1, len(failedBlocks))
 	testutil.Equals(t, id2.String(), failedBlocks[0])
 	testutil.Equals(t, 2, len(metas))
@@ -146,8 +146,9 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 
 	inmemory := objstore.NewInMemBucket()
 
+	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, metrics, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())
@@ -178,6 +179,12 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []string{segmentFile}, meta.Thanos.SegmentFiles)
+
+	testutil.Ok(t, promtest.GatherAndCompare(metrics, strings.NewReader(`
+				# HELP thanos_shipper_dir_syncs_total Total number of dir syncs
+				# TYPE thanos_shipper_dir_syncs_total counter
+				thanos_shipper_dir_syncs_total{} 1
+				`), `thanos_shipper_dir_syncs_total`))
 }
 
 func TestShipperSkipCorruptedBlocks(t *testing.T) {
