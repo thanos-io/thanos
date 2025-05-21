@@ -103,7 +103,7 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 
 	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, true, metadata.NoneFunc, DefaultMetaFilename)
 	metas, failedBlocks, err := shipper.blockMetasFromOldest()
-	testutil.Ok(t, err)
+	testutil.NotOk(t, err)
 	testutil.Equals(t, 1, len(failedBlocks))
 	testutil.Equals(t, id2.String(), failedBlocks[0])
 	testutil.Equals(t, 2, len(metas))
