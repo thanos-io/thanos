@@ -240,19 +240,24 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta.Uploaded = nil
 
 	var (
-		checker    = newLazyOverlapChecker(s.logger, s.bucket, func() labels.Labels { return s.labels() })
-		uploadErrs int
+		checker         = newLazyOverlapChecker(s.logger, s.bucket, func() labels.Labels { return s.labels() })
+		uploadErrs      int
+		failedExecution = true
 	)
+
+	defer func() {
+		if failedExecution {
+			s.metrics.dirSyncFailures.Inc()
+		} else {
+			s.metrics.dirSyncs.Inc()
+		}
+	}()
 
 	uploadCompacted := s.uploadCompactedFunc()
 	metas, failedBlocks, err := s.blockMetasFromOldest()
 	// Ignore error when there are failed blocks and we should ignore them
 	if err != nil {
-		if len(failedBlocks) == 0 || !s.skipCorruptedBlocks {
-			s.metrics.dirSyncFailures.Inc()
-			return 0, err
-		}
-		level.Error(s.logger).Log("msg", "loading block failed", "err", err, "blocks", failedBlocks)
+		return 0, err
 	}
 	for _, m := range metas {
 		// Do not sync a block if we already uploaded or ignored it. If it's no longer found in the bucket,
@@ -278,13 +283,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// Check against bucket if the meta file for this block exists.
 		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
 		if err != nil {
-			if !s.skipCorruptedBlocks {
-				s.metrics.dirSyncFailures.Inc()
-				return uploaded, errors.Wrapf(err, "check exists - ulid: %s", m.ULID.String())
-			}
-			failedBlocks = append(failedBlocks, m.ULID.String())
-			level.Warn(s.logger).Log("msg", "check exists failure", "err", err, "ULID", m.ULID.String())
-			continue
+			return uploaded, errors.Wrap(err, "check exists")
 		}
 		if ok {
 			meta.Uploaded = append(meta.Uploaded, m.ULID)
@@ -294,14 +293,12 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// Skip overlap check if out of order uploads is enabled.
 		if m.Compaction.Level > 1 && !s.allowOutOfOrderUploads {
 			if err := checker.IsOverlapping(ctx, m.BlockMeta); err != nil {
-				s.metrics.dirSyncFailures.Inc()
 				return uploaded, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
 			}
 		}
 
 		if err := s.upload(ctx, m); err != nil {
 			if !s.allowOutOfOrderUploads {
-				s.metrics.dirSyncFailures.Inc()
 				return uploaded, errors.Wrapf(err, "upload %v", m.ULID)
 			}
 
@@ -319,7 +316,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
 	}
 
-	s.metrics.dirSyncs.Inc()
+	failedExecution = false
 	if uploadErrs > 0 || len(failedBlocks) > 0 {
 		s.metrics.uploadFailures.Add(float64(uploadErrs + len(failedBlocks)))
 		return uploaded, errors.Errorf("failed to sync %v/%v blocks", uploadErrs, len(failedBlocks))
@@ -407,18 +404,24 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks [
 
 		fi, err := os.Stat(dir)
 		if err != nil {
-			level.Error(s.logger).Log("msg", "stat block", "err", err, "block", dir)
-			failedBlocks = append(failedBlocks, n)
-			continue
+			if s.skipCorruptedBlocks {
+				level.Error(s.logger).Log("msg", "stat block", "err", err, "block", dir)
+				failedBlocks = append(failedBlocks, n)
+				continue
+			}
+			return nil, nil, errors.Wrapf(err, "stat block %v", dir)
 		}
 		if !fi.IsDir() {
 			continue
 		}
 		m, err := metadata.ReadFromDir(dir)
 		if err != nil {
-			level.Error(s.logger).Log("msg", "read metadata for block", "err", err, "block", dir)
-			failedBlocks = append(failedBlocks, n)
-			continue
+			if s.skipCorruptedBlocks {
+				level.Error(s.logger).Log("msg", "read metadata for block", "err", err, "block", dir)
+				failedBlocks = append(failedBlocks, n)
+				continue
+			}
+			return nil, nil, errors.Wrapf(err, "read metadata for block %v", dir)
 		}
 		metas = append(metas, m)
 	}
@@ -426,10 +429,7 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks [
 		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
 	})
 
-	if len(failedBlocks) > 0 {
-		err = errors.Errorf("failed to load blocks %v", failedBlocks)
-	}
-	return metas, failedBlocks, err
+	return metas, failedBlocks, nil
 }
 
 func hardlinkBlock(src, dst string) error {
