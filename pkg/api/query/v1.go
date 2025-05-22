@@ -410,14 +410,15 @@ func (qapi *QueryAPI) getQueryExplain(query promql.Query) (*engine.ExplainOutput
 
 }
 
-func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query) (queryTelemetry, error) {
-	if r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1" {
-		if eq, ok := query.(engine.ExplainableQuery); ok {
-			return processAnalysis(eq.Analyze()), nil
-		}
-		return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos'")
+func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
+	return (r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1")
+}
+
+func analyzeQueryOutput(query promql.Query) (queryTelemetry, error) {
+	if eq, ok := query.(engine.ExplainableQuery); ok {
+		return processAnalysis(eq.Analyze()), nil
 	}
-	return queryTelemetry{}, nil
+	return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos'")
 }
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
@@ -665,9 +666,12 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
 
-	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if err != nil {
-		return nil, nil, apiErr, func() {}
+	var analysis queryTelemetry
+	if qapi.parseQueryAnalyzeParam(r) {
+		analysis, err = analyzeQueryOutput(qry)
+		if err != nil {
+			return nil, nil, apiErr, func() {}
+		}
 	}
 
 	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator(tenant)
@@ -971,9 +975,12 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
 
-	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if err != nil {
-		return nil, nil, apiErr, func() {}
+	var analysis queryTelemetry
+	if qapi.parseQueryAnalyzeParam(r) {
+		analysis, err = analyzeQueryOutput(qry)
+		if err != nil {
+			return nil, nil, apiErr, func() {}
+		}
 	}
 
 	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator(tenant)
