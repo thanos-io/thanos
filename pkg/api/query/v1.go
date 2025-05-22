@@ -418,7 +418,7 @@ func analyzeQueryOutput(query promql.Query) (queryTelemetry, error) {
 	if eq, ok := query.(engine.ExplainableQuery); ok {
 		return processAnalysis(eq.Analyze()), nil
 	}
-	return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos'")
+	return queryTelemetry{}, errors.Errorf("Query fallback to prometheus engine; not analyzable. ")
 }
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
@@ -615,6 +615,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	var (
 		qry         promql.Query
 		seriesStats []storepb.SeriesStatsCounter
+		warnings    []error
 	)
 
 	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
@@ -665,12 +666,13 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	warnings = append(warnings, res.Warnings.AsErrors()...)
 
 	var analysis queryTelemetry
 	if qapi.parseQueryAnalyzeParam(r) {
 		analysis, err = analyzeQueryOutput(qry)
 		if err != nil {
-			return nil, nil, apiErr, func() {}
+			warnings = append(warnings, err)
 		}
 	}
 
@@ -690,7 +692,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, res.Warnings.AsErrors(), nil, qry.Close
+	}, warnings, nil, qry.Close
 }
 
 func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -927,6 +929,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	var (
 		qry         promql.Query
 		seriesStats []storepb.SeriesStatsCounter
+		warnings    []error
 	)
 	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
 		queryable := qapi.queryableCreate(
@@ -974,12 +977,13 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	warnings = append(warnings, res.Warnings.AsErrors()...)
 
 	var analysis queryTelemetry
 	if qapi.parseQueryAnalyzeParam(r) {
 		analysis, err = analyzeQueryOutput(qry)
 		if err != nil {
-			return nil, nil, apiErr, func() {}
+			warnings = append(warnings, err)
 		}
 	}
 
@@ -999,7 +1003,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, res.Warnings.AsErrors(), nil, qry.Close
+	}, warnings, nil, qry.Close
 }
 
 func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
