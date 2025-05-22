@@ -22,6 +22,48 @@ The Ketama algorithm is a consistent hashing scheme which enables stable scaling
 
 If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the simplest and safest way would be to set up a new pool receivers with `ketama` hashrings and start remote-writing to them. Provided you are on the latest Thanos version, old receivers will flush their TSDBs after the configured retention period and will upload blocks to object storage. Once you have verified that is done, decommission the old receivers.
 
+#### Shuffle sharding
+
+Ketama also supports [shuffle sharding](https://aws.amazon.com/builders-library/workload-isolation-using-shuffle-sharding/). It allows you to provide a single-tenant experience in a multi-tenant system. With shuffle sharding, a tenant gets a subset of all nodes in a hashring. You can configure shuffle sharding for any Ketama hashring like so:
+
+```json
+[
+    {
+        "endpoints": [
+          {"address": "node-1:10901", "capnproto_address": "node-1:19391", "az": "foo"},
+          {"address": "node-2:10901", "capnproto_address": "node-2:19391", "az": "bar"},
+          {"address": "node-3:10901", "capnproto_address": "node-3:19391", "az": "qux"},
+          {"address": "node-4:10901", "capnproto_address": "node-4:19391", "az": "foo"},
+          {"address": "node-5:10901", "capnproto_address": "node-5:19391", "az": "bar"},
+          {"address": "node-6:10901", "capnproto_address": "node-6:19391", "az": "qux"}
+        ],
+        "algorithm": "ketama",
+        "shuffle_sharding_config": {
+            "shard_size": 2,
+            "cache_size": 100,
+            "overrides": [
+                {
+                    "shard_size": 3,
+                    "tenants": ["prefix-tenant-*"],
+                    "tenant_matcher_type": "glob"
+                }
+            ]
+        }
+    }
+]
+```
+
+This will enable shuffle sharding with the default shard size of 2 and override it to 3 for every tenant that starts with `prefix-tenant-`.
+
+`cache_size` sets the size of the in-memory LRU cache of the computed subrings. It is not possible to cache everything because an attacker could possibly
+spam requests with random tenants and those subrings would stay in-memory forever.
+
+With this config, `shard_size/number_of_azs` is chosen from each availability zone for each tenant. So, each tenant will get a unique and consistent set of 3 nodes.
+
+You can use `zone_awareness_disabled` to disable zone awareness. This is useful in the case where you have many separate AZs and it doesn't matter which one to choose. The shards will ignore AZs but the Ketama algorithm will later prefer spreading load through as many AZs as possible. That's why with zone awareness disabled it is recommended to set the shard size to be `max(nodes_in_any_az, replication_factor)`.
+
+Receive only supports stateless shuffle sharding now so it doesn't store and check there have been any overlaps between shards.
+
 ### Hashmod (discouraged)
 
 This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
