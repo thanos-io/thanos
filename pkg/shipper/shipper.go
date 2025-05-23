@@ -8,8 +8,8 @@ package shipper
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
