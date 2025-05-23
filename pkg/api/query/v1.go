@@ -414,11 +414,19 @@ func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
 	return (r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1")
 }
 
-func analyzeQueryOutput(query promql.Query) (queryTelemetry, error) {
+func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType) (queryTelemetry, error) {
 	if eq, ok := query.(engine.ExplainableQuery); ok {
 		return processAnalysis(eq.Analyze()), nil
 	}
-	return queryTelemetry{}, errors.Errorf("Query fallback to prometheus engine; not analyzable. ")
+
+	var warning error
+	if engineType == PromqlEngineThanos {
+		warning = errors.New("Query fallback to prometheus engine; not analyzable.")
+	} else {
+		warning = errors.New("Query not analyzable; change engine to 'thanos'.")
+	}
+
+	return queryTelemetry{}, warning
 }
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
@@ -670,7 +678,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	var analysis queryTelemetry
 	if qapi.parseQueryAnalyzeParam(r) {
-		analysis, err = analyzeQueryOutput(qry)
+		analysis, err = analyzeQueryOutput(qry, engineParam)
 		if err != nil {
 			warnings = append(warnings, err)
 		}
@@ -981,7 +989,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	var analysis queryTelemetry
 	if qapi.parseQueryAnalyzeParam(r) {
-		analysis, err = analyzeQueryOutput(qry)
+		analysis, err = analyzeQueryOutput(qry, engineParam)
 		if err != nil {
 			warnings = append(warnings, err)
 		}
