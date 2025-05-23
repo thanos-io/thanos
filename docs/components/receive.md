@@ -55,8 +55,7 @@ Ketama also supports [shuffle sharding](https://aws.amazon.com/builders-library/
 
 This will enable shuffle sharding with the default shard size of 2 and override it to 3 for every tenant that starts with `prefix-tenant-`.
 
-`cache_size` sets the size of the in-memory LRU cache of the computed subrings. It is not possible to cache everything because an attacker could possibly
-spam requests with random tenants and those subrings would stay in-memory forever.
+`cache_size` sets the size of the in-memory LRU cache of the computed subrings. It is not possible to cache everything because an attacker could possibly spam requests with random tenants and those subrings would stay in-memory forever.
 
 With this config, `shard_size/number_of_azs` is chosen from each availability zone for each tenant. So, each tenant will get a unique and consistent set of 3 nodes.
 
@@ -374,16 +373,16 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 The following formula is used for calculating quorum:
 
 ```go mdox-exec="sed -n '1034,1044p' pkg/receive/handler.go"
+}
+
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
-	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
-	// would need to succeed all the time. Another way to think about it is when migrating
-	// from a Sidecar based setup with 2 Prometheus nodes to a Receiver setup, we want to
-	// keep the same guarantees.
-	if h.options.ReplicationFactor == 2 {
-		return 1
-	}
-	return int((h.options.ReplicationFactor / 2) + 1)
+// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
+// would need to succeed all the time. Another way to think about it is when migrating
+// from a Sidecar based setup with 2 Prometheus nodes to a Receiver setup, we want to
+// keep the same guarantees.
+if h.options.ReplicationFactor == 2 {
+	return 1
 }
 ```
 
