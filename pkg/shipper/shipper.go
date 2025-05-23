@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -228,8 +229,10 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
 		// The meta file is only used to avoid unnecessary bucket.Exists call,
 		// which are properly handled by the system if their occur anyway.
-		if !os.IsNotExist(err) {
-			level.Warn(s.logger).Log("msg", "reading meta file failed, will override it", "err", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			level.Info(s.logger).Log("msg", "no meta file found, creating empty meta data to write later")
+		} else {
+			level.Error(s.logger).Log("msg", "failed to read meta file, creating empty meta data to write later", "err", err)
 		}
 		meta = &Meta{Version: MetaVersion1}
 	}
