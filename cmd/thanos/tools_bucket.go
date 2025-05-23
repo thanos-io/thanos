@@ -1500,8 +1500,18 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		s := shipper.New(logger, reg, tbc.path, bkt, func() labels.Labels { return lset }, metadata.BucketUploadSource,
-			nil, false, metadata.HashFunc(""), shipper.DefaultMetaFilename)
+		s := shipper.New(
+			logger,
+			reg,
+			tbc.path,
+			bkt, func() labels.Labels { return lset },
+			metadata.BucketUploadSource,
+			nil,
+			nil,
+			false,
+			metadata.HashFunc(""),
+			shipper.DefaultMetaFilename,
+		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {

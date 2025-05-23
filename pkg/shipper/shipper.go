@@ -9,11 +9,13 @@ import (
 	"context"
 	"encoding/json"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -77,6 +79,7 @@ type Shipper struct {
 	metadataFilePath string
 
 	uploadCompactedFunc    func() bool
+	uploadMaxTimeFunc      func() int64
 	allowOutOfOrderUploads bool
 	hashFunc               metadata.HashFunc
 
@@ -95,6 +98,7 @@ func New(
 	lbls func() labels.Labels,
 	source metadata.SourceType,
 	uploadCompactedFunc func() bool,
+	uploadMaxTimeFunc func() int64,
 	allowOutOfOrderUploads bool,
 	hashFunc metadata.HashFunc,
 	metaFileName string,
@@ -115,6 +119,11 @@ func New(
 			return false
 		}
 	}
+	if uploadMaxTimeFunc == nil {
+		uploadMaxTimeFunc = func() int64 {
+			return math.MaxInt64
+		}
+	}
 	return &Shipper{
 		logger:                 logger,
 		dir:                    dir,
@@ -124,6 +133,7 @@ func New(
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
 		uploadCompactedFunc:    uploadCompactedFunc,
+		uploadMaxTimeFunc:      uploadMaxTimeFunc,
 		hashFunc:               hashFunc,
 		metadataFilePath:       filepath.Join(dir, filepath.Clean(metaFileName)),
 	}
@@ -242,6 +252,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	)
 
 	uploadCompacted := s.uploadCompactedFunc()
+	uploadMaxTime := s.uploadMaxTimeFunc()
 	metas, err := s.blockMetasFromOldest()
 	if err != nil {
 		return 0, err
@@ -265,6 +276,11 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			if !uploadCompacted {
 				continue
 			}
+		}
+
+		// We only ship blocks that have a max timestamp thtas before the max upload time.
+		if time.UnixMilli(m.MaxTime).After(time.UnixMilli(uploadMaxTime)) {
+			continue
 		}
 
 		// Check against bucket if the meta file for this block exists.

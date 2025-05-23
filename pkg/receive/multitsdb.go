@@ -760,6 +760,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			func() labels.Labels { return lset },
 			metadata.ReceiveSource,
 			nil,
+			nil,
 			t.allowOutOfOrderUpload,
 			t.hashFunc,
 			shipper.DefaultMetaFilename,
