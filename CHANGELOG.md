@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
+- [#8259](https://github.com/thanos-io/thanos/pull/8259) Shipper: Add `--shipper.skip-corrupted-blocks` flat to allow `Sync()` to continue upload when finding a corrupted block
 
 ### Changed
 

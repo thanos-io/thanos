@@ -203,6 +203,7 @@ type shipperConfig struct {
 	uploadCompacted       bool
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
+	skipCorruptedBlocks   bool
 	hashFunc              string
 	metaFileName          string
 }
@@ -219,6 +220,11 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
+	cmd.Flag("shipper.skip-corrupted-blocks",
+		"If true, shipper will skip corrupted blocks in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().BoolVar(&sc.skipCorruptedBlocks)
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
 	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)

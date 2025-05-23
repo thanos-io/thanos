@@ -53,7 +53,7 @@ func TestMultiTSDB(t *testing.T) {
 			NoLockfile:            true,
 			MaxExemplars:          100,
 			EnableExemplarStorage: true,
-		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, metadata.NoneFunc)
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
@@ -136,6 +136,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			false,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
@@ -173,7 +174,7 @@ func TestMultiTSDB(t *testing.T) {
 			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 			RetentionDuration: (6 * time.Hour).Milliseconds(),
 			NoLockfile:        true,
-		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, metadata.NoneFunc)
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
@@ -441,6 +442,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				"tenant_id",
 				test.bucket,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -516,6 +518,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		"tenant_id",
 		objstore.NewInMemBucket(),
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
@@ -544,6 +547,7 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 				labels.FromStrings("replica", "test"),
 				"tenant_id",
 				objstore.NewInMemBucket(),
+				false,
 				false,
 				metadata.NoneFunc,
 			)
@@ -619,6 +623,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 				labels.FromStrings("replica", "test"),
 				"tenant_id",
 				test.bucket,
+				false,
 				false,
 				metadata.NoneFunc,
 			)
@@ -696,6 +701,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				"tenant_id",
 				nil,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -726,6 +732,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -769,6 +776,7 @@ func TestProxyLabelValues(t *testing.T) {
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -863,6 +871,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 		"tenant_id",
 		nil,
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
@@ -943,7 +952,7 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 			Uploaded: []ulid.ULID{mockBlockIDs[0]},
 		}))
 
-		tenant.ship = shipper.New(log.NewNopLogger(), nil, td, nil, nil, metadata.BucketUploadSource, nil, false, metadata.NoneFunc, "")
+		tenant.ship = shipper.New(log.NewNopLogger(), nil, td, nil, nil, metadata.BucketUploadSource, nil, false, false, metadata.NoneFunc, "")
 		require.Equal(t, map[ulid.ULID]struct{}{
 			mockBlockIDs[0]: {},
 		}, tenant.blocksToDelete(nil))

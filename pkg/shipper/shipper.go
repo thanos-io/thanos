@@ -37,6 +37,7 @@ type metrics struct {
 	dirSyncFailures   prometheus.Counter
 	uploads           prometheus.Counter
 	uploadFailures    prometheus.Counter
+	corruptedBlocks   prometheus.Counter
 	uploadedCompacted prometheus.Gauge
 }
 
@@ -59,6 +60,10 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 		Name: "thanos_shipper_upload_failures_total",
 		Help: "Total number of block upload failures",
 	})
+	m.corruptedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_shipper_corrupted_blocks_total",
+		Help: "Total number of corrupted blocks",
+	})
 	m.uploadedCompacted = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_shipper_upload_compacted_done",
 		Help: "If 1 it means shipper uploaded all compacted blocks from the filesystem.",
@@ -78,11 +83,16 @@ type Shipper struct {
 
 	uploadCompactedFunc    func() bool
 	allowOutOfOrderUploads bool
+	skipCorruptedBlocks    bool
 	hashFunc               metadata.HashFunc
 
 	labels func() labels.Labels
 	mtx    sync.RWMutex
 }
+
+var (
+	ErrorSyncBlockCorrupted = errors.New("corrupted blocks found")
+)
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
 // remote if necessary. It attaches the Thanos metadata section in each meta JSON file.
@@ -96,6 +106,7 @@ func New(
 	source metadata.SourceType,
 	uploadCompactedFunc func() bool,
 	allowOutOfOrderUploads bool,
+	skipCorruptedBlocks bool,
 	hashFunc metadata.HashFunc,
 	metaFileName string,
 ) *Shipper {
@@ -123,6 +134,7 @@ func New(
 		metrics:                newMetrics(r),
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
+		skipCorruptedBlocks:    skipCorruptedBlocks,
 		uploadCompactedFunc:    uploadCompactedFunc,
 		hashFunc:               hashFunc,
 		metadataFilePath:       filepath.Join(dir, filepath.Clean(metaFileName)),
@@ -237,13 +249,23 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta.Uploaded = nil
 
 	var (
-		checker    = newLazyOverlapChecker(s.logger, s.bucket, func() labels.Labels { return s.labels() })
-		uploadErrs int
+		checker         = newLazyOverlapChecker(s.logger, s.bucket, func() labels.Labels { return s.labels() })
+		uploadErrs      int
+		failedExecution = true
 	)
 
+	defer func() {
+		if failedExecution {
+			s.metrics.dirSyncFailures.Inc()
+		} else {
+			s.metrics.dirSyncs.Inc()
+		}
+	}()
+
 	uploadCompacted := s.uploadCompactedFunc()
-	metas, err := s.blockMetasFromOldest()
-	if err != nil {
+	metas, failedBlocks, err := s.blockMetasFromOldest()
+	// Ignore error when we should ignore failed blocks
+	if err != nil && (!errors.Is(errors.Cause(err), ErrorSyncBlockCorrupted) || !s.skipCorruptedBlocks) {
 		return 0, err
 	}
 	for _, m := range metas {
@@ -270,7 +292,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// Check against bucket if the meta file for this block exists.
 		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
 		if err != nil {
-			return 0, errors.Wrap(err, "check exists")
+			return uploaded, errors.Wrap(err, "check exists")
 		}
 		if ok {
 			meta.Uploaded = append(meta.Uploaded, m.ULID)
@@ -280,13 +302,13 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// Skip overlap check if out of order uploads is enabled.
 		if m.Compaction.Level > 1 && !s.allowOutOfOrderUploads {
 			if err := checker.IsOverlapping(ctx, m.BlockMeta); err != nil {
-				return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
+				return uploaded, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
 			}
 		}
 
 		if err := s.upload(ctx, m); err != nil {
 			if !s.allowOutOfOrderUploads {
-				return 0, errors.Wrapf(err, "upload %v", m.ULID)
+				return uploaded, errors.Wrapf(err, "upload %v", m.ULID)
 			}
 
 			// No error returned, just log line. This is because we want other blocks to be uploaded even
@@ -303,10 +325,11 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
 	}
 
-	s.metrics.dirSyncs.Inc()
-	if uploadErrs > 0 {
+	failedExecution = false
+	if uploadErrs > 0 || len(failedBlocks) > 0 {
 		s.metrics.uploadFailures.Add(float64(uploadErrs))
-		return uploaded, errors.Errorf("failed to sync %v blocks", uploadErrs)
+		s.metrics.corruptedBlocks.Add(float64(len(failedBlocks)))
+		return uploaded, errors.Errorf("failed to sync %v/%v blocks", uploadErrs, len(failedBlocks))
 	}
 
 	if uploadCompacted {
@@ -374,10 +397,10 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 
 // blockMetasFromOldest returns the block meta of each block found in dir
 // sorted by minTime asc.
-func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
+func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks []string, _ error) {
 	fis, err := os.ReadDir(s.dir)
 	if err != nil {
-		return nil, errors.Wrap(err, "read dir")
+		return nil, nil, errors.Wrap(err, "read dir")
 	}
 	names := make([]string, 0, len(fis))
 	for _, fi := range fis {
@@ -391,21 +414,35 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
 
 		fi, err := os.Stat(dir)
 		if err != nil {
-			return nil, errors.Wrapf(err, "stat block %v", dir)
+			if s.skipCorruptedBlocks {
+				level.Error(s.logger).Log("msg", "stat block", "err", err, "block", dir)
+				failedBlocks = append(failedBlocks, n)
+				continue
+			}
+			return nil, nil, errors.Wrapf(err, "stat block %v", dir)
 		}
 		if !fi.IsDir() {
 			continue
 		}
 		m, err := metadata.ReadFromDir(dir)
 		if err != nil {
-			return nil, errors.Wrapf(err, "read metadata for block %v", dir)
+			if s.skipCorruptedBlocks {
+				level.Error(s.logger).Log("msg", "read metadata for block", "err", err, "block", dir)
+				failedBlocks = append(failedBlocks, n)
+				continue
+			}
+			return nil, nil, errors.Wrapf(err, "read metadata for block %v", dir)
 		}
 		metas = append(metas, m)
 	}
 	sort.Slice(metas, func(i, j int) bool {
 		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
 	})
-	return metas, nil
+
+	if len(failedBlocks) > 0 {
+		err = ErrorSyncBlockCorrupted
+	}
+	return metas, failedBlocks, err
 }
 
 func hardlinkBlock(src, dst string) error {
