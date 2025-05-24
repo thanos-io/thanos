@@ -1211,3 +1211,191 @@ func Test_ParseRelabelConfig(t *testing.T) {
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
 }
+
+func TestCompactionMetaFilter_Filter(t *testing.T) {
+	testCases := []struct {
+		name             string
+		compactionLevels []int
+		input            map[ulid.ULID]*metadata.Meta
+		expected         map[ulid.ULID]*metadata.Meta
+	}{
+		{
+			name:             "filters out blocks not in specified compaction range",
+			compactionLevels: []int{1, 2},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 1}}},
+				ULID(2): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 2}}},
+				ULID(3): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 3}}},
+				ULID(4): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 4}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 1}}},
+				ULID(2): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 2}}},
+			},
+		},
+		{
+			name:             "handles empty input",
+			compactionLevels: []int{1, 2},
+			input:            map[ulid.ULID]*metadata.Meta{},
+			expected:         map[ulid.ULID]*metadata.Meta{},
+		},
+		{
+			name:             "filters out all blocks if no matching compaction levels",
+			compactionLevels: []int{5, 6},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 1}}},
+				ULID(2): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 2}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{},
+		},
+		{
+			name:             "keeps all blocks if all match compaction levels",
+			compactionLevels: []int{1, 2, 3},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 1}}},
+				ULID(2): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 2}}},
+				ULID(3): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 3}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 1}}},
+				ULID(2): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 2}}},
+				ULID(3): {BlockMeta: tsdb.BlockMeta{Compaction: tsdb.BlockMetaCompaction{Level: 3}}},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := NewCompactionMetaFilter(log.NewNopLogger(), tc.compactionLevels)
+
+			m := newTestFetcherMetrics()
+			testutil.Ok(t, filter.Filter(context.Background(), tc.input, m.Synced, nil))
+			testutil.Equals(t, tc.expected, tc.input)
+		})
+	}
+}
+
+func TestResolutionMetaFilter_Filter(t *testing.T) {
+	testCases := []struct {
+		name        string
+		resolutions []int64
+		input       map[ulid.ULID]*metadata.Meta
+		expected    map[ulid.ULID]*metadata.Meta
+	}{
+		{
+			name:        "filters out blocks not matching resolution",
+			resolutions: []int64{30000, 60000},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 30000}}},
+				ULID(2): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 60000}}},
+				ULID(3): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 15000}}},
+				ULID(4): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 0}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 30000}}},
+				ULID(2): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 60000}}},
+			},
+		},
+		{
+			name:        "keeps all blocks when all match resolution",
+			resolutions: []int64{15000, 30000, 60000},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 15000}}},
+				ULID(2): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 30000}}},
+				ULID(3): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 60000}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 15000}}},
+				ULID(2): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 30000}}},
+				ULID(3): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 60000}}},
+			},
+		},
+		{
+			name:        "handles empty input gracefully",
+			resolutions: []int64{30000, 60000},
+			input:       map[ulid.ULID]*metadata.Meta{},
+			expected:    map[ulid.ULID]*metadata.Meta{},
+		},
+		{
+			name:        "filters out all blocks when no resolution matches",
+			resolutions: []int64{90000, 120000},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 30000}}},
+				ULID(2): {Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 60000}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := NewResolutionMetaFilter(log.NewNopLogger(), tc.resolutions)
+
+			m := newTestFetcherMetrics()
+			testutil.Ok(t, filter.Filter(context.Background(), tc.input, m.Synced, nil))
+			testutil.Equals(t, tc.expected, tc.input)
+		})
+	}
+}
+
+func TestIDMetaFilter_Filter(t *testing.T) {
+	testCases := []struct {
+		name     string
+		ids      []ulid.ULID
+		input    map[ulid.ULID]*metadata.Meta
+		expected map[ulid.ULID]*metadata.Meta
+	}{
+		{
+			name: "filters out blocks not in ID list",
+			ids:  []ulid.ULID{ULID(1), ULID(2)},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"key3": "value3"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+			},
+		},
+		{
+			name: "keeps all blocks when all IDs match",
+			ids:  []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"key3": "value3"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"key3": "value3"}}},
+			},
+		},
+		{
+			name:     "handles empty input gracefully",
+			ids:      []ulid.ULID{ULID(1), ULID(2)},
+			input:    map[ulid.ULID]*metadata.Meta{},
+			expected: map[ulid.ULID]*metadata.Meta{},
+		},
+		{
+			name: "filters out all blocks when no IDs match",
+			ids:  []ulid.ULID{ULID(4), ULID(5)},
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"key1": "value1"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"key2": "value2"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := NewIDMetaFilter(log.NewNopLogger(), tc.ids)
+
+			m := newTestFetcherMetrics()
+			testutil.Ok(t, filter.Filter(context.Background(), tc.input, m.Synced, nil))
+			testutil.Equals(t, tc.expected, tc.input)
+		})
+	}
+}
