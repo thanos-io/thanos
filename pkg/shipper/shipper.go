@@ -8,7 +8,7 @@ package shipper
 import (
 	"context"
 	"encoding/json"
-	"math"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -136,42 +136,6 @@ func (s *Shipper) SetLabels(lbls labels.Labels) {
 	s.labels = func() labels.Labels { return lbls }
 }
 
-// Timestamps returns the minimum timestamp for which data is available and the highest timestamp
-// of blocks that were successfully uploaded.
-func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
-	meta, err := ReadMetaFile(s.metadataFilePath)
-	if err != nil {
-		return 0, 0, errors.Wrap(err, "read shipper meta file")
-	}
-	// Build a map of blocks we already uploaded.
-	hasUploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
-	for _, id := range meta.Uploaded {
-		hasUploaded[id] = struct{}{}
-	}
-
-	minTime = math.MaxInt64
-	maxSyncTime = math.MinInt64
-
-	metas, err := s.blockMetasFromOldest()
-	if err != nil {
-		return 0, 0, err
-	}
-	for _, m := range metas {
-		if m.MinTime < minTime {
-			minTime = m.MinTime
-		}
-		if _, ok := hasUploaded[m.ULID]; ok && m.MaxTime > maxSyncTime {
-			maxSyncTime = m.MaxTime
-		}
-	}
-
-	if minTime == math.MaxInt64 {
-		// No block yet found. We cannot assume any min block size so propagate 0 minTime.
-		minTime = 0
-	}
-	return minTime, maxSyncTime, nil
-}
-
 type lazyOverlapChecker struct {
 	synced bool
 	logger log.Logger
@@ -255,8 +219,10 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
 		// The meta file is only used to avoid unnecessary bucket.Exists call,
 		// which are properly handled by the system if their occur anyway.
-		if !os.IsNotExist(err) {
-			level.Warn(s.logger).Log("msg", "reading meta file failed, will override it", "err", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			level.Info(s.logger).Log("msg", "no meta file found, creating empty meta data to write later")
+		} else {
+			level.Error(s.logger).Log("msg", "failed to read meta file, creating empty meta data to write later", "err", err)
 		}
 		meta = &Meta{Version: MetaVersion1}
 	}

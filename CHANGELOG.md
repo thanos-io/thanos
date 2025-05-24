@@ -11,10 +11,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 - [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
 - [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
+- [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
 
 ### Added
 
 - [#8191](https://github.com/thanos-io/thanos/pull/8191) Query: Add `--enable-feature=promql-experimental-functions` flag to enable experimental functions in query.
+- [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
 
 ### Changed
 

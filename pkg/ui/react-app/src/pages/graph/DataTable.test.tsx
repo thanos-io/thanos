@@ -10,7 +10,7 @@ describe('DataTable', () => {
     it('renders an alert', () => {
       const table = shallow(<DataTable data={null} />);
       const alert = table.find(UncontrolledAlert);
-      expect(Object.keys(alert.props())).toHaveLength(2);
+      expect(Object.keys(alert.props() as object)).toHaveLength(2);
       expect(alert.prop('color')).toEqual('light');
       expect(alert.prop('children')).toEqual('No data queried yet');
     });
@@ -26,7 +26,7 @@ describe('DataTable', () => {
       };
       const table = shallow(<DataTable {...dataTableProps} />);
       const alert = table.find(UncontrolledAlert);
-      expect(Object.keys(alert.props())).toHaveLength(2);
+      expect(Object.keys(alert.props() as object)).toHaveLength(2);
       expect(alert.prop('color')).toEqual('secondary');
       expect(alert.prop('children')).toEqual('Empty query result');
     });
