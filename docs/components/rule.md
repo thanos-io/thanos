@@ -477,6 +477,9 @@ Flags:
                                  them.
       --rule-query-offset=0s     The default rule group query_offset duration to
                                  use.
+      --rule-queue-capacity=10000
+                                 The capacity of the queue for pending
+                                 Alertmanager notifications. Default is 10000
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
       --shipper.upload-compacted
