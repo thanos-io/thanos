@@ -93,7 +93,7 @@ require (
 	golang.org/x/net v0.37.0
 	golang.org/x/sync v0.12.0
 	golang.org/x/text v0.23.0
-	golang.org/x/time v0.8.0
+	golang.org/x/time v0.11.0
 	google.golang.org/grpc v1.69.4
 	google.golang.org/grpc/examples v0.0.0-20211119005141-f45e61797429
 	google.golang.org/protobuf v1.36.3
