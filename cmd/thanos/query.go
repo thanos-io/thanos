@@ -53,9 +53,10 @@ import (
 )
 
 const (
-	promqlNegativeOffset = "promql-negative-offset"
-	promqlAtModifier     = "promql-at-modifier"
-	queryPushdown        = "query-pushdown"
+	promqlNegativeOffset        = "promql-negative-offset"
+	promqlAtModifier            = "promql-at-modifier"
+	queryPushdown               = "query-pushdown"
+	promqlExperimentalFunctions = "promql-experimental-functions"
 )
 
 // registerQuery registers a query command.
@@ -135,7 +136,7 @@ func registerQuery(app *extkingpin.App) {
 
 	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is empty.").Hidden().Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is: promql-experimental-functions (enables experimental PromQL functions).").Hidden().Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -317,6 +318,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			false,
 			*activeQueryDir,
 			time.Duration(*instantDefaultMaxSourceResolution),
 			*defaultMetadataTimeRange,
@@ -379,6 +381,7 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableQueryExperimentalFunctions bool,
 	activeQueryDir string,
 	instantDefaultMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
@@ -464,6 +467,7 @@ func runQuery(
 		lookbackDelta,
 		defaultEvaluationInterval,
 		extendedFunctionsEnabled,
+		enableQueryExperimentalFunctions,
 		activeQueryTracker,
 		queryMode,
 	)
