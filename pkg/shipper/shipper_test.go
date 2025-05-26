@@ -64,7 +64,7 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	shipper := New(nil, nil, dir, nil, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, nil, nil, nil, nil)
 	metas, failedBlocks, err := shipper.blockMetasFromOldest()
 	testutil.Ok(t, err)
 	testutil.Equals(t, 0, len(failedBlocks))
@@ -101,7 +101,7 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, true, metadata.NoneFunc, DefaultMetaFilename)
+	shipper := New(nil, nil, dir, nil, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, nil, nil, nil, func() bool { return true })
 	metas, failedBlocks, err := shipper.blockMetasFromOldest()
 	testutil.NotOk(t, err)
 	testutil.Equals(t, 1, len(failedBlocks))
@@ -135,7 +135,7 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	shipper := New(nil, nil, dir, nil, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, nil, nil, nil, nil)
 
 	_, _, err := shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
@@ -148,7 +148,7 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, metrics, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, metrics, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, nil)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())
@@ -194,7 +194,7 @@ func TestShipperSkipCorruptedBlocks(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, metrics, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, true, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, metrics, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, func() bool { return true })
 
 	id1 := ulid.MustNew(1, nil)
 	blockDir1 := path.Join(dir, id1.String())
@@ -245,7 +245,7 @@ func TestShipperNotSkipCorruptedBlocks(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, metrics, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, metrics, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, nil)
 
 	id := ulid.MustNew(2, nil)
 	blockDir := path.Join(dir, id.String())
@@ -303,7 +303,7 @@ func TestShipperExistingThanosLabels(t *testing.T) {
 	inmemory := objstore.NewInMemBucket()
 
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, nil, false, false, metadata.NoneFunc, DefaultMetaFilename)
+	s := New(nil, nil, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, nil)
 
 	id := ulid.MustNew(1, nil)
 	id2 := ulid.MustNew(2, nil)

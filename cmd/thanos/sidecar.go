@@ -415,8 +415,10 @@ func runSidecar(
 			}
 
 			uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
-			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
-				uploadCompactedFunc, conf.shipper.allowOutOfOrderUpload, conf.shipper.skipCorruptedBlocks, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
+			allowOutOfOrderUploadFunc := func() bool { return conf.shipper.allowOutOfOrderUpload }
+			skipCorruptedBlocksFunc := func() bool { return conf.shipper.skipCorruptedBlocks }
+			s := shipper.New(logger, reg, conf.tsdb.path, bkt, metadata.SidecarSource, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName,
+				m.Labels, uploadCompactedFunc, allowOutOfOrderUploadFunc, skipCorruptedBlocksFunc)
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {

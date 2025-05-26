@@ -81,7 +81,7 @@ type Shipper struct {
 	source           metadata.SourceType
 	metadataFilePath string
 
-	uploadCompactedFunc    func() bool
+	uploadCompacted        bool
 	allowOutOfOrderUploads bool
 	skipCorruptedBlocks    bool
 	hashFunc               metadata.HashFunc
@@ -102,13 +102,14 @@ func New(
 	r prometheus.Registerer,
 	dir string,
 	bucket objstore.Bucket,
-	lbls func() labels.Labels,
 	source metadata.SourceType,
-	uploadCompactedFunc func() bool,
-	allowOutOfOrderUploads bool,
-	skipCorruptedBlocks bool,
 	hashFunc metadata.HashFunc,
 	metaFileName string,
+	lbls func() labels.Labels,
+	uploadCompacted func() bool,
+	allowOutOfOrderUploads func() bool,
+	skipCorruptedBlocks func() bool,
+
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -121,11 +122,24 @@ func New(
 		metaFileName = DefaultMetaFilename
 	}
 
-	if uploadCompactedFunc == nil {
-		uploadCompactedFunc = func() bool {
+	if uploadCompacted == nil {
+		uploadCompacted = func() bool {
 			return false
 		}
 	}
+
+	if allowOutOfOrderUploads == nil {
+		allowOutOfOrderUploads = func() bool {
+			return false
+		}
+	}
+
+	if skipCorruptedBlocks == nil {
+		skipCorruptedBlocks = func() bool {
+			return false
+		}
+	}
+
 	return &Shipper{
 		logger:                 logger,
 		dir:                    dir,
@@ -133,9 +147,9 @@ func New(
 		labels:                 lbls,
 		metrics:                newMetrics(r),
 		source:                 source,
-		allowOutOfOrderUploads: allowOutOfOrderUploads,
-		skipCorruptedBlocks:    skipCorruptedBlocks,
-		uploadCompactedFunc:    uploadCompactedFunc,
+		allowOutOfOrderUploads: allowOutOfOrderUploads(),
+		skipCorruptedBlocks:    skipCorruptedBlocks(),
+		uploadCompacted:        uploadCompacted(),
 		hashFunc:               hashFunc,
 		metadataFilePath:       filepath.Join(dir, filepath.Clean(metaFileName)),
 	}
@@ -262,7 +276,6 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		}
 	}()
 
-	uploadCompacted := s.uploadCompactedFunc()
 	metas, failedBlocks, err := s.blockMetasFromOldest()
 	// Ignore error when we should ignore failed blocks
 	if err != nil && (!errors.Is(errors.Cause(err), ErrorSyncBlockCorrupted) || !s.skipCorruptedBlocks) {
@@ -284,7 +297,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 
 		// We only ship of the first compacted block level as normal flow.
 		if m.Compaction.Level > 1 {
-			if !uploadCompacted {
+			if !s.uploadCompacted {
 				continue
 			}
 		}
@@ -332,7 +345,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		return uploaded, errors.Errorf("failed to sync %v/%v blocks", uploadErrs, len(failedBlocks))
 	}
 
-	if uploadCompacted {
+	if s.uploadCompacted {
 		s.metrics.uploadedCompacted.Set(1)
 	} else {
 		s.metrics.uploadedCompacted.Set(0)

@@ -760,13 +760,13 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			reg,
 			dataDir,
 			t.bucket,
-			func() labels.Labels { return lset },
 			metadata.ReceiveSource,
-			nil,
-			t.allowOutOfOrderUpload,
-			t.skipCorruptedBlocks,
 			t.hashFunc,
 			shipper.DefaultMetaFilename,
+			func() labels.Labels { return lset },
+			nil,
+			func() bool { return t.allowOutOfOrderUpload },
+			func() bool { return t.skipCorruptedBlocks },
 		)
 	}
 	var options []store.TSDBStoreOption
