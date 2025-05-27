@@ -11,7 +11,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"go.opentelemetry.io/otel/attribute"
-	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
+	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger" //nolint:staticcheck
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"

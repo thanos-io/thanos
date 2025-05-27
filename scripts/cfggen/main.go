@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/fatih/structtag"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -24,7 +25,6 @@ import (
 	"github.com/thanos-io/objstore/providers/oss"
 	"github.com/thanos-io/objstore/providers/s3"
 	"github.com/thanos-io/objstore/providers/swift"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
