@@ -83,6 +83,8 @@ func registerQuery(app *extkingpin.App) {
 
 	defaultEngine := cmd.Flag("query.promql-engine", "Default PromQL engine to use.").Default(string(apiv1.PromqlEnginePrometheus)).
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
+	disableQueryFallback := cmd.Flag("query.disable-fallback", "If set then thanos engine will throw an error if query falls back to prometheus engine").Hidden().Default("false").Bool()
+
 	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
 		Default(string(apiv1.PromqlQueryModeLocal)).
@@ -336,6 +338,7 @@ func registerQuery(app *extkingpin.App) {
 			store.NewTSDBSelector(tsdbSelector),
 			apiv1.PromqlEngineType(*defaultEngine),
 			apiv1.PromqlQueryMode(*promqlQueryMode),
+			*disableQueryFallback,
 			*tenantHeader,
 			*defaultTenant,
 			*tenantCertField,
@@ -398,6 +401,7 @@ func runQuery(
 	tsdbSelector *store.TSDBSelector,
 	defaultEngine apiv1.PromqlEngineType,
 	queryMode apiv1.PromqlQueryMode,
+	disableQueryFallback bool,
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
@@ -471,6 +475,7 @@ func runQuery(
 		extendedFunctionsEnabled,
 		activeQueryTracker,
 		queryMode,
+		disableQueryFallback,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)

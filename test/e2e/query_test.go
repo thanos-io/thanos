@@ -367,7 +367,7 @@ func TestQueryWithExperimentalFunctions(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	// create querier with enabling experimental features
-	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnabledFeatures([]string{"promql-experimental-functions"}).Init()
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnabledFeatures([]string{"promql-experimental-functions"}).WithDisabledFallback().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
