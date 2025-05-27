@@ -280,10 +280,75 @@ usage: thanos compact [<flags>]
 
 Continuously compacts blocks in an object store bucket.
 
+
 Flags:
+  -h, --[no-]help               Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --[no-]version            Show application version.
+      --log.level=info          Log filtering level.
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --tracing.config-file=<file-path>
+                                Path to YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tracing.config=<content>
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --[no-]enable-auto-gomemlimit
+                                Enable go runtime to automatically limit memory
+                                consumption.
       --auto-gomemlimit.ratio=0.9
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
+      --http-address="0.0.0.0:10902"
+                                Listen host:port for HTTP endpoints.
+      --http-grace-period=2m    Time to wait after an interrupt received for
+                                HTTP Server.
+      --http.config=""          [EXPERIMENTAL] Path to the configuration file
+                                that can enable TLS or authentication for all
+                                HTTP endpoints.
+      --data-dir="./data"       Data directory in which to cache blocks and
+                                process compactions.
+      --objstore.config-file=<file-path>
+                                Path to YAML file that contains object
+                                store configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config=<content>
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --consistency-delay=30m   Minimum age of fresh (non-compacted)
+                                blocks before they are being processed.
+                                Malformed blocks older than the maximum of
+                                consistency-delay and 48h0m0s will be removed.
+      --retention.resolution-raw=0d
+                                How long to retain raw samples in bucket.
+                                Setting this to 0d will retain samples of this
+                                resolution forever
+      --retention.resolution-5m=0d
+                                How long to retain samples of resolution 1 (5
+                                minutes) in bucket. Setting this to 0d will
+                                retain samples of this resolution forever
+      --retention.resolution-1h=0d
+                                How long to retain samples of resolution 2 (1
+                                hour) in bucket. Setting this to 0d will retain
+                                samples of this resolution forever
+  -w, --[no-]wait               Do not exit after all compactions have been
+                                processed and wait for new work.
+      --wait-interval=5m        Wait interval between consecutive compaction
+                                runs and bucket refreshes. Only works when
+                                --wait flag specified.
+      --[no-]downsampling.disable
+                                Disables downsampling. This is not recommended
+                                as querying long time ranges without
+                                non-downsampled data is not efficient and useful
+                                e.g it is not possible to render all samples for
+                                a human eye anyway
       --block-discovery-strategy="concurrent"
                                 One of concurrent, recursive. When set to
                                 concurrent, stores will concurrently issue
@@ -293,13 +358,13 @@ Flags:
                                 recursively traversing into each directory.
                                 This avoids N+1 calls at the expense of having
                                 slower bucket iterations.
+      --block-meta-fetch-concurrency=32
+                                Number of goroutines to use when fetching block
+                                metadata from object storage.
       --block-files-concurrency=1
                                 Number of goroutines to use when
                                 fetching/uploading block files from object
                                 storage.
-      --block-meta-fetch-concurrency=32
-                                Number of goroutines to use when fetching block
-                                metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
@@ -308,32 +373,37 @@ Flags:
                                 Maximum time for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
-      --bucket-web-label=BUCKET-WEB-LABEL
-                                External block label to use as group title in
-                                the bucket web UI
-      --compact.blocks-fetch-concurrency=1
-                                Number of goroutines to use when download block
-                                during compaction.
       --compact.cleanup-interval=5m
                                 How often we should clean up partially uploaded
                                 blocks and blocks with deletion mark in the
                                 background when --wait has been enabled. Setting
                                 it to "0s" disables it - the cleaning will only
                                 happen at the end of an iteration.
-      --compact.concurrency=1   Number of goroutines to use when compacting
-                                groups.
       --compact.progress-interval=5m
                                 Frequency of calculating the compaction progress
                                 in the background when --wait has been enabled.
                                 Setting it to "0s" disables it. Now compaction,
                                 downsampling and retention progress are
                                 supported.
-      --consistency-delay=30m   Minimum age of fresh (non-compacted)
-                                blocks before they are being processed.
-                                Malformed blocks older than the maximum of
-                                consistency-delay and 48h0m0s will be removed.
-      --data-dir="./data"       Data directory in which to cache blocks and
-                                process compactions.
+      --compact.concurrency=1   Number of goroutines to use when compacting
+                                groups.
+      --compact.blocks-fetch-concurrency=1
+                                Number of goroutines to use when download block
+                                during compaction.
+      --downsample.concurrency=1
+                                Number of goroutines to use when downsampling
+                                blocks.
+      --delete-delay=48h        Time before a block marked for deletion is
+                                deleted from bucket. If delete-delay is non
+                                zero, blocks will be marked for deletion and
+                                compactor component will delete blocks marked
+                                for deletion from the bucket. If delete-delay
+                                is 0, blocks will be deleted straight away.
+                                Note that deleting blocks immediately can cause
+                                query failures, if store gateway still has the
+                                block loaded, or compactor is ignoring the
+                                deletion because it's compacting the block at
+                                the same time.
       --deduplication.func=     Experimental. Deduplication algorithm for
                                 merging overlapping blocks. Possible values are:
                                 "", "penalty". If no value is specified,
@@ -360,48 +430,19 @@ Flags:
                                 need a different deduplication algorithm (e.g
                                 one that works well with Prometheus replicas),
                                 please set it via --deduplication.func.
-      --delete-delay=48h        Time before a block marked for deletion is
-                                deleted from bucket. If delete-delay is non
-                                zero, blocks will be marked for deletion and
-                                compactor component will delete blocks marked
-                                for deletion from the bucket. If delete-delay
-                                is 0, blocks will be deleted straight away.
-                                Note that deleting blocks immediately can cause
-                                query failures, if store gateway still has the
-                                block loaded, or compactor is ignoring the
-                                deletion because it's compacting the block at
-                                the same time.
-      --disable-admin-operations
-                                Disable UI/API admin operations like marking
-                                blocks for deletion and no compaction.
-      --downsample.concurrency=1
-                                Number of goroutines to use when downsampling
-                                blocks.
-      --downsampling.disable    Disables downsampling. This is not recommended
-                                as querying long time ranges without
-                                non-downsampled data is not efficient and useful
-                                e.g it is not possible to render all samples for
-                                a human eye anyway
-      --enable-auto-gomemlimit  Enable go runtime to automatically limit memory
-                                consumption.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not
                                 happen. This permits avoiding downloading some
                                 files twice albeit at some performance cost.
                                 Possible values are: "", "SHA256".
-  -h, --help                    Show context-sensitive help (also try
-                                --help-long and --help-man).
-      --http-address="0.0.0.0:10902"
-                                Listen host:port for HTTP endpoints.
-      --http-grace-period=2m    Time to wait after an interrupt received for
-                                HTTP Server.
-      --http.config=""          [EXPERIMENTAL] Path to the configuration file
-                                that can enable TLS or authentication for all
-                                HTTP endpoints.
-      --log.format=logfmt       Log format to use. Possible options: logfmt or
-                                json.
-      --log.level=info          Log filtering level.
+      --min-time=0000-01-01T00:00:00Z
+                                Start of time range limit to compact.
+                                Thanos Compactor will compact only blocks, which
+                                happened later than this value. Option can be a
+                                constant time in RFC3339 format or time duration
+                                relative to current time, such as -1d or 2h45m.
+                                Valid duration units are ms, s, m, h, d, w, y.
       --max-time=9999-12-31T23:59:59Z
                                 End of time range limit to compact.
                                 Thanos Compactor will compact only blocks,
@@ -410,35 +451,14 @@ Flags:
                                 duration relative to current time, such as -1d
                                 or 2h45m. Valid duration units are ms, s, m, h,
                                 d, w, y.
-      --min-time=0000-01-01T00:00:00Z
-                                Start of time range limit to compact.
-                                Thanos Compactor will compact only blocks, which
-                                happened later than this value. Option can be a
-                                constant time in RFC3339 format or time duration
-                                relative to current time, such as -1d or 2h45m.
-                                Valid duration units are ms, s, m, h, d, w, y.
-      --objstore.config=<content>
-                                Alternative to 'objstore.config-file'
-                                flag (mutually exclusive). Content of
-                                YAML file that contains object store
-                                configuration. See format details:
-                                https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
-                                Path to YAML file that contains object
-                                store configuration. See format details:
-                                https://thanos.io/tip/thanos/storage.md/#configuration
-      --retention.resolution-1h=0d
-                                How long to retain samples of resolution 2 (1
-                                hour) in bucket. Setting this to 0d will retain
-                                samples of this resolution forever
-      --retention.resolution-5m=0d
-                                How long to retain samples of resolution 1 (5
-                                minutes) in bucket. Setting this to 0d will
-                                retain samples of this resolution forever
-      --retention.resolution-raw=0d
-                                How long to retain raw samples in bucket.
-                                Setting this to 0d will retain samples of this
-                                resolution forever
+      --[no-]web.disable        Disable Block Viewer UI.
+      --selector.relabel-config-file=<file-path>
+                                Path to YAML file with relabeling
+                                configuration that allows selecting blocks
+                                to act on based on their external labels.
+                                It follows thanos sharding relabel-config
+                                syntax. For format details see:
+                                https://thanos.io/tip/thanos/sharding.md/#relabelling
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
                                 flag (mutually exclusive). Content of YAML
@@ -447,32 +467,10 @@ Flags:
                                 external labels. It follows thanos sharding
                                 relabel-config syntax. For format details see:
                                 https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --selector.relabel-config-file=<file-path>
-                                Path to YAML file with relabeling
-                                configuration that allows selecting blocks
-                                to act on based on their external labels.
-                                It follows thanos sharding relabel-config
-                                syntax. For format details see:
-                                https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --tracing.config=<content>
-                                Alternative to 'tracing.config-file' flag
-                                (mutually exclusive). Content of YAML file
-                                with tracing configuration. See format details:
-                                https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
-                                Path to YAML file with tracing
-                                configuration. See format details:
-                                https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version                 Show application version.
-  -w, --wait                    Do not exit after all compactions have been
-                                processed and wait for new work.
-      --wait-interval=5m        Wait interval between consecutive compaction
-                                runs and bucket refreshes. Only works when
-                                --wait flag specified.
-      --web.disable             Disable Block Viewer UI.
-      --web.disable-cors        Whether to disable CORS headers to be set by
-                                Thanos. By default Thanos sets CORS headers to
-                                be allowed by all.
+      --web.route-prefix=""     Prefix for API and UI endpoints. This allows
+                                thanos UI to be served on a sub-path. This
+                                option is analogous to --web.route-prefix of
+                                Prometheus.
       --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface.
                                 Actual endpoints are still served on / or the
@@ -492,9 +490,14 @@ Flags:
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
-      --web.route-prefix=""     Prefix for API and UI endpoints. This allows
-                                thanos UI to be served on a sub-path. This
-                                option is analogous to --web.route-prefix of
-                                Prometheus.
+      --[no-]web.disable-cors   Whether to disable CORS headers to be set by
+                                Thanos. By default Thanos sets CORS headers to
+                                be allowed by all.
+      --bucket-web-label=BUCKET-WEB-LABEL
+                                External block label to use as group title in
+                                the bucket web UI
+      --[no-]disable-admin-operations
+                                Disable UI/API admin operations like marking
+                                blocks for deletion and no compaction.
 
 ```
