@@ -292,10 +292,6 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
-      --enable-feature= ...      Comma separated feature names to enable. Valid
-                                 options for now: promql-experimental-functions
-                                 (enables promql experimental functions for
-                                 ruler)
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -503,6 +499,10 @@ Flags:
                                  Whether to enable extended rate functions
                                  (xrate, xincrease and xdelta). Only has effect
                                  when used with Thanos engine.
+      --enable-feature= ...      Comma separated feature names to enable. Valid
+                                 options for now: promql-experimental-functions
+                                 (enables promql experimental functions for
+                                 ruler)
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

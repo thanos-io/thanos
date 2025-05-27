@@ -322,10 +322,6 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
-      --enable-feature= ...      Comma separated feature names to enable. Valid
-                                 options for now: promql-experimental-functions
-                                 (enables promql experimental functions in
-                                 query)
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -479,6 +475,10 @@ Flags:
       --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
+      --enable-feature= ...      Comma separated feature names to enable. Valid
+                                 options for now: promql-experimental-functions
+                                 (enables promql experimental functions in
+                                 query)
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.

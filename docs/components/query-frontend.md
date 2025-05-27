@@ -223,10 +223,6 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                The ratio of reserved GOMEMLIMIT memory to the
                                detected maximum container or system memory.
-      --enable-feature= ...      Comma separated feature names to enable. Valid
-                                 options for now: promql-experimental-functions
-                                 (enables promql experimental functions in
-                                 query-frontend)
       --http-address="0.0.0.0:10902"
                                Listen host:port for HTTP endpoints.
       --http-grace-period=2m   Time to wait after an interrupt received for HTTP
@@ -274,6 +270,10 @@ Flags:
                                functions in query-frontend.
                                --no-query-frontend.enable-x-functions for
                                disabling.
+      --enable-feature= ...    Comma separated feature names to enable. Valid
+                               options for now: promql-experimental-functions
+                               (enables promql experimental functions in
+                               query-frontend)
       --query-range.max-query-length=0
                                Limit the query time range (end - start time) in
                                the query-frontend, 0 disables it.
