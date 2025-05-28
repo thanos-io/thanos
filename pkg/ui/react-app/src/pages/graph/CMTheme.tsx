@@ -4,12 +4,12 @@
    https://github.com/prometheus/prometheus/blob/main/LICENSE.
 */
 
-import { EditorView } from '@codemirror/view';
 import { HighlightStyle } from '@codemirror/language';
+import { EditorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 
 export const baseTheme = EditorView.theme({
-  '&': {
+  '&.cm-editor': {
     '&.cm-focused': {
       outline: 'none',
       outline_fallback: 'none',
@@ -25,8 +25,6 @@ export const baseTheme = EditorView.theme({
   },
 
   '.cm-matchingBracket': {
-    color: '#000',
-    backgroundColor: '#dedede',
     fontWeight: 'bold',
     outline: '1px dashed transparent',
   },
@@ -42,6 +40,7 @@ export const baseTheme = EditorView.theme({
       padding: '2px 1em 2px 3px',
     },
     minWidth: '30%',
+    maxWidth: '65%',
   },
 
   '.cm-completionDetail': {
@@ -88,7 +87,6 @@ export const baseTheme = EditorView.theme({
   '.cm-completionMatchedText': {
     textDecoration: 'none',
     fontWeight: 'bold',
-    color: '#0066bf',
   },
 
   '.cm-selectionMatch': {
@@ -111,12 +109,10 @@ export const baseTheme = EditorView.theme({
     fontFamily: 'codicon',
     paddingRight: '0',
     opacity: '1',
-    color: '#007acc',
   },
 
   '.cm-completionIcon-function, .cm-completionIcon-method': {
     '&:after': { content: "'\\ea8c'" },
-    color: '#652d90',
   },
   '.cm-completionIcon-class': {
     '&:after': { content: "'○'" },
@@ -129,7 +125,6 @@ export const baseTheme = EditorView.theme({
   },
   '.cm-completionIcon-constant': {
     '&:after': { content: "'\\eb5f'" },
-    color: '#007acc',
   },
   '.cm-completionIcon-type': {
     '&:after': { content: "'𝑡'" },
@@ -142,7 +137,6 @@ export const baseTheme = EditorView.theme({
   },
   '.cm-completionIcon-keyword': {
     '&:after': { content: "'\\eb62'" },
-    color: '#616161',
   },
   '.cm-completionIcon-namespace': {
     '&:after': { content: "'▢'" },
@@ -193,6 +187,31 @@ export const lightTheme = EditorView.theme(
         backgroundColor: '#add6ff',
       },
     },
+
+    '.cm-matchingBracket': {
+      color: '#000',
+      backgroundColor: '#dedede',
+    },
+
+    '.cm-completionMatchedText': {
+      color: '#0066bf',
+    },
+
+    '.cm-completionIcon': {
+      color: '#007acc',
+    },
+
+    '.cm-completionIcon-constant': {
+      color: '#007acc',
+    },
+
+    '.cm-completionIcon-function, .cm-completionIcon-method': {
+      color: '#652d90',
+    },
+
+    '.cm-completionIcon-keyword': {
+      color: '#616161',
+    },
   },
   { dark: false }
 );
@@ -226,12 +245,31 @@ export const darkTheme = EditorView.theme(
         backgroundColor: '#767676',
       },
     },
+
+    '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
+      backgroundColor: '#616161',
+    },
+
+    '.cm-completionMatchedText': {
+      color: '#7dd3fc',
+    },
+
+    '.cm-completionIcon, .cm-completionIcon-constant': {
+      color: '#7dd3fc',
+    },
+
+    '.cm-completionIcon-function, .cm-completionIcon-method': {
+      color: '#d8b4fe',
+    },
+
+    '.cm-completionIcon-keyword': {
+      color: '#cbd5e1 !important',
+    },
   },
   { dark: true }
 );
 
 export const promqlHighlighter = HighlightStyle.define([
-  { tag: tags.name, color: '#000' },
   { tag: tags.number, color: '#09885a' },
   { tag: tags.string, color: '#a31515' },
   { tag: tags.keyword, color: '#008080' },
@@ -244,4 +282,19 @@ export const promqlHighlighter = HighlightStyle.define([
   { tag: tags.brace },
   { tag: tags.invalid, color: 'red' },
   { tag: tags.comment, color: '#888', fontStyle: 'italic' },
+]);
+
+export const darkPromqlHighlighter = HighlightStyle.define([
+  { tag: tags.number, color: '#22c55e' },
+  { tag: tags.string, color: '#fca5a5' },
+  { tag: tags.keyword, color: '#14bfad' },
+  { tag: tags.function(tags.variableName), color: '#14bfad' },
+  { tag: tags.labelName, color: '#ff8585' },
+  { tag: tags.operator },
+  { tag: tags.modifier, color: '#14bfad' },
+  { tag: tags.paren },
+  { tag: tags.squareBracket },
+  { tag: tags.brace },
+  { tag: tags.invalid, color: '#ff3d3d' },
+  { tag: tags.comment, color: '#9ca3af', fontStyle: 'italic' },
 ]);

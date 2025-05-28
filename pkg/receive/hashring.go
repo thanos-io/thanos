@@ -4,19 +4,26 @@
 package receive
 
 import (
+	"crypto/md5"
+	"encoding/binary"
 	"fmt"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -51,22 +58,19 @@ func (i *insufficientNodesError) Error() string {
 // for a specified tenant.
 // It returns the node and any error encountered.
 type Hashring interface {
-	// Get returns the first node that should handle the given tenant and time series.
-	Get(tenant string, timeSeries *prompb.TimeSeries) (Endpoint, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
 	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (Endpoint, error)
 	// Nodes returns a sorted slice of nodes that are in this hashring. Addresses could be duplicated
 	// if, for example, the same address is used for multiple tenants in the multi-hashring.
 	Nodes() []Endpoint
+
+	Close()
 }
 
 // SingleNodeHashring always returns the same node.
 type SingleNodeHashring string
 
-// Get implements the Hashring interface.
-func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
-	return s.GetN(tenant, ts, 0)
-}
+func (s SingleNodeHashring) Close() {}
 
 func (s SingleNodeHashring) Nodes() []Endpoint {
 	return []Endpoint{{Address: string(s), CapNProtoAddress: string(s)}}
@@ -85,6 +89,8 @@ func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (Endp
 
 // simpleHashring represents a group of nodes handling write requests by hashmoding individual series.
 type simpleHashring []Endpoint
+
+func (s simpleHashring) Close() {}
 
 func newSimpleHashring(endpoints []Endpoint) (Hashring, error) {
 	for i := range endpoints {
@@ -137,6 +143,8 @@ type ketamaHashring struct {
 	sections     sections
 	numEndpoints uint64
 }
+
+func (s ketamaHashring) Close() {}
 
 func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFactor uint64) (*ketamaHashring, error) {
 	numSections := len(endpoints) * sectionsPerNode
@@ -286,6 +294,12 @@ type multiHashring struct {
 	nodes []Endpoint
 }
 
+func (s *multiHashring) Close() {
+	for _, h := range s.hashrings {
+		h.Close()
+	}
+}
+
 // Get returns a target to handle the given tenant and time series.
 func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (Endpoint, error) {
 	return m.GetN(tenant, ts, 0)
@@ -335,11 +349,306 @@ func (m *multiHashring) Nodes() []Endpoint {
 	return m.nodes
 }
 
+// shuffleShardHashring wraps a hashring implementation and applies shuffle sharding logic
+// to limit which nodes are used for each tenant.
+type shuffleShardHashring struct {
+	baseRing Hashring
+
+	shuffleShardingConfig ShuffleShardingConfig
+
+	replicationFactor uint64
+
+	nodes []Endpoint
+
+	cache *lru.Cache[string, *ketamaHashring]
+
+	metrics *shuffleShardCacheMetrics
+}
+
+func (s *shuffleShardHashring) Close() {
+	s.metrics.close()
+}
+
+func (s *shuffleShardCacheMetrics) close() {
+	s.reg.Unregister(s.requestsTotal)
+	s.reg.Unregister(s.hitsTotal)
+	s.reg.Unregister(s.numItems)
+	s.reg.Unregister(s.maxItems)
+	s.reg.Unregister(s.evicted)
+}
+
+type shuffleShardCacheMetrics struct {
+	requestsTotal prometheus.Counter
+	hitsTotal     prometheus.Counter
+	numItems      prometheus.Gauge
+	maxItems      prometheus.Gauge
+	evicted       prometheus.Counter
+
+	reg prometheus.Registerer
+}
+
+func newShuffleShardCacheMetrics(reg prometheus.Registerer, hashringName string) *shuffleShardCacheMetrics {
+	reg = prometheus.WrapRegistererWith(prometheus.Labels{"hashring": hashringName}, reg)
+
+	return &shuffleShardCacheMetrics{
+		reg: reg,
+		requestsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_shuffle_shard_cache_requests_total",
+			Help: "Total number of cache requests for shuffle shard subrings",
+		}),
+		hitsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_shuffle_shard_cache_hits_total",
+			Help: "Total number of cache hits for shuffle shard subrings",
+		}),
+		numItems: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_shuffle_shard_cache_items",
+			Help: "Total number of cached items",
+		}),
+		maxItems: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_shuffle_shard_cache_max_items",
+			Help: "Maximum number of items that can be cached",
+		}),
+		evicted: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_shuffle_shard_cache_evicted_total",
+			Help: "Total number of items evicted from the cache",
+		}),
+	}
+}
+
+// newShuffleShardHashring creates a new shuffle sharding hashring wrapper.
+func newShuffleShardHashring(baseRing Hashring, shuffleShardingConfig ShuffleShardingConfig, replicationFactor uint64, reg prometheus.Registerer, name string) (*shuffleShardHashring, error) {
+	l := log.NewNopLogger()
+
+	level.Info(l).Log(
+		"msg", "Creating shuffle sharding hashring",
+		"default_shard_size", shuffleShardingConfig.ShardSize,
+		"total_nodes", len(baseRing.Nodes()),
+	)
+
+	if len(shuffleShardingConfig.Overrides) > 0 {
+		for _, override := range shuffleShardingConfig.Overrides {
+			level.Info(l).Log(
+				"msg", "Tenant shard size override",
+				"tenants", override.Tenants,
+				"tenant_matcher_type", override.TenantMatcherType,
+				"shard_size", override.ShardSize,
+			)
+		}
+	}
+
+	const DefaultShuffleShardingCacheSize = 100
+
+	if shuffleShardingConfig.CacheSize <= 0 {
+		shuffleShardingConfig.CacheSize = DefaultShuffleShardingCacheSize
+	}
+
+	metrics := newShuffleShardCacheMetrics(reg, name)
+	metrics.maxItems.Set(float64(shuffleShardingConfig.CacheSize))
+
+	cache, err := lru.NewWithEvict[string, *ketamaHashring](shuffleShardingConfig.CacheSize, func(key string, value *ketamaHashring) {
+		metrics.evicted.Inc()
+		metrics.numItems.Dec()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ssh := &shuffleShardHashring{
+		baseRing:              baseRing,
+		shuffleShardingConfig: shuffleShardingConfig,
+		replicationFactor:     replicationFactor,
+		cache:                 cache,
+		metrics:               metrics,
+	}
+
+	// Dedupe nodes as the base ring may have duplicates. We are only interested in unique nodes.
+	ssh.nodes = ssh.dedupedNodes()
+
+	nodeCountByAZ := make(map[string]int)
+	for _, node := range ssh.nodes {
+		var az string = node.AZ
+		if shuffleShardingConfig.ZoneAwarenessDisabled {
+			az = ""
+		}
+		nodeCountByAZ[az]++
+	}
+
+	maxNodesInAZ := 0
+	for _, count := range nodeCountByAZ {
+		maxNodesInAZ = max(maxNodesInAZ, count)
+	}
+
+	if shuffleShardingConfig.ShardSize > maxNodesInAZ {
+		level.Warn(l).Log(
+			"msg", "Shard size is larger than the maximum number of nodes in any AZ; some tenants might get all not working nodes if that AZ goes down",
+			"shard_size", shuffleShardingConfig.ShardSize,
+			"max_nodes_in_az", maxNodesInAZ,
+		)
+	}
+
+	for _, override := range shuffleShardingConfig.Overrides {
+		if override.ShardSize < maxNodesInAZ {
+			continue
+		}
+		level.Warn(l).Log(
+			"msg", "Shard size is larger than the maximum number of nodes in any AZ; some tenants might get all not working nodes if that AZ goes down",
+			"max_nodes_in_az", maxNodesInAZ,
+			"shard_size", override.ShardSize,
+			"tenants", override.Tenants,
+			"tenant_matcher_type", override.TenantMatcherType,
+		)
+	}
+	return ssh, nil
+}
+
+func (s *shuffleShardHashring) Nodes() []Endpoint {
+	return s.nodes
+}
+
+func (s *shuffleShardHashring) dedupedNodes() []Endpoint {
+	uniqueNodes := make(map[Endpoint]struct{})
+	for _, node := range s.baseRing.Nodes() {
+		uniqueNodes[node] = struct{}{}
+	}
+
+	// Convert the map back to a slice
+	nodes := make(endpoints, 0, len(uniqueNodes))
+	for node := range uniqueNodes {
+		nodes = append(nodes, node)
+	}
+
+	sort.Sort(nodes)
+
+	return nodes
+}
+
+// getShardSize returns the shard size for a specific tenant, taking into account any overrides.
+func (s *shuffleShardHashring) getShardSize(tenant string) int {
+	for _, override := range s.shuffleShardingConfig.Overrides {
+		if override.TenantMatcherType == TenantMatcherTypeExact {
+			for _, t := range override.Tenants {
+				if t == tenant {
+					return override.ShardSize
+				}
+			}
+		} else if override.TenantMatcherType == TenantMatcherGlob {
+			for _, t := range override.Tenants {
+				matches, err := filepath.Match(t, tenant)
+				if err == nil && matches {
+					return override.ShardSize
+				}
+			}
+		}
+	}
+
+	// Default shard size is used if no overrides match
+	return s.shuffleShardingConfig.ShardSize
+}
+
+// ShuffleShardExpectedInstancesPerZone returns the expected number of instances per zone for a given shard size and number of zones.
+// Copied from Cortex. Copyright Cortex Authors.
+func ShuffleShardExpectedInstancesPerZone(shardSize, numZones int) int {
+	return int(math.Ceil(float64(shardSize) / float64(numZones)))
+}
+
+var (
+	seedSeparator = []byte{0}
+)
+
+// yoloBuf will return an unsafe pointer to a string, as the name yoloBuf implies. Use at your own risk.
+func yoloBuf(s string) []byte {
+	return *((*[]byte)(unsafe.Pointer(&s)))
+}
+
+// ShuffleShardSeed returns seed for random number generator, computed from provided identifier.
+// Copied from Cortex. Copyright Cortex Authors.
+func ShuffleShardSeed(identifier, zone string) int64 {
+	// Use the identifier to compute a hash we'll use to seed the random.
+	hasher := md5.New()
+	hasher.Write(yoloBuf(identifier)) // nolint:errcheck
+	if zone != "" {
+		hasher.Write(seedSeparator) // nolint:errcheck
+		hasher.Write(yoloBuf(zone)) // nolint:errcheck
+	}
+	checksum := hasher.Sum(nil)
+
+	// Generate the seed based on the first 64 bits of the checksum.
+	return int64(binary.BigEndian.Uint64(checksum))
+}
+
+func (s *shuffleShardHashring) getTenantShardCached(tenant string) (*ketamaHashring, error) {
+	s.metrics.requestsTotal.Inc()
+
+	cached, ok := s.cache.Get(tenant)
+	if ok {
+		s.metrics.hitsTotal.Inc()
+		return cached, nil
+	}
+
+	h, err := s.getTenantShard(tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	s.metrics.numItems.Inc()
+	s.cache.Add(tenant, h)
+
+	return h, nil
+}
+
+// getTenantShard returns or creates a consistent subset of nodes for a tenant.
+func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, error) {
+	nodes := s.Nodes()
+	nodesByAZ := make(map[string][]Endpoint)
+	for _, node := range nodes {
+		var az = node.AZ
+		if s.shuffleShardingConfig.ZoneAwarenessDisabled {
+			az = ""
+		}
+		nodesByAZ[az] = append(nodesByAZ[az], node)
+	}
+
+	ss := s.getShardSize(tenant)
+	var take int
+	if s.shuffleShardingConfig.ZoneAwarenessDisabled {
+		take = ss
+	} else {
+		take = ShuffleShardExpectedInstancesPerZone(ss, len(nodesByAZ))
+	}
+
+	var finalNodes = make([]Endpoint, 0, take*len(nodesByAZ))
+	for az, azNodes := range nodesByAZ {
+		seed := ShuffleShardSeed(tenant, az)
+		r := rand.New(rand.NewSource(seed))
+		r.Shuffle(len(azNodes), func(i, j int) {
+			azNodes[i], azNodes[j] = azNodes[j], azNodes[i]
+		})
+
+		if take > len(azNodes) {
+			return nil, fmt.Errorf("shard size %d is larger than number of nodes in AZ %s (%d)", ss, az, len(azNodes))
+		}
+
+		finalNodes = append(finalNodes, azNodes[:take]...)
+	}
+
+	return newKetamaHashring(finalNodes, SectionsPerNode, s.replicationFactor)
+}
+
+// GetN returns the nth endpoint for a tenant and time series, respecting the shuffle sharding.
+func (s *shuffleShardHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+	h, err := s.getTenantShardCached(tenant)
+	if err != nil {
+		return Endpoint{}, err
+	}
+
+	return h.GetN(tenant, ts, n)
+}
+
 // newMultiHashring creates a multi-tenant hashring for a given slice of
 // groups.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
-func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig) (Hashring, error) {
+func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig, reg prometheus.Registerer) (Hashring, error) {
 	m := &multiHashring{
 		cache: make(map[string]Hashring),
 	}
@@ -351,7 +660,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		if h.Algorithm != "" {
 			activeAlgorithm = h.Algorithm
 		}
-		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
+		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants, h.ShuffleShardingConfig, reg)
 		if err != nil {
 			return nil, err
 		}
@@ -372,17 +681,38 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 	return m, nil
 }
 
-func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string) (Hashring, error) {
+func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string, shuffleShardingConfig ShuffleShardingConfig, reg prometheus.Registerer) (Hashring, error) {
+
 	switch algorithm {
 	case AlgorithmHashmod:
-		return newSimpleHashring(endpoints)
+		ringImpl, err := newSimpleHashring(endpoints)
+		if err != nil {
+			return nil, err
+		}
+		if shuffleShardingConfig.ShardSize > 0 {
+			return nil, fmt.Errorf("hashmod algorithm does not support shuffle sharding. Either use Ketama or remove shuffle sharding configuration")
+		}
+		return ringImpl, nil
 	case AlgorithmKetama:
-		return newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
+		ringImpl, err := newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
+		if err != nil {
+			return nil, err
+		}
+		if shuffleShardingConfig.ShardSize > 0 {
+			if shuffleShardingConfig.ShardSize > len(endpoints) {
+				return nil, fmt.Errorf("shard size %d is larger than number of nodes in hashring %s (%d)", shuffleShardingConfig.ShardSize, hashring, len(endpoints))
+			}
+			return newShuffleShardHashring(ringImpl, shuffleShardingConfig, replicationFactor, reg, hashring)
+		}
+		return ringImpl, nil
 	default:
 		l := log.NewNopLogger()
 		level.Warn(l).Log("msg", "Unrecognizable hashring algorithm. Fall back to hashmod algorithm.",
 			"hashring", hashring,
 			"tenants", tenants)
+		if shuffleShardingConfig.ShardSize > 0 {
+			return nil, fmt.Errorf("hashmod algorithm does not support shuffle sharding. Either use Ketama or remove shuffle sharding configuration")
+		}
 		return newSimpleHashring(endpoints)
 	}
 }

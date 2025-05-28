@@ -6,6 +6,7 @@ package storepb
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
@@ -149,6 +150,33 @@ func TestServerAsClient(t *testing.T) {
 				}
 				testutil.Equals(t, s.series[:len(s.series)/2], resps)
 				testutil.Equals(t, r, s.seriesLastReq)
+				s.seriesLastReq = nil
+			}
+		})
+		t.Run("race", func(t *testing.T) {
+			s.err = nil
+			for i := 0; i < 20; i++ {
+				r := &SeriesRequest{
+					MinTime:                 -214,
+					MaxTime:                 213,
+					Matchers:                []LabelMatcher{{Value: "wfsdfs", Name: "__name__", Type: LabelMatcher_EQ}},
+					PartialResponseStrategy: PartialResponseStrategy_ABORT,
+				}
+				client, err := ServerAsClient(s).Series(ctx, r)
+				testutil.Ok(t, err)
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for {
+						_, err := client.Recv()
+						if err != nil {
+							break
+						}
+					}
+				}()
+				testutil.Ok(t, client.CloseSend())
+				wg.Wait()
 				s.seriesLastReq = nil
 			}
 		})

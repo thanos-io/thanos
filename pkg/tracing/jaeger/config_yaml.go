@@ -15,7 +15,7 @@ import (
 	"github.com/go-kit/log/level"
 	"go.opentelemetry.io/contrib/samplers/jaegerremote"
 	"go.opentelemetry.io/otel/attribute"
-	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
+	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger" //nolint:staticcheck
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 )
 

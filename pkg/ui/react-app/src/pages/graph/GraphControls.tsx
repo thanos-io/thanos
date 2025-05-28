@@ -157,7 +157,7 @@ class GraphControls extends Component<GraphControlsProps> {
           </Button>
         </ButtonGroup>
         <Input
-          disabled={this.props.queryMode != 'local' && this.props.engine != 'prometheus'}
+          disabled={this.props.queryMode !== 'local' && this.props.engine !== 'prometheus'}
           type="select"
           value={this.props.maxSourceResolution}
           onChange={this.handleMaxSourceResChange}

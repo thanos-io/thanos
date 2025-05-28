@@ -593,7 +593,7 @@ func setupHashring(g *run.Group,
 					webHandler.Hashring(receive.SingleNodeHashring(conf.endpoint))
 					level.Info(logger).Log("msg", "Empty hashring config. Set up single node hashring.")
 				} else {
-					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c)
+					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c, reg)
 					if err != nil {
 						return errors.Wrap(err, "unable to create new hashring from config")
 					}
@@ -1045,7 +1045,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("tsdb.enable-native-histograms",
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
-		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
+		Default("false").BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("writer.intern",
 		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").

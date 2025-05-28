@@ -324,6 +324,8 @@ func (h *Handler) Hashring(hashring Hashring) {
 				level.Error(h.logger).Log("msg", "closing gRPC connection failed, we might have leaked a file descriptor", "addr", node, "err", err.Error())
 			}
 		}
+
+		h.hashring.Close()
 	}
 
 	h.hashring = hashring
@@ -1015,6 +1017,11 @@ func (h *Handler) sendRemoteWrite(
 			}
 			h.peers.markPeerAvailable(endpoint)
 		} else {
+			h.forwardRequests.WithLabelValues(labelError).Inc()
+			if !alreadyReplicated {
+				h.replications.WithLabelValues(labelError).Inc()
+			}
+
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
 				if st.Code() == codes.Unavailable {

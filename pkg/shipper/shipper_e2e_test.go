@@ -51,12 +51,11 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
-			expBlocks    = map[ulid.ULID]struct{}{}
-			expFiles     = map[string][]byte{}
-			randr        = rand.New(rand.NewSource(0))
-			now          = time.Now()
-			ids          = []ulid.ULID{}
-			maxSyncSoFar int64
+			expBlocks = map[ulid.ULID]struct{}{}
+			expFiles  = map[string][]byte{}
+			randr     = rand.New(rand.NewSource(0))
+			now       = time.Now()
+			ids       = []ulid.ULID{}
 		)
 		for i := 0; i < 10; i++ {
 			id := ulid.MustNew(uint64(i), randr)
@@ -120,7 +119,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 			if i != 5 {
 				ids = append(ids, id)
-				maxSyncSoFar = meta.MaxTime
 				testutil.Equals(t, 1, b)
 			} else {
 				// 5 blocks uploaded so far - 5 existence checks & 25 uploads (5 files each).
@@ -167,12 +165,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
-
-			// Verify timestamps were updated correctly.
-			minTotal, maxSync, err := shipper.Timestamps()
-			testutil.Ok(t, err)
-			testutil.Equals(t, timestamp.FromTime(now), minTotal)
-			testutil.Equals(t, maxSyncSoFar, maxSync)
 		}
 
 		for id := range expBlocks {
@@ -313,12 +305,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
-
-			// Verify timestamps were updated correctly.
-			minTotal, maxSync, err := shipper.Timestamps()
-			testutil.Ok(t, err)
-			testutil.Equals(t, timestamp.FromTime(now), minTotal)
-			testutil.Equals(t, meta.MaxTime, maxSync)
 		}
 
 		for id := range expBlocks {
