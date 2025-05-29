@@ -54,7 +54,7 @@ As a fallback, the file contents are periodically re-read at an interval that ca
 
 ### Thanos Querier
 
-The repeatable flag `--endpoint.sd-config-file` can be used to specify the path to files that contain addresses of `StoreAPI` servers. The `<path>` can be a glob pattern so you can specify several files using a single flag.
+The repeatable flag `--endpoint.sd-config-file` can be used to specify the path to files that contain addresses of `StoreAPI` servers.
 
 The flag `--endpoint.sd-config-reload-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
 
