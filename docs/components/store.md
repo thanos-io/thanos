@@ -301,7 +301,9 @@ Flags:
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-
+      --disable-admin-operations
+                                Disable UI/API admin operations like marking
+                                blocks for deletion and no compaction.
 ```
 
 ## Time based partitioning
