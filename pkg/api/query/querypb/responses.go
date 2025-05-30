@@ -4,8 +4,6 @@
 package querypb
 
 import (
-	"strings"
-
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -31,8 +29,10 @@ func NewQueryWarningsResponse(errs ...error) *QueryResponse {
 		warnings = append(warnings, err.Error())
 	}
 	return &QueryResponse{
-		Result: &QueryResponse_Warnings{
-			Warnings: strings.Join(warnings, ", "),
+		Result: &QueryResponse_WarningsSlice{
+			WarningsSlice: &Warnings{
+				Warnings: warnings,
+			},
 		},
 	}
 }
@@ -59,8 +59,10 @@ func NewQueryRangeWarningsResponse(errs ...error) *QueryRangeResponse {
 		warnings = append(warnings, err.Error())
 	}
 	return &QueryRangeResponse{
-		Result: &QueryRangeResponse_Warnings{
-			Warnings: strings.Join(warnings, ", "),
+		Result: &QueryRangeResponse_WarningsSlice{
+			WarningsSlice: &Warnings{
+				Warnings: warnings,
+			},
 		},
 	}
 }
