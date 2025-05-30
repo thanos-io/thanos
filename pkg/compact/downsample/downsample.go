@@ -170,7 +170,7 @@ func Downsample(
 
 		// Raw and already downsampled data need different processing.
 		if origMeta.Thanos.Downsample.Resolution == 0 {
-			var prevEnc chunkenc.Encoding = chks[0].Chunk.Encoding()
+			var prevEnc = chks[0].Chunk.Encoding()
 
 			for _, c := range chks {
 				if cutNewChunk(c.Chunk.Encoding(), prevEnc) {
