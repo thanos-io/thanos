@@ -835,7 +835,8 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 
 	testutil.Ok(t, remoteWrite(ctx, samplespb, i.Endpoint("remote-write")))
 
-	q1 := e2ethanos.NewQuerierBuilder(e, "q1", i.InternalEndpoint("grpc")).Init()
+	enableFeature := []string{"promql-experimental-functions"}
+	q1 := e2ethanos.NewQuerierBuilder(e, "q1", i.InternalEndpoint("grpc")).WithEnabledFeatures(enableFeature).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q1))
 
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
@@ -849,7 +850,8 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 		QueryRangeConfig: queryfrontend.QueryRangeConfig{
 			AlignRangeWithStep: false,
 		},
-		NumShards: 2,
+		NumShards:      2,
+		EnableFeatures: enableFeature,
 	}
 	qfe := e2ethanos.NewQueryFrontend(e, "query-frontend", "http://"+q1.InternalEndpoint("http"), config, inMemoryCacheConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
@@ -903,6 +905,11 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 		{
 			name:           "multiple aggregations with grouping",
 			qryFunc:        func() string { return `max by (handler) (sum(http_requests_total) by (pod, handler))` },
+			expectedSeries: 2,
+		},
+		{
+			name:           "aggregations with parameter",
+			qryFunc:        func() string { return `topk(2, limitk by (pod) (4, http_requests_total))` },
 			expectedSeries: 2,
 		},
 	} {

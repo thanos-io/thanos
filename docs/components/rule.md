@@ -499,6 +499,10 @@ Flags:
                                  Whether to enable extended rate functions
                                  (xrate, xincrease and xdelta). Only has effect
                                  when used with Thanos engine.
+      --enable-feature= ...      Comma separated feature names to enable. Valid
+                                 options for now: promql-experimental-functions
+                                 (enables promql experimental functions for
+                                 ruler)
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers
