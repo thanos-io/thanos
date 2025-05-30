@@ -299,7 +299,9 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-
+      --disable-admin-operations
+                                Disable UI/API admin operations like marking
+                                blocks for deletion and no compaction.
 ```
 
 ## Time based partitioning
