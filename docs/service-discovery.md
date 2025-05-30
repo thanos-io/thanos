@@ -20,7 +20,11 @@ The simplest way to tell a component about a peer is to use a static flag.
 
 ### Thanos Querier
 
-The repeatable flag `--endpoint.sd-config=<content>` can be used to specify a `StoreAPI` that `Thanos Querier` should use.
+The flag `--endpoint.sd-config=<content>` can be used to specify a `StoreAPI` that `Thanos Querier` should use. It expects a formatted configuration.
+
+```
+--endpoint.sd-config=endpoints: [{address: "localhost:9090"}]
+```
 
 ### Thanos Ruler
 
@@ -32,29 +36,32 @@ The repeatable flag `--endpoint.sd-config=<content>` can be used to specify a `S
 
 File Service Discovery is another mechanism for configuring components. With File SD, a list of files can be watched for updates, and the new configuration will be dynamically loaded when a change occurs. The list of files to watch is passed to a component via a flag shown in the component-specific sections below.
 
-The format of the configuration file is the same as the one used in [Prometheus' File SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config). Both YAML and JSON files can be used. The format of the files is as follows:
+Both YAML and JSON files can be used. The format of the files is as follows:
 
 * JSON:
 
 ```json
-[
-  {
-    "targets": ["localhost:9090", "example.org:443"]
-  }
-]
+{
+  "endpoints": [
+    { "address": "localhost:9090" },
+    { "address": "example.org:443" }
+  ]
+}
 ```
 
 * YAML:
 
 ```yaml
-- targets: ['localhost:9090', 'example.org:443']
+endpoints:
+  - address: 'localhost:9090'
+  - address: 'example.org:443'
 ```
 
 As a fallback, the file contents are periodically re-read at an interval that can be set using a flag specific to the component as shown below. The default value for all File SD re-read intervals is 5 minutes.
 
 ### Thanos Querier
 
-The repeatable flag `--endpoint.sd-config-file` can be used to specify the path to files that contain addresses of `StoreAPI` servers.
+The flag `--endpoint.sd-config-file` can be used to specify the path to files that contain addresses of `StoreAPI` servers.
 
 The flag `--endpoint.sd-config-reload-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
 
@@ -73,19 +80,19 @@ To use DNS SD, just add one of the following prefixes to the domain name in your
 * `dns+` - the domain name after this prefix will be looked up as an A/AAAA query. *A port is required for this query type*. An example using this lookup with a static flag:
 
 ```
---endpoint.sd-config=dns+stores.thanos.mycompany.org:9090
+--endpoint.sd-config=endpoints: [{address: "dns+stores.thanos.mycompany.org:9090"}]
 ```
 
 * `dnssrv+` - the domain name after this prefix will be looked up as a SRV query, and then each SRV record will be looked up as an A/AAAA query. You do not need to specify a port as the one from the query results will be used. For example:
 
 ```
---endpoint.sd-config=dnssrv+_thanosstores._tcp.mycompany.org
+--endpoint.sd-config=endpoints: [{address: "dnssrv+_thanosstores._tcp.mycompany.org"}]
 ```
 
 DNS SRV record discovery also work well within Kubernetes. Consider the following example:
 
 ```
---endpoint.sd-config=dnssrv+_grpc._tcp.thanos-store.monitoring.svc
+--endpoint.sd-config=endpoints: [{address: "dnssrv+_grpc._tcp.thanos-store.monitoring.svc"}]
 ```
 
 This configuration will instruct Thanos to discover all endpoints within the `thanos-store` service in the `monitoring` namespace and use the declared port named `grpc`.
@@ -93,7 +100,7 @@ This configuration will instruct Thanos to discover all endpoints within the `th
 * `dnssrvnoa+` - the domain name after this prefix will be looked up as a SRV query, with no A/AAAA lookup made after that. Similar to the `dnssrv+` case, you do not need to specify a port. For example:
 
 ```
---endpoint.sd-config=dnssrvnoa+_thanosstores._tcp.mycompany.org
+--endpoint.sd-config=endpoints: [{address: "dnssrvnoa+_thanosstores._tcp.mycompany.org"}]
 ```
 
 The default interval between DNS lookups is 30s. This interval can be changed using the `store.sd-dns-interval` flag for `StoreAPI` configuration in `Thanos Querier`, or `query.sd-dns-interval` for `QueryAPI` configuration in `Thanos Ruler`.
