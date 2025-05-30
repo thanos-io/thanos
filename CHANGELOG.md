@@ -18,6 +18,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
+- [#8266](https://github.com/thanos-io/thanos/pull/8266) Website: maintain expanded state based on current page
+- [#8245](https://github.com/thanos-io/thanos/pull/8245) Querier/Query-Frontend/Ruler: Add `--enable-feature=promql-experimental-functions` flag option to enable using promQL experimental functions in respective Thanos components
 
 ### Changed
 
@@ -26,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 ### Fixed
+- [#8199](https://github.com/thanos-io/thanos/pull/8199) Query: handle panics or nil pointer dereference in querier gracefully when query analyze returns nil
 
 - [#8211](https://github.com/thanos-io/thanos/pull/8211) Query: fix panic on nested partial response in distributed instant query
 - [#8216](https://github.com/thanos-io/thanos/pull/8216) Query/Receive: fix iter race between `next()` and `stop()` introduced in https://github.com/thanos-io/thanos/pull/7821.
