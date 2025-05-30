@@ -818,6 +818,7 @@ func initializeMultiTSDB(dir string) *MultiTSDB {
 		"tenant_id",
 		bucket,
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 
