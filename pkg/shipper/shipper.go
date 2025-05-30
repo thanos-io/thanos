@@ -94,64 +94,122 @@ var (
 	ErrorSyncBlockCorrupted = errors.New("corrupted blocks found")
 )
 
+type shipperOptions struct {
+	logger                 log.Logger
+	r                      prometheus.Registerer
+	source                 metadata.SourceType
+	hashFunc               metadata.HashFunc
+	metaFileName           string
+	lbls                   func() labels.Labels
+	uploadCompacted        bool
+	allowOutOfOrderUploads bool
+	skipCorruptedBlocks    bool
+}
+
+type Option func(*shipperOptions)
+
+// WithLogger sets the logger.
+func WithLogger(logger log.Logger) Option {
+	return func(o *shipperOptions) {
+		o.logger = logger
+	}
+}
+
+// WithRegisterer sets the Prometheus registerer.
+func WithRegisterer(r prometheus.Registerer) Option {
+	return func(o *shipperOptions) {
+		o.r = r
+	}
+}
+
+// WithSource sets the metadata source type.
+func WithSource(source metadata.SourceType) Option {
+	return func(o *shipperOptions) {
+		o.source = source
+	}
+}
+
+// WithHashFunc sets the hash function.
+func WithHashFunc(hashFunc metadata.HashFunc) Option {
+	return func(o *shipperOptions) {
+		o.hashFunc = hashFunc
+	}
+}
+
+// WithMetaFileName sets the meta file name.
+func WithMetaFileName(name string) Option {
+	return func(o *shipperOptions) {
+		o.metaFileName = name
+	}
+}
+
+// WithLabels sets the labels function.
+func WithLabels(lbls func() labels.Labels) Option {
+	return func(o *shipperOptions) {
+		o.lbls = lbls
+	}
+}
+
+// WithUploadCompacted sets whether to upload compacted blocks.
+func WithUploadCompacted(upload bool) Option {
+	return func(o *shipperOptions) {
+		o.uploadCompacted = upload
+	}
+}
+
+// WithAllowOutOfOrderUploads sets whether to allow out of order uploads.
+func WithAllowOutOfOrderUploads(allow bool) Option {
+	return func(o *shipperOptions) {
+		o.allowOutOfOrderUploads = allow
+	}
+}
+
+// WithSkipCorruptedBlocks sets whether to skip corrupted blocks.
+func WithSkipCorruptedBlocks(skip bool) Option {
+	return func(o *shipperOptions) {
+		o.skipCorruptedBlocks = skip
+	}
+}
+
+func applyOptions(opts []Option) *shipperOptions {
+	so := new(shipperOptions)
+	for _, o := range opts {
+		o(so)
+	}
+
+	if so.logger == nil {
+		so.logger = log.NewNopLogger()
+	}
+
+	if so.lbls == nil {
+		so.lbls = func() labels.Labels { return labels.EmptyLabels() }
+	}
+
+	if so.metaFileName == "" {
+		so.metaFileName = DefaultMetaFilename
+	}
+
+	return so
+}
+
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
 // remote if necessary. It attaches the Thanos metadata section in each meta JSON file.
 // If uploadCompacted is enabled, it also uploads compacted blocks which are already in filesystem.
-func New(
-	logger log.Logger,
-	r prometheus.Registerer,
-	dir string,
-	bucket objstore.Bucket,
-	source metadata.SourceType,
-	hashFunc metadata.HashFunc,
-	metaFileName string,
-	lbls func() labels.Labels,
-	uploadCompacted func() bool,
-	allowOutOfOrderUploads func() bool,
-	skipCorruptedBlocks func() bool,
-
-) *Shipper {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-	if lbls == nil {
-		lbls = func() labels.Labels { return labels.EmptyLabels() }
-	}
-
-	if metaFileName == "" {
-		metaFileName = DefaultMetaFilename
-	}
-
-	if uploadCompacted == nil {
-		uploadCompacted = func() bool {
-			return false
-		}
-	}
-
-	if allowOutOfOrderUploads == nil {
-		allowOutOfOrderUploads = func() bool {
-			return false
-		}
-	}
-
-	if skipCorruptedBlocks == nil {
-		skipCorruptedBlocks = func() bool {
-			return false
-		}
-	}
+func New(bucket objstore.Bucket, dir string, opts ...Option) *Shipper {
+	options := applyOptions(opts)
 
 	return &Shipper{
-		logger:                 logger,
+		logger:                 options.logger,
 		dir:                    dir,
 		bucket:                 bucket,
-		labels:                 lbls,
-		metrics:                newMetrics(r),
-		source:                 source,
-		allowOutOfOrderUploads: allowOutOfOrderUploads(),
-		skipCorruptedBlocks:    skipCorruptedBlocks(),
-		uploadCompacted:        uploadCompacted(),
-		hashFunc:               hashFunc,
-		metadataFilePath:       filepath.Join(dir, filepath.Clean(metaFileName)),
+		labels:                 options.lbls,
+		metrics:                newMetrics(options.r),
+		source:                 options.source,
+		allowOutOfOrderUploads: options.allowOutOfOrderUploads,
+		skipCorruptedBlocks:    options.skipCorruptedBlocks,
+		uploadCompacted:        options.uploadCompacted,
+		hashFunc:               options.hashFunc,
+		metadataFilePath:       filepath.Join(dir, filepath.Clean(options.metaFileName)),
 	}
 }
 

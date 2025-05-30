@@ -64,7 +64,12 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, nil, nil, nil, nil)
+	shipper := New(
+		nil,
+		dir,
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+	)
 	metas, failedBlocks, err := shipper.blockMetasFromOldest()
 	testutil.Ok(t, err)
 	testutil.Equals(t, 0, len(failedBlocks))
@@ -101,7 +106,13 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id3.String())))
 
-	shipper := New(nil, nil, dir, nil, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, nil, nil, nil, func() bool { return true })
+	shipper := New(
+		nil,
+		dir,
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithSkipCorruptedBlocks(true),
+	)
 	metas, failedBlocks, err := shipper.blockMetasFromOldest()
 	testutil.NotOk(t, err)
 	testutil.Equals(t, 1, len(failedBlocks))
@@ -135,20 +146,29 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, nil, nil, nil, nil)
-
+	shipper := New(
+		nil,
+		dir,
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+	)
 	_, _, err := shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
 }
 
 func TestShipperAddsSegmentFiles(t *testing.T) {
 	dir := t.TempDir()
-
 	inmemory := objstore.NewInMemBucket()
-
 	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, metrics, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, nil)
+	s := New(
+		inmemory,
+		dir,
+		WithRegisterer(metrics),
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithLabels(func() labels.Labels { return lbls }),
+	)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())
@@ -189,12 +209,18 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 
 func TestShipperSkipCorruptedBlocks(t *testing.T) {
 	dir := t.TempDir()
-
 	inmemory := objstore.NewInMemBucket()
-
 	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, metrics, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, func() bool { return true })
+	s := New(
+		inmemory,
+		dir,
+		WithRegisterer(metrics),
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithLabels(func() labels.Labels { return lbls }),
+		WithSkipCorruptedBlocks(true),
+	)
 
 	id1 := ulid.MustNew(1, nil)
 	blockDir1 := path.Join(dir, id1.String())
@@ -240,12 +266,17 @@ func TestShipperSkipCorruptedBlocks(t *testing.T) {
 
 func TestShipperNotSkipCorruptedBlocks(t *testing.T) {
 	dir := t.TempDir()
-
 	inmemory := objstore.NewInMemBucket()
-
 	metrics := prometheus.NewRegistry()
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, metrics, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, nil)
+	s := New(
+		inmemory,
+		dir,
+		WithRegisterer(metrics),
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithLabels(func() labels.Labels { return lbls }),
+	)
 
 	id := ulid.MustNew(2, nil)
 	blockDir := path.Join(dir, id.String())
@@ -299,11 +330,15 @@ func TestReadMetaFile(t *testing.T) {
 
 func TestShipperExistingThanosLabels(t *testing.T) {
 	dir := t.TempDir()
-
 	inmemory := objstore.NewInMemBucket()
-
 	lbls := labels.FromStrings("test", "test")
-	s := New(nil, nil, dir, inmemory, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return lbls }, nil, nil, nil)
+	s := New(
+		inmemory,
+		dir,
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithLabels(func() labels.Labels { return lbls }),
+	)
 
 	id := ulid.MustNew(1, nil)
 	id2 := ulid.MustNew(2, nil)

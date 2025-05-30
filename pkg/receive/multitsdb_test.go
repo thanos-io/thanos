@@ -952,7 +952,13 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 			Uploaded: []ulid.ULID{mockBlockIDs[0]},
 		}))
 
-		tenant.ship = shipper.New(log.NewNopLogger(), nil, td, nil, metadata.BucketUploadSource, metadata.NoneFunc, "", nil, nil, nil, nil)
+		tenant.ship = shipper.New(
+			nil,
+			td,
+			shipper.WithLogger(log.NewNopLogger()),
+			shipper.WithSource(metadata.BucketUploadSource),
+			shipper.WithHashFunc(metadata.NoneFunc),
+		)
 		require.Equal(t, map[ulid.ULID]struct{}{
 			mockBlockIDs[0]: {},
 		}, tenant.blocksToDelete(nil))

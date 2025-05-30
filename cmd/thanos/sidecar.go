@@ -414,11 +414,19 @@ func runSidecar(
 				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
 			}
 
-			uploadCompactedFunc := func() bool { return conf.shipper.uploadCompacted }
-			allowOutOfOrderUploadFunc := func() bool { return conf.shipper.allowOutOfOrderUpload }
-			skipCorruptedBlocksFunc := func() bool { return conf.shipper.skipCorruptedBlocks }
-			s := shipper.New(logger, reg, conf.tsdb.path, bkt, metadata.SidecarSource, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName,
-				m.Labels, uploadCompactedFunc, allowOutOfOrderUploadFunc, skipCorruptedBlocksFunc)
+			s := shipper.New(
+				bkt,
+				conf.tsdb.path,
+				shipper.WithLogger(logger),
+				shipper.WithRegisterer(reg),
+				shipper.WithSource(metadata.SidecarSource),
+				shipper.WithHashFunc(metadata.HashFunc(conf.shipper.hashFunc)),
+				shipper.WithMetaFileName(conf.shipper.metaFileName),
+				shipper.WithLabels(m.Labels),
+				shipper.WithUploadCompacted(conf.shipper.uploadCompacted),
+				shipper.WithAllowOutOfOrderUploads(conf.shipper.allowOutOfOrderUpload),
+				shipper.WithSkipCorruptedBlocks(conf.shipper.skipCorruptedBlocks),
+			)
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {

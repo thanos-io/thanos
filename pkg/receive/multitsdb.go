@@ -756,17 +756,16 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	var ship *shipper.Shipper
 	if t.bucket != nil {
 		ship = shipper.New(
-			logger,
-			reg,
-			dataDir,
 			t.bucket,
-			metadata.ReceiveSource,
-			t.hashFunc,
-			shipper.DefaultMetaFilename,
-			func() labels.Labels { return lset },
-			nil,
-			func() bool { return t.allowOutOfOrderUpload },
-			func() bool { return t.skipCorruptedBlocks },
+			dataDir,
+			shipper.WithLogger(logger),
+			shipper.WithRegisterer(reg),
+			shipper.WithSource(metadata.ReceiveSource),
+			shipper.WithHashFunc(t.hashFunc),
+			shipper.WithMetaFileName(shipper.DefaultMetaFilename),
+			shipper.WithLabels(func() labels.Labels { return lset }),
+			shipper.WithAllowOutOfOrderUploads(t.allowOutOfOrderUpload),
+			shipper.WithSkipCorruptedBlocks(t.skipCorruptedBlocks),
 		)
 	}
 	var options []store.TSDBStoreOption

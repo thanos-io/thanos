@@ -44,7 +44,14 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		dir := t.TempDir()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return extLset }, nil, nil, nil)
+		shipper := New(
+			metricsBucket,
+			dir,
+			WithLogger(log.NewLogfmtLogger(os.Stderr)),
+			WithSource(metadata.TestSource),
+			WithHashFunc(metadata.NoneFunc),
+			WithLabels(func() labels.Labels { return extLset }),
+		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -203,8 +210,15 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		p.DisableCompaction()
 		testutil.Ok(t, p.Restart(context.Background(), logger))
 
-		uploadCompactedFunc := func() bool { return true }
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return extLset }, uploadCompactedFunc, nil, nil)
+		shipper := New(
+			bkt,
+			dir,
+			WithLogger(log.NewLogfmtLogger(os.Stderr)),
+			WithSource(metadata.TestSource),
+			WithHashFunc(metadata.NoneFunc),
+			WithLabels(func() labels.Labels { return extLset }),
+			WithUploadCompacted(true),
+		)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
@@ -345,10 +359,17 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	p.DisableCompaction()
 	testutil.Ok(t, p.Restart(context.Background(), logger))
 
-	uploadCompactedFunc := func() bool { return true }
 	// Here, the allowOutOfOrderUploads flag is set to true, which allows blocks with overlaps to be uploaded.
-	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, metadata.TestSource, metadata.NoneFunc, DefaultMetaFilename, func() labels.Labels { return extLset }, uploadCompactedFunc, nil, nil)
-
+	shipper := New(
+		bkt,
+		dir,
+		WithLogger(log.NewLogfmtLogger(os.Stderr)),
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithLabels(func() labels.Labels { return extLset }),
+		WithUploadCompacted(true),
+		WithAllowOutOfOrderUploads(true),
+	)
 	// Creating 2 overlapping blocks - both uploaded when OOO uploads allowed.
 	var (
 		expBlocks = map[ulid.ULID]struct{}{}
