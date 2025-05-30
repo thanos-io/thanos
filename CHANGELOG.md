@@ -16,7 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
-
+- [#8284](https://github.com/thanos-io/thanos/pull/8284) Store: Add --disable-admin-operations Flag to Store Gateway
 ### Changed
 
 - [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
