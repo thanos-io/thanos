@@ -1366,7 +1366,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_query_endpoints_dns_lookups_total{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "lookups {{job}}",
@@ -1445,7 +1445,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~\"$job\"}[$interval])) / sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_query_endpoints_dns_failures_total{job=~\"$job\"}[$interval])) / sum by (job) (rate(thanos_query_endpoints_dns_lookups_total{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",

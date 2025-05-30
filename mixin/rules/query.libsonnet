@@ -33,9 +33,9 @@
             record: ':thanos_query_store_apis_dns_failures_per_lookup:sum_rate',
             expr: |||
               (
-                sum by (%(dimensions)s) (rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_query_endpoints_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (%(dimensions)s) (rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_query_endpoints_dns_lookups_total{%(selector)s}[5m]))
               )
             ||| % thanos.query,
           },

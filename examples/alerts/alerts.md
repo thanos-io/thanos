@@ -238,9 +238,9 @@ rules:
     summary: Thanos Store has high latency for store series gate requests.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{job=~".*thanos-store.*"}[5m]))) > 2
+      histogram_quantile(0.99, sum by (job, le) (rate(thanos_bucket_store_series_gate_queries_duration_seconds_bucket{job=~".*thanos-store.*"}[5m]))) > 2
     and
-      sum by (job) (rate(thanos_bucket_store_series_gate_duration_seconds_count{job=~".*thanos-store.*"}[5m])) > 0
+      sum by (job) (rate(thanos_bucket_store_series_gate_queries_duration_seconds_count{job=~".*thanos-store.*"}[5m])) > 0
     )
   for: 10m
   labels:
@@ -374,9 +374,9 @@ rules:
     summary: Thanos Query is having high number of DNS failures.
   expr: |
     (
-      sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~".*thanos-query.*"}[5m]))
+      sum by (job) (rate(thanos_query_endpoints_dns_failures_total{job=~".*thanos-query.*"}[5m]))
     /
-      sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~".*thanos-query.*"}[5m]))
+      sum by (job) (rate(thanos_query_endpoints_dns_lookups_total{job=~".*thanos-query.*"}[5m]))
     ) * 100 > 1
   for: 15m
   labels:

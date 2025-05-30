@@ -42,9 +42,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{%(selector)s}[5m]))) > %(seriesGateErrorThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(thanos_bucket_store_series_gate_queries_duration_seconds_bucket{%(selector)s}[5m]))) > %(seriesGateErrorThreshold)s
               and
-                sum by (%(dimensions)s) (rate(thanos_bucket_store_series_gate_duration_seconds_count{%(selector)s}[5m])) > 0
+                sum by (%(dimensions)s) (rate(thanos_bucket_store_series_gate_queries_duration_seconds_count{%(selector)s}[5m])) > 0
               )
             ||| % thanos.store,
             'for': '10m',
