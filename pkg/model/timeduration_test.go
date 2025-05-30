@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/prometheus/model/timestamp"
-	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/model"

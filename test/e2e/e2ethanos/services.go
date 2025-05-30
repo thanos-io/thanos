@@ -282,6 +282,7 @@ type QuerierBuilder struct {
 	queryDistributedWithOverlappingInterval bool
 	enableXFunctions                        bool
 	deduplicationFunc                       string
+	disabledFallback                        bool
 
 	replicaLabels []string
 	tracingConfig string
@@ -381,6 +382,12 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	q.queryMode = mode
 	return q
 }
+
+func (q *QuerierBuilder) WithDisabledFallback() *QuerierBuilder {
+	q.disabledFallback = true
+	return q
+}
+
 func (q *QuerierBuilder) WithDistributedOverlap(overlap bool) *QuerierBuilder {
 	q.queryDistributedWithOverlappingInterval = overlap
 	return q
@@ -519,6 +526,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.queryMode != "" {
 		args = append(args, "--query.mode="+q.queryMode)
+	}
+	if q.disabledFallback {
+		args = append(args, "--query.disable-fallback")
 	}
 	if q.queryDistributedWithOverlappingInterval {
 		args = append(args, "--query.distributed-with-overlapping-interval")
@@ -1064,6 +1074,10 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 	}
 	if config.DefaultTenant != "" {
 		flags["--query-frontend.default-tenant"] = config.DefaultTenant
+	}
+
+	if len(config.EnableFeatures) > 0 {
+		flags["--enable-feature"] = strings.Join(config.EnableFeatures, ",")
 	}
 
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alecthomas/kingpin/v2"
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func ModelDuration(flags *kingpin.FlagClause) *model.Duration {

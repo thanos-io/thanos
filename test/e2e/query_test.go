@@ -355,6 +355,55 @@ func TestQueryWithExtendedFunctions(t *testing.T) {
 	})
 }
 
+func TestQueryWithExperimentalFunctions(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.New(e2e.WithName("e2e-qry-exp-func"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// create prom + sidecar
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	// create querier with enabling experimental features
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithEngine("thanos").WithEnabledFeatures([]string{"promql-experimental-functions"}).WithDisabledFallback().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// send series to prom
+	samples := []seriesWithLabels{
+		{intLabels: labels.FromStrings("__name__", "http_requests_total", "pod", "nginx-1", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "http_requests_total", "pod", "nginx-1", "instance", "2")},
+		{intLabels: labels.FromStrings("__name__", "http_requests_total", "pod", "nginx-2", "instance", "1")},
+		{intLabels: labels.FromStrings("__name__", "http_requests_total", "pod", "nginx-2", "instance", "2")},
+	}
+	testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom, samples))
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return `limitk(1, http_requests_total) by (pod)`
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"__name__":   "http_requests_total",
+			"pod":        "nginx-1",
+			"instance":   "1",
+			"prometheus": "prom",
+			"replica":    "0",
+		},
+		{
+			"__name__":   "http_requests_total",
+			"pod":        "nginx-2",
+			"instance":   "1",
+			"prometheus": "prom",
+			"replica":    "0",
+		},
+	})
+}
+
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 

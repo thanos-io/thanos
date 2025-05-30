@@ -74,7 +74,8 @@ type queryCreator interface {
 }
 
 type QueryFactory struct {
-	mode PromqlQueryMode
+	mode            PromqlQueryMode
+	disableFallback bool
 
 	prometheus        *promql.Engine
 	thanosLocal       *engine.Engine
@@ -90,6 +91,7 @@ func NewQueryFactory(
 	enableXFunctions bool,
 	activeQueryTracker *promql.ActiveQueryTracker,
 	mode PromqlQueryMode,
+	disableFallback bool,
 ) *QueryFactory {
 	makeOpts := func(registry prometheus.Registerer) engine.Opts {
 		opts := engine.Opts{
@@ -134,6 +136,7 @@ func NewQueryFactory(
 		prometheus:        promEngine,
 		thanosLocal:       thanosLocal,
 		thanosDistributed: thanosDistributed,
+		disableFallback:   disableFallback,
 	}
 }
 
@@ -159,7 +162,7 @@ func (f *QueryFactory) makeInstantQuery(
 			res, err = f.thanosLocal.MakeInstantQuery(ctx, q, opts, qry.query, ts)
 		}
 		if err != nil {
-			if engine.IsUnimplemented(err) {
+			if engine.IsUnimplemented(err) && !f.disableFallback {
 				// fallback to prometheus
 				return f.prometheus.NewInstantQuery(ctx, q, opts, qry.query, ts)
 			}
