@@ -99,6 +99,7 @@ var (
 		true,
 		nil,
 		PromqlQueryModeLocal,
+		false,
 	)
 
 	emptyRemoteEndpointsCreate = query.NewRemoteEndpointsCreator(
