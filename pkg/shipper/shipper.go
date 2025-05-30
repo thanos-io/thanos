@@ -467,6 +467,11 @@ func WriteMetaFile(logger log.Logger, path string, meta *Meta) error {
 		runutil.CloseWithLogOnErr(logger, f, "write meta file close")
 		return err
 	}
+
+	// Force the kernel to persist the file on disk to avoid data loss if the host crashes.
+	if err := f.Sync(); err != nil {
+		return err
+	}
 	if err := f.Close(); err != nil {
 		return err
 	}
