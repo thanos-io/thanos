@@ -407,7 +407,6 @@ func (qapi *QueryAPI) getQueryExplain(query promql.Query) (*engine.ExplainOutput
 		return eq.Explain(), nil
 	}
 	return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("Query not explainable")}
-
 }
 
 func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
@@ -416,7 +415,11 @@ func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
 
 func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType) (queryTelemetry, error) {
 	if eq, ok := query.(engine.ExplainableQuery); ok {
-		return processAnalysis(eq.Analyze()), nil
+		if analyze := eq.Analyze(); analyze != nil {
+			return processAnalysis(analyze), nil
+		} else {
+			return queryTelemetry{}, errors.Errorf("Query: %v not analyzable", query)
+		}
 	}
 
 	var warning error
@@ -539,7 +542,6 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 		var qErr error
 		qry, qErr = qapi.queryCreate.makeInstantQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, ts)
 		return qErr
-
 	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -648,7 +650,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		var qErr error
 		qry, qErr = qapi.queryCreate.makeInstantQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, ts)
 		return qErr
-
 	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -827,7 +828,6 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 		var qErr error
 		qry, qErr = qapi.queryCreate.makeRangeQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, start, end, step)
 		return qErr
-
 	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -961,7 +961,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		var qErr error
 		qry, qErr = qapi.queryCreate.makeRangeQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, start, end, step)
 		return qErr
-
 	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -1164,7 +1163,6 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		nil,
 		query.NoopSeriesStatsReporter,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
-
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}
