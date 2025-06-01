@@ -414,9 +414,13 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		if conf.lazyRetrievalMaxBufferedResponses <= 0 {
+			return errors.New("--receive.lazy-retrieval-max-buffered-responses must be > 0")
+		}
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
 			store.WithoutDedup(),
+			store.WithLazyRetrievalMaxBufferedResponsesForProxy(conf.lazyRetrievalMaxBufferedResponses),
 		}
 		if matcherConverter != nil {
 			options = append(options, store.WithProxyStoreMatcherConverter(matcherConverter))
@@ -996,11 +1000,12 @@ type receiveConfig struct {
 
 	asyncForwardWorkerCount uint
 
-	numTopMetricsPerTenant        int
-	topMetricsMinimumCardinality  uint64
-	topMetricsUpdateInterval      time.Duration
-	matcherConverterCacheCapacity int
-	maxPendingGrpcWriteRequests   int
+	numTopMetricsPerTenant            int
+	topMetricsMinimumCardinality      uint64
+	topMetricsUpdateInterval          time.Duration
+	matcherConverterCacheCapacity     int
+	maxPendingGrpcWriteRequests       int
+	lazyRetrievalMaxBufferedResponses int
 
 	featureList *[]string
 }
@@ -1170,6 +1175,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.max-pending-grcp-write-requests", "Reject right away gRPC write requests when this number of requests are pending. Value 0 disables this feature.").
 		Default("0").IntVar(&rc.maxPendingGrpcWriteRequests)
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
+	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
+		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
