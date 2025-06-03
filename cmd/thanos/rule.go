@@ -850,7 +850,18 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, conf.dataDir, bkt, func() labels.Labels { return conf.lset }, metadata.RulerSource, nil, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
+		s := shipper.New(
+			bkt,
+			conf.dataDir,
+			shipper.WithLogger(logger),
+			shipper.WithRegisterer(reg),
+			shipper.WithSource(metadata.RulerSource),
+			shipper.WithHashFunc(metadata.HashFunc(conf.shipper.hashFunc)),
+			shipper.WithMetaFileName(conf.shipper.metaFileName),
+			shipper.WithLabels(func() labels.Labels { return conf.lset }),
+			shipper.WithAllowOutOfOrderUploads(conf.shipper.allowOutOfOrderUpload),
+			shipper.WithSkipCorruptedBlocks(conf.shipper.skipCorruptedBlocks),
+		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
