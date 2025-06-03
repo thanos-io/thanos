@@ -27,6 +27,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
 
 ### Removed
+- [#8289](https://github.com/thanos-io/thanos/pull/8289) Receive: *breaking :warning:* Removed migration of legacy-TSDB to multi-TSDB. Ensure you are running version >0.13
 
 ### Fixed
 - [#8199](https://github.com/thanos-io/thanos/pull/8199) Query: handle panics or nil pointer dereference in querier gracefully when query analyze returns nil
