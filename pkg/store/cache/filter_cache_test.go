@@ -54,7 +54,7 @@ func TestFilterCache(t *testing.T) {
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
-				testutil.Equals(t, testPostingData, hits[postingKeys[0]])
+				testutil.Equals(t, testPostingData, hits[0])
 
 				ep, hit := c.FetchExpandedPostings(ctx, blockID, expandedPostingsMatchers, tenancy.DefaultTenant)
 				testutil.Equals(t, true, hit)
@@ -75,7 +75,7 @@ func TestFilterCache(t *testing.T) {
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
-				testutil.Equals(t, testPostingData, hits[postingKeys[0]])
+				testutil.Equals(t, testPostingData, hits[0])
 
 				ep, hit := c.FetchExpandedPostings(ctx, blockID, expandedPostingsMatchers, tenancy.DefaultTenant)
 				testutil.Assert(t, true, hit)
@@ -96,7 +96,7 @@ func TestFilterCache(t *testing.T) {
 
 				hits, missed := c.FetchMultiPostings(ctx, blockID, postingKeys, tenancy.DefaultTenant)
 				testutil.Equals(t, 0, len(missed))
-				testutil.Equals(t, testPostingData, hits[postingKeys[0]])
+				testutil.Equals(t, testPostingData, hits[0])
 
 				_, hit := c.FetchExpandedPostings(ctx, blockID, expandedPostingsMatchers, tenancy.DefaultTenant)
 				testutil.Equals(t, false, hit)
