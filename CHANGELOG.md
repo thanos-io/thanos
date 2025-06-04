@@ -12,18 +12,25 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
 - [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
 - [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
+- [#8282](https://github.com/thanos-io/thanos/pull/8282) Force sync writes to meta.json in case of host crash
 
 ### Added
 
 - [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
+- [#8284](https://github.com/thanos-io/thanos/pull/8284) Store: Add `--disable-admin-operations` Flag to Store Gateway
+- [#8266](https://github.com/thanos-io/thanos/pull/8266) Website: maintain expanded state based on current page
+- [#8245](https://github.com/thanos-io/thanos/pull/8245) Querier/Query-Frontend/Ruler: Add `--enable-feature=promql-experimental-functions` flag option to enable using promQL experimental functions in respective Thanos components
+- [#8259](https://github.com/thanos-io/thanos/pull/8259) Shipper: Add `--shipper.skip-corrupted-blocks` flag to allow `Sync()` to continue upload when finding a corrupted block
 
 ### Changed
 
 - [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
 
 ### Removed
+- [#8289](https://github.com/thanos-io/thanos/pull/8289) Receive: *breaking :warning:* Removed migration of legacy-TSDB to multi-TSDB. Ensure you are running version >0.13
 
 ### Fixed
+- [#8199](https://github.com/thanos-io/thanos/pull/8199) Query: handle panics or nil pointer dereference in querier gracefully when query analyze returns nil
 
 - [#8211](https://github.com/thanos-io/thanos/pull/8211) Query: fix panic on nested partial response in distributed instant query
 - [#8216](https://github.com/thanos-io/thanos/pull/8216) Query/Receive: fix iter race between `next()` and `stop()` introduced in https://github.com/thanos-io/thanos/pull/7821.

@@ -439,6 +439,7 @@ func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, A
 		"tenant_id",
 		nil,
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	t.Cleanup(func() { testutil.Ok(t, m.Close()) })
@@ -503,6 +504,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)

@@ -111,6 +111,7 @@ type ruleConfig struct {
 	ruleConcurrentEval int64
 
 	extendedFunctionsEnabled bool
+	EnableFeatures           []string
 }
 
 type Expression struct {
@@ -165,6 +166,7 @@ func registerRule(app *extkingpin.App) {
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
 
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
+	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler)").Default("").StringsVar(&conf.EnableFeatures)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
@@ -581,6 +583,15 @@ func runRule(
 			}
 		}
 
+		if len(conf.EnableFeatures) > 0 {
+			for _, feature := range conf.EnableFeatures {
+				if feature == promqlExperimentalFunctions {
+					parser.EnableExperimentalFunctions = true
+					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+				}
+			}
+		}
+
 		// Run rule evaluation and alert notifications.
 		notifyFunc := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
 			res := make([]*notifier.Alert, 0, len(alerts))
@@ -839,7 +850,18 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, conf.dataDir, bkt, func() labels.Labels { return conf.lset }, metadata.RulerSource, nil, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc), conf.shipper.metaFileName)
+		s := shipper.New(
+			bkt,
+			conf.dataDir,
+			shipper.WithLogger(logger),
+			shipper.WithRegisterer(reg),
+			shipper.WithSource(metadata.RulerSource),
+			shipper.WithHashFunc(metadata.HashFunc(conf.shipper.hashFunc)),
+			shipper.WithMetaFileName(conf.shipper.metaFileName),
+			shipper.WithLabels(func() labels.Labels { return conf.lset }),
+			shipper.WithAllowOutOfOrderUploads(conf.shipper.allowOutOfOrderUpload),
+			shipper.WithSkipCorruptedBlocks(conf.shipper.skipCorruptedBlocks),
+		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 

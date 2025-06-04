@@ -210,10 +210,9 @@ func runReceive(
 		}
 	}
 
-	// TODO(brancz): remove after a couple of versions
-	// Migrate non-multi-tsdb capable storage to multi-tsdb disk layout.
-	if err := migrateLegacyStorage(logger, conf.dataDir, conf.defaultTenantID); err != nil {
-		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
+	// Create TSDB for the default tenant.
+	if err := createDefautTenantTSDB(logger, conf.dataDir, conf.defaultTenantID); err != nil {
+		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
 	relabelContentYaml, err := conf.relabelConfigPath.Content()
@@ -243,6 +242,7 @@ func runReceive(
 		conf.tenantLabelName,
 		bkt,
 		conf.allowOutOfOrderUpload,
+		conf.skipCorruptedBlocks,
 		hashFunc,
 		multiTSDBOptions...,
 	)
@@ -795,36 +795,23 @@ func startTSDBAndUpload(g *run.Group,
 	return nil
 }
 
-func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) error {
+func createDefautTenantTSDB(logger log.Logger, dataDir, defaultTenantID string) error {
 	defaultTenantDataDir := path.Join(dataDir, defaultTenantID)
 
 	if _, err := os.Stat(defaultTenantDataDir); !os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "default tenant data dir already present, not attempting to migrate storage")
+		level.Info(logger).Log("msg", "default tenant data dir already present, will not create")
 		return nil
 	}
 
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "no existing storage found, no data migration attempted")
+		level.Info(logger).Log("msg", "no existing storage found, not creating default tenant data dir")
 		return nil
 	}
 
-	level.Info(logger).Log("msg", "found legacy storage, migrating to multi-tsdb layout with default tenant", "defaultTenantID", defaultTenantID)
-
-	files, err := os.ReadDir(dataDir)
-	if err != nil {
-		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
-	}
+	level.Info(logger).Log("msg", "default tenant data dir not found, creating", "defaultTenantID", defaultTenantID)
 
 	if err := os.MkdirAll(defaultTenantDataDir, 0750); err != nil {
 		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
-	}
-
-	for _, f := range files {
-		from := path.Join(dataDir, f.Name())
-		to := path.Join(defaultTenantDataDir, f.Name())
-		if err := os.Rename(from, to); err != nil {
-			return errors.Wrapf(err, "migrate file from %v to %v", from, to)
-		}
 	}
 
 	return nil
@@ -895,6 +882,7 @@ type receiveConfig struct {
 
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
+	skipCorruptedBlocks   bool
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
@@ -1061,6 +1049,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
+
+	cmd.Flag("shipper.skip-corrupted-blocks",
+		"If true, shipper will skip corrupted blocks in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().BoolVar(&rc.skipCorruptedBlocks)
 
 	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 
