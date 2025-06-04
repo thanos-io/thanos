@@ -5,7 +5,6 @@ package receive
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -221,7 +220,7 @@ func (l *localClient) Matches(matchers []*labels.Matcher) bool {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
+	return l.store.LabelSet()
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
@@ -237,7 +236,9 @@ func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 	mint, maxt := l.store.TimeRange()
 	return []infopb.TSDBInfo{
 		{
-			Labels:  labelsets[0],
+			Labels: labelpb.ZLabelSet{
+				Labels: labelpb.ZLabelsFromPromLabels(labelsets[0]),
+			},
 			MinTime: mint,
 			MaxTime: maxt,
 		},
@@ -245,11 +246,7 @@ func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 }
 
 func (l *localClient) String() string {
-	mint, maxt := l.store.TimeRange()
-	return fmt.Sprintf(
-		"LabelSets: %v MinTime: %d MaxTime: %d",
-		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
-	)
+	return l.store.String()
 }
 
 func (l *localClient) Addr() (string, bool) {
