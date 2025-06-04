@@ -234,7 +234,7 @@ type lazyRespSet struct {
 	fixedBufferSize int
 	// This a ring buffer of size fixedBufferSize.
 	// A ring buffer of size N can hold N - 1 elements at most in order to distinguish being empty from being full.
-	bufferedResponses []*storepb.SeriesResponse
+	bufferedResponses    []*storepb.SeriesResponse
 	ringHead             int
 	ringTail             int
 	closed               bool
@@ -332,7 +332,7 @@ func newLazyRespSet(
 ) respSet {
 	// A ring buffer of size N can hold N - 1 elements at most in order to distinguish being empty from being full.
 	// That's why the size is increased by 1 internally.
-	bufferedResponses := make([]*storepb.SeriesResponse, fixedBufferSize + 1)
+	bufferedResponses := make([]*storepb.SeriesResponse, fixedBufferSize+1)
 	bufferedResponsesMtx := &sync.Mutex{}
 	dataAvailable := sync.NewCond(bufferedResponsesMtx)
 
@@ -501,9 +501,9 @@ func newAsyncRespSet(
 		"target": storeAddr,
 	})
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-		"store.id":       storeID,
-		"store.is_local": isLocalStore,
-		"store.addr":     storeAddr,
+		"store.id":           storeID,
+		"store.is_local":     isLocalStore,
+		"store.addr":         storeAddr,
 		"retrieval_strategy": retrievalStrategy,
 	})
 
