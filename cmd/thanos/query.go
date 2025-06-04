@@ -202,6 +202,9 @@ func registerQuery(app *extkingpin.App) {
 
 	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "(Deprecated, Experimental): DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").PlaceHolder("<endpoint-group-strict>"))
 
+	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
+		Default("20").Hidden().Int()
+
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -345,6 +348,7 @@ func registerQuery(app *extkingpin.App) {
 			*enforceTenancy,
 			*tenantLabel,
 			*queryDistributedWithOverlappingInterval,
+			*lazyRetrievalMaxBufferedResponses,
 		)
 	})
 }
@@ -408,6 +412,7 @@ func runQuery(
 	enforceTenancy bool,
 	tenantLabel string,
 	queryDistributedWithOverlappingInterval bool,
+	lazyRetrievalMaxBufferedResponses int,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -421,6 +426,7 @@ func runQuery(
 	options := []store.ProxyStoreOption{
 		store.WithTSDBSelector(tsdbSelector),
 		store.WithProxyStoreDebugLogging(debugLogging),
+		store.WithLazyRetrievalMaxBufferedResponsesForProxy(lazyRetrievalMaxBufferedResponses),
 	}
 
 	// Parse and sanitize the provided replica labels flags.
