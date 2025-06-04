@@ -606,17 +606,13 @@ func WithSeriesMatchRatio(seriesMatchRatio float64) BucketStoreOption {
 // WithDontResort disables series resorting in Store Gateway.
 func WithDontResort(true bool) BucketStoreOption {
 	return func(s *BucketStore) {
-		if true {
-			s.sortingStrategy = sortingStrategyNone
-		}
+		s.sortingStrategy = sortingStrategyNone
 	}
 }
 
 func WithLazyRetrievalMaxBufferedResponsesForBucket(n int) BucketStoreOption {
 	return func(s *BucketStore) {
-		if true {
-			s.lazyRetrievalMaxBufferedResponses = n
-		}
+		s.lazyRetrievalMaxBufferedResponses = n
 	}
 }
 
@@ -694,7 +690,7 @@ func NewBucketStore(
 		requestLoggerFunc:               NoopRequestLoggerFunc,
 		blockLifecycleCallback:          &noopBlockLifecycleCallback{},
 
-		lazyRetrievalMaxBufferedResponses: 1,
+		lazyRetrievalMaxBufferedResponses: 20,
 	}
 
 	for _, option := range options {

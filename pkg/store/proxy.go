@@ -120,9 +120,9 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 // ProxyStoreOption are functions that configure the ProxyStore.
 type ProxyStoreOption func(s *ProxyStore)
 
-func WithLazyRetrievalMaxBufferedResponsesForProxy(buferSize int) ProxyStoreOption {
+func WithLazyRetrievalMaxBufferedResponsesForProxy(bufferSize int) ProxyStoreOption {
 	return func(s *ProxyStore) {
-		s.lazyRetrievalMaxBufferedResponses = buferSize
+		s.lazyRetrievalMaxBufferedResponses = bufferSize
 	}
 }
 
@@ -191,7 +191,6 @@ func NewProxyStore(
 	for _, option := range options {
 		option(s)
 	}
-
 	return s
 }
 

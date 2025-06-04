@@ -235,10 +235,6 @@ type lazyRespSet struct {
 	// This a ring buffer of size fixedBufferSize.
 	// A ring buffer of size N can hold N - 1 elements at most in order to distinguish being empty from being full.
 	bufferedResponses []*storepb.SeriesResponse
-	// ringHead points to the first element in the ring buffer.
-	// ringTail points to the slot after the last element in the ring buffer.
-	// if ringHead == ringTail then the buffer is empty.
-	// if ringHead == (ringTail + 1) % fixedBufferSize then the buffer is full.
 	ringHead             int
 	ringTail             int
 	closed               bool
@@ -336,8 +332,7 @@ func newLazyRespSet(
 ) respSet {
 	// A ring buffer of size N can hold N - 1 elements at most in order to distinguish being empty from being full.
 	// That's why the size is increased by 1 internally.
-	fixedBufferSize++
-	bufferedResponses := make([]*storepb.SeriesResponse, fixedBufferSize)
+	bufferedResponses := make([]*storepb.SeriesResponse, fixedBufferSize + 1)
 	bufferedResponsesMtx := &sync.Mutex{}
 	dataAvailable := sync.NewCond(bufferedResponsesMtx)
 
@@ -353,7 +348,7 @@ func newLazyRespSet(
 		bufferedResponsesMtx: bufferedResponsesMtx,
 		bufferedResponses:    bufferedResponses,
 		shardMatcher:         shardMatcher,
-		fixedBufferSize:      fixedBufferSize,
+		fixedBufferSize:      fixedBufferSize + 1,
 		ringHead:             0,
 		ringTail:             0,
 		closed:               false,
@@ -426,7 +421,7 @@ func newLazyRespSet(
 			}
 			if t != nil {
 				// frameTimeout only applies to cl.Recv() gRPC call because the goroutine may be blocked on waiting for an empty buffer slot.
-				// Set the timeout to the largest possible value to void triggering it.
+				// Set the timeout to the largest possible value to avoid triggering it.
 				t.Reset(time.Duration(math.MaxInt64))
 			}
 
@@ -509,6 +504,7 @@ func newAsyncRespSet(
 		"store.id":       storeID,
 		"store.is_local": isLocalStore,
 		"store.addr":     storeAddr,
+		"retrieval_strategy": retrievalStrategy,
 	})
 
 	seriesCtx, cancel = context.WithCancel(seriesCtx)
@@ -544,7 +540,6 @@ func newAsyncRespSet(
 
 	switch retrievalStrategy {
 	case LazyRetrieval:
-		span.SetTag("retrival_strategy", LazyRetrieval)
 		if lazyRetrievalMaxBufferedResponses < 1 {
 			// Some unit and e2e tests hit this path.
 			lazyRetrievalMaxBufferedResponses = 1

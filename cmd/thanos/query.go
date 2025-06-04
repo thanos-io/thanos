@@ -203,7 +203,7 @@ func registerQuery(app *extkingpin.App) {
 	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "(Deprecated, Experimental): DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").PlaceHolder("<endpoint-group-strict>"))
 
 	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
-		Default("20").Int()
+		Default("20").Hidden().Int()
 
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
