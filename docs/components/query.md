@@ -475,6 +475,10 @@ Flags:
       --query.active-query-path=""
                                  Directory to log currently active queries in
                                  the queries.active file.
+      --enable-feature= ...      Comma separated feature names to enable. Valid
+                                 options for now: promql-experimental-functions
+                                 (enables promql experimental functions in
+                                 query)
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.

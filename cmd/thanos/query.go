@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -53,9 +54,10 @@ import (
 )
 
 const (
-	promqlNegativeOffset = "promql-negative-offset"
-	promqlAtModifier     = "promql-at-modifier"
-	queryPushdown        = "query-pushdown"
+	promqlNegativeOffset        = "promql-negative-offset"
+	promqlAtModifier            = "promql-at-modifier"
+	queryPushdown               = "query-pushdown"
+	promqlExperimentalFunctions = "promql-experimental-functions"
 )
 
 // registerQuery registers a query command.
@@ -81,6 +83,8 @@ func registerQuery(app *extkingpin.App) {
 
 	defaultEngine := cmd.Flag("query.promql-engine", "Default PromQL engine to use.").Default(string(apiv1.PromqlEnginePrometheus)).
 		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
+	disableQueryFallback := cmd.Flag("query.disable-fallback", "If set then thanos engine will throw an error if query falls back to prometheus engine").Hidden().Default("false").Bool()
+
 	extendedFunctionsEnabled := cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").Bool()
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
 		Default(string(apiv1.PromqlQueryModeLocal)).
@@ -135,7 +139,7 @@ func registerQuery(app *extkingpin.App) {
 
 	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is empty.").Hidden().Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions in query)").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -208,6 +212,10 @@ func registerQuery(app *extkingpin.App) {
 		}
 
 		for _, feature := range *featureList {
+			if feature == promqlExperimentalFunctions {
+				parser.EnableExperimentalFunctions = true
+				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+			}
 			if feature == promqlAtModifier {
 				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlAtModifier)
 			}
@@ -225,7 +233,6 @@ func registerQuery(app *extkingpin.App) {
 		}
 
 		grpcLogOpts, logFilterMethods, err := logging.ParsegRPCOptions(reqLogConfig)
-
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -331,6 +338,7 @@ func registerQuery(app *extkingpin.App) {
 			store.NewTSDBSelector(tsdbSelector),
 			apiv1.PromqlEngineType(*defaultEngine),
 			apiv1.PromqlQueryMode(*promqlQueryMode),
+			*disableQueryFallback,
 			*tenantHeader,
 			*defaultTenant,
 			*tenantCertField,
@@ -393,6 +401,7 @@ func runQuery(
 	tsdbSelector *store.TSDBSelector,
 	defaultEngine apiv1.PromqlEngineType,
 	queryMode apiv1.PromqlQueryMode,
+	disableQueryFallback bool,
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
@@ -466,6 +475,7 @@ func runQuery(
 		extendedFunctionsEnabled,
 		activeQueryTracker,
 		queryMode,
+		disableQueryFallback,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)

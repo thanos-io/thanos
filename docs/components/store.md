@@ -291,7 +291,10 @@ Flags:
                                  the bucket web UI
       --matcher-cache-size=0     Max number of cached matchers items. Using 0
                                  disables caching.
-      --request.logging-config-file=<file-path>  
+      --[no-]disable-admin-operations
+                                 Disable UI/API admin operations like marking
+                                 blocks for deletion and no compaction.
+      --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
