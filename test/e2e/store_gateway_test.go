@@ -73,13 +73,10 @@ metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
-		client.BucketConfig{
-			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
-		},
+	s1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(client.BucketConfig{
+		Type:   client.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+	},
 		memcachedConfig,
 		"",
 		nil,
@@ -87,8 +84,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
 			SourceLabels: model.LabelNames{"ext1"},
-		},
-	)
+		})
+
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
@@ -409,9 +406,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	s1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -641,9 +636,7 @@ config:
   addresses: [%s]
 blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	s1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -750,9 +743,7 @@ metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s`
 
-	store1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	store1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -761,9 +752,7 @@ metafile_content_ttl: 0s`
 		"",
 		nil,
 	)
-	store2 := e2ethanos.NewStoreGW(
-		e,
-		"2",
+	store2 := e2ethanos.NewStoreGWBuilder(e, "2").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -772,9 +761,7 @@ metafile_content_ttl: 0s`
 		"",
 		nil,
 	)
-	store3 := e2ethanos.NewStoreGW(
-		e,
-		"3",
+	store3 := e2ethanos.NewStoreGWBuilder(e, "3").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -869,9 +856,7 @@ config:
 	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
-	store1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	store1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -881,9 +866,7 @@ config:
 		[]string{"--store.grpc.downloaded-bytes-limit=1B"},
 	)
 
-	store2 := e2ethanos.NewStoreGW(
-		e,
-		"2",
+	store2 := e2ethanos.NewStoreGWBuilder(e, "2").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -892,9 +875,7 @@ config:
 		"",
 		[]string{"--store.grpc.downloaded-bytes-limit=100B"},
 	)
-	store3 := e2ethanos.NewStoreGW(
-		e,
-		"3",
+	store3 := e2ethanos.NewStoreGWBuilder(e, "3").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -1037,9 +1018,7 @@ config:
   dns_provider_update_interval: 1s
   auto_discovery: false`, memcached.InternalEndpoint("memcached"))
 
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	s1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -1133,9 +1112,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create 2 store gateways, one with lazy expanded postings enabled and another one disabled.
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	s1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -1144,9 +1121,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 		"",
 		[]string{"--store.enable-lazy-expanded-postings"},
 	)
-	s2 := e2ethanos.NewStoreGW(
-		e,
-		"2",
+	s2 := e2ethanos.NewStoreGWBuilder(e, "2").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -1290,9 +1265,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create 2 store gateways, one with lazy expanded postings enabled and another one disabled.
-	s1 := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	s1 := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -1301,9 +1274,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		"",
 		[]string{"--store.enable-lazy-expanded-postings"},
 	)
-	s2 := e2ethanos.NewStoreGW(
-		e,
-		"2",
+	s2 := e2ethanos.NewStoreGWBuilder(e, "2").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
@@ -1436,4 +1407,37 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	if failures > 0 {
 		require.Failf(t, "finished store gateway lazy expanded posting fuzzing tests", "%d test cases failed", failures)
 	}
+}
+
+func TestStoreGatewayUlimitNoFiles(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("store-nofiles")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "store-gateway-nofiles-test"
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	// Set THANOS_ULIMIT_NOFILES to a very small value to trigger ulimit error.
+	env := map[string]string{
+		"THANOS_ULIMIT_NOFILES": "1",
+	}
+
+	s1 := e2ethanos.NewStoreGWBuilder(e, "32").
+		WithEnvVars(env).
+		Init(
+			client.BucketConfig{
+				Type:   client.S3,
+				Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+			},
+			"",
+			"",
+			nil,
+		)
+	err = e2e.StartAndWaitReady(s1)
+	// We expect the process to fail to start due to the low ulimit.
+	// error while loading shared libraries: libc.so.6: cannot open shared object file: Error 24
+	testutil.NotOk(t, err)
 }

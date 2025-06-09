@@ -40,9 +40,7 @@ func TestInfo(t *testing.T) {
 	const bucket = "info-api-test"
 	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
-	store := e2ethanos.NewStoreGW(
-		e,
-		"1",
+	store := e2ethanos.NewStoreGWBuilder(e, "1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
