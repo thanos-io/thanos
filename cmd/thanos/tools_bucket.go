@@ -534,7 +534,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	tbc := &bucketInspectConfig{}
 	tbc.registerBucketInspectFlag(cmd)
 
-	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, tsv.").Default("table").Enum(outputTypes...)
+	output := cmd.Flag("output", "Output format for result. Currently supports table, csv, tsv.").Default("table").Enum(outputTypes...)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
