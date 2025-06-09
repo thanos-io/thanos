@@ -124,9 +124,10 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 		params := test.query.Encode()
 
 		var body io.Reader
-		if test.method == http.MethodPost {
+		switch test.method {
+		case http.MethodPost:
 			body = strings.NewReader(params)
-		} else if test.method == "" {
+		case "":
 			test.method = "ANY"
 			reqURL += "?" + params
 		}
