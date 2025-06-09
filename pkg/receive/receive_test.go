@@ -16,7 +16,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 )
 
@@ -836,7 +835,7 @@ func setupSetsOfExpectedAndActualStoreClientLabelSets(
 		testStore := store.TSDBStore{}
 		testStore.SetExtLset(expectedExternalLabelSets[i])
 
-		expectedClientLabelSets := labelpb.ZLabelSetsToPromLabelSets(testStore.LabelSet()...)
+		expectedClientLabelSets := testStore.LabelSet()
 		setOfExpectedClientLabelSets = append(setOfExpectedClientLabelSets, expectedClientLabelSets)
 
 		actualClientLabelSets := actualStoreClients[i].LabelSets()

@@ -64,14 +64,18 @@ func WithMatcherCacheInstance(cache storecache.MatchersCache) TSDBStoreOption {
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
 type TSDBStore struct {
-	logger           log.Logger
-	db               TSDBReader
-	component        component.StoreAPI
+	logger    log.Logger
+	db        TSDBReader
+	component component.StoreAPI
+
+	extLset        labels.Labels
+	extLsetString  string
+	extLabelsSlice []labels.Label
+
 	buffers          sync.Pool
 	maxBytesPerFrame int
 	matcherCache     storecache.MatchersCache
 
-	extLset                labels.Labels
 	startStoreFilterUpdate bool
 	storeFilter            filter.StoreFilter
 	mtx                    sync.RWMutex
@@ -109,10 +113,13 @@ func NewTSDBStore(
 	}
 
 	st := &TSDBStore{
-		logger:           logger,
-		db:               db,
-		component:        component,
-		extLset:          extLset,
+		logger:         logger,
+		db:             db,
+		component:      component,
+		extLset:        extLset,
+		extLsetString:  extLset.String(),
+		extLabelsSlice: labelsToSlice(extLset),
+
 		maxBytesPerFrame: RemoteReadFrameLimit,
 		storeFilter:      filter.AllowAllStoreFilter{},
 		close:            func() {},
@@ -167,6 +174,8 @@ func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
 	defer s.mtx.Unlock()
 
 	s.extLset = extLset
+	s.extLsetString = extLset.String()
+	s.extLabelsSlice = labelsToSlice(extLset)
 }
 
 func (s *TSDBStore) getExtLset() labels.Labels {
@@ -176,14 +185,21 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelSetsFromPromLabels(s.getExtLset())
-	labelSets := []labelpb.ZLabelSet{}
-	if len(labels) > 0 {
-		labelSets = append(labelSets, labels...)
-	}
+func (s *TSDBStore) getExtLabelsSlice() []labels.Label {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
 
-	return labelSets
+	return s.extLabelsSlice
+}
+
+func (s *TSDBStore) LabelSet() []labels.Labels {
+	return []labels.Labels{
+		s.getExtLset(),
+	}
+}
+
+func (s *TSDBStore) String() string {
+	return s.extLsetString
 }
 
 func (s *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
@@ -196,7 +212,7 @@ func (s *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
 	return []infopb.TSDBInfo{
 		{
 			Labels: labelpb.ZLabelSet{
-				Labels: labels[0].Labels,
+				Labels: labelpb.ZLabelsFromPromLabels(labels[0]),
 			},
 			MinTime: mint,
 			MaxTime: maxt,
@@ -208,7 +224,7 @@ func (s *TSDBStore) TimeRange() (int64, int64) {
 	var minTime int64 = math.MinInt64
 	startTime, err := s.db.StartTime()
 	if err == nil {
-		// Since we always use tsdb.DB  implementation,
+		// Since we always use tsdb.DB implementation,
 		// StartTime should never return error.
 		minTime = startTime
 	}
@@ -293,22 +309,30 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	extLsetToRemove := map[string]struct{}{}
+	var (
+		withoutLabels = make(map[string]struct{})
+		lblsScratch   []labelpb.ZLabel
+	)
 	for _, lbl := range r.WithoutReplicaLabels {
-		extLsetToRemove[lbl] = struct{}{}
+		withoutLabels[lbl] = struct{}{}
 	}
-	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
-
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
 
-		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(completeLabelset) {
+		lbls := buildSeriesLabels(
+			lblsScratch,
+			series.Labels(),
+			s.getExtLabelsSlice(),
+			withoutLabels,
+		)
+		if !shardMatcher.MatchesZLabels(lbls) {
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		lblsCopy := make([]labelpb.ZLabel, len(lbls))
+		copy(lblsCopy, lbls)
+		storeSeries := storepb.Series{Labels: lblsCopy}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -372,7 +396,44 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}
+
 	return srv.Flush()
+}
+
+func buildSeriesLabels(lbls []labelpb.ZLabel, seriesLabels labels.Labels, extLabels []labels.Label, withoutLabels map[string]struct{}) []labelpb.ZLabel {
+	lbls = lbls[:0]
+	iExt := 0
+	seriesLabels.Range(func(intLbl labels.Label) {
+	extLoop:
+		for iExt < len(extLabels) {
+			cmp := strings.Compare(extLabels[iExt].Name, intLbl.Name)
+			if cmp < 1 {
+				extLbl := extLabels[iExt]
+				if _, ok := withoutLabels[extLbl.Name]; !ok {
+					lbls = append(lbls, labelpb.ZLabel{Name: extLbl.Name, Value: extLbl.Value})
+				}
+				iExt++
+			}
+			// If the current internal label is identical to the external label, move over to
+			// the next internal label to avoid duplicates.
+			// Otherwise, move over to adding internal labels.
+			switch cmp {
+			case 0:
+				return
+			case 1:
+				break extLoop
+			}
+		}
+		if _, ok := withoutLabels[intLbl.Name]; !ok {
+			lbls = append(lbls, labelpb.ZLabel{Name: intLbl.Name, Value: intLbl.Value})
+		}
+	})
+	for _, l := range extLabels[iExt:] {
+		if _, ok := withoutLabels[l.Name]; !ok {
+			lbls = append(lbls, labelpb.ZLabel{Name: l.Name, Value: l.Value})
+		}
+	}
+	return lbls
 }
 
 // LabelNames returns all known label names constrained with the given matchers.
@@ -493,4 +554,12 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	}
 
 	return &storepb.LabelValuesResponse{Values: values}, nil
+}
+
+func labelsToSlice(lset labels.Labels) []labels.Label {
+	r := make([]labels.Label, 0, lset.Len())
+	lset.Range(func(l labels.Label) {
+		r = append(r, l)
+	})
+	return r
 }
