@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
 )
 
 type ctxKey int

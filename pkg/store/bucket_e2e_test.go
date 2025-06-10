@@ -17,7 +17,8 @@ import (
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/status"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/model/labels"

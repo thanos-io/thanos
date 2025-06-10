@@ -18,7 +18,8 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/efficientgo/core/testutil"
 	"github.com/gogo/protobuf/types"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"

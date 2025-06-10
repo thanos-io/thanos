@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/objstore"

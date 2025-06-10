@@ -23,7 +23,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/olekukonko/tablewriter"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
