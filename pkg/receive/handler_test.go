@@ -281,7 +281,7 @@ func newTestHandlerHashring(
 		hashringAlgo = AlgorithmHashmod
 	}
 
-	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg)
+	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg, prometheus.NewRegistry())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1107,6 +1107,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)

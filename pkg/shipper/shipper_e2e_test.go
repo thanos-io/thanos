@@ -44,19 +44,25 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		dir := t.TempDir()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, nil, false, metadata.NoneFunc, DefaultMetaFilename)
+		shipper := New(
+			metricsBucket,
+			dir,
+			WithLogger(log.NewLogfmtLogger(os.Stderr)),
+			WithSource(metadata.TestSource),
+			WithHashFunc(metadata.NoneFunc),
+			WithLabels(func() labels.Labels { return extLset }),
+		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
-			expBlocks    = map[ulid.ULID]struct{}{}
-			expFiles     = map[string][]byte{}
-			randr        = rand.New(rand.NewSource(0))
-			now          = time.Now()
-			ids          = []ulid.ULID{}
-			maxSyncSoFar int64
+			expBlocks = map[ulid.ULID]struct{}{}
+			expFiles  = map[string][]byte{}
+			randr     = rand.New(rand.NewSource(0))
+			now       = time.Now()
+			ids       = []ulid.ULID{}
 		)
 		for i := 0; i < 10; i++ {
 			id := ulid.MustNew(uint64(i), randr)
@@ -120,7 +126,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 			if i != 5 {
 				ids = append(ids, id)
-				maxSyncSoFar = meta.MaxTime
 				testutil.Equals(t, 1, b)
 			} else {
 				// 5 blocks uploaded so far - 5 existence checks & 25 uploads (5 files each).
@@ -167,12 +172,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
-
-			// Verify timestamps were updated correctly.
-			minTotal, maxSync, err := shipper.Timestamps()
-			testutil.Ok(t, err)
-			testutil.Equals(t, timestamp.FromTime(now), minTotal)
-			testutil.Equals(t, maxSyncSoFar, maxSync)
 		}
 
 		for id := range expBlocks {
@@ -211,8 +210,15 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		p.DisableCompaction()
 		testutil.Ok(t, p.Restart(context.Background(), logger))
 
-		uploadCompactedFunc := func() bool { return true }
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, false, metadata.NoneFunc, DefaultMetaFilename)
+		shipper := New(
+			bkt,
+			dir,
+			WithLogger(log.NewLogfmtLogger(os.Stderr)),
+			WithSource(metadata.TestSource),
+			WithHashFunc(metadata.NoneFunc),
+			WithLabels(func() labels.Labels { return extLset }),
+			WithUploadCompacted(true),
+		)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
@@ -313,12 +319,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			shipMeta, err = ReadMetaFile(shipper.metadataFilePath)
 			testutil.Ok(t, err)
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
-
-			// Verify timestamps were updated correctly.
-			minTotal, maxSync, err := shipper.Timestamps()
-			testutil.Ok(t, err)
-			testutil.Equals(t, timestamp.FromTime(now), minTotal)
-			testutil.Equals(t, meta.MaxTime, maxSync)
 		}
 
 		for id := range expBlocks {
@@ -359,10 +359,17 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	p.DisableCompaction()
 	testutil.Ok(t, p.Restart(context.Background(), logger))
 
-	uploadCompactedFunc := func() bool { return true }
 	// Here, the allowOutOfOrderUploads flag is set to true, which allows blocks with overlaps to be uploaded.
-	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, uploadCompactedFunc, true, metadata.NoneFunc, DefaultMetaFilename)
-
+	shipper := New(
+		bkt,
+		dir,
+		WithLogger(log.NewLogfmtLogger(os.Stderr)),
+		WithSource(metadata.TestSource),
+		WithHashFunc(metadata.NoneFunc),
+		WithLabels(func() labels.Labels { return extLset }),
+		WithUploadCompacted(true),
+		WithAllowOutOfOrderUploads(true),
+	)
 	// Creating 2 overlapping blocks - both uploaded when OOO uploads allowed.
 	var (
 		expBlocks = map[ulid.ULID]struct{}{}

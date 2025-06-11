@@ -6,9 +6,9 @@ package model
 import (
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/timestamp"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // TimeOrDurationValue is a custom kingping parser for time in RFC3339
