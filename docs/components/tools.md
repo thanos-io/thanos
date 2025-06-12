@@ -587,7 +587,7 @@ Flags:
                              are then further sorted by the 'UNTIL' value.
       --timeout=5m           Timeout to download metadata from remote storage
       --output=table         Output format for result. Currently supports table,
-                             cvs, tsv.
+                             csv, tsv.
 
 ```
 
