@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	texttemplate "text/template"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
@@ -471,7 +473,7 @@ func runRule(
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
 		remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
 			return 0, nil
-		}, conf.dataDir, 1*time.Minute, nil, false)
+		}, conf.dataDir, 1*time.Minute, &readyScrapeManager{})
 		if err := remoteStore.ApplyConfig(&config.Config{
 			GlobalConfig: config.GlobalConfig{
 				ExternalLabels: labelsTSDBToProm(conf.lset),
@@ -1106,3 +1108,32 @@ func filterOutPromQLWarnings(warns []string, logger log.Logger, query string) []
 	}
 	return storeWarnings
 }
+
+// ReadyScrapeManager allows a scrape manager to be retrieved. Even if it's set at a later point in time.
+type readyScrapeManager struct {
+	mtx sync.RWMutex
+	m   *scrape.Manager
+}
+
+// Set the scrape manager.
+func (rm *readyScrapeManager) Set(m *scrape.Manager) {
+	rm.mtx.Lock()
+	defer rm.mtx.Unlock()
+
+	rm.m = m
+}
+
+// Get the scrape manager. If is not ready, return an error.
+func (rm *readyScrapeManager) Get() (*scrape.Manager, error) {
+	rm.mtx.RLock()
+	defer rm.mtx.RUnlock()
+
+	if rm.m != nil {
+		return rm.m, nil
+	}
+
+	return nil, ErrNotReady
+}
+
+// ErrNotReady is returned if the underlying scrape manager is not ready yet.
+var ErrNotReady = errors.New("scrape manager not ready")

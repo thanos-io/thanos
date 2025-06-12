@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/go-kit/log/level"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 )
