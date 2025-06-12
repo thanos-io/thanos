@@ -191,6 +191,11 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 		} else if a.GetSeries() != nil && b.GetSeries() == nil {
 			return false
 		}
+
+		if a.GetWarning() != "" && b.GetWarning() != "" {
+			return len(a.GetWarning()) < len(b.GetWarning())
+		}
+
 		return false
 	}
 
@@ -222,7 +227,7 @@ type ringBuffer struct {
 	bufferedResponses []*storepb.SeriesResponse
 	ringHead          int
 	ringTail          int
-	closed 		  	  bool
+	closed            bool
 }
 
 // NB: A call site of any method of ringBuffer must hold the mtx lock
@@ -287,7 +292,7 @@ type lazyRespSet struct {
 	frameTimeout   time.Duration
 
 	// Internal bookkeeping.
-	dataOrFinishEvent    *sync.Cond
+	dataOrFinishEvent *sync.Cond
 
 	// bufferedResponsMtx protects all the following fields.
 	bufferedResponsesMtx *sync.Mutex

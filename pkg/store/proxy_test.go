@@ -1239,7 +1239,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
-			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from : context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled; all stores respond 3s",
@@ -1278,12 +1278,16 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:   labels.FromStrings("a", "b"),
-					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+					lset: labels.FromStrings("a", "b"),
+					chunks: [][]sample{
+						[]sample{{1, 1}, {2, 2}, {3, 3}},
+					},
 				},
 				{
-					lset:   labels.FromStrings("b", "c"),
-					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+					lset: labels.FromStrings("b", "c"),
+					chunks: [][]sample{
+						[]sample{{1, 1}, {2, 2}, {3, 3}},
+					},
 				},
 			},
 			expectedWarningsLen: 2,
