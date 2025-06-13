@@ -230,7 +230,7 @@ type ringBuffer struct {
 	closed            bool
 }
 
-// NB: A call site of any method of ringBuffer must hold the mtx lock
+// NB: A call site of any method of ringBuffer must hold the mtx lock.
 func newRingBuffer(fixedBufferSize int, mtx *sync.Mutex) *ringBuffer {
 	return &ringBuffer{
 		bufferedResponses: make([]*storepb.SeriesResponse, fixedBufferSize+1),

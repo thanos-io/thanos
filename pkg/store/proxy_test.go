@@ -1280,13 +1280,13 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				{
 					lset: labels.FromStrings("a", "b"),
 					chunks: [][]sample{
-						[]sample{{1, 1}, {2, 2}, {3, 3}},
+						{{1, 1}, {2, 2}, {3, 3}},
 					},
 				},
 				{
 					lset: labels.FromStrings("b", "c"),
 					chunks: [][]sample{
-						[]sample{{1, 1}, {2, 2}, {3, 3}},
+						{{1, 1}, {2, 2}, {3, 3}},
 					},
 				},
 			},
