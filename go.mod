@@ -60,7 +60,7 @@ require (
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.63.0
+	github.com/prometheus/common v0.64.0
 	github.com/prometheus/exporter-toolkit v0.14.0
 	// Prometheus maps version 3.x.y to tags v0.30x.y.
 	github.com/prometheus/prometheus v0.303.1
