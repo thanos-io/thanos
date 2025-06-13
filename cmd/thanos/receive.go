@@ -998,7 +998,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.tsdbOutOfOrderTimeWindow = extkingpin.ModelDuration(cmd.Flag("tsdb.out-of-order.time-window",
 		"[EXPERIMENTAL] Configures the allowed time window for ingestion of out-of-order samples. Disabled (0s) by default"+
-			"Please note if you enable this option and you use compactor, make sure you have the --enable-vertical-compaction flag enabled, otherwise you might risk compactor halt.",
+			"Please note if you enable this option and you use compactor, make sure you have the --compact.enable-vertical-compaction flag enabled, otherwise you might risk compactor halt.",
 	).Default("0s"))
 
 	cmd.Flag("tsdb.out-of-order.cap-max",
