@@ -665,5 +665,10 @@ Flags:
       --enable-feature= ...      Comma separated experimental feature names
                                  to enable. The current list of features is
                                  metric-names-filter.
+      --receive.lazy-retrieval-max-buffered-responses=20
+                                 The lazy retrieval strategy can buffer up to
+                                 this number of responses. This is to limit the
+                                 memory usage. This flag takes effect only when
+                                 the lazy retrieval strategy is enabled.
 
 ```

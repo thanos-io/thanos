@@ -1790,12 +1790,13 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			b1.meta.ULID: b1,
 			b2.meta.ULID: b2,
 		},
-		queryGate:            gate.NewNoop(),
-		chunksLimiterFactory: NewChunksLimiterFactory(0),
-		seriesLimiterFactory: NewSeriesLimiterFactory(0),
-		bytesLimiterFactory:  NewBytesLimiterFactory(0),
-		seriesBatchSize:      SeriesBatchSize,
-		requestLoggerFunc:    NoopRequestLoggerFunc,
+		queryGate:                         gate.NewNoop(),
+		chunksLimiterFactory:              NewChunksLimiterFactory(0),
+		seriesLimiterFactory:              NewSeriesLimiterFactory(0),
+		bytesLimiterFactory:               NewBytesLimiterFactory(0),
+		seriesBatchSize:                   SeriesBatchSize,
+		requestLoggerFunc:                 NoopRequestLoggerFunc,
+		lazyRetrievalMaxBufferedResponses: 1,
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {

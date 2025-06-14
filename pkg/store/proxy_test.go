@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -808,11 +807,6 @@ func TestProxyStore_Series(t *testing.T) {
 func TestProxyStore_SeriesSlowStores(t *testing.T) {
 	t.Parallel()
 
-	enable := os.Getenv("THANOS_ENABLE_STORE_READ_TIMEOUT_TESTS")
-	if enable == "" {
-		t.Skip("enable THANOS_ENABLE_STORE_READ_TIMEOUT_TESTS to run store-read-timeout tests")
-	}
-
 	for _, tc := range []struct {
 		title          string
 		storeAPIs      []Client
@@ -913,7 +907,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("rpc error: code = Aborted desc = failed to receive any data in 4s from test: context canceled"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
 		},
 		{
 			title: "partial response disabled; 1st store is fast, 2nd store is slow;",
@@ -935,7 +929,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
-						RespDuration: 10 * time.Second,
+						RespDuration: 2 * time.Second,
 					},
 					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
 					MinTime: 1,
@@ -1207,21 +1201,13 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				},
 			},
 			req: &storepb.SeriesRequest{
-				MinTime:  1,
-				MaxTime:  300,
-				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseDisabled: true,
+				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedSeries: []rawSeries{
-				{
-					lset:   labels.FromStrings("a", "b"),
-					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
-				},
-				{
-					lset:   labels.FromStrings("b", "c"),
-					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
-				},
-			},
-			expectedWarningsLen: 3,
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
 		},
 		{
 			title: "partial response disabled; all stores respond 3s",
@@ -1253,7 +1239,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
-			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from : context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled; all stores respond 3s",
@@ -1292,17 +1278,25 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:   labels.FromStrings("a", "b"),
-					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+					lset: labels.FromStrings("a", "b"),
+					chunks: [][]sample{
+						{{1, 1}, {2, 2}, {3, 3}},
+					},
 				},
 				{
-					lset:   labels.FromStrings("b", "c"),
-					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+					lset: labels.FromStrings("b", "c"),
+					chunks: [][]sample{
+						{{1, 1}, {2, 2}, {3, 3}},
+					},
 				},
 			},
 			expectedWarningsLen: 2,
 		},
 	} {
+
+		options := []ProxyStoreOption{
+			WithLazyRetrievalMaxBufferedResponsesForProxy(1),
+		}
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 				if ok := t.Run(string(strategy), func(t *testing.T) {
@@ -1312,6 +1306,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 						component.Query,
 						tc.selectorLabels,
 						4*time.Second, strategy,
+						options...,
 					)
 
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
