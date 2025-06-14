@@ -11,6 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+
+	"go.uber.org/atomic"
 )
 
 // seriesStatsAggregator aggregates results from fanned-out queries into a histogram given their
@@ -145,6 +147,9 @@ type instrumentedStoreServer struct {
 	storepb.StoreServer
 	seriesRequested prometheus.Histogram
 	chunksRequested prometheus.Histogram
+
+	pendingRequests        prometheus.Gauge
+	pendingRequestsCounter atomic.Int32
 }
 
 // NewInstrumentedStoreServer creates a new instrumentedStoreServer.
@@ -161,11 +166,18 @@ func NewInstrumentedStoreServer(reg prometheus.Registerer, store storepb.StoreSe
 			Help:    "Number of requested chunks for Series calls",
 			Buckets: []float64{1, 100, 1000, 10000, 100000, 10000000, 100000000, 1000000000},
 		}),
+		pendingRequests: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_store_server_pending_series_requests",
+			Help: "Number of pending series requests",
+		}),
 	}
 }
 
 func (s *instrumentedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	instrumented := newInstrumentedServer(srv)
+	s.pendingRequests.Set(float64(s.pendingRequestsCounter.Add(1)))
+	defer s.pendingRequestsCounter.Add(-1)
+
 	if err := s.StoreServer.Series(req, instrumented); err != nil {
 		return err
 	}

@@ -37,6 +37,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -141,6 +142,9 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
+	pendingWriteRequests        prometheus.Gauge
+	pendingWriteRequestsCounter atomic.Int32
+
 	Limiter *Limiter
 }
 
@@ -221,6 +225,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The number of sampled received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
+		),
+		pendingWriteRequests: promauto.With(registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_pending_write_requests",
+				Help: "The number of pending write requests.",
+			},
 		),
 	}
 
@@ -1059,6 +1069,9 @@ func quorumReached(successes []int, successThreshold int) bool {
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
+
+	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
+	defer h.pendingWriteRequestsCounter.Add(-1)
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
