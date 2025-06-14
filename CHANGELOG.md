@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8266](https://github.com/thanos-io/thanos/pull/8266) Website: maintain expanded state based on current page
 - [#8245](https://github.com/thanos-io/thanos/pull/8245) Querier/Query-Frontend/Ruler: Add `--enable-feature=promql-experimental-functions` flag option to enable using promQL experimental functions in respective Thanos components
 - [#8259](https://github.com/thanos-io/thanos/pull/8259) Shipper: Add `--shipper.skip-corrupted-blocks` flag to allow `Sync()` to continue upload when finding a corrupted block
+- [#8309](https://github.com/thanos-io/thanos/pull/8309) Tools: add a subcmd "stream_metric" to "thanos tools"
 
 ### Changed
 
