@@ -25,7 +25,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -446,6 +447,8 @@ type BucketStore struct {
 	postingGroupMaxKeySeriesRatio float64
 
 	sortingStrategy sortingStrategy
+	// This flag limits memory usage when lazy retrieval strategy, newLazyRespSet(), is used.
+	lazyRetrievalMaxBufferedResponses int
 
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
@@ -604,9 +607,13 @@ func WithSeriesMatchRatio(seriesMatchRatio float64) BucketStoreOption {
 // WithDontResort disables series resorting in Store Gateway.
 func WithDontResort(true bool) BucketStoreOption {
 	return func(s *BucketStore) {
-		if true {
-			s.sortingStrategy = sortingStrategyNone
-		}
+		s.sortingStrategy = sortingStrategyNone
+	}
+}
+
+func WithLazyRetrievalMaxBufferedResponsesForBucket(n int) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.lazyRetrievalMaxBufferedResponses = n
 	}
 }
 
@@ -683,6 +690,8 @@ func NewBucketStore(
 		indexHeaderLazyDownloadStrategy: indexheader.AlwaysEagerDownloadIndexHeader,
 		requestLoggerFunc:               NoopRequestLoggerFunc,
 		blockLifecycleCallback:          &noopBlockLifecycleCallback{},
+
+		lazyRetrievalMaxBufferedResponses: 20,
 	}
 
 	for _, option := range options {
@@ -1728,6 +1737,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						shardMatcher,
 						false,
 						s.metrics.emptyPostingCount.WithLabelValues(tenant),
+						max(s.lazyRetrievalMaxBufferedResponses, 1),
 					)
 				}
 

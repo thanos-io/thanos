@@ -3,7 +3,7 @@
 
 package hintspb
 
-import "github.com/oklog/ulid"
+import "github.com/oklog/ulid/v2"
 
 func (m *SeriesResponseHints) AddQueriedBlock(id ulid.ULID) {
 	m.QueriedBlocks = append(m.QueriedBlocks, Block{

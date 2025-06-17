@@ -354,10 +354,14 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		if conf.lazyRetrievalMaxBufferedResponses <= 0 {
+			return errors.New("--receive.lazy-retrieval-max-buffered-responses must be > 0")
+		}
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
 			store.WithMatcherCache(cache),
 			store.WithoutDedup(),
+			store.WithLazyRetrievalMaxBufferedResponsesForProxy(conf.lazyRetrievalMaxBufferedResponses),
 		}
 
 		proxy := store.NewProxyStore(
@@ -895,6 +899,8 @@ type receiveConfig struct {
 
 	matcherCacheSize int
 
+	lazyRetrievalMaxBufferedResponses int
+
 	featureList *[]string
 
 	headExpandedPostingsCacheSize            uint64
@@ -998,7 +1004,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.tsdbOutOfOrderTimeWindow = extkingpin.ModelDuration(cmd.Flag("tsdb.out-of-order.time-window",
 		"[EXPERIMENTAL] Configures the allowed time window for ingestion of out-of-order samples. Disabled (0s) by default"+
-			"Please note if you enable this option and you use compactor, make sure you have the --enable-vertical-compaction flag enabled, otherwise you might risk compactor halt.",
+			"Please note if you enable this option and you use compactor, make sure you have the --compact.enable-vertical-compaction flag enabled, otherwise you might risk compactor halt.",
 	).Default("0s"))
 
 	cmd.Flag("tsdb.out-of-order.cap-max",
@@ -1068,6 +1074,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.otlp-promote-resource-attributes", "(Repeatable) Resource attributes to include in OTLP metrics ingested by Receive.").Default("").StringsVar(&rc.otlpResourceAttributes)
 
 	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
+
+	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
+		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

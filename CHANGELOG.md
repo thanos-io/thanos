@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
 - [#8282](https://github.com/thanos-io/thanos/pull/8282) Force sync writes to meta.json in case of host crash
 - [#8280](https://github.com/thanos-io/thanos/pull/8280) docs: legacy --store flags + alerts examples legacy metrics
+- [#8308](https://github.com/thanos-io/thanos/pull/8308) Receive: Prometheus counters for pending write requests and series requests
 
 ### Added
 
@@ -36,6 +37,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8211](https://github.com/thanos-io/thanos/pull/8211) Query: fix panic on nested partial response in distributed instant query
 - [#8216](https://github.com/thanos-io/thanos/pull/8216) Query/Receive: fix iter race between `next()` and `stop()` introduced in https://github.com/thanos-io/thanos/pull/7821.
 - [#8212](https://github.com/thanos-io/thanos/pull/8212) Receive: Ensure forward/replication metrics are incremented in err cases
+- [#8296](https://github.com/thanos-io/thanos/pull/8296) Query: limit LazyRetrieval memory buffer size
 
 ## [v0.38.0](https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
 

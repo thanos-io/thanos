@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1036,1046p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1046,1056p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -594,13 +594,14 @@ Flags:
                                  receive local NTP time + configured duration
                                  due to clock skew in remote write clients.
       --tsdb.out-of-order.time-window=0s
-                                 [EXPERIMENTAL] Configures the allowed time
-                                 window for ingestion of out-of-order samples.
-                                 Disabled (0s) by defaultPlease note if you
-                                 enable this option and you use compactor, make
-                                 sure you have the --enable-vertical-compaction
-                                 flag enabled, otherwise you might risk
-                                 compactor halt.
+                                 [EXPERIMENTAL] Configures the allowed
+                                 time window for ingestion of out-of-order
+                                 samples. Disabled (0s) by defaultPlease
+                                 note if you enable this option and you
+                                 use compactor, make sure you have the
+                                 --compact.enable-vertical-compaction flag
+                                 enabled, otherwise you might risk compactor
+                                 halt.
       --tsdb.out-of-order.cap-max=0
                                  [EXPERIMENTAL] Configures the maximum capacity
                                  for out-of-order chunks (in samples). If set to
@@ -664,5 +665,10 @@ Flags:
       --enable-feature= ...      Comma separated experimental feature names
                                  to enable. The current list of features is
                                  metric-names-filter.
+      --receive.lazy-retrieval-max-buffered-responses=20
+                                 The lazy retrieval strategy can buffer up to
+                                 this number of responses. This is to limit the
+                                 memory usage. This flag takes effect only when
+                                 the lazy retrieval strategy is enabled.
 
 ```
