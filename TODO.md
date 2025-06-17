@@ -1,7 +1,7 @@
 # Thanos Bucket Migration Tool - Implementation Tasks
 
 ## Phase 1: Command Structure and Basic Setup
-- [ ] **Add new migrate command to CLI structure**
+- [x] **Add new migrate command to CLI structure**
   Add `migrate` subcommand to `thanos bucket tools` in `cmd/thanos/tools_bucket.go`
   Use the existing `replicate` command as a template for basic structure
   Set up command registration and basic help text

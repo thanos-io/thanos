@@ -133,6 +133,16 @@ type bucketReplicateConfig struct {
 	singleRun   bool
 }
 
+type bucketMigrateConfig struct {
+	olderThan               string
+	dryRun                  bool
+	overwriteExisting       bool
+	excludeDeleteMarked     bool
+	concurrency            int
+	maxRetries             int
+	selectorRelabelConfig  *extflag.PathOrContent
+}
+
 type bucketDownsampleConfig struct {
 	waitInterval          time.Duration
 	downsampleConcurrency int
@@ -232,6 +242,22 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	return tbc
 }
 
+func (tbc *bucketMigrateConfig) registerBucketMigrateFlag(cmd extkingpin.FlagClause) *bucketMigrateConfig {
+	cmd.Flag("older-than", "Migrate blocks older than this time. Supports RFC3339 format (e.g., 2025-06-01T00:00:00Z) or relative durations (e.g., 30d, 2h, 1w).").Required().StringVar(&tbc.olderThan)
+	
+	cmd.Flag("dry-run", "Preview mode - shows blocks that would be migrated without performing the actual migration.").Default("false").BoolVar(&tbc.dryRun)
+	
+	cmd.Flag("overwrite-existing", "Overwrite blocks that already exist in destination storage.").Default("false").BoolVar(&tbc.overwriteExisting)
+	
+	cmd.Flag("exclude-delete-marked", "Skip blocks that are already marked for deletion.").Default("false").BoolVar(&tbc.excludeDeleteMarked)
+	
+	cmd.Flag("concurrency", "Number of concurrent migration operations.").Default("10").IntVar(&tbc.concurrency)
+	
+	cmd.Flag("max-retries", "Maximum number of retry attempts for failed migrations.").Default("3").IntVar(&tbc.maxRetries)
+
+	return tbc
+}
+
 func (tbc *bucketRewriteConfig) registerBucketRewriteFlag(cmd extkingpin.FlagClause) *bucketRewriteConfig {
 	cmd.Flag("id", "ID (ULID) of the blocks for rewrite (repeated flag).").Required().StringsVar(&tbc.blockIDs)
 	cmd.Flag("tmp.dir", "Working directory for temporary files").Default(filepath.Join(os.TempDir(), "thanos-rewrite")).StringVar(&tbc.tmpDir)
@@ -300,6 +326,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketInspect(cmd, objStoreConfig)
 	registerBucketWeb(cmd, objStoreConfig)
 	registerBucketReplicate(cmd, objStoreConfig)
+	registerBucketMigrate(cmd, objStoreConfig)
 	registerBucketDownsample(cmd, objStoreConfig)
 	registerBucketCleanup(cmd, objStoreConfig)
 	registerBucketMarkBlock(cmd, objStoreConfig)
@@ -787,6 +814,25 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			blockIDs,
 			*ignoreMarkedForDeletion,
 		)
+	})
+}
+
+func registerBucketMigrate(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("migrate", "Migrate TSDB blocks from source to destination storage based on configurable time cutoffs. Blocks older than the specified cutoff will be migrated and marked for deletion from source.")
+	
+	toObjStoreConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "-to", false, "The destination object storage to migrate blocks to.")
+	
+	tbc := &bucketMigrateConfig{}
+	tbc.registerBucketMigrateFlag(cmd)
+	
+	// Add selector.relabel-config support similar to bucket web command
+	tbc.selectorRelabelConfig = extkingpin.RegisterSelectorRelabelFlags(cmd)
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		// TODO: Implement migration logic here using toObjStoreConfig for destination storage
+		_ = toObjStoreConfig // TODO: Use this in migration implementation
+		level.Info(logger).Log("msg", "Migration command setup - implementation coming soon")
+		return errors.New("migrate command not yet implemented")
 	})
 }
 
