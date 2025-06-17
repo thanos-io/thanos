@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
 - [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
 - [#8282](https://github.com/thanos-io/thanos/pull/8282) Force sync writes to meta.json in case of host crash
+- [#8308](https://github.com/thanos-io/thanos/pull/8308) Receive: Prometheus counters for pending write requests and series requests
 
 ### Added
 
