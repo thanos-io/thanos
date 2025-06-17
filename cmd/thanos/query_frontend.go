@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -395,8 +397,55 @@ func runQueryFrontend(
 		})
 	}
 
+	// Periodically check downstream URL to ensure it is reachable.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+
+			var firstRun = true
+			for {
+				if !firstRun {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(10 * time.Second):
+					}
+				}
+
+				timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				readinessUrl := cfg.DownstreamURL + "/-/ready"
+				req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, readinessUrl, nil)
+				if err != nil {
+					return errors.Wrap(err, "creating request to downstream URL")
+				}
+
+				resp, err := roundTripper.RoundTrip(req)
+				if err != nil {
+					level.Warn(logger).Log("msg", "failed to reach downstream URL", "err", err, "readiness_url", readinessUrl)
+					statusProber.NotReady(err)
+					firstRun = false
+					continue
+				}
+				runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "downstream health check response body")
+
+				if resp.StatusCode/100 == 4 || resp.StatusCode/100 == 5 {
+					level.Warn(logger).Log("msg", "downstream URL returned an error", "status_code", resp.StatusCode, "readiness_url", readinessUrl)
+					statusProber.NotReady(errors.Errorf("downstream URL %s returned an error: %d", readinessUrl, resp.StatusCode))
+					firstRun = false
+					continue
+				}
+
+				statusProber.Ready()
+			}
+		}, func(err error) {
+			cancel()
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting query frontend")
-	statusProber.Ready()
 	return nil
 }
 
