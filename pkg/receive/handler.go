@@ -134,6 +134,7 @@ type Handler struct {
 	receiverMode ReceiverMode
 
 	forwardRequests   *prometheus.CounterVec
+	endpointFailures  *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
 
@@ -191,6 +192,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
+		),
+		endpointFailures: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_write_failures_to_endpoint_total",
+				Help: "The number of write failures broken down by receive endpoint.",
+			}, []string{"endpoint", "error"},
 		),
 		replications: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
@@ -1015,9 +1022,10 @@ func (h *Handler) sendRemoteWrite(
 	cl, err := h.peers.getConnection(ctx, endpoint)
 	if err != nil {
 		if errors.Is(err, errUnavailable) {
-			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v due to connection error", endpointReplica)
 		}
 		responses <- newWriteResponse(trackedSeries.seriesIDs, err, endpointReplica)
+		h.endpointFailures.WithLabelValues(endpoint.Address, "connection_error").Inc()
 		wg.Done()
 		return
 	}
@@ -1039,6 +1047,8 @@ func (h *Handler) sendRemoteWrite(
 			}
 			h.peers.markPeerAvailable(endpoint)
 		} else {
+			h.endpointFailures.WithLabelValues(endpoint.Address, "grpc_write_error").Inc()
+			h.replications.WithLabelValues(labelError).Inc()
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
 				if st.Code() == codes.Unavailable {
