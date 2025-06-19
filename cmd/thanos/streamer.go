@@ -183,7 +183,6 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 	outOfTimeRangeSampleTotal := 0
 	outOfOrderSampleTotal := 0
 	duplicateSampleTotal := 0
-	duplicateChunks := 0
 	storeReq := convertToSeriesReq(&s.config, request)
 	responseSeq := 0
 
@@ -242,7 +241,6 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 				"out_of_time_range_samples", outOfTimeRangeSampleTotal,
 				"out_of_order_samples", outOfOrderSampleTotal,
 				"duplicate_samples", duplicateSampleTotal,
-				"dupliate_chunks", duplicateChunks,
 			)
 		}
 	}()
@@ -292,12 +290,7 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 			}
 		}
 		sort.Sort(aggrChunkByTimestamp(seriesResp.Chunks))
-		samples := 0
 		outOfTimeRangeSamples := 0
-		outOfOrderSamples := 0
-		duplicateSamples := 0
-		prevTs := int64(0)
-		prevChunkMinTime := int64(0)
 		for _, chunk := range seriesResp.Chunks {
 			if chunk.Raw == nil {
 				// We only ask for and handle RAW
@@ -310,82 +303,69 @@ func (s *Streamer) streamOneRequest(request *streamer.StreamerRequest, writer io
 				level.Error(s.logger).Log("err", err, "request_id", request.RequestId)
 				return writeResponse(&streamer.StreamerResponse{Err: err.Error()})
 			}
-			level.Debug(s.logger).Log(
-				"msg", "received a chunk for a time series",
-				"request_id", request.RequestId,
-				"metric_name", metricName,
-				"chunk_min_time", chunk.MinTime,
-				"chunk_min_time_unix", time.Unix(chunk.MinTime/1000, 0).UTC(),
-				"duration_seconds", float64(chunk.MaxTime-chunk.MinTime)/1000,
-				"num_samples", len(chunk.Raw.Data),
-				// A duplicate chunk is common because offline store has replication factor > 1 to avoid data loss during release.
-				"is_duplicate_chunk", prevChunkMinTime == chunk.MinTime,
-			)
-			if prevChunkMinTime == chunk.MinTime {
-				// Chunks are sorted by MinTime.
-				duplicateChunks++
-				continue
-			}
-			prevChunkMinTime = chunk.MinTime
 
 			raw, err := chunkenc.FromData(chunkenc.EncXOR, chunk.Raw.Data)
 			if err != nil {
 				level.Error(s.logger).Log("err", err, "msg", "error in decoding chunk", "request_id", request.RequestId)
 				return writeResponse(&streamer.StreamerResponse{Err: err.Error()})
 			}
+			level.Debug(s.logger).Log(
+				"msg", "received a chunk for a time series",
+				"request_id", request.RequestId,
+				"metric_name", metricName,
+				"chunk_min_time", chunk.MinTime,
+				"chunk_min_time_unix", time.Unix(chunk.MinTime/1000, 0).UTC(),
+				"chunk_max_time", chunk.MaxTime,
+				"chunk_max_time_unix", time.Unix(chunk.MaxTime/1000, 0).UTC(),
+				"duration_seconds", float64(chunk.MaxTime-chunk.MinTime)/1000,
+				"num_samples", len(chunk.Raw.Data),
+			)
 
+			// Thanos Querier does 2 steps to deduplicate time series to serve a PromQL query:
+			//   1. Deduplicate time series by their labels. The output is a list of unique time series, each of which has a list of data chunks.
+			//      The chunks have duplicate data samples. This step is done inside Series() impl.
+			//   2. Deduplicate data samples within each unique time series. This step is done inside query execution.
+			//   The data seen here is after step 1 but before step 2.
 			for iter := raw.Iterator(nil); iter.Next() != chunkenc.ValNone; {
 				ts, value := iter.At()
 				if ts < request.StartTimestampMs || ts > request.EndTimestampMs {
 					outOfTimeRangeSamples++
-				} else if prevTs == ts {
-					duplicateSamples++
-				} else if prevTs > ts {
-					outOfOrderSamples++
-					level.Debug(s.logger).Log(
-						"msg", "out of order sample",
-						"request_id", request.RequestId,
-						"metric_name", metricName,
-						"prev_ts", prevTs,
-						"ts", ts,
-					)
 				} else {
 					timeSeries.Samples = append(timeSeries.Samples, streamer.DataSample{
 						// In milliseconds since epoch
 						Timestamp: ts,
 						Value:     value,
 					})
-					samples++
-					prevTs = ts
 				}
 			}
 		}
-		if outOfOrderSamples > 0 {
-			level.Debug(s.logger).Log(
-				"msg", "out of order samples",
-				"request_id", request.RequestId,
-				"metric_name", metricName,
-				"num_chunks", len(seriesResp.Chunks),
-				"num_samples", samples,
-				"num_out_of_order_samples", outOfOrderSamples,
-				"num_duplicate_samples", duplicateSamples,
-			)
+		numSamplesBeforeDeduplication := len(timeSeries.Samples)
+		if numSamplesBeforeDeduplication > 0 {
+			// Sort the samples by timestamp and remove duplicates.
+			sort.Slice(timeSeries.Samples, func(i, j int) bool {
+				return timeSeries.Samples[i].Timestamp < timeSeries.Samples[j].Timestamp
+			})
+			nextSlot := 1
+			for i := 1; i < len(timeSeries.Samples); i++ {
+				if timeSeries.Samples[i].Timestamp != timeSeries.Samples[i-1].Timestamp {
+					timeSeries.Samples[nextSlot] = timeSeries.Samples[i]
+					nextSlot++
+				}
+			}
+			timeSeries.Samples = timeSeries.Samples[:nextSlot]
 		}
 		level.Debug(s.logger).Log(
 			"msg", "received and processed chunks for a time series",
 			"request_id", request.RequestId,
 			"metric_name", metricName,
 			"num_chunks", len(seriesResp.Chunks),
-			"num_samples", samples,
 			"out_of_time_range_samples", outOfTimeRangeSamples,
-			"num_duplicate_samples", duplicateSamples,
-			"num_out_of_order_samples", outOfOrderSamples,
+			"num_samples_before_deduplication", numSamplesBeforeDeduplication,
+			"num_samples_after_deduplication", len(timeSeries.Samples),
 		)
 		chunksTotal += len(seriesResp.Chunks)
 		timeSeriesTotal++
-		samplesTotal += int64(samples)
-		outOfOrderSampleTotal += outOfOrderSamples
-		duplicateSampleTotal += duplicateSamples
+		samplesTotal += int64(len(timeSeries.Samples))
 		outOfTimeRangeSampleTotal += outOfTimeRangeSamples
 		if err := writeResponse(&streamer.StreamerResponse{Data: timeSeries}); err != nil {
 			level.Error(s.logger).Log("err", err, "msg", "error in writing a data response")
