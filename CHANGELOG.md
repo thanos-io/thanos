@@ -9,6 +9,16 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+
+### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [v0.39.0 - in progress](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 19
 - [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
 - [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
 - [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
