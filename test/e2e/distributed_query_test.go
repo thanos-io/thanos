@@ -145,9 +145,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt1, path.Join(dir1, blockID2.String()), blockID2.String()))
-	store1 := e2ethanos.NewStoreGW(
-		e,
-		"s1",
+	store1 := e2ethanos.NewStoreGWBuilder(e, "s1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket1, minio1.InternalEndpoint("http"), minio1.InternalDir()),
@@ -238,9 +236,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt1, path.Join(dir1, blockID2.String()), blockID2.String()))
-	store1 := e2ethanos.NewStoreGW(
-		e,
-		"s1",
+	store1 := e2ethanos.NewStoreGWBuilder(e, "s1").Init(
 		client.BucketConfig{
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket1, minio1.InternalEndpoint("http"), minio1.InternalDir()),
