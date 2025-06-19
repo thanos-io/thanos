@@ -83,15 +83,15 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of DNS lookups to discover stores.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_query_store_apis_dns_lookups_total{%s}[$interval]))' % [thanos.query.dashboard.dimensions, thanos.query.dashboard.selector],
+            'sum by (%s) (rate(thanos_query_endpoints_dns_lookups_total{%s}[$interval]))' % [thanos.query.dashboard.dimensions, thanos.query.dashboard.selector],
             'lookups {{job}}'
           )
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of failures compared to the total number of executed DNS lookups.') +
           g.qpsErrTotalPanel(
-            'thanos_query_store_apis_dns_failures_total{%s}' % thanos.query.dashboard.selector,
-            'thanos_query_store_apis_dns_lookups_total{%s}' % thanos.query.dashboard.selector,
+            'thanos_query_endpoints_dns_failures_total{%s}' % thanos.query.dashboard.selector,
+            'thanos_query_endpoints_dns_lookups_total{%s}' % thanos.query.dashboard.selector,
             thanos.query.dashboard.dimensions
           )
         )
