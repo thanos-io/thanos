@@ -74,7 +74,7 @@ func runStreamerTool(conf *streamerToolConfig, logger log.Logger) error {
 	request := &streamer.StreamerRequest{
 		RequestId:        conf.metric,
 		StartTimestampMs: startMs,
-		EndTimestampMs:   startMs + 4*3600*1000,
+		EndTimestampMs:   startMs + 2*3600*1000,
 		SkipChunks:       conf.skipChunks,
 		Metric:           conf.metric,
 	}
@@ -145,16 +145,19 @@ func runStreamerTool(conf *streamerToolConfig, logger log.Logger) error {
 		}
 		series := resp.Data
 		metric := ""
-		fmt.Printf("{")
+		fmt.Printf("%s{", conf.metric)
+		comma := ""
 		for _, label := range series.Labels {
 			name := strings.Clone(label.Name)
 			value := strings.Clone(label.Value)
-			fmt.Printf("%s=%s,", label.Name, label.Value)
-			if name == labels.MetricName {
+			if name != labels.MetricName {
+				fmt.Printf("%s%s=\"%s\"", comma, label.Name, label.Value)
+				comma = ","
+			} else {
 				metric = value
 			}
 		}
-		fmt.Printf("}")
+		fmt.Printf("} %d |", len(series.Samples))
 		if metric != conf.metric {
 			return fmt.Errorf("%d-th time series from the response has a different metric name:\n   Actual: %+v\n   Expected: %+v",
 				seq, []byte(metric), []byte(conf.metric))
