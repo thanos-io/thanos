@@ -3822,7 +3822,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		n, err = io.ReadFull(bufReader, cb)
 		readOffset += n
 		// Unexpected EOF for last chunk could be a valid case. Any other errors are definitely real.
-		if err != nil && !(errors.Is(err, io.ErrUnexpectedEOF) && i == len(pIdxs)-1) {
+		if err != nil && (!errors.Is(err, io.ErrUnexpectedEOF) || i != len(pIdxs)-1) {
 			return errors.Wrapf(err, "read range for seq %d offset %x", seq, pIdx.offset)
 		}
 
