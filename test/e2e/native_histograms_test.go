@@ -394,6 +394,64 @@ func TestRuleNativeHistograms(t *testing.T) {
 	queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return expectedRecordedName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(expectedRecordedName, nil, expectedRecordedHistogram, map[string]string{"tenant_id": "default-tenant"}))
 }
 
+func TestRuleNativeHistogramsTSDB(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("hist-rule-tsdb")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1").WithNativeHistograms()
+	rulesSubDir := "rules"
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+
+	for i, rule := range []string{testRuleRecordHistogramSum} {
+		createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
+	}
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().WithNativeHistograms().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+
+	receiver2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().WithNativeHistograms().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).WithReplicaLabels("receive", "replica").Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	histograms := tsdbutil.GenerateTestHistograms(4)
+	ts := time.Now().Add(-2 * time.Minute)
+	rawRemoteWriteURL1 := "http://" + receiver.Endpoint("remote-write") + "/api/v1/receive"
+	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL1, prompb.Label{Name: "series", Value: "one"})
+	testutil.Ok(t, err)
+	rawRemoteWriteURL2 := "http://" + receiver2.Endpoint("remote-write") + "/api/v1/receive"
+	_, err = writeHistograms(ctx, ts, testHistogramMetricName, histograms, nil, rawRemoteWriteURL2, prompb.Label{Name: "series", Value: "two"})
+	testutil.Ok(t, err)
+
+	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
+		{
+			GRPCConfig: &clientconfig.GRPCConfig{
+				EndpointAddrs: []string{q.InternalEndpoint("grpc")},
+			},
+		},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	qR := e2ethanos.NewQuerierBuilder(e, "2", r.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(qR))
+
+	// Wait until samples are written successfully.
+	histogramMatcher, _ := matchers.NewMatcher(matchers.MatchEqual, "type", "histogram")
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"prometheus_tsdb_head_samples_appended_total"}, e2emon.WithLabelMatchers(histogramMatcher), e2emon.WaitMissingMetrics()))
+
+	expectedRecordedName := testHistogramMetricName + ":sum"
+	expectedRecordedHistogram := histograms[len(histograms)-1].ToFloat(nil).Mul(2)
+	queryAndAssert(t, ctx, qR.Endpoint("http"), func() string { return expectedRecordedName }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(expectedRecordedName, nil, expectedRecordedHistogram, nil))
+}
+
 func writeHistograms(ctx context.Context, now time.Time, name string, histograms []*histogram.Histogram, floatHistograms []*histogram.FloatHistogram, rawRemoteWriteURL string, labels ...prompb.Label) (time.Time, error) {
 	startTime := now.Add(time.Duration(len(histograms)-1) * -30 * time.Second).Truncate(30 * time.Second)
 	prompbHistograms := make([]prompb.Histogram, 0, len(histograms))
