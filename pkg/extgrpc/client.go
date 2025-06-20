@@ -24,8 +24,9 @@ import (
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
-func EndpointGroupGRPCOpts() []grpc.DialOption {
-	serviceConfig := `
+func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
+	if serviceConfig == "" {
+		serviceConfig = `
 {
   "loadBalancingPolicy":"round_robin",
   "retryPolicy": {
@@ -37,6 +38,7 @@ func EndpointGroupGRPCOpts() []grpc.DialOption {
     ]
   }
 }`
+	}
 
 	return []grpc.DialOption{
 		grpc.WithDefaultServiceConfig(serviceConfig),
