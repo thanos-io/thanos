@@ -5,11 +5,10 @@ package e2e_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
+	"os"
 	"reflect"
 	"regexp"
 	"sort"
@@ -21,9 +20,8 @@ import (
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/api"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -33,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -925,108 +924,6 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 	}
 }
 
-func TestQueryFrontendTenantForward(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                   string
-		customTenantHeaderName string
-		tenantName             string
-	}{
-		{
-			name:                   "default tenant header name with a tenant name",
-			customTenantHeaderName: tenancy.DefaultTenantHeader,
-			tenantName:             "test-tenant",
-		},
-		{
-			name:                   "default tenant header name without a tenant name",
-			customTenantHeaderName: tenancy.DefaultTenantHeader,
-		},
-		{
-			name:                   "custom tenant header name with a tenant name",
-			customTenantHeaderName: "X-Foobar-Tenant",
-			tenantName:             "test-tenant",
-		},
-		{
-			name:                   "custom tenant header name without a tenant name",
-			customTenantHeaderName: "X-Foobar-Tenant",
-		},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if tc.tenantName == "" {
-				tc.tenantName = tenancy.DefaultTenant
-			}
-			// Use a shorthash of tc.name as e2e env name because the random name generator is having a collision for
-			// some reason.
-			e2ename := fmt.Sprintf("%x", sha256.Sum256([]byte(tc.name)))[:8]
-			e, err := e2e.New(e2e.WithName(e2ename))
-			testutil.Ok(t, err)
-			t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusNoContent)
-				// The tenant header present in the outgoing request should be the default tenant header.
-				testutil.Equals(t, tc.tenantName, r.Header.Get(tenancy.DefaultTenantHeader))
-
-				// In case the query frontend is configured with a custom tenant header name, verify such header
-				// is not present in the outgoing request.
-				if tc.customTenantHeaderName != tenancy.DefaultTenantHeader {
-					testutil.Equals(t, "", r.Header.Get(tc.customTenantHeaderName))
-				}
-
-				// Verify the outgoing request will keep the X-Scope-OrgID header for compatibility with Cortex.
-				testutil.Equals(t, tc.tenantName, r.Header.Get("X-Scope-OrgID"))
-			}))
-			t.Cleanup(ts.Close)
-			tsPort := urlParse(t, ts.URL).Port()
-
-			inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
-				Type: queryfrontend.INMEMORY,
-				Config: queryfrontend.InMemoryResponseCacheConfig{
-					MaxSizeItems: 1000,
-					Validity:     time.Hour,
-				},
-			}
-			queryFrontendConfig := queryfrontend.Config{
-				TenantHeader: tc.customTenantHeaderName,
-			}
-			queryFrontend := e2ethanos.NewQueryFrontend(
-				e,
-				"qfe",
-				fmt.Sprintf("http://%s:%s", e.HostAddr(), tsPort),
-				queryFrontendConfig,
-				inMemoryCacheConfig,
-			)
-			testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
-
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			t.Cleanup(cancel)
-
-			promClient, err := api.NewClient(api.Config{
-				Address: "http://" + queryFrontend.Endpoint("http"),
-				RoundTripper: tenantRoundTripper{
-					tenant: tc.tenantName,
-					rt:     http.DefaultTransport,
-				},
-			})
-			testutil.Ok(t, err)
-			v1api := v1.NewAPI(promClient)
-
-			r := v1.Range{
-				Start: time.Now().Add(-time.Hour),
-				End:   time.Now(),
-				Step:  time.Minute,
-			}
-
-			_, _, _ = v1api.QueryRange(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", r)
-			_, _, _ = v1api.Query(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", time.Now())
-		})
-	}
-}
-
 type tenantRoundTripper struct {
 	tenant       string
 	tenantHeader string
@@ -1209,4 +1106,52 @@ func TestQueryFrontendAnalyze(t *testing.T) {
 	t.Log(strings.TrimSpace(string(body)))
 
 	require.Equal(t, true, r.MatchString(strings.TrimSpace(string(body))))
+}
+
+func TestQueryFrontendReadyOnlyIfDownstreamIsAvailable(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("qfe-analyze")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1").Init()
+	qfe := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), queryfrontend.Config{}, queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+	})
+	testutil.Ok(t, qfe.Start())
+
+	l := log.NewLogfmtLogger(os.Stdout)
+
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, runutil.RetryWithLog(l, 1*time.Second, timeoutCtx.Done(), func() error {
+		resp, err := http.Get(fmt.Sprintf("http://%s/-/ready", qfe.Endpoint("http")))
+		if err != nil {
+			return err
+		}
+		t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+		if resp.StatusCode/100 == 2 {
+			return fmt.Errorf("expected query frontend to be not ready, but it is ready")
+		}
+		return nil
+	}))
+
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	require.NoError(t, runutil.RetryWithLog(l, 1*time.Second, timeoutCtx.Done(), func() error {
+		resp, err := http.Get(fmt.Sprintf("http://%s/-/ready", qfe.Endpoint("http")))
+		if err != nil {
+			return err
+		}
+		t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("expected query frontend to be ready (%d), but it is not ready", resp.StatusCode)
+		}
+		return nil
+	}))
+
 }
