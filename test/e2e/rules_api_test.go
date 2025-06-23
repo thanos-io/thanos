@@ -102,6 +102,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "foo", Value: "bar"},
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -118,6 +119,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "foo", Value: "bar"},
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthGood),
