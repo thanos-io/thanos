@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 ## [v0.39.0 - in progress](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 19
+- [#8329](https://github.com/thanos-io/thanos/pull/8329) Fix manifest.json for authenticated UI
 - [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
 - [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
 - [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
