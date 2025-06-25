@@ -503,6 +503,9 @@ Flags:
                                  options for now: promql-experimental-functions
                                  (enables promql experimental functions for
                                  ruler)
+      --[no-]tsdb.enable-native-histograms
+                                 [EXPERIMENTAL] Enables the ingestion of native
+                                 histograms.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers
