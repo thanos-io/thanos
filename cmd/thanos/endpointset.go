@@ -345,5 +345,11 @@ func setupEndpointSet(
 		cancel()
 	})
 
+	// perform an initial update so we dont mark ourselves ready without having registered any endpoints
+	// TODO: it would be nice if we could return an error here from "Update"
+	ctxUpdate, cancelUpdate := context.WithTimeout(ctx, endpointTimeout)
+	defer cancelUpdate()
+	endpointset.Update(ctxUpdate)
+
 	return endpointset, nil
 }
