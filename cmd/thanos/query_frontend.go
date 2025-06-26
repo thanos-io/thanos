@@ -329,13 +329,13 @@ func runQueryFrontend(
 		return err
 	}
 
-	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
+	downstreamRT, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
 	if err != nil {
 		return errors.Wrap(err, "setup downstream roundtripper")
 	}
 
 	// Wrap the downstream RoundTripper into query frontend Tripperware.
-	roundTripper = tripperWare(roundTripper)
+	roundTripper := tripperWare(downstreamRT)
 
 	// Create the query frontend transport.
 	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
@@ -422,14 +422,14 @@ func runQueryFrontend(
 					return errors.Wrap(err, "creating request to downstream URL")
 				}
 
-				resp, err := roundTripper.RoundTrip(req)
+				resp, err := downstreamRT.RoundTrip(req)
 				if err != nil {
 					level.Warn(logger).Log("msg", "failed to reach downstream URL", "err", err, "readiness_url", readinessUrl)
 					statusProber.NotReady(err)
 					firstRun = false
 					continue
 				}
-				runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "downstream health check response body")
+				runutil.CloseWithLogOnErr(logger, resp.Body, "downstream health check response body")
 
 				if resp.StatusCode/100 == 4 || resp.StatusCode/100 == 5 {
 					level.Warn(logger).Log("msg", "downstream URL returned an error", "status_code", resp.StatusCode, "readiness_url", readinessUrl)
