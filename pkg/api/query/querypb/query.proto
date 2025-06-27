@@ -61,10 +61,17 @@ message StoreMatchers {
   repeated LabelMatcher labelMatchers = 1 [(gogoproto.nullable) = false];
 }
 
+message Warnings {
+  repeated string warnings = 1;
+}
+
 message QueryResponse {
   oneof result {
     /// warnings are additional messages coming from the PromQL engine.
+    /// deprecated: use warnings_slice.
     string warnings = 1;
+
+    Warnings warnings_slice = 4;
 
     /// timeseries is one series from the result of the executed query.
     prometheus_copy.TimeSeries timeseries = 2;
@@ -109,7 +116,10 @@ message QueryRangeRequest {
 message QueryRangeResponse {
   oneof result {
     /// warnings are additional messages coming from the PromQL engine.
+    /// deprecated: use warnings_slice.
     string warnings = 1;
+
+    Warnings warnings_slice = 4;
 
     /// timeseries is one series from the result of the executed query.
     prometheus_copy.TimeSeries timeseries = 2;
