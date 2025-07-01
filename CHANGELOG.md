@@ -18,7 +18,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-
 ### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
 
 Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
