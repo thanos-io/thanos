@@ -112,8 +112,9 @@ type ruleConfig struct {
 	storeRateLimits    store.SeriesSelectLimits
 	ruleConcurrentEval int64
 
-	extendedFunctionsEnabled bool
-	EnableFeatures           []string
+	extendedFunctionsEnabled   bool
+	EnableFeatures             []string
+	tsdbEnableNativeHistograms bool
 }
 
 type Expression struct {
@@ -170,6 +171,10 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
 	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler)").Default("").StringsVar(&conf.EnableFeatures)
 
+	cmd.Flag("tsdb.enable-native-histograms",
+		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
+		Default("false").BoolVar(&conf.tsdbEnableNativeHistograms)
+
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
@@ -189,11 +194,12 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
-			NoLockfile:        *noLockFile,
-			WALCompression:    wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
+			MinBlockDuration:       int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			MaxBlockDuration:       int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			RetentionDuration:      int64(time.Duration(*tsdbRetention) / time.Millisecond),
+			NoLockfile:             *noLockFile,
+			WALCompression:         wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
+			EnableNativeHistograms: conf.tsdbEnableNativeHistograms,
 		}
 
 		agentOpts := &agent.Options{

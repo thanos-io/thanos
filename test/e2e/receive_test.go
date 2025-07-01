@@ -34,6 +34,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -1210,7 +1211,7 @@ func TestReceiveCpnp(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExemplarsInMemStorage(100).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 	h := receive.HashringConfig{
@@ -1232,6 +1233,15 @@ func TestReceiveCpnp(t *testing.T) {
 		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
 			Timeseries: []prompb.TimeSeries{
 				{
+					Exemplars: []prompb.Exemplar{
+						{
+							Labels: []prompb.Label{
+								{Name: "receive", Value: "receive-ingestor"},
+							},
+							Value:     1.2345,
+							Timestamp: timestamp.FromTime(ts),
+						},
+					},
 					Labels: []prompb.Label{
 						{Name: model.MetricNameLabel, Value: "myself"},
 					},
@@ -1264,5 +1274,13 @@ func TestReceiveCpnp(t *testing.T) {
 			Value: 1,
 		},
 	}, v)
+
+	// TODO(GiedriusS): repro for https://github.com/thanos-io/thanos/issues/8224. Fix in following PRs.
+	queryExemplars(
+		t, context.Background(), q.Endpoint("http"), "myself", timestamp.FromTime(ts), timestamp.FromTime(ts), func(data []*exemplarspb.ExemplarData) error {
+			require.Equal(t, "\000\000\000\000\000\000\000", data[0].Exemplars[0].Labels.Labels[0].Name)
+			return nil
+		},
+	)
 
 }

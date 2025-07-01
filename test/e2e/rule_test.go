@@ -40,6 +40,8 @@ groups:
 - name: example_abort
   interval: 1s
   # Abort should be a default: partial_response_strategy: "ABORT"
+  labels:
+    foo: bar
   rules:
   - alert: TestAlert_AbortOnPartialResponse
     # It must be based on actual metrics otherwise call to StoreAPI would be not involved.
@@ -501,6 +503,7 @@ func TestRule(t *testing.T) {
 				"__name__":   "ALERTS",
 				"severity":   "page",
 				"alertname":  "TestAlert_AbortOnPartialResponse",
+				"foo":        "bar",
 				"alertstate": "firing",
 				"replica":    "1",
 			},
@@ -523,17 +526,18 @@ func TestRule(t *testing.T) {
 		expAlertLabels := []model.LabelSet{
 			{
 				"severity":  "page",
-				"alertname": "TestAlert_AbortOnPartialResponse",
-				"replica":   "1",
-			},
-			{
-				"severity":  "page",
 				"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
 				"replica":   "1",
 			},
 			{
 				"severity":  "page",
 				"alertname": "TestAlert_WarnOnPartialResponse",
+				"replica":   "1",
+			},
+			{
+				"severity":  "page",
+				"foo":       "bar",
+				"alertname": "TestAlert_AbortOnPartialResponse",
 				"replica":   "1",
 			},
 		}
