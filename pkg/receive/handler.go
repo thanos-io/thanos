@@ -140,6 +140,7 @@ type Handler struct {
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
+	writeTimeseriesError *prometheus.HistogramVec
 	writeE2eLatency      *prometheus.HistogramVec
 
 	Limiter *Limiter
@@ -217,6 +218,15 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Subsystem: "receive",
 				Name:      "write_timeseries",
 				Help:      "The number of timeseries received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeTimeseriesError: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_timeseries_error",
+				Help:      "The number of actual failed timeseries received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
@@ -482,13 +492,15 @@ type writeResponse struct {
 	seriesIDs []int
 	err       error
 	er        endpointReplica
+	tenant    string
 }
 
-func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeResponse {
+func newWriteResponse(seriesIDs []int, err error, er endpointReplica, tenant string) writeResponse {
 	return writeResponse{
 		seriesIDs: seriesIDs,
 		err:       err,
 		er:        er,
+		tenant:    tenant,
 	}
 }
 
@@ -652,6 +664,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for tenant, stats := range tenantStats {
 		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+		if stats.errorSeries > 0 {
+			h.writeTimeseriesError.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.errorSeries))
+		}
 	}
 	nowMS := time.Now().UnixNano() / int64(time.Millisecond)
 	for _, ts := range wreq.Timeseries {
@@ -664,6 +679,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 type requestStats struct {
 	timeseries   int
 	totalSamples int
+	errorSeries  int
 }
 
 type tenantRequestStats map[string]requestStats
@@ -848,6 +864,9 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 				for _, seriesErr := range seriesErrs {
 					writeErrors.Add(seriesErr)
 				}
+				if stat, ok := stats[resp.tenant]; ok {
+					stat.errorSeries += len(seriesErrs)
+				}
 				return stats, writeErrors.ErrOrNil()
 			}
 
@@ -998,11 +1017,11 @@ func (h *Handler) sendLocalWrite(
 		if err != nil {
 			span.SetTag("error", true)
 			span.SetTag("error.msg", err.Error())
-			responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination)
+			responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination, tenant)
 			return
 		}
 	}
-	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, writeDestination)
+	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, writeDestination, "")
 
 }
 
@@ -1024,7 +1043,7 @@ func (h *Handler) sendRemoteWrite(
 		if errors.Is(err, errUnavailable) {
 			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v due to connection error", endpointReplica)
 		}
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, endpointReplica)
+		responses <- newWriteResponse(trackedSeries.seriesIDs, err, endpointReplica, tenant)
 		h.endpointFailures.WithLabelValues(endpoint.Address, "connection_error").Inc()
 		wg.Done()
 		return
@@ -1454,6 +1473,7 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 				seriesIDs,
 				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
 				er,
+				req.Tenant,
 			)
 			if err != nil {
 				sp := trace.SpanFromContext(ctx)
