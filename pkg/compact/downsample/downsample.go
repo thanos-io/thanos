@@ -80,6 +80,7 @@ func Downsample(
 	if origMeta.Thanos.Downsample.Resolution >= resolution {
 		return id, errors.New("target resolution not lower than existing one")
 	}
+	level.Info(logger).Log("msg", "starting downsample operation", "source_resolution", ResolutionToString(origMeta.Thanos.Downsample.Resolution), "target_resolution", ResolutionToString(resolution), "block", origMeta.ULID)
 
 	indexr, err := b.Index()
 	if err != nil {
@@ -279,6 +280,7 @@ func Downsample(
 	}
 
 	id = uid
+	level.Info(logger).Log("msg", "completed downsample operation", "source_resolution", ResolutionToString(origMeta.Thanos.Downsample.Resolution), "target_resolution", ResolutionToString(resolution), "source_block", origMeta.ULID, "result_block", id)
 	return
 }
 
@@ -1430,4 +1432,19 @@ func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[uli
 	}
 
 	return nil
+}
+
+// Func helps convert the Resolution from milliseconds to precise time for logging
+// useful while downsampling and compacting logs
+func ResolutionToString(resolution int64) string {
+	switch resolution {
+	case 0:
+		return "raw"
+	case 5 * 60 * 1000:
+		return "5m"
+	case 60 * 60 * 1000:
+		return "1h"
+	default:
+		return fmt.Sprintf("%dms", resolution)
+	}
 }

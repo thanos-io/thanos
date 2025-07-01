@@ -1324,7 +1324,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		if err != nil {
 			return false, nil, retry(errors.Wrapf(err, "upload of %s failed", compID))
 		}
-		level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+		level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "resolution", ResolutionToString(cg.resolution))
 		level.Info(cg.logger).Log("msg", "running post compaction callback", "result_block", compID)
 		if err := compactionLifecycleCallback.PostCompactionCallback(ctx, cg.logger, cg, compID); err != nil {
 			return false, nil, retry(errors.Wrapf(err, "failed to run post compaction callback for result block %s", compID))
@@ -1345,7 +1345,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	level.Info(cg.logger).Log("msg", "finished compacting blocks", "duration", time.Since(groupCompactionBegin),
-		"duration_ms", time.Since(groupCompactionBegin).Milliseconds(), "result_blocks", compIDStrs, "source_blocks", sourceBlockStr)
+		"duration_ms", time.Since(groupCompactionBegin).Milliseconds(), "result_blocks", compIDStrs, "source_blocks", sourceBlockStr, "resolution", ResolutionToString(cg.resolution))
 	return true, compIDs, nil
 }
 
@@ -1358,7 +1358,7 @@ func (cg *Group) deleteBlock(id ulid.ULID, bdir string, blockDeletableChecker Bl
 		// Spawn a new context so we always mark a block for deletion in full on shutdown.
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		level.Info(cg.logger).Log("msg", "marking compacted block for deletion", "old_block", id)
+		level.Info(cg.logger).Log("msg", "marking compacted block for deletion", "old_block", id, "resolution", ResolutionToString(cg.resolution))
 		if err := block.MarkForDeletion(delCtx, cg.logger, cg.bkt, id, "source of compacted block", cg.blocksMarkedForDeletion); err != nil {
 			return errors.Wrapf(err, "mark block %s for deletion from bucket", id)
 		}
@@ -1690,4 +1690,19 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 	f.mtx.Unlock()
 
 	return nil
+}
+
+// Func helps convert the Resolution from milliseconds to precise time for logging
+// useful while downsampling and compacting logs
+func ResolutionToString(resolution int64) string {
+	switch resolution {
+	case 0:
+		return "raw"
+	case 5 * 60 * 1000:
+		return "5m"
+	case 60 * 60 * 1000:
+		return "1h"
+	default:
+		return fmt.Sprintf("%dms", resolution)
+	}
 }
