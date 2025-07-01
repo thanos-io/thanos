@@ -324,18 +324,31 @@ func TestParseRetentionPolicyByTenant(t *testing.T) {
 		},
 		{
 			"valid",
-			[]string{"tenant-1:2021-01-01", "tenant-2:11d"},
+			[]string{"tenant-1:2021-01-01", "tenant-2:11d", "tenant-3:2024-10-17:lvl1"},
 			map[string]compact.RetentionPolicy{
 				"tenant-1": {
 					CutoffDate:        time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),
 					RetentionDuration: time.Duration(0),
+					Level1:            false,
 				},
 				"tenant-2": {
 					CutoffDate:        time.Time{},
 					RetentionDuration: 11 * 24 * time.Hour,
+					Level1:            false,
+				},
+				"tenant-3": {
+					CutoffDate:        time.Date(2024, 10, 17, 0, 0, 0, 0, time.UTC),
+					RetentionDuration: time.Duration(0),
+					Level1:            true,
 				},
 			},
 			false,
+		},
+		{
+			"invalid string",
+			[]string{"ewrwerwerw:werqj:Werw", "tenant#2:1:lvl1"},
+			nil,
+			true,
 		},
 		{
 			"invalid tenant",
@@ -380,6 +393,7 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 		id, tenant string
 		minTime    time.Time
 		maxTime    time.Time
+		lvl        int
 	}
 
 	logger := log.NewNopLogger()
@@ -407,12 +421,14 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 					"tenant-1",
 					time.Now().Add(-3 * 24 * time.Hour),
 					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW49",
 					"tenant-2",
 					time.Now().Add(-3 * 24 * time.Hour),
 					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
 				},
 			},
 			map[string]compact.RetentionPolicy{},
@@ -430,24 +446,28 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 					"tenant-1",
 					time.Now().Add(-3 * 24 * time.Hour),
 					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW49",
 					"tenant-1",
 					time.Now().Add(-2 * 24 * time.Hour),
 					time.Now().Add(-24 * time.Hour),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW50",
 					"tenant-2",
 					time.Now().Add(-24 * time.Hour),
 					time.Now().Add(-23 * time.Hour),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW51",
 					"tenant-2",
 					time.Now().Add(-23 * time.Hour),
 					time.Now().Add(-6 * time.Hour),
+					compact.Level1,
 				},
 			},
 			map[string]compact.RetentionPolicy{
@@ -471,24 +491,28 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 					"tenant-1",
 					time.Now().Add(-3 * 24 * time.Hour),
 					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW49",
 					"tenant-1",
 					time.Now().Add(-2 * 24 * time.Hour),
 					time.Now().Add(-24 * time.Hour),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW50",
 					"tenant-2",
 					time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC),
 					time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC),
+					compact.Level1,
 				},
 				{
 					"01CPHBEX20729MJQZXE3W0BW51",
 					"tenant-2",
 					time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 					time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+					compact.Level1,
 				},
 			},
 			map[string]compact.RetentionPolicy{
@@ -504,11 +528,56 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 			},
 			false,
 		},
+		{
+			"tenant retention with duration and lvl1 only",
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-other",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant",
+					time.Now().Add(-2 * 24 * time.Hour),
+					time.Now().Add(-24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					"tenant",
+					time.Now().Add(-24 * time.Hour),
+					time.Now().Add(-23 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW51",
+					"tenant",
+					time.Now().Add(-24 * time.Hour),
+					time.Now().Add(-23 * time.Hour),
+					compact.Level2,
+				},
+			},
+			map[string]compact.RetentionPolicy{
+				"tenant": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 10 * time.Hour,
+					Level1:            true,
+				},
+			},
+			[]string{
+				"01CPHBEX20729MJQZXE3W0BW48/",
+				"01CPHBEX20729MJQZXE3W0BW51/",
+			},
+			false,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 			for _, b := range tt.blocks {
-				uploadTenantBlock(t, bkt, b.id, b.tenant, b.minTime, b.maxTime)
+				uploadTenantBlock(t, bkt, b.id, b.tenant, b.minTime, b.maxTime, b.lvl)
 			}
 
 			baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
@@ -544,7 +613,7 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 	}
 }
 
-func uploadTenantBlock(t *testing.T, bkt objstore.Bucket, id, tenant string, minTime, maxTime time.Time) {
+func uploadTenantBlock(t *testing.T, bkt objstore.Bucket, id, tenant string, minTime, maxTime time.Time, lvl int) {
 	t.Helper()
 	meta1 := metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
@@ -552,6 +621,9 @@ func uploadTenantBlock(t *testing.T, bkt objstore.Bucket, id, tenant string, min
 			MinTime: minTime.Unix() * 1000,
 			MaxTime: maxTime.Unix() * 1000,
 			Version: 1,
+			Compaction: tsdb.BlockMetaCompaction{
+				Level: lvl,
+			},
 		},
 		Thanos: metadata.Thanos{
 			Labels: map[string]string{

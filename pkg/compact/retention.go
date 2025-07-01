@@ -25,8 +25,11 @@ import (
 
 const (
 	// tenantRetentionRegex is the regex pattern for parsing tenant retention.
-	// valid format is `<tenant>:(<yyyy-mm-dd>|<duration>d)` where <duration> > 0.
-	tenantRetentionRegex = `^([\w-]+):((\d{4}-\d{2}-\d{2})|(\d+d))$`
+	// valid format is `<tenant>:(<yyyy-mm-dd>|<duration>d)(:lvl1)?` where <duration> > 0.
+	tenantRetentionRegex = `^([\w-]+):((\d{4}-\d{2}-\d{2})|(\d+d))(:lvl1)?$`
+
+	Level1 = 1 // compaction level 1 indicating a new block
+	Level2 = 2 // compaction level 2 indicating a compacted block
 )
 
 // ApplyRetentionPolicyByResolution removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
@@ -70,6 +73,7 @@ func ApplyRetentionPolicyByResolution(
 type RetentionPolicy struct {
 	CutoffDate        time.Time
 	RetentionDuration time.Duration
+	Level1            bool // Lvl1 indicates if the retention policy is only for level 1 blocks.
 }
 
 func (r RetentionPolicy) isExpired(blockMaxTime time.Time) bool {
@@ -85,7 +89,7 @@ func ParesRetentionPolicyByTenant(logger log.Logger, retentionTenants []string) 
 	for _, tenantRetention := range retentionTenants {
 		matches := pattern.FindStringSubmatch(tenantRetention)
 		invalidFormat := errors.Errorf("invalid retention format for tenant: %s, must be `<tenant>:(<yyyy-mm-dd>|<duration>d)`", tenantRetention)
-		if len(matches) != 5 {
+		if matches == nil {
 			return nil, errors.Wrapf(invalidFormat, "matched size %d", len(matches))
 		}
 		tenant := matches[1]
@@ -107,6 +111,7 @@ func ParesRetentionPolicyByTenant(logger log.Logger, retentionTenants []string) 
 			}
 			policy.RetentionDuration = time.Duration(duration)
 		}
+		policy.Level1 = len(matches) > 5 && matches[5] == ":lvl1"
 		level.Info(logger).Log("msg", "retention policy for tenant is enabled", "tenant", tenant, "retention policy", fmt.Sprintf("%v", policy))
 		retentionByTenant[tenant] = policy
 	}
@@ -134,8 +139,11 @@ func ApplyRetentionPolicyByTenant(
 			continue
 		}
 		maxTime := time.Unix(m.MaxTime/1000, 0)
+		if policy.Level1 && m.Compaction.Level != Level1 {
+			continue
+		}
 		if policy.isExpired(maxTime) {
-			level.Info(logger).Log("msg", "applying retention: marking block for deletion", "id", id, "maxTime", maxTime.String())
+			level.Info(logger).Log("msg", "deleting blocks applying retention policy", "id", id, "maxTime", maxTime.String())
 			if err := block.Delete(ctx, logger, bkt, id); err != nil {
 				level.Error(logger).Log("msg", "failed to delete block", "id", id, "err", err)
 				continue // continue to next block to clean up backlogs
