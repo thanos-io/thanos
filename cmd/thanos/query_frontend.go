@@ -329,13 +329,13 @@ func runQueryFrontend(
 		return err
 	}
 
-	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
+	downstreamRT, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
 	if err != nil {
 		return errors.Wrap(err, "setup downstream roundtripper")
 	}
 
 	// Wrap the downstream RoundTripper into query frontend Tripperware.
-	roundTripper = tripperWare(roundTripper)
+	roundTripper := tripperWare(downstreamRT)
 
 	// Create the query frontend transport.
 	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
@@ -402,17 +402,9 @@ func runQueryFrontend(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-
 			var firstRun = true
-			for {
-				if !firstRun {
-					select {
-					case <-ctx.Done():
-						return nil
-					case <-time.After(10 * time.Second):
-					}
-				}
 
+			doCheckDownstream := func() (rerr error) {
 				timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 				defer cancel()
 
@@ -422,23 +414,33 @@ func runQueryFrontend(
 					return errors.Wrap(err, "creating request to downstream URL")
 				}
 
-				resp, err := roundTripper.RoundTrip(req)
+				resp, err := downstreamRT.RoundTrip(req)
 				if err != nil {
-					level.Warn(logger).Log("msg", "failed to reach downstream URL", "err", err, "readiness_url", readinessUrl)
-					statusProber.NotReady(err)
-					firstRun = false
-					continue
+					return errors.Wrapf(err, "roundtripping to downstream URL %s", readinessUrl)
 				}
-				runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "downstream health check response body")
+				defer runutil.CloseWithErrCapture(&rerr, resp.Body, "downstream health check response body")
 
 				if resp.StatusCode/100 == 4 || resp.StatusCode/100 == 5 {
-					level.Warn(logger).Log("msg", "downstream URL returned an error", "status_code", resp.StatusCode, "readiness_url", readinessUrl)
-					statusProber.NotReady(errors.Errorf("downstream URL %s returned an error: %d", readinessUrl, resp.StatusCode))
-					firstRun = false
-					continue
+					return errors.Errorf("downstream URL %s returned an error: %d", readinessUrl, resp.StatusCode)
 				}
 
-				statusProber.Ready()
+				return nil
+			}
+			for {
+				if !firstRun {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(10 * time.Second):
+					}
+				}
+				firstRun = false
+
+				if err := doCheckDownstream(); err != nil {
+					statusProber.NotReady(err)
+				} else {
+					statusProber.Ready()
+				}
 			}
 		}, func(err error) {
 			cancel()
