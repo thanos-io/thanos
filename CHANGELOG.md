@@ -18,6 +18,15 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
+
+Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
+
+### Fixed
+
+- [#8349](https://github.com/thanos-io/thanos/pull/8349) Query-Frontend: properly clean up resources
+- [#8338](https://github.com/thanos-io/thanos/pull/8338) Query-Frontend: use original roundtripper + close immediately
+
 ## [v0.39.0](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 25
 
 In short: there are a bunch of fixes and small improvements. The shining items in this release are memory usage improvements in Thanos Query and shuffle sharding support in Thanos Receiver. Information about shuffle sharding support is available in the documentation. Thank you to all contributors!
