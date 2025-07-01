@@ -92,7 +92,7 @@ func (s *memcachedAutoDiscovery) parseConfig(reader *bufio.Reader) (*clusterConf
 	}
 
 	if len(configVersion)+len(nodes) != configSize {
-		return nil, fmt.Errorf("expected %d in config payload, but got %d instead.", configSize, len(configVersion)+len(nodes))
+		return nil, fmt.Errorf("expected %d in config payload, but got %d instead", configSize, len(configVersion)+len(nodes))
 	}
 
 	for _, host := range strings.Split(strings.TrimSpace(nodes), " ") {

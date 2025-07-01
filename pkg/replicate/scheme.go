@@ -96,7 +96,7 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 		return false
 	}
 
-	gotCompactionLevel := b.BlockMeta.Compaction.Level
+	gotCompactionLevel := b.Compaction.Level
 	if _, ok := bf.compactionLevels[gotCompactionLevel]; !ok {
 		level.Info(bf.logger).Log("msg", "filtering block", "reason", "compaction level doesn't match allowed levels", "got_compaction_level", gotCompactionLevel, "allowed_compaction_levels", fmt.Sprintf("%v", bf.compactionLevels))
 		return false
@@ -191,12 +191,12 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 	// In order to prevent races in compactions by the target environment, we
 	// need to replicate oldest start timestamp first.
 	sort.Slice(availableBlocks, func(i, j int) bool {
-		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
+		return availableBlocks[i].MinTime < availableBlocks[j].MinTime
 	})
 
 	for _, b := range availableBlocks {
-		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
-			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
+		if err := rs.ensureBlockIsReplicated(ctx, b.ULID); err != nil {
+			return errors.Wrapf(err, "ensure block %v is replicated", b.ULID.String())
 		}
 	}
 
