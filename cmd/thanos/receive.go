@@ -292,6 +292,8 @@ func runReceive(
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 		OtlpEnableTargetInfo:    conf.otlpEnableTargetInfo,
 		OtlpResourceAttributes:  conf.otlpResourceAttributes,
+		RetryAfterBackoff:       time.Duration(*conf.retryAfterBackoff),
+		RetryAfterJitter:        conf.retryAfterJitter,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -864,6 +866,8 @@ type receiveConfig struct {
 	compression         string
 	replicationProtocol string
 	grpcServiceConfig   string
+	retryAfterBackoff   *model.Duration
+	retryAfterJitter    float64
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -1077,6 +1081,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
+
+	rc.retryAfterBackoff = extkingpin.ModelDuration(cmd.Flag("receive-retry-after-backoff", "Backoff for retry-after header, set if active-series-limiting is enabled").Default("5s"))
+
+	cmd.Flag("receive-retry-after-jitter", "Jitter for retry-after backoff").Default("0.5").Float64Var(&rc.retryAfterJitter)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
