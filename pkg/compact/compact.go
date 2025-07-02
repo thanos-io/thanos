@@ -366,7 +366,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 			resolutionVal := m.Thanos.Downsample.Resolution
 			resolutionLabel := m.Thanos.ResolutionString()
 			group, err = NewGroup(
-				log.With(g.logger, "group", fmt.Sprintf("%s@%v", metadata.ResolutionToString(resolutionVal), lbls.String()), "groupKey", groupKey),
+				log.With(g.logger, "group", fmt.Sprintf("%s@%v", resolutionLabel, lbls.String()), "groupKey", groupKey, "resolution", metadata.ResolutionToString(resolutionVal)),
 				g.bkt,
 				groupKey,
 				lbls,
