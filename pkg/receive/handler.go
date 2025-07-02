@@ -42,6 +42,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/internal/cortex/util"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -119,6 +120,8 @@ type Options struct {
 	ReplicationProtocol     ReplicationProtocol
 	OtlpEnableTargetInfo    bool
 	OtlpResourceAttributes  []string
+	RetryAfterBackoff       time.Duration
+	RetryAfterJitter        float64
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -534,6 +537,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
+		backoffDuration := util.DurationWithJitter(h.options.RetryAfterBackoff, h.options.RetryAfterJitter)
+		w.Header().Add("Retry-After", time.Now().Add(backoffDuration).Format(http.TimeFormat))
 		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
 		return
 	}
