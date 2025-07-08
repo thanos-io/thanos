@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	io "io"
-	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -19,6 +18,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/prometheus/model/timestamp"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
@@ -26,11 +26,6 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-)
-
-var (
-	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
-	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
 )
 
 // labelsCodec is used to encode/decode Thanos labels and series requests and responses.
@@ -400,8 +395,8 @@ func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Durat
 	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
 	var defaultStartTime, defaultEndTime time.Time
 	if defaultMetadataTimeRange == 0 {
-		defaultStartTime = infMinTime
-		defaultEndTime = infMaxTime
+		defaultStartTime = v1.MinTime
+		defaultEndTime = v1.MaxTime
 	} else {
 		now := time.Now()
 		defaultStartTime = now.Add(-defaultMetadataTimeRange)
