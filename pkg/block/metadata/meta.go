@@ -53,6 +53,11 @@ const (
 	TSDBVersion1 = 1
 	// ThanosVersion1 is a enumeration of Thanos section of TSDB meta supported by Thanos.
 	ThanosVersion1 = 1
+
+	// ParquetMigratedExtensionKey is the key used in block extensions to indicate
+	// that the block has been migrated to parquet format and can be safely ignored
+	// by store gateways.
+	ParquetMigratedExtensionKey = "parquet_migrated"
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and

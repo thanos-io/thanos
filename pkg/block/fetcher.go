@@ -92,6 +92,9 @@ const (
 	// MarkedForNoDownsampleMeta is label for blocks which are loaded but also marked for no downsample. This label is also counted in `loaded` label metric.
 	MarkedForNoDownsampleMeta = "marked-for-no-downsample"
 
+	// ParquetMigratedMeta is label for blocks which are marked as migrated to parquet format.
+	ParquetMigratedMeta = "parquet-migrated"
+
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 )
@@ -162,6 +165,7 @@ func DefaultSyncedStateLabelValues() [][]string {
 		{duplicateMeta},
 		{MarkedForDeletionMeta},
 		{MarkedForNoCompactionMeta},
+		{ParquetMigratedMeta},
 	}
 }
 
@@ -1085,4 +1089,58 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	}
 
 	return relabelConfig, nil
+}
+
+var _ MetadataFilter = &ParquetMigratedMetaFilter{}
+
+// ParquetMigratedMetaFilter is a metadata filter that filters out blocks that have been 
+// migrated to parquet format. The filter checks for the presence of the parquet_migrated
+// extension key with a value of true.
+// Not go-routine safe.
+type ParquetMigratedMetaFilter struct {
+	logger log.Logger
+}
+
+// NewParquetMigratedMetaFilter creates a new ParquetMigratedMetaFilter.
+func NewParquetMigratedMetaFilter(logger log.Logger) *ParquetMigratedMetaFilter {
+	return &ParquetMigratedMetaFilter{
+		logger: logger,
+	}
+}
+
+// Filter filters out blocks that have been marked as migrated to parquet format.
+func (f *ParquetMigratedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+	for id, meta := range metas {
+		if meta.Thanos.Extensions == nil {
+			continue
+		}
+
+		// Try to extract the parquet_migrated extension value
+		extensionsMap, ok := meta.Thanos.Extensions.(map[string]interface{})
+		if !ok {
+			// If extensions is not a map, try to convert it
+			extensionsBytes, err := json.Marshal(meta.Thanos.Extensions)
+			if err != nil {
+				level.Warn(f.logger).Log("msg", "failed to marshal extensions for parquet migration check", "block", id, "err", err)
+				continue
+			}
+			
+			var parsedExtensions map[string]interface{}
+			if err := json.Unmarshal(extensionsBytes, &parsedExtensions); err != nil {
+				level.Warn(f.logger).Log("msg", "failed to unmarshal extensions for parquet migration check", "block", id, "err", err)
+				continue
+			}
+			extensionsMap = parsedExtensions
+		}
+
+		// Check if the parquet_migrated key exists and is set to true
+		if parquetMigrated, exists := extensionsMap[metadata.ParquetMigratedExtensionKey]; exists {
+			if migratedBool, ok := parquetMigrated.(bool); ok && migratedBool {
+				level.Debug(f.logger).Log("msg", "filtering out parquet migrated block", "block", id)
+				synced.WithLabelValues(ParquetMigratedMeta).Inc()
+				delete(metas, id)
+			}
+		}
+	}
+	return nil
 }

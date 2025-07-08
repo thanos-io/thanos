@@ -1212,3 +1212,159 @@ func Test_ParseRelabelConfig(t *testing.T) {
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
 }
+
+func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
+	logger := log.NewNopLogger()
+	filter := NewParquetMigratedMetaFilter(logger)
+
+	synced := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "test_synced",
+			Help: "Test synced metric",
+		},
+		[]string{"state"},
+	)
+	modified := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "test_modified",
+			Help: "Test modified metric",
+		},
+		[]string{"state"},
+	)
+
+	ctx := context.Background()
+
+	// Test case 1: Block without extensions should not be filtered
+	t.Run("block without extensions", func(t *testing.T) {
+		metas := map[ulid.ULID]*metadata.Meta{
+			ulid.MustNew(1, nil): {
+				Thanos: metadata.Thanos{
+					Extensions: nil,
+				},
+			},
+		}
+
+		err := filter.Filter(ctx, metas, synced, modified)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(metas))
+	})
+
+	// Test case 2: Block with extensions but no parquet_migrated key should not be filtered
+	t.Run("block with other extensions", func(t *testing.T) {
+		metas := map[ulid.ULID]*metadata.Meta{
+			ulid.MustNew(2, nil): {
+				Thanos: metadata.Thanos{
+					Extensions: map[string]interface{}{
+						"other_key": "other_value",
+					},
+				},
+			},
+		}
+
+		err := filter.Filter(ctx, metas, synced, modified)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(metas))
+	})
+
+	// Test case 3: Block with parquet_migrated=false should not be filtered
+	t.Run("block with parquet_migrated=false", func(t *testing.T) {
+		metas := map[ulid.ULID]*metadata.Meta{
+			ulid.MustNew(3, nil): {
+				Thanos: metadata.Thanos{
+					Extensions: map[string]interface{}{
+						metadata.ParquetMigratedExtensionKey: false,
+					},
+				},
+			},
+		}
+
+		err := filter.Filter(ctx, metas, synced, modified)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(metas))
+	})
+
+	// Test case 4: Block with parquet_migrated=true should be filtered
+	t.Run("block with parquet_migrated=true", func(t *testing.T) {
+		blockID := ulid.MustNew(4, nil)
+		metas := map[ulid.ULID]*metadata.Meta{
+			blockID: {
+				Thanos: metadata.Thanos{
+					Extensions: map[string]interface{}{
+						metadata.ParquetMigratedExtensionKey: true,
+					},
+				},
+			},
+		}
+
+		err := filter.Filter(ctx, metas, synced, modified)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 0, len(metas))
+	})
+
+	// Test case 5: Mixed blocks - only parquet migrated ones should be filtered
+	t.Run("mixed blocks", func(t *testing.T) {
+		blockID1 := ulid.MustNew(5, nil)
+		blockID2 := ulid.MustNew(6, nil)
+		blockID3 := ulid.MustNew(7, nil)
+
+		metas := map[ulid.ULID]*metadata.Meta{
+			blockID1: {
+				Thanos: metadata.Thanos{
+					Extensions: map[string]interface{}{
+						metadata.ParquetMigratedExtensionKey: true,
+					},
+				},
+			},
+			blockID2: {
+				Thanos: metadata.Thanos{
+					Extensions: map[string]interface{}{
+						metadata.ParquetMigratedExtensionKey: false,
+					},
+				},
+			},
+			blockID3: {
+				Thanos: metadata.Thanos{
+					Extensions: nil,
+				},
+			},
+		}
+
+		err := filter.Filter(ctx, metas, synced, modified)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 2, len(metas))
+
+		// blockID1 should be filtered out
+		_, exists := metas[blockID1]
+		testutil.Equals(t, false, exists)
+
+		// blockID2 and blockID3 should remain
+		_, exists = metas[blockID2]
+		testutil.Equals(t, true, exists)
+		_, exists = metas[blockID3]
+		testutil.Equals(t, true, exists)
+	})
+
+	// Test case 6: Test with JSON serialized extensions (as might come from real metadata)
+	t.Run("block with serialized extensions", func(t *testing.T) {
+		blockID := ulid.MustNew(8, nil)
+
+		// Simulate what might happen when extensions are loaded from JSON
+		extensions := struct {
+			ParquetMigrated bool `json:"parquet_migrated"`
+		}{
+			ParquetMigrated: true,
+		}
+
+		metas := map[ulid.ULID]*metadata.Meta{
+			blockID: {
+				Thanos: metadata.Thanos{
+					Extensions: extensions,
+				},
+			},
+		}
+
+		err := filter.Filter(ctx, metas, synced, modified)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 0, len(metas))
+	})
+}
