@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/thanos-io/objstore"
 	"io"
 	"os"
 	"path/filepath"
@@ -45,15 +46,15 @@ var (
 	configs        map[string]interface{}
 	possibleValues []string
 
-	bucketConfigs = map[client.ObjProvider]interface{}{
-		client.AZURE:      azure.Config{},
-		client.GCS:        gcs.Config{},
-		client.S3:         s3.DefaultConfig,
-		client.SWIFT:      swift.DefaultConfig,
-		client.COS:        cos.DefaultConfig,
-		client.ALIYUNOSS:  oss.Config{},
-		client.FILESYSTEM: filesystem.Config{},
-		client.BOS:        bos.Config{},
+	bucketConfigs = map[objstore.ObjProvider]interface{}{
+		objstore.AZURE:      azure.DefaultConfig,
+		objstore.GCS:        gcs.DefaultConfig,
+		objstore.S3:         s3.DefaultConfig,
+		objstore.SWIFT:      swift.DefaultConfig,
+		objstore.COS:        cos.DefaultConfig,
+		objstore.ALIYUNOSS:  oss.Config{},
+		objstore.FILESYSTEM: filesystem.Config{},
+		objstore.BOS:        bos.Config{},
 	}
 
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
