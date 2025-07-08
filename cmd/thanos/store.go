@@ -107,6 +107,7 @@ type storeConfig struct {
 
 	matcherCacheSize       int
 	disableAdminOperations bool
+	ignoreParquetMigratedBlocks bool
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -231,6 +232,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&sc.matcherCacheSize)
 
 	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&sc.disableAdminOperations)
+
+	cmd.Flag("ignore-parquet-migrated-blocks", "If true, store gateway will ignore blocks that have been migrated to parquet format. This allows for safe migration from TSDB to parquet blocks.").Default("false").BoolVar(&sc.ignoreParquetMigratedBlocks)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
@@ -393,14 +396,19 @@ func runStore(
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
-		[]block.MetadataFilter{
-			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
-			block.NewLabelShardedMetaFilter(relabelConfig),
-			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
-			ignoreDeletionMarkFilter,
-			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		})
+	filters := []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
+		ignoreDeletionMarkFilter,
+		block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
+	}
+	
+	if conf.ignoreParquetMigratedBlocks {
+		filters = append(filters, block.NewParquetMigratedMetaFilter(logger))
+	}
+	
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}
