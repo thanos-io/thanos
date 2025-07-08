@@ -557,7 +557,7 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/index"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt.Bucket, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of index fails, block is deleted.
@@ -568,7 +568,7 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/meta.json"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt.Bucket, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of meta.json fails, nothing is cleaned up.
@@ -588,8 +588,8 @@ type errBucket struct {
 	failSuffix string
 }
 
-func (eb errBucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	err := eb.Bucket.Upload(ctx, name, r)
+func (eb errBucket) Upload(ctx context.Context, name string, r io.Reader, opts ...objstore.ObjectUploadOption) error {
+	err := eb.Bucket.Upload(ctx, name, r, opts...)
 	if err != nil {
 		return err
 	}
