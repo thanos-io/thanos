@@ -5,6 +5,7 @@ package e2ebench_test
 
 import (
 	"fmt"
+	"github.com/thanos-io/objstore"
 	"os"
 	execlib "os/exec"
 	"path/filepath"
@@ -176,7 +177,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//	                    │           │
 	//	                    └───────────┘
 	bkt1Config, err := yaml.Marshal(client.BucketConfig{
-		Type: client.S3,
+		Type: objstore.S3,
 		Config: s3.Config{
 			Bucket:    "bkt1",
 			AccessKey: e2edb.MinioAccessKey,
@@ -198,7 +199,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	)
 
 	bkt2Config, err := yaml.Marshal(client.BucketConfig{
-		Type: client.S3,
+		Type: objstore.S3,
 		Config: s3.Config{
 			Bucket:    "bkt2",
 			AccessKey: e2edb.MinioAccessKey,
