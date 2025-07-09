@@ -11,7 +11,7 @@ menu: proposals-accepted
 * https://github.com/thanos-io/thanos/pull/5250
 * https://github.com/thanos-io/thanos/pull/4917
 * https://github.com/thanos-io/thanos/pull/5350
-* https://github.com/thanos-community/promql-engine/issues/25
+* https://github.com/thanos-io/promql-engine/issues/25
 
 ## 2 Why
 
@@ -75,7 +75,7 @@ Keeping PromQL execution in Query components allows for deduplication between Pr
 
 <img src="../img/distributed-execution-proposal-1.png" alt="Distributed query execution" width="400"/>
 
-The initial version of the solution can be found here: https://github.com/thanos-community/promql-engine/pull/139
+The initial version of the solution can be found here: https://github.com/thanos-io/promql-engine/pull/139
 
 ### Query rewrite algorithm
 

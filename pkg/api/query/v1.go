@@ -43,6 +43,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/promql-engine/engine"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -1446,11 +1447,11 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			err      error
 		)
 
-		start, err := parseTimeParam(r, "start", infMinTime)
+		start, err := parseTimeParam(r, "start", v1.MinTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}
-		end, err := parseTimeParam(r, "end", infMaxTime)
+		end, err := parseTimeParam(r, "end", v1.MaxTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}
@@ -1473,17 +1474,12 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 	}
 }
 
-var (
-	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
-	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
-)
-
 func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Duration) (time.Time, time.Time, error) {
 	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
 	var defaultStartTime, defaultEndTime time.Time
 	if defaultMetadataTimeRange == 0 {
-		defaultStartTime = infMinTime
-		defaultEndTime = infMaxTime
+		defaultStartTime = v1.MinTime
+		defaultEndTime = v1.MaxTime
 	} else {
 		now := time.Now()
 		defaultStartTime = now.Add(-defaultMetadataTimeRange)

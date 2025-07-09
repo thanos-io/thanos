@@ -27,7 +27,6 @@ import (
 type Server struct {
 	logger log.Logger
 	comp   component.Component
-	prober *prober.HTTPProbe
 
 	mux *http.ServeMux
 	srv *http.Server
@@ -62,7 +61,6 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	return &Server{
 		logger: log.With(logger, "service", "http/server", "component", comp.String()),
 		comp:   comp,
-		prober: prober,
 		mux:    mux,
 		srv:    &http.Server{Addr: options.listen, Handler: h},
 		opts:   options,

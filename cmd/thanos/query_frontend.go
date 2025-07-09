@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -327,13 +329,13 @@ func runQueryFrontend(
 		return err
 	}
 
-	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
+	downstreamRT, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
 	if err != nil {
 		return errors.Wrap(err, "setup downstream roundtripper")
 	}
 
 	// Wrap the downstream RoundTripper into query frontend Tripperware.
-	roundTripper = tripperWare(roundTripper)
+	roundTripper := tripperWare(downstreamRT)
 
 	// Create the query frontend transport.
 	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
@@ -395,8 +397,57 @@ func runQueryFrontend(
 		})
 	}
 
+	// Periodically check downstream URL to ensure it is reachable.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			var firstRun = true
+
+			doCheckDownstream := func() (rerr error) {
+				timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				readinessUrl := cfg.DownstreamURL + "/-/ready"
+				req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, readinessUrl, nil)
+				if err != nil {
+					return errors.Wrap(err, "creating request to downstream URL")
+				}
+
+				resp, err := downstreamRT.RoundTrip(req)
+				if err != nil {
+					return errors.Wrapf(err, "roundtripping to downstream URL %s", readinessUrl)
+				}
+				defer runutil.CloseWithErrCapture(&rerr, resp.Body, "downstream health check response body")
+
+				if resp.StatusCode/100 == 4 || resp.StatusCode/100 == 5 {
+					return errors.Errorf("downstream URL %s returned an error: %d", readinessUrl, resp.StatusCode)
+				}
+
+				return nil
+			}
+			for {
+				if !firstRun {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(10 * time.Second):
+					}
+				}
+				firstRun = false
+
+				if err := doCheckDownstream(); err != nil {
+					statusProber.NotReady(err)
+				} else {
+					statusProber.Ready()
+				}
+			}
+		}, func(err error) {
+			cancel()
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting query frontend")
-	statusProber.Ready()
 	return nil
 }
 

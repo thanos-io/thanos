@@ -9,31 +9,50 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
-- [#8190](https://github.com/thanos-io/thanos/pull/8190) Fix markdown formatting in CHANGELOG.
-- [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
-- [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
-- [#8282](https://github.com/thanos-io/thanos/pull/8282) Force sync writes to meta.json in case of host crash
 - [#8280](https://github.com/thanos-io/thanos/pull/8280) docs: legacy --store flags + alerts examples legacy metrics
-- [#8308](https://github.com/thanos-io/thanos/pull/8308) Receive: Prometheus counters for pending write requests and series requests
 
 ### Added
 
+### Changed
+
+### Removed
+
+### Fixed
+
+### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
+
+Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
+
+### Fixed
+
+- [#8349](https://github.com/thanos-io/thanos/pull/8349) Query-Frontend: properly clean up resources
+- [#8338](https://github.com/thanos-io/thanos/pull/8338) Query-Frontend: use original roundtripper + close immediately
+
+## [v0.39.0](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 25
+
+In short: there are a bunch of fixes and small improvements. The shining items in this release are memory usage improvements in Thanos Query and shuffle sharding support in Thanos Receiver. Information about shuffle sharding support is available in the documentation. Thank you to all contributors!
+
+### Added
+
+- [#8308](https://github.com/thanos-io/thanos/pull/8308) Receive: Prometheus counters for pending write requests and series requests
+- [#8225](https://github.com/thanos-io/thanos/pull/8225) tools: Extend bucket ls options.
 - [#8238](https://github.com/thanos-io/thanos/pull/8238) Receive: add shuffle sharding support
 - [#8284](https://github.com/thanos-io/thanos/pull/8284) Store: Add `--disable-admin-operations` Flag to Store Gateway
-- [#8266](https://github.com/thanos-io/thanos/pull/8266) Website: maintain expanded state based on current page
 - [#8245](https://github.com/thanos-io/thanos/pull/8245) Querier/Query-Frontend/Ruler: Add `--enable-feature=promql-experimental-functions` flag option to enable using promQL experimental functions in respective Thanos components
 - [#8259](https://github.com/thanos-io/thanos/pull/8259) Shipper: Add `--shipper.skip-corrupted-blocks` flag to allow `Sync()` to continue upload when finding a corrupted block
 
 ### Changed
 
+- [#8282](https://github.com/thanos-io/thanos/pull/8282) Force sync writes to meta.json in case of host crash
 - [#8192](https://github.com/thanos-io/thanos/pull/8192) Sidecar: fix default get config timeout
+- [#8202](https://github.com/thanos-io/thanos/pull/8202) Receive: Unhide `--tsdb.enable-native-histograms` flag
+- [#8315](https://github.com/thanos-io/thanos/pull/8315) Query-Frontend: only ready if downstream is ready
 
 ### Removed
 - [#8289](https://github.com/thanos-io/thanos/pull/8289) Receive: *breaking :warning:* Removed migration of legacy-TSDB to multi-TSDB. Ensure you are running version >0.13
 
 ### Fixed
 - [#8199](https://github.com/thanos-io/thanos/pull/8199) Query: handle panics or nil pointer dereference in querier gracefully when query analyze returns nil
-
 - [#8211](https://github.com/thanos-io/thanos/pull/8211) Query: fix panic on nested partial response in distributed instant query
 - [#8216](https://github.com/thanos-io/thanos/pull/8216) Query/Receive: fix iter race between `next()` and `stop()` introduced in https://github.com/thanos-io/thanos/pull/7821.
 - [#8212](https://github.com/thanos-io/thanos/pull/8212) Receive: Ensure forward/replication metrics are incremented in err cases
