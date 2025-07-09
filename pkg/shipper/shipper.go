@@ -507,7 +507,7 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks [
 		metas = append(metas, m)
 	}
 	sort.Slice(metas, func(i, j int) bool {
-		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+		return metas[i].MinTime < metas[j].MinTime
 	})
 
 	if len(failedBlocks) > 0 {
