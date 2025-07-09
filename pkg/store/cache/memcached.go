@@ -34,7 +34,7 @@ type RemoteIndexCache struct {
 
 	compressionScheme string
 
-	ttl time.Duration
+	maxTTL time.Duration
 
 	// Metrics.
 	requestTotal  *prometheus.CounterVec
@@ -46,7 +46,7 @@ type RemoteIndexCache struct {
 // NewRemoteIndexCache makes a new RemoteIndexCache.
 func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, commonMetrics *CommonMetrics, reg prometheus.Registerer, ttl time.Duration) (*RemoteIndexCache, error) {
 	c := &RemoteIndexCache{
-		ttl:               ttl,
+		maxTTL:            ttl,
 		logger:            logger,
 		memcached:         cacheClient,
 		compressionScheme: compressionSchemeStreamedSnappy, // Hardcode it for now. Expose it once we support different types of compressions.
@@ -82,10 +82,10 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // StorePostings sets the postings identified by the ulid and label to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
+func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string, ttl time.Duration) {
 	c.dataSizeBytes.WithLabelValues(CacheTypePostings, tenant).Observe(float64(len(v)))
 	key := CacheKey{blockID.String(), CacheKeyPostings(l), c.compressionScheme}.String()
-	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
+	if err := c.memcached.SetAsync(key, v, min(ttl, c.maxTTL)); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
 	}
 }
@@ -134,11 +134,11 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 // StoreExpandedPostings sets the postings identified by the ulid and label to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labels.Matcher, v []byte, tenant string) {
+func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labels.Matcher, v []byte, tenant string, ttl time.Duration) {
 	c.dataSizeBytes.WithLabelValues(CacheTypeExpandedPostings, tenant).Observe(float64(len(v)))
 	key := CacheKey{blockID.String(), CacheKeyExpandedPostings(LabelMatchersToString(keys)), c.compressionScheme}.String()
 
-	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
+	if err := c.memcached.SetAsync(key, v, min(ttl, c.maxTTL)); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache expanded postings in memcached", "err", err)
 	}
 }
@@ -168,11 +168,11 @@ func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ul
 // StoreSeries sets the series identified by the ulid and id to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
+func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string, ttl time.Duration) {
 	c.dataSizeBytes.WithLabelValues(CacheTypeSeries, tenant).Observe(float64(len(v)))
 	key := CacheKey{blockID.String(), CacheKeySeries(id), ""}.String()
 
-	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
+	if err := c.memcached.SetAsync(key, v, min(ttl, c.maxTTL)); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache series in memcached", "err", err)
 	}
 }
