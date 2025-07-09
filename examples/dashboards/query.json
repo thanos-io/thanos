@@ -1361,7 +1361,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 6,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -1440,7 +1440,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 6,
+               "span": 3,
                "stack": true,
                "steppedLine": false,
                "targets": [
@@ -1456,6 +1456,161 @@
                "timeFrom": null,
                "timeShift": null,
                "title": "Errors",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "percentunit",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows rate of group DNS lookups to discover stores.",
+               "fill": 1,
+               "id": 15,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 3,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum by (job) (rate(thanos_query_endpoint_groups_dns_lookups_total{job=~\"$job\"}[$interval]))",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "lookups {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Group Rate",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": {
+                  "error": "#E24D42"
+               },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows ratio of failures compared to the total number of executed group DNS lookups.",
+               "fill": 10,
+               "id": 16,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 0,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 3,
+               "stack": true,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum by (job) (rate(thanos_query_endpoint_groups_dns_failures_total{job=~\"$job\"}[$interval])) / sum by (job) (rate(thanos_query_endpoint_groups_dns_lookups_total{job=~\"$job\"}[$interval]))",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "error",
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Group Errors",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -1508,7 +1663,7 @@
                "datasource": "$datasource",
                "description": "Shows available capacity of processing queries in parallel.",
                "fill": 1,
-               "id": 15,
+               "id": 17,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1596,7 +1751,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 16,
+               "id": 18,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1712,7 +1867,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 17,
+               "id": 19,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1788,7 +1943,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 18,
+               "id": 20,
                "legend": {
                   "avg": false,
                   "current": false,

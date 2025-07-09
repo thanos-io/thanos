@@ -95,6 +95,21 @@ local utils = import '../lib/utils.libsonnet';
             thanos.query.dashboard.dimensions
           )
         )
+        .addPanel(
+          g.panel('Group Rate', 'Shows rate of group DNS lookups to discover stores.') +
+          g.queryPanel(
+            'sum by (%s) (rate(thanos_query_endpoint_groups_dns_lookups_total{%s}[$interval]))' % [thanos.query.dashboard.dimensions, thanos.query.dashboard.selector],
+            'lookups {{job}}'
+          )
+        )
+        .addPanel(
+          g.panel('Group Errors', 'Shows ratio of failures compared to the total number of executed group DNS lookups.') +
+          g.qpsErrTotalPanel(
+            'thanos_query_endpoint_groups_dns_failures_total{%s}' % thanos.query.dashboard.selector,
+            'thanos_query_endpoint_groups_dns_lookups_total{%s}' % thanos.query.dashboard.selector,
+            thanos.query.dashboard.dimensions
+          )
+        )
       )
       .addRow(
         g.row('Query Concurrency')

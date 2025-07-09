@@ -130,6 +130,20 @@ groups:
     for: 15m
     labels:
       severity: warning
+  - alert: ThanosQueryHighGroupDNSFailures
+    annotations:
+      description: Thanos Query {{$labels.job}} have {{$value | humanize}}% of failing group DNS queries for store endpoints.
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosqueryhighgroupdnsfailures
+      summary: Thanos Query is having high number of group DNS failures.
+    expr: |
+      (
+        sum by (job) (rate(thanos_query_endpoint_groups_dns_failures_total{job=~".*thanos-query.*"}[5m]))
+      /
+        sum by (job) (rate(thanos_query_endpoint_groups_dns_lookups_total{job=~".*thanos-query.*"}[5m]))
+      ) * 100 > 1
+    for: 15m
+    labels:
+      severity: warning
   - alert: ThanosQueryInstantLatencyHigh
     annotations:
       description: Thanos Query {{$labels.job}} has a 99th percentile latency of {{$value}} seconds for instant queries.

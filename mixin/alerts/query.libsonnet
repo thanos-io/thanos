@@ -107,6 +107,24 @@
             },
           },
           {
+            alert: 'ThanosQueryHighGroupDNSFailures',
+            annotations: {
+              description: 'Thanos Query {{$labels.job}}%s have {{$value | humanize}}%% of failing group DNS queries for store endpoints.' % location,
+              summary: 'Thanos Query is having high number of group DNS failures.',
+            },
+            expr: |||
+              (
+                sum by (%(dimensions)s) (rate(thanos_query_endpoint_groups_dns_failures_total{%(selector)s}[5m]))
+              /
+                sum by (%(dimensions)s) (rate(thanos_query_endpoint_groups_dns_lookups_total{%(selector)s}[5m]))
+              ) * 100 > %(dnsErrorThreshold)s
+            ||| % thanos.query,
+            'for': '15m',
+            labels: {
+              severity: 'warning',
+            },
+          },
+          {
             alert: 'ThanosQueryInstantLatencyHigh',
             annotations: {
               description: 'Thanos Query {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for instant queries.' % location,

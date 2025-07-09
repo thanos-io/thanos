@@ -23,7 +23,7 @@ The simplest way to tell a component about a peer is to use a static flag.
 The flag `--endpoint.sd-config=<content>` can be used to specify a `StoreAPI` that `Thanos Querier` should use. It expects a formatted configuration.
 
 ```
---endpoint.sd-config=endpoints: [{address: "localhost:9090"}]
+--endpoint.sd-config="endpoints: [{address: "localhost:9090"}]"
 ```
 
 ### Thanos Ruler
@@ -63,7 +63,7 @@ As a fallback, the file contents are periodically re-read at an interval that ca
 
 The flag `--endpoint.sd-config-file` can be used to specify the path to files that contain addresses of `StoreAPI` servers.
 
-The flag `--endpoint.sd-config-reload-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
+The flag `--endpoint.sd-config-reload-interval=5m` can be used to change the fallback re-read interval from the default 5 minutes.
 
 ### Thanos Ruler
 
