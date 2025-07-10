@@ -557,7 +557,7 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/index"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt.Bucket, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of index fails, block is deleted.
@@ -568,7 +568,7 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/meta.json"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt.Bucket, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of meta.json fails, nothing is cleaned up.
