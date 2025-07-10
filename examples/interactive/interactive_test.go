@@ -5,12 +5,13 @@ package e2ebench_test
 
 import (
 	"fmt"
-	"github.com/thanos-io/objstore"
 	"os"
 	execlib "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
