@@ -1299,21 +1299,19 @@ func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiErr
 		if status.ComponentType == nil {
 			continue
 		}
-		
+
 		// Apply TSDBSelector filtering to LabelSets if selector is configured
 		filteredStatus := status
 		if qapi.tsdbSelector != nil && len(status.LabelSets) > 0 {
 			matches, filteredLabelSets := qapi.tsdbSelector.MatchLabelSets(status.LabelSets...)
 			if !matches {
-				// Skip this endpoint if it doesn't match the TSDBSelector
 				continue
 			}
 			if filteredLabelSets != nil {
-				// Use the filtered label sets if available
 				filteredStatus.LabelSets = filteredLabelSets
 			}
 		}
-		
+
 		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], filteredStatus)
 	}
 	return statuses, nil, nil, func() {}
