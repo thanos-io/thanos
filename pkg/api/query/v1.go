@@ -111,6 +111,7 @@ type QueryAPI struct {
 
 	replicaLabels  []string
 	endpointStatus func() []query.EndpointStatus
+	tsdbSelector   *store.TSDBSelector
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -160,6 +161,7 @@ func NewQueryAPI(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	tsdbSelector *store.TSDBSelector,
 ) *QueryAPI {
 	if statsAggregatorFactory == nil {
 		statsAggregatorFactory = &store.NoopSeriesStatsAggregatorFactory{}
@@ -195,6 +197,7 @@ func NewQueryAPI(
 		tenantCertField:                        tenantCertField,
 		enforceTenancy:                         enforceTenancy,
 		tenantLabel:                            tenantLabel,
+		tsdbSelector:                           tsdbSelector,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -1296,7 +1299,22 @@ func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiErr
 		if status.ComponentType == nil {
 			continue
 		}
-		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], status)
+		
+		// Apply TSDBSelector filtering to LabelSets if selector is configured
+		filteredStatus := status
+		if qapi.tsdbSelector != nil && len(status.LabelSets) > 0 {
+			matches, filteredLabelSets := qapi.tsdbSelector.MatchLabelSets(status.LabelSets...)
+			if !matches {
+				// Skip this endpoint if it doesn't match the TSDBSelector
+				continue
+			}
+			if filteredLabelSets != nil {
+				// Use the filtered label sets if available
+				filteredStatus.LabelSets = filteredLabelSets
+			}
+		}
+		
+		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], filteredStatus)
 	}
 	return statuses, nil, nil, func() {}
 }

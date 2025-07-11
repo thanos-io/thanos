@@ -202,7 +202,22 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 
 	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
-		for _, lset := range st.LabelSets() {
+		// Apply TSDBSelector filtering to each individual label set
+		matches, filteredLabelSets := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		
+		if !matches {
+			continue
+		}
+		
+		// Use the filtered label sets if available, otherwise use original
+		var labelSetsToProcess []labels.Labels
+		if filteredLabelSets != nil {
+			labelSetsToProcess = filteredLabelSets
+		} else {
+			labelSetsToProcess = st.LabelSets()
+		}
+		
+		for _, lset := range labelSetsToProcess {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
 			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
 		}
@@ -232,14 +247,26 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	}
 
 	var minTime, maxTime int64 = math.MaxInt64, math.MinInt64
-	for _, s := range stores {
-		storeMinTime, storeMaxTime := s.TimeRange()
+	hasMatchingStores := false
+	for _, st := range stores {
+		// Apply TSDBSelector filtering to match what's used in TSDBInfos() and actual queries
+		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if !matches {
+			continue
+		}
+		hasMatchingStores = true
+		storeMinTime, storeMaxTime := st.TimeRange()
 		if storeMinTime < minTime {
 			minTime = storeMinTime
 		}
 		if storeMaxTime > maxTime {
 			maxTime = storeMaxTime
 		}
+	}
+
+	// If no stores match the selector, return the full range as fallback
+	if !hasMatchingStores {
+		return math.MinInt64, math.MaxInt64
 	}
 
 	return minTime, maxTime
