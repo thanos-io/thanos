@@ -553,6 +553,7 @@ func runQuery(
 			tenantCertField,
 			enforceTenancy,
 			tenantLabel,
+			tsdbSelector,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)

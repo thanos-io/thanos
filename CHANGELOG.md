@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#8370](https://github.com/thanos-io/thanos/pull/8370) Query: announced labelset now reflects relabel-config
+
 ### Removed
 
 ### Fixed
