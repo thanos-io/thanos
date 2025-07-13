@@ -1243,102 +1243,51 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 func TestTSDBSelectorFilteringBehavior(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-
-	// Create two TSDB stores with different tenant labels
-	db1, err := e2eutil.NewTSDB()
-	testutil.Ok(t, err)
-	t.Cleanup(func() { testutil.Ok(t, db1.Close()) })
-
-	db2, err := e2eutil.NewTSDB()
-	testutil.Ok(t, err)
-	t.Cleanup(func() { testutil.Ok(t, db2.Close()) })
-
-	// Add test data to both stores
-	app1 := db1.Appender(ctx)
-	_, err = app1.Append(0, labels.FromStrings("__name__", "test_metric", "job", "test"), 0, 1.0)
-	testutil.Ok(t, err)
-	testutil.Ok(t, app1.Commit())
-
-	app2 := db2.Appender(ctx)
-	_, err = app2.Append(0, labels.FromStrings("__name__", "test_metric", "job", "test"), 0, 2.0)
-	testutil.Ok(t, err)
-	testutil.Ok(t, app2.Commit())
-
-	// Create stores with different tenant labels
-	extLset1 := labels.FromStrings("tenant_id", "team-a", "region", "us-east")
-	extLset2 := labels.FromStrings("tenant_id", "team-b", "region", "us-west")
-
-	store1 := NewTSDBStore(nil, db1, component.Rule, extLset1)
-	store2 := NewTSDBStore(nil, db2, component.Rule, extLset2)
-
-	clients := []Client{
-		storetestutil.TestClient{
-			StoreClient:    storepb.ServerAsClient(store1),
-			ExtLset:        []labels.Labels{extLset1},
-			StoreTSDBInfos: store1.TSDBInfos(),
-		},
-		storetestutil.TestClient{
-			StoreClient:    storepb.ServerAsClient(store2),
-			ExtLset:        []labels.Labels{extLset2},
-			StoreTSDBInfos: store2.TSDBInfos(),
-		},
-	}
-
-	// Create relabel config to keep only tenant_id="team-a"
-	relabelCfgs := []*relabel.Config{{
-		SourceLabels: []model.LabelName{"tenant_id"},
-		Regex:        relabel.MustNewRegexp("team-a"),
-		Action:       relabel.Keep,
-	}}
-
-	proxyStore := NewProxyStore(
-		nil, nil,
-		func() []Client { return clients },
-		component.Query,
-		labels.EmptyLabels(),
-		0*time.Second,
-		RetrievalStrategy(EagerRetrieval),
-		WithTSDBSelector(NewTSDBSelector(relabelCfgs)),
-	)
-
-	// Test 1: TSDBInfos should only return info from team-a store
-	tsdbInfos := proxyStore.TSDBInfos()
-	testutil.Equals(t, 1, len(tsdbInfos), "Should only have one TSDB (team-a)")
-
-	// Verify it's the team-a store
-	found := false
-	for _, info := range tsdbInfos {
-		lbls := info.Labels.Labels
-		for _, label := range lbls {
-			if label.Name == "tenant_id" && label.Value == "team-a" {
-				found = true
-				break
-			}
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, appendFn func(app storage.Appender), extLset labels.Labels) storepb.StoreServer {
+			db, err := e2eutil.NewTSDB()
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+			appendFn(db.Appender(context.Background()))
+			// Create the store with the provided external label sets
+			return NewTSDBStore(nil, db, component.Rule, extLset)
 		}
+
+		extLset1 := labels.NewBuilder(extLset).Set("tenant_id", "team-a").Set("region", "us-east").Labels()
+		extLset2 := labels.NewBuilder(extLset).Set("tenant_id", "team-b").Set("region", "us-west").Labels()
+
+		store1 := startNestedStore(tt, appendFn, extLset1)
+		store2 := startNestedStore(tt, appendFn, extLset2)
+
+		clients := []Client{
+			storetestutil.TestClient{
+				StoreClient: storepb.ServerAsClient(store1),
+				ExtLset:     []labels.Labels{extLset1},
+			},
+			storetestutil.TestClient{
+				StoreClient: storepb.ServerAsClient(store2),
+				ExtLset:     []labels.Labels{extLset2},
+			},
+		}
+
+		// Create relabel config to keep only tenant_id="team-a"
+		relabelCfgs := []*relabel.Config{{
+			SourceLabels: []model.LabelName{"tenant_id"},
+			Regex:        relabel.MustNewRegexp("team-a"),
+			Action:       relabel.Keep,
+		}}
+
+		return NewProxyStore(
+			nil, nil,
+			func() []Client { return clients },
+			component.Query,
+			labels.EmptyLabels(),
+			0*time.Second,
+			RetrievalStrategy(EagerRetrieval),
+			WithTSDBSelector(NewTSDBSelector(relabelCfgs)),
+		)
 	}
-	testutil.Assert(t, found, "Should find team-a in TSDBInfos")
 
-	// Test 2: LabelValues should only return values from team-a
-	labelValuesResp, err := proxyStore.LabelValues(ctx, &storepb.LabelValuesRequest{
-		Label: "tenant_id",
-		Start: 0,
-		End:   1000,
-	})
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string{"team-a"}, labelValuesResp.Values, "Should only return team-a tenant")
+	testStoreAPIsAcceptance(t, startStore)
 
-	// Test 3: Verify filtering works by comparing with unfiltered proxy store
-	proxyStoreNoFilter := NewProxyStore(
-		nil, nil,
-		func() []Client { return clients },
-		component.Query,
-		labels.EmptyLabels(),
-		0*time.Second,
-		RetrievalStrategy(EagerRetrieval),
-		// No TSDBSelector filter
-	)
-	unfiltered := proxyStoreNoFilter.TSDBInfos()
-	testutil.Equals(t, 2, len(unfiltered), "Unfiltered should have both TSDBs")
-	testutil.Equals(t, 1, len(tsdbInfos), "Filtered should have only one TSDB")
 }
