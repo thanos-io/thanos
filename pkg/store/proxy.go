@@ -195,7 +195,7 @@ func NewProxyStore(
 }
 
 func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
-	stores := s.filteredStores()
+	stores := s.storesForTSDBSelector()
 	if len(stores) == 0 {
 		// We always want to enforce announcing the subset of data that
 		// selector-labels represents. If no stores match the filter,
@@ -243,7 +243,7 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 }
 
 func (s *ProxyStore) TimeRange() (int64, int64) {
-	stores := s.filteredStores()
+	stores := s.storesForTSDBSelector()
 	if len(stores) == 0 {
 		return math.MinInt64, math.MaxInt64
 	}
@@ -263,7 +263,7 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 }
 
 func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
-	stores := s.filteredStores()
+	stores := s.storesForTSDBSelector()
 	infos := make([]infopb.TSDBInfo, 0)
 	for _, st := range stores {
 		infos = append(infos, st.TSDBInfos()...)
@@ -586,9 +586,10 @@ func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) 
 	return storeID, storeAddr, isLocalStore
 }
 
-// filteredStores returns stores that match the TSDBSelector filtering criteria.
-// This centralizes the TSDBSelector filtering logic used across all ProxyStore methods.
-func (s *ProxyStore) filteredStores() []Client {
+// storesForTSDBSelector returns stores that match the TSDBSelector filtering criteria.
+// This centralizes the TSDBSelector filtering logic used across all ProxyStore methods
+// for cases where we don't need additional matchers or time range filtering.
+func (s *ProxyStore) storesForTSDBSelector() []Client {
 	var filteredStores []Client
 	for _, st := range s.stores() {
 		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
@@ -607,7 +608,7 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 		storeLabelSets []labels.Labels
 		storeDebugMsgs []string
 	)
-	for _, st := range s.filteredStores() {
+	for _, st := range s.storesForTSDBSelector() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
 			if s.debugLogging {
