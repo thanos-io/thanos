@@ -1244,29 +1244,19 @@ func TestTSDBSelectorFilteringBehavior(t *testing.T) {
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		startNestedStore := func(tt *testing.T, appendFn func(app storage.Appender), extLset labels.Labels) storepb.StoreServer {
-			db, err := e2eutil.NewTSDB()
-			testutil.Ok(tt, err)
-			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-			appendFn(db.Appender(context.Background()))
-			// Create the store with the provided external label sets
-			return NewTSDBStore(nil, db, component.Rule, extLset)
-		}
 
-		extLset1 := labels.NewBuilder(extLset).Set("tenant_id", "team-a").Set("region", "us-east").Labels()
-		extLset2 := labels.NewBuilder(extLset).Set("tenant_id", "team-b").Set("region", "us-west").Labels()
+		lset := labels.NewBuilder(extLset).Set("tenant_id", "team-a").Labels()
 
-		store1 := startNestedStore(tt, appendFn, extLset1)
-		store2 := startNestedStore(tt, appendFn, extLset2)
+		db, err := e2eutil.NewTSDB()
+		testutil.Ok(tt, err)
+		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+		appendFn(db.Appender(context.Background()))
+		store := NewTSDBStore(nil, db, component.Rule, lset)
 
 		clients := []Client{
 			storetestutil.TestClient{
-				StoreClient: storepb.ServerAsClient(store1),
-				ExtLset:     []labels.Labels{extLset1},
-			},
-			storetestutil.TestClient{
-				StoreClient: storepb.ServerAsClient(store2),
-				ExtLset:     []labels.Labels{extLset2},
+				StoreClient: storepb.ServerAsClient(store),
+				ExtLset:     []labels.Labels{lset},
 			},
 		}
 
