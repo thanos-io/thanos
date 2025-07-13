@@ -195,18 +195,22 @@ func NewProxyStore(
 }
 
 func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
-	stores := s.stores()
+	stores := s.filteredStores()
 	if len(stores) == 0 {
+		// We always want to enforce announcing the subset of data that
+		// selector-labels represents. If no stores match the filter,
+		// we still want to enforce announcing this subset.
+		selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
+		if len(selectorLabels) > 0 {
+			return []labelpb.ZLabelSet{{Labels: selectorLabels}}
+		}
 		return []labelpb.ZLabelSet{}
 	}
 
 	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
-		matches, filteredLabelSets := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-
-		if !matches {
-			continue
-		}
+		// Get filtered label sets from TSDBSelector
+		_, filteredLabelSets := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 
 		var labelSetsToProcess []labels.Labels
 		if filteredLabelSets != nil {
@@ -239,20 +243,13 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 }
 
 func (s *ProxyStore) TimeRange() (int64, int64) {
-	stores := s.stores()
+	stores := s.filteredStores()
 	if len(stores) == 0 {
 		return math.MinInt64, math.MaxInt64
 	}
 
 	var minTime, maxTime int64 = math.MaxInt64, math.MinInt64
-	hasMatchingStores := false
 	for _, st := range stores {
-		// Apply TSDBSelector filtering to match what's used in TSDBInfos() and actual queries
-		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-		if !matches {
-			continue
-		}
-		hasMatchingStores = true
 		storeMinTime, storeMaxTime := st.TimeRange()
 		if storeMinTime < minTime {
 			minTime = storeMinTime
@@ -262,20 +259,13 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 		}
 	}
 
-	if !hasMatchingStores {
-		return math.MinInt64, math.MaxInt64
-	}
-
 	return minTime, maxTime
 }
 
 func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
+	stores := s.filteredStores()
 	infos := make([]infopb.TSDBInfo, 0)
-	for _, st := range s.stores() {
-		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-		if !matches {
-			continue
-		}
+	for _, st := range stores {
 		infos = append(infos, st.TSDBInfos()...)
 	}
 	return infos
@@ -596,6 +586,19 @@ func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) 
 	return storeID, storeAddr, isLocalStore
 }
 
+// filteredStores returns stores that match the TSDBSelector filtering criteria.
+// This centralizes the TSDBSelector filtering logic used across all ProxyStore methods.
+func (s *ProxyStore) filteredStores() []Client {
+	var filteredStores []Client
+	for _, st := range s.stores() {
+		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
+		if matches {
+			filteredStores = append(filteredStores, st)
+		}
+	}
+	return filteredStores
+}
+
 // TODO: consider moving the following functions into something like "pkg/pruneutils" since it is also used for exemplars.
 
 func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64, matchers []*labels.Matcher) ([]Client, []labels.Labels, []string) {
@@ -604,7 +607,7 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 		storeLabelSets []labels.Labels
 		storeDebugMsgs []string
 	)
-	for _, st := range s.stores() {
+	for _, st := range s.filteredStores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
 			if s.debugLogging {
@@ -612,13 +615,8 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 			}
 			continue
 		}
-		matches, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
-		if !matches {
-			if s.debugLogging {
-				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to: %v", st, "tsdb selector"))
-			}
-			continue
-		}
+		// Since we already filtered by TSDBSelector in filteredStores(), we just need to get the extra matchers
+		_, extraMatchers := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		storeLabelSets = append(storeLabelSets, extraMatchers...)
 
 		stores = append(stores, st)
@@ -693,7 +691,7 @@ func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][
 	return true, ""
 }
 
-// LabelSetsMatch returns false if all label-set do not match the matchers (aka: OR is between all label-sets).
+// LabelSetsMatch returns false if all label-sets do not match the matchers (aka: OR is between all label-sets).
 func LabelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
 	if len(lset) == 0 {
 		return true
