@@ -1244,27 +1244,38 @@ func TestTSDBSelectorFilteringBehavior(t *testing.T) {
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			db, err := e2eutil.NewTSDB()
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+			appendFn(db.Appender(context.Background()))
 
-		lset := labels.NewBuilder(extLset).Set("tenant_id", "team-a").Labels()
+			return NewTSDBStore(nil, db, component.Rule, extLset)
+		}
 
-		db, err := e2eutil.NewTSDB()
-		testutil.Ok(tt, err)
-		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-		appendFn(db.Appender(context.Background()))
-		store := NewTSDBStore(nil, db, component.Rule, lset)
+		// this TSDB will be selected
+		store1 := startNestedStore(tt, extLset, appendFn)
+
+		// this TSDB should be dropped
+		droppedLset := labels.New(labels.Label{Name: "foo", Value: "bar"})
+		store2 := startNestedStore(tt, droppedLset, appendFn)
 
 		clients := []Client{
 			storetestutil.TestClient{
-				StoreClient: storepb.ServerAsClient(store),
-				ExtLset:     []labels.Labels{lset},
+				StoreClient: storepb.ServerAsClient(store1),
+				ExtLset:     []labels.Labels{extLset},
+			},
+			storetestutil.TestClient{
+				StoreClient: storepb.ServerAsClient(store2),
+				ExtLset:     []labels.Labels{droppedLset},
 			},
 		}
 
-		// Create relabel config to keep only tenant_id="team-a"
+		// Create relabel config to keep only the labels in the extLset
 		relabelCfgs := []*relabel.Config{{
-			SourceLabels: []model.LabelName{"tenant_id"},
-			Regex:        relabel.MustNewRegexp("team-a"),
-			Action:       relabel.Keep,
+			SourceLabels: []model.LabelName{"foo"},
+			Regex:        relabel.MustNewRegexp("bar"),
+			Action:       relabel.Drop,
 		}}
 
 		return NewProxyStore(
