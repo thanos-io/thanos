@@ -342,6 +342,7 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 		"minTime":  hints.Start,
 		"maxTime":  hints.End,
 		"matchers": "{" + strings.Join(matchers, ",") + "}",
+		"tenant":   tenant,
 	})
 
 	promise := make(chan storage.SeriesSet, 1)
