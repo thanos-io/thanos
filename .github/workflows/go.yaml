@@ -70,9 +70,9 @@ jobs:
       - name: Cross build check
         run: make crossbuild
 
-  build-stringlabels:
+  build-slicelabels:
     runs-on: ubuntu-latest
-    name: Go build with -tags=stringlabels
+    name: Go build with -tags=slicelabels
     env:
       GOBIN: /tmp/.bin
     steps:
@@ -95,7 +95,7 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Cross build check
-      run: go build -tags=stringlabels ./cmd/thanos
+      run: go build -tags=slicelabels ./cmd/thanos
 
   lint:
     runs-on: ubuntu-latest
