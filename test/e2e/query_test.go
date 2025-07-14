@@ -1650,7 +1650,7 @@ func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2eobs.Observa
 	samplespb := make([]prompb.TimeSeries, 0, len(series))
 	r := rand.New(rand.NewSource(int64(len(series))))
 	for _, serie := range series {
-		labelspb := make([]prompb.Label, 0, len(serie.intLabels))
+		labelspb := make([]prompb.Label, 0, serie.intLabels.Len())
 		for labelKey, labelValue := range serie.intLabels.Map() {
 			labelspb = append(labelspb, prompb.Label{
 				Name:  labelKey,

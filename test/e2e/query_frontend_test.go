@@ -11,7 +11,6 @@ import (
 	"os"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -586,36 +585,39 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 
 	ctx := context.Background()
 	timeSeries := []labels.Labels{
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/metrics"}},
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/metrics"),
 	}
 
 	// Ensure labels are ordered.
-	for _, ts := range timeSeries {
-		sort.Slice(ts, func(i, j int) bool {
-			return ts[i].Name < ts[j].Name
+	for j, ts := range timeSeries {
+		builder := labels.NewBuilder(labels.EmptyLabels())
+		ts.Range(func(l labels.Label) {
+			builder.Set(l.Name, l.Value)
 		})
+
+		timeSeries[j] = builder.Labels()
 	}
 
 	samplespb := make([]prompb.TimeSeries, 0, len(timeSeries))
-	for _, labels := range timeSeries {
-		labelspb := make([]prompb.Label, 0, len(labels))
-		for _, label := range labels {
+	for _, lbls := range timeSeries {
+		labelspb := make([]prompb.Label, 0, lbls.Len())
+		lbls.Range(func(l labels.Label) {
 			labelspb = append(labelspb, prompb.Label{
-				Name:  string(label.Name),
-				Value: string(label.Value),
+				Name:  l.Name,
+				Value: l.Value,
 			})
-		}
+		})
 		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
 			Samples: []prompb.Sample{
@@ -791,36 +793,39 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 	ctx := context.Background()
 
 	timeSeries := []labels.Labels{
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/metrics"}},
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/metrics"),
 	}
 
 	// Ensure labels are ordered.
-	for _, ts := range timeSeries {
-		sort.Slice(ts, func(i, j int) bool {
-			return ts[i].Name < ts[j].Name
+	for j, ts := range timeSeries {
+		builder := labels.NewBuilder(labels.EmptyLabels())
+		ts.Range(func(l labels.Label) {
+			builder.Set(l.Name, l.Value)
 		})
+
+		timeSeries[j] = builder.Labels()
 	}
 
 	samplespb := make([]prompb.TimeSeries, 0, len(timeSeries))
-	for _, labels := range timeSeries {
-		labelspb := make([]prompb.Label, 0, len(labels))
-		for _, label := range labels {
+	for _, lbls := range timeSeries {
+		labelspb := make([]prompb.Label, 0, lbls.Len())
+		lbls.Range(func(l labels.Label) {
 			labelspb = append(labelspb, prompb.Label{
-				Name:  string(label.Name),
-				Value: string(label.Value),
+				Name:  l.Name,
+				Value: l.Value,
 			})
-		}
+		})
 		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
 			Samples: []prompb.Sample{

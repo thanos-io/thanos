@@ -80,6 +80,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/wlogutil"
 )
 
 type ruleConfig struct {
@@ -198,12 +199,12 @@ func registerRule(app *extkingpin.App) {
 			MaxBlockDuration:       int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration:      int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:             *noLockFile,
-			WALCompression:         parseCompressionType(*walCompression, compression.Snappy),
+			WALCompression:         wlogutil.ParseCompressionType(*walCompression, compression.Snappy),
 			EnableNativeHistograms: conf.tsdbEnableNativeHistograms,
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: parseCompressionType(*walCompression, compression.Snappy),
+			WALCompression: wlogutil.ParseCompressionType(*walCompression, compression.Snappy),
 			NoLockfile:     *noLockFile,
 		}
 

@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/wlogutil"
 )
 
 const (
@@ -93,7 +94,7 @@ func registerReceive(app *extkingpin.App) {
 			MaxBytes:                       int64(conf.tsdbMaxBytes),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
-			WALCompression:                 parseCompressionType(conf.walCompression, compression.Snappy),
+			WALCompression:                 wlogutil.ParseCompressionType(conf.walCompression, compression.Snappy),
 			MaxExemplars:                   conf.tsdbMaxExemplars,
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
