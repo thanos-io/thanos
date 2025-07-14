@@ -248,7 +248,7 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 	}
 	stats.LabelNamesCount = int64(len(lnames))
 
-	lvals, err := r.LabelValues(ctx, "__name__")
+	lvals, err := r.LabelValues(ctx, "__name__", nil)
 	if err != nil {
 		return stats, errors.Wrap(err, "metric label values")
 	}

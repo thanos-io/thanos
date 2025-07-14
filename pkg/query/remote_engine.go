@@ -190,6 +190,13 @@ func (r *remoteEngine) LabelSets() []labels.Labels {
 	return r.labelSets
 }
 
+func (r *remoteEngine) PartitionLabelSets() []labels.Labels {
+	r.labelSetsOnce.Do(func() {
+		r.labelSets = r.adjustedInfos().LabelSets()
+	})
+	return r.labelSets
+}
+
 // adjustedInfos strips out replica labels and scopes the remaining labels
 // onto the partition labels if they are set.
 func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
