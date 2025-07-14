@@ -243,6 +243,13 @@ func newQueryRangeTripperware(
 		)
 	}
 
+	// Add range query logging middleware
+	queryRangeMiddleware = append(
+		queryRangeMiddleware,
+		queryrange.InstrumentMiddleware("rangequerylogging", m, logger),
+		NewRangeQueryLoggingMiddleware(logger, reg),
+	)
+
 	return func(next http.RoundTripper) http.RoundTripper {
 		rt := queryrange.NewRoundTripper(next, codec, forwardHeaders, queryRangeMiddleware...)
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
