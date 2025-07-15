@@ -390,7 +390,7 @@ func (f *Handler) parseRequestQueryString(r *http.Request, bodyBuf bytes.Buffer)
 
 	// Ensure the form has been parsed so all the parameters are present
 	err := r.ParseForm()
-	if err != nil { 
+	if err != nil {
 		level.Warn(util_log.WithContext(r.Context(), f.log)).Log("msg", "unable to parse request form", "err", err)
 		return nil
 	}
