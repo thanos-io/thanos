@@ -534,9 +534,10 @@ func newAsyncRespSet(
 		"target": storeAddr,
 	})
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-		"store.id":       storeID,
-		"store.is_local": isLocalStore,
-		"store.addr":     storeAddr,
+		"store.id":          storeID,
+		"store.is_local":    isLocalStore,
+		"store.addr":        storeAddr,
+		"retrival_strategy": retrievalStrategy,
 	})
 
 	seriesCtx, cancel = context.WithCancel(seriesCtx)
@@ -572,11 +573,11 @@ func newAsyncRespSet(
 
 	switch retrievalStrategy {
 	case LazyRetrieval:
-		span.SetTag("retrival_strategy", LazyRetrieval)
 		if lazyRetrievalMaxBufferedResponses < 1 {
 			// Some unit and e2e tests hit this path.
 			lazyRetrievalMaxBufferedResponses = 1
 		}
+		span.SetTag("lazy_retrival_max_buffered_responses", lazyRetrievalMaxBufferedResponses)
 
 		return newLazyRespSet(
 			span,
@@ -591,7 +592,6 @@ func newAsyncRespSet(
 			lazyRetrievalMaxBufferedResponses,
 		), nil
 	case EagerRetrieval:
-		span.SetTag("retrival_strategy", EagerRetrieval)
 		return newEagerRespSet(
 			span,
 			frameTimeout,
