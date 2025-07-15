@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
@@ -80,12 +80,9 @@ type UserInfo struct {
 }
 
 type rangeQueryLoggingMiddleware struct {
-	next                    queryrange.Handler
-	logger                  log.Logger
-	logFile                 *os.File
-	queriesLogged           prometheus.Counter
-	successfulQueriesLogged prometheus.Counter
-	failedQueriesLogged     prometheus.Counter
+	next    queryrange.Handler
+	logger  log.Logger
+	logFile *os.File
 }
 
 // NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information
@@ -108,18 +105,6 @@ func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer
 			next:    next,
 			logger:  logger,
 			logFile: logFile,
-			queriesLogged: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-				Name: "thanos_frontend_rangequerylogging_logged_total",
-				Help: "Total number of range queries logged",
-			}),
-			successfulQueriesLogged: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-				Name: "thanos_frontend_rangequerylogging_successful_total",
-				Help: "Total number of successful range queries logged",
-			}),
-			failedQueriesLogged: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-				Name: "thanos_frontend_rangequerylogging_failed_total",
-				Help: "Total number of failed range queries logged",
-			}),
 		}
 	})
 }
@@ -146,17 +131,12 @@ func (m *rangeQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Reque
 }
 
 func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest, resp queryrange.Response, err error, latencyMs int64) {
-	// Increment total queries logged
-	m.queriesLogged.Inc()
-
-	// Determine success
+	
 	success := err == nil
-
-	// Extract user identification fields
 	userInfo := m.extractUserInfo(req)
 
 	// Calculate bytes fetched (only for successful queries)
-	var bytesFetched int64
+	var bytesFetched int64 = 0
 	if success && resp != nil {
 		bytesFetched = m.calculateBytesFetched(resp)
 	}
@@ -194,13 +174,6 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		Stats:                 req.Stats,
 		// Store-matcher details
 		StoreMatchers: m.convertStoreMatchers(req.StoreMatchers),
-	}
-
-	// Update metrics
-	if success {
-		m.successfulQueriesLogged.Inc()
-	} else {
-		m.failedQueriesLogged.Inc()
 	}
 
 	// Log to file if available
@@ -295,28 +268,9 @@ func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Resp
 		return 0
 	}
 
-	// Try to estimate bytes from response
-	// This is a rough approximation based on the response structure
-	switch r := resp.(type) {
-	case *queryrange.PrometheusResponse:
-		if len(r.Data.Result) > 0 {
-			// Rough estimation: each sample is approximately 24 bytes (timestamp + value)
-			// plus some overhead for labels
-			totalSamples := int64(0)
-			totalLabelBytes := int64(0)
-
-			for _, series := range r.Data.Result {
-				totalSamples += int64(len(series.Samples))
-				totalSamples += int64(len(series.Histograms))
-
-				// Estimate label bytes
-				for _, label := range series.Labels {
-					totalLabelBytes += int64(len(label.Name) + len(label.Value))
-				}
-			}
-
-			// Rough estimation: 24 bytes per sample + 2 bytes per label character
-			return totalSamples*24 + totalLabelBytes*2
+	if headerValues := queryrange.QueryBytesFetchedHttpHeaderValue(resp); len(headerValues) > 0 {
+		if bytes, err := strconv.ParseInt(headerValues[0], 10, 64); err == nil {
+			return bytes
 		}
 	}
 
