@@ -30,12 +30,12 @@ type MetricsRangeQueryLogging struct {
 	BytesFetched  int64  `json:"bytesFetched"`
 	EvalLatencyMs int64  `json:"evalLatencyMs"`
 	// User identification fields
-	GrafanaDashboardUid string `json:"grafanaDashboardUid,omitempty"`
-	GrafanaPanelId      string `json:"grafanaPanelId,omitempty"`
-	RequestId           string `json:"requestId,omitempty"`
-	Tenant              string `json:"tenant,omitempty"`
-	ForwardedFor        string `json:"forwardedFor,omitempty"`
-	UserAgent           string `json:"userAgent,omitempty"`
+	GrafanaDashboardUid string `json:"grafanaDashboardUid"`
+	GrafanaPanelId      string `json:"grafanaPanelId"`
+	RequestId           string `json:"requestId"`
+	Tenant              string `json:"tenant"`
+	ForwardedFor        string `json:"forwardedFor"`
+	UserAgent           string `json:"userAgent"`
 	// Query-related fields
 	StartTimestampMs      int64    `json:"startTimestampMs"`
 	EndTimestampMs        int64    `json:"endTimestampMs"`
@@ -45,7 +45,7 @@ type MetricsRangeQueryLogging struct {
 	PartialResponse       bool     `json:"partialResponse"`
 	AutoDownsampling      bool     `json:"autoDownsampling"`
 	MaxSourceResolutionMs int64    `json:"maxSourceResolutionMs"`
-	ReplicaLabels         []string `json:"replicaLabels,omitempty"`
+	ReplicaLabels         []string `json:"replicaLabels"`
 	StoreMatchersCount    int      `json:"storeMatchersCount"`
 	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`
 	Analyze               bool     `json:"analyze"`
@@ -53,7 +53,7 @@ type MetricsRangeQueryLogging struct {
 	SplitIntervalMs       int64    `json:"splitIntervalMs"`
 	Stats                 string   `json:"stats,omitempty"`
 	// Store-matcher details
-	StoreMatchers []StoreMatcherSet `json:"storeMatchers,omitempty"`
+	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
 }
 
 // StoreMatcherSet represents a set of label matchers for store filtering
