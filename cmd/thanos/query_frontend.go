@@ -393,6 +393,7 @@ func runQueryFrontend(
 	}
 
 	level.Info(logger).Log("msg", "starting query frontend")
+	level.Info(logger).Log("msg", "check again")
 	statusProber.Ready()
 	return nil
 }
