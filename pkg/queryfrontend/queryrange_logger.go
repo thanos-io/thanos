@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
@@ -28,6 +29,54 @@ type MetricsRangeQueryLogging struct {
 	Success       bool   `json:"success"`
 	BytesFetched  int64  `json:"bytesFetched"`
 	EvalLatencyMs int64  `json:"evalLatencyMs"`
+	// User identification fields
+	GrafanaDashboardUid string `json:"grafanaDashboardUid,omitempty"`
+	GrafanaPanelId      string `json:"grafanaPanelId,omitempty"`
+	RequestId           string `json:"requestId,omitempty"`
+	Tenant              string `json:"tenant,omitempty"`
+	ForwardedFor        string `json:"forwardedFor,omitempty"`
+	UserAgent           string `json:"userAgent,omitempty"`
+	// Query-related fields
+	StartTimestampMs      int64    `json:"startTimestampMs"`
+	EndTimestampMs        int64    `json:"endTimestampMs"`
+	StepMs                int64    `json:"stepMs"`
+	Path                  string   `json:"path"`
+	Dedup                 bool     `json:"dedup"`
+	PartialResponse       bool     `json:"partialResponse"`
+	AutoDownsampling      bool     `json:"autoDownsampling"`
+	MaxSourceResolutionMs int64    `json:"maxSourceResolutionMs"`
+	ReplicaLabels         []string `json:"replicaLabels,omitempty"`
+	StoreMatchersCount    int      `json:"storeMatchersCount"`
+	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`
+	Analyze               bool     `json:"analyze"`
+	Engine                string   `json:"engine,omitempty"`
+	SplitIntervalMs       int64    `json:"splitIntervalMs"`
+	Stats                 string   `json:"stats,omitempty"`
+	// Store-matcher details
+	StoreMatchers []StoreMatcherSet `json:"storeMatchers,omitempty"`
+}
+
+// StoreMatcherSet represents a set of label matchers for store filtering
+type StoreMatcherSet struct {
+	Matchers []LabelMatcher `json:"matchers"`
+}
+
+// LabelMatcher represents a single label matcher
+type LabelMatcher struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Type  string `json:"type"` // EQ, NEQ, RE, NRE
+}
+
+// UserInfo holds user identification information extracted from request headers
+type UserInfo struct {
+	Source              string
+	GrafanaDashboardUid string
+	GrafanaPanelId      string
+	RequestId           string
+	Tenant              string
+	ForwardedFor        string
+	UserAgent           string
 }
 
 type rangeQueryLoggingMiddleware struct {
@@ -42,7 +91,7 @@ type rangeQueryLoggingMiddleware struct {
 // NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information
 func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer) queryrange.Middleware {
 	// Create the /databricks/logs directory if it doesn't exist
-	logDir := "/databricks/logs"
+	logDir := "/databricks/logs/pantheon-range-query-frontend"
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		level.Error(logger).Log("msg", "failed to create log directory", "dir", logDir, "err", err)
 	}
@@ -103,8 +152,8 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	// Determine success
 	success := err == nil
 
-	// Determine source from headers
-	source := m.extractSource(req)
+	// Extract user identification fields
+	userInfo := m.extractUserInfo(req)
 
 	// Calculate bytes fetched (only for successful queries)
 	var bytesFetched int64
@@ -115,11 +164,36 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	// Create the range query log entry
 	rangeQueryLog := MetricsRangeQueryLogging{
 		TimestampMs:   time.Now().UnixMilli(),
-		Source:        source,
+		Source:        userInfo.Source,
 		QueryExpr:     req.Query,
 		Success:       success,
 		BytesFetched:  bytesFetched,
 		EvalLatencyMs: latencyMs,
+		// User identification fields
+		GrafanaDashboardUid: userInfo.GrafanaDashboardUid,
+		GrafanaPanelId:      userInfo.GrafanaPanelId,
+		RequestId:           userInfo.RequestId,
+		Tenant:              userInfo.Tenant,
+		ForwardedFor:        userInfo.ForwardedFor,
+		UserAgent:           userInfo.UserAgent,
+		// Query-related fields
+		StartTimestampMs:      req.Start,
+		EndTimestampMs:        req.End,
+		StepMs:                req.Step,
+		Path:                  req.Path,
+		Dedup:                 req.Dedup,
+		PartialResponse:       req.PartialResponse,
+		AutoDownsampling:      req.AutoDownsampling,
+		MaxSourceResolutionMs: req.MaxSourceResolution,
+		ReplicaLabels:         req.ReplicaLabels,
+		StoreMatchersCount:    len(req.StoreMatchers),
+		LookbackDeltaMs:       req.LookbackDelta,
+		Analyze:               req.Analyze,
+		Engine:                req.Engine,
+		SplitIntervalMs:       req.SplitInterval.Milliseconds(),
+		Stats:                 req.Stats,
+		// Store-matcher details
+		StoreMatchers: m.convertStoreMatchers(req.StoreMatchers),
 	}
 
 	// Update metrics
@@ -134,48 +208,86 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		m.writeToLogFile(rangeQueryLog)
 	}
 
-	// Also log to regular logger at debug level
-	level.Debug(m.logger).Log(
-		"msg", "rangequerylogging",
-		"timestampMs", rangeQueryLog.TimestampMs,
-		"source", rangeQueryLog.Source,
-		"queryExpr", rangeQueryLog.QueryExpr,
-		"success", rangeQueryLog.Success,
-		"bytesFetched", rangeQueryLog.BytesFetched,
-		"evalLatencyMs", rangeQueryLog.EvalLatencyMs,
-	)
 }
 
-func (m *rangeQueryLoggingMiddleware) extractSource(req *ThanosQueryRangeRequest) string {
-	// Check User-Agent header to determine source
+func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeRequest) UserInfo {
+	userInfo := UserInfo{}
+
+	// Extract information from headers
 	for _, header := range req.Headers {
-		if strings.ToLower(header.Name) == "user-agent" && len(header.Values) > 0 {
-			userAgent := strings.ToLower(header.Values[0])
-			if strings.Contains(userAgent, "grafana") {
-				return "Grafana"
+		headerName := strings.ToLower(header.Name)
+		if len(header.Values) == 0 {
+			continue
+		}
+		headerValue := header.Values[0]
+
+		switch headerName {
+		case "user-agent":
+			userInfo.UserAgent = headerValue
+			// Determine source from User-Agent if not already set
+			if userInfo.Source == "" {
+				userAgentLower := strings.ToLower(headerValue)
+				if strings.Contains(userAgentLower, "grafana") {
+					userInfo.Source = "Grafana"
+				} else if strings.Contains(userAgentLower, "bronson") {
+					userInfo.Source = "Bronson"
+				} else if strings.Contains(userAgentLower, "pandora") {
+					userInfo.Source = "Pandora"
+				} else {
+					// Return the first part of the user agent if no specific match
+					parts := strings.Split(userAgentLower, " ")
+					if len(parts) > 0 {
+						userInfo.Source = parts[0]
+					}
+				}
 			}
-			if strings.Contains(userAgent, "bronson") {
-				return "Bronson"
-			}
-			if strings.Contains(userAgent, "pandora") {
-				return "Pandora"
-			}
-			// Return the first part of the user agent if no specific match
-			parts := strings.Split(userAgent, " ")
-			if len(parts) > 0 {
-				return parts[0]
+		case "x-dashboard-uid":
+			userInfo.GrafanaDashboardUid = headerValue
+		case "x-panel-id":
+			userInfo.GrafanaPanelId = headerValue
+		case "x-request-id":
+			userInfo.RequestId = headerValue
+		case "thanos-tenant":
+			userInfo.Tenant = headerValue
+		case "x-forwarded-for":
+			userInfo.ForwardedFor = headerValue
+		case "x-source":
+			// X-Source header as fallback for source
+			if userInfo.Source == "" {
+				userInfo.Source = headerValue
 			}
 		}
 	}
 
-	// Check X-Source header as fallback
-	for _, header := range req.Headers {
-		if strings.ToLower(header.Name) == "x-source" && len(header.Values) > 0 {
-			return header.Values[0]
-		}
+	// Set default source if still empty
+	if userInfo.Source == "" {
+		userInfo.Source = "unknown"
 	}
 
-	return "unknown"
+	return userInfo
+}
+
+// convertStoreMatchers converts internal store matchers to logging format
+func (m *rangeQueryLoggingMiddleware) convertStoreMatchers(storeMatchers [][]*labels.Matcher) []StoreMatcherSet {
+	if len(storeMatchers) == 0 {
+		return nil
+	}
+
+	result := make([]StoreMatcherSet, len(storeMatchers))
+	for i, matcherSet := range storeMatchers {
+		matchers := make([]LabelMatcher, len(matcherSet))
+		for j, matcher := range matcherSet {
+			matchers[j] = LabelMatcher{
+				Name:  matcher.Name,
+				Value: matcher.Value,
+				Type:  matcher.Type.String(),
+			}
+		}
+		result[i] = StoreMatcherSet{
+			Matchers: matchers,
+		}
+	}
+	return result
 }
 
 func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Response) int64 {
