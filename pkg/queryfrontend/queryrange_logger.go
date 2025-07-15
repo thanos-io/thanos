@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -131,7 +130,6 @@ func (m *rangeQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Reque
 }
 
 func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest, resp queryrange.Response, err error, latencyMs int64) {
-	
 	success := err == nil
 	userInfo := m.extractUserInfo(req)
 
@@ -186,7 +184,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeRequest) UserInfo {
 	userInfo := UserInfo{}
 
-	// Extract information from headers
+	// Extract information from forwarded headers
 	for _, header := range req.Headers {
 		headerName := strings.ToLower(header.Name)
 		if len(header.Values) == 0 {
@@ -268,9 +266,10 @@ func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Resp
 		return 0
 	}
 
-	if headerValues := queryrange.QueryBytesFetchedHttpHeaderValue(resp); len(headerValues) > 0 {
-		if bytes, err := strconv.ParseInt(headerValues[0], 10, 64); err == nil {
-			return bytes
+	// Use SeriesStatsCounter.Bytes for range queries only
+	if r, ok := resp.(*queryrange.PrometheusResponse); ok {
+		if r.Data.SeriesStatsCounter != nil {
+			return r.Data.SeriesStatsCounter.Bytes
 		}
 	}
 
