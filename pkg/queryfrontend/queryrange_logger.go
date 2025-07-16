@@ -184,7 +184,6 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeRequest) UserInfo {
 	userInfo := UserInfo{}
 
-	// Extract information from forwarded headers.		
 	for _, header := range req.Headers {
 		headerName := strings.ToLower(header.Name)
 		if len(header.Values) == 0 {
