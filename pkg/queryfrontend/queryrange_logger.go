@@ -48,9 +48,9 @@ type MetricsRangeQueryLogging struct {
 	StoreMatchersCount    int      `json:"storeMatchersCount"`
 	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`
 	Analyze               bool     `json:"analyze"`
-	Engine                string   `json:"engine,omitempty"`
+	Engine                string   `json:"engine"`
 	SplitIntervalMs       int64    `json:"splitIntervalMs"`
-	Stats                 string   `json:"stats,omitempty"`
+	Stats                 string   `json:"stats"`
 	// Store-matcher details
 	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
 }
