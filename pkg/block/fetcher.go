@@ -1093,7 +1093,7 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 
 var _ MetadataFilter = &ParquetMigratedMetaFilter{}
 
-// ParquetMigratedMetaFilter is a metadata filter that filters out blocks that have been 
+// ParquetMigratedMetaFilter is a metadata filter that filters out blocks that have been
 // migrated to parquet format. The filter checks for the presence of the parquet_migrated
 // extension key with a value of true.
 // Not go-routine safe.
@@ -1115,31 +1115,20 @@ func (f *ParquetMigratedMetaFilter) Filter(_ context.Context, metas map[ulid.ULI
 			continue
 		}
 
-		// Try to extract the parquet_migrated extension value
 		extensionsMap, ok := meta.Thanos.Extensions.(map[string]interface{})
 		if !ok {
-			// If extensions is not a map, try to convert it
-			extensionsBytes, err := json.Marshal(meta.Thanos.Extensions)
-			if err != nil {
-				level.Warn(f.logger).Log("msg", "failed to marshal extensions for parquet migration check", "block", id, "err", err)
-				continue
-			}
-			
-			var parsedExtensions map[string]interface{}
-			if err := json.Unmarshal(extensionsBytes, &parsedExtensions); err != nil {
-				level.Warn(f.logger).Log("msg", "failed to unmarshal extensions for parquet migration check", "block", id, "err", err)
-				continue
-			}
-			extensionsMap = parsedExtensions
+			continue
 		}
 
-		// Check if the parquet_migrated key exists and is set to true
-		if parquetMigrated, exists := extensionsMap[metadata.ParquetMigratedExtensionKey]; exists {
-			if migratedBool, ok := parquetMigrated.(bool); ok && migratedBool {
-				level.Debug(f.logger).Log("msg", "filtering out parquet migrated block", "block", id)
-				synced.WithLabelValues(ParquetMigratedMeta).Inc()
-				delete(metas, id)
-			}
+		parquetMigrated, exists := extensionsMap[metadata.ParquetMigratedExtensionKey]
+		if !exists {
+			continue
+		}
+
+		if migratedBool, ok := parquetMigrated.(bool); ok && migratedBool {
+			level.Debug(f.logger).Log("msg", "filtering out parquet migrated block", "block", id)
+			synced.WithLabelValues(ParquetMigratedMeta).Inc()
+			delete(metas, id)
 		}
 	}
 	return nil
