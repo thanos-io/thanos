@@ -40,17 +40,17 @@ type MetricsRangeQueryLogging struct {
 	EndTimestampMs        int64    `json:"endTimestampMs"`
 	StepMs                int64    `json:"stepMs"`
 	Path                  string   `json:"path"`
-	Dedup                 bool     `json:"dedup"`
-	PartialResponse       bool     `json:"partialResponse"`
-	AutoDownsampling      bool     `json:"autoDownsampling"`
-	MaxSourceResolutionMs int64    `json:"maxSourceResolutionMs"`
-	ReplicaLabels         []string `json:"replicaLabels"`
-	StoreMatchersCount    int      `json:"storeMatchersCount"`
-	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`
-	Analyze               bool     `json:"analyze"`
-	Engine                string   `json:"engine"`
-	SplitIntervalMs       int64    `json:"splitIntervalMs"`
-	Stats                 string   `json:"stats"`
+	Dedup                 bool     `json:"dedup"`                 // Whether deduplication is enabled
+	PartialResponse       bool     `json:"partialResponse"`       // Whether partial responses are allowed
+	AutoDownsampling      bool     `json:"autoDownsampling"`      // Whether automatic downsampling is enabled
+	MaxSourceResolutionMs int64    `json:"maxSourceResolutionMs"` // Maximum source resolution in milliseconds
+	ReplicaLabels         []string `json:"replicaLabels"`         // Labels used for replica deduplication
+	StoreMatchersCount    int      `json:"storeMatchersCount"`    // Number of store matcher sets
+	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`       // Lookback delta in milliseconds
+	Analyze               bool     `json:"analyze"`               // Whether query analysis is enabled
+	Engine                string   `json:"engine"`                // Query engine being used
+	SplitIntervalMs       int64    `json:"splitIntervalMs"`       // Query splitting interval in milliseconds
+	Stats                 string   `json:"stats"`                 // Query statistics information
 	// Store-matcher details
 	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
 }
