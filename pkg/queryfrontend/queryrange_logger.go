@@ -20,7 +20,7 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
 
-// MetricsRangeQueryLogging represents the logging information for a range query
+// MetricsRangeQueryLogging represents the logging information for a range query.
 type MetricsRangeQueryLogging struct {
 	TimestampMs   int64  `json:"timestampMs"`
 	Source        string `json:"source"`
@@ -55,19 +55,19 @@ type MetricsRangeQueryLogging struct {
 	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
 }
 
-// StoreMatcherSet represents a set of label matchers for store filtering
+// StoreMatcherSet represents a set of label matchers for store filtering.
 type StoreMatcherSet struct {
 	Matchers []LabelMatcher `json:"matchers"`
 }
 
-// LabelMatcher represents a single label matcher
+// LabelMatcher represents a single label matcher.
 type LabelMatcher struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	Type  string `json:"type"` // EQ, NEQ, RE, NRE
 }
 
-// UserInfo holds user identification information extracted from request headers
+// UserInfo holds user identification information extracted from request headers.
 type UserInfo struct {
 	Source              string
 	GrafanaDashboardUid string
@@ -84,15 +84,15 @@ type rangeQueryLoggingMiddleware struct {
 	logFile *os.File
 }
 
-// NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information
+// NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information.
 func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer) queryrange.Middleware {
-	// Create the /databricks/logs directory if it doesn't exist
+	// Create the /databricks/logs directory if it doesn't exist.
 	logDir := "/databricks/logs/pantheon-range-query-frontend"
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		level.Error(logger).Log("msg", "failed to create log directory", "dir", logDir, "err", err)
 	}
 
-	// Open the log file for range query logging
+	// Open the log file for range query logging.
 	logFile, err := os.OpenFile(filepath.Join(logDir, "rangequerylogging.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		level.Error(logger).Log("msg", "failed to open range query logging file", "err", err)
@@ -109,7 +109,7 @@ func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer
 }
 
 func (m *rangeQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
-	// Only log for range queries
+	// Only log for range queries.
 	rangeReq, ok := r.(*ThanosQueryRangeRequest)
 	if !ok {
 		return m.next.Do(ctx, r)
@@ -117,13 +117,13 @@ func (m *rangeQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Reque
 
 	startTime := time.Now()
 
-	// Execute the query
+	// Execute the query.
 	resp, err := m.next.Do(ctx, r)
 
-	// Calculate latency
+	// Calculate latency.
 	latencyMs := time.Since(startTime).Milliseconds()
 
-	// Log the range query
+	// Log the range query.
 	m.logRangeQuery(rangeReq, resp, err, latencyMs)
 
 	return resp, err
@@ -133,13 +133,13 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	success := err == nil
 	userInfo := m.extractUserInfo(req)
 
-	// Calculate bytes fetched (only for successful queries)
+	// Calculate bytes fetched (only for successful queries).
 	var bytesFetched int64 = 0
 	if success && resp != nil {
 		bytesFetched = m.calculateBytesFetched(resp)
 	}
 
-	// Create the range query log entry
+	// Create the range query log entry.
 	rangeQueryLog := MetricsRangeQueryLogging{
 		TimestampMs:   time.Now().UnixMilli(),
 		Source:        userInfo.Source,
@@ -174,7 +174,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		StoreMatchers: m.convertStoreMatchers(req.StoreMatchers),
 	}
 
-	// Log to file if available
+	// Log to file if available.
 	if m.logFile != nil {
 		m.writeToLogFile(rangeQueryLog)
 	}
@@ -184,7 +184,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeRequest) UserInfo {
 	userInfo := UserInfo{}
 
-	// Extract information from forwarded headers
+	// Extract information from forwarded headers.		
 	for _, header := range req.Headers {
 		headerName := strings.ToLower(header.Name)
 		if len(header.Values) == 0 {
@@ -195,7 +195,7 @@ func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeReque
 		switch headerName {
 		case "user-agent":
 			userInfo.UserAgent = headerValue
-			// Determine source from User-Agent if not already set
+			// Determine source from User-Agent if not already set.
 			if userInfo.Source == "" {
 				userAgentLower := strings.ToLower(headerValue)
 				if strings.Contains(userAgentLower, "grafana") {
@@ -205,7 +205,7 @@ func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeReque
 				} else if strings.Contains(userAgentLower, "pandora") {
 					userInfo.Source = "Pandora"
 				} else {
-					// Return the first part of the user agent if no specific match
+					// Return the first part of the user agent if no specific match.
 					parts := strings.Split(userAgentLower, " ")
 					if len(parts) > 0 {
 						userInfo.Source = parts[0]
@@ -223,14 +223,14 @@ func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeReque
 		case "x-forwarded-for":
 			userInfo.ForwardedFor = headerValue
 		case "x-source":
-			// X-Source header as fallback for source
+			// X-Source header as fallback for source.
 			if userInfo.Source == "" {
 				userInfo.Source = headerValue
 			}
 		}
 	}
 
-	// Set default source if still empty
+	// Set default source if still empty.
 	if userInfo.Source == "" {
 		userInfo.Source = "unknown"
 	}
@@ -238,7 +238,7 @@ func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeReque
 	return userInfo
 }
 
-// convertStoreMatchers converts internal store matchers to logging format
+// convertStoreMatchers converts internal store matchers to logging format.
 func (m *rangeQueryLoggingMiddleware) convertStoreMatchers(storeMatchers [][]*labels.Matcher) []StoreMatcherSet {
 	if len(storeMatchers) == 0 {
 		return nil
@@ -266,7 +266,7 @@ func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Resp
 		return 0
 	}
 
-	// Use SeriesStatsCounter.Bytes for range queries only
+	// Use SeriesStatsCounter.Bytes for range queries only.
 	if r, ok := resp.(*queryrange.PrometheusResponse); ok {
 		if r.Data.SeriesStatsCounter != nil {
 			return r.Data.SeriesStatsCounter.Bytes
@@ -281,14 +281,14 @@ func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQ
 		return
 	}
 
-	// Marshal to JSON
+	// Marshal to JSON.
 	jsonData, err := json.Marshal(rangeQueryLog)
 	if err != nil {
 		level.Error(m.logger).Log("msg", "failed to marshal range query log to JSON", "err", err)
 		return
 	}
 
-	// Write to file with newline
+	// Write to file with newline.
 	if _, err := fmt.Fprintf(m.logFile, "%s\n", jsonData); err != nil {
 		level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
 	}

@@ -243,7 +243,7 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	// Add range query logging middleware
+	// Add range query logging middleware.
 	queryRangeMiddleware = append(
 		queryRangeMiddleware,
 		queryrange.InstrumentMiddleware("rangequerylogging", m, logger),
