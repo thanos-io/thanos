@@ -293,7 +293,7 @@ func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQ
 	}
 }
 
-// Close should be called when the middleware is no longer needed
+// Close should be called when the middleware is no longer needed.
 func (m *rangeQueryLoggingMiddleware) Close() error {
 	if m.logFile != nil {
 		return m.logFile.Close()
