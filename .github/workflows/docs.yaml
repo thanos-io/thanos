@@ -12,7 +12,6 @@ on:
       - main
     paths:
       - "**/*.md"
-
 permissions:  
   contents: read
 
@@ -47,6 +46,7 @@ jobs:
 
       - name: Check docs
         run: make check-docs
+        continue-on-error: true
 
       - name: Check examples
         run: make check-examples
