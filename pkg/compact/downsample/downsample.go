@@ -83,7 +83,7 @@ func Downsample(
 
 	minT := time.Unix(origMeta.MinTime/1000, 0)
 	maxT := time.Unix(origMeta.MaxTime/1000, 0)
-	level.Info(logger).Log("msg", "starting downsample operation", "source_resolution", time.Duration(origMeta.Thanos.Downsample.Resolution), "target_resolution", time.Duration(resolution),
+	level.Info(logger).Log("msg", "starting downsample operation", "source_resolution", time.Duration(origMeta.Thanos.Downsample.Resolution*1000), "target_resolution", time.Duration(resolution*1000),
 		"time_window", fmt.Sprintf("%s-%s", minT.Format(time.RFC3339), maxT.Format(time.RFC3339)), "block", origMeta.ULID)
 
 	indexr, err := b.Index()
@@ -284,7 +284,7 @@ func Downsample(
 	}
 
 	id = uid
-	level.Info(logger).Log("msg", "completed downsample operation", "source_resolution", time.Duration(origMeta.Thanos.Downsample.Resolution), "target_resolution", time.Duration(resolution), "source_block", origMeta.ULID, "result_block", id)
+	level.Info(logger).Log("msg", "completed downsample operation", "source_resolution", time.Duration(origMeta.Thanos.Downsample.Resolution*1000), "target_resolution", time.Duration(resolution*1000), "source_block", origMeta.ULID, "result_block", id)
 	return
 }
 
