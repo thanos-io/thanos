@@ -724,7 +724,7 @@ type remoteWriteParams struct {
 }
 
 func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
-	var stats tenantRequestStats = make(tenantRequestStats)
+	var stats = make(tenantRequestStats)
 
 	for _, write := range writes {
 		for er := range write {
@@ -764,7 +764,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
-	var stats tenantRequestStats = make(tenantRequestStats)
+	var stats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {

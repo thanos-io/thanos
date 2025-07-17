@@ -74,10 +74,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
-		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
+		Default("true").BoolVar(&cfg.AlignRangeWithStep)
 
 	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
-		Default("true").BoolVar(&cfg.QueryRangeConfig.RequestDownsampled)
+		Default("true").BoolVar(&cfg.RequestDownsampled)
 
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
@@ -85,13 +85,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.min-split-interval", "Split query range requests above this interval in query-range.horizontal-shards requests of equal range. "+
 		"Using this parameter is not allowed with query-range.split-interval. "+
 		"One should also set query-range.split-min-horizontal-shards to a value greater than 1 to enable splitting.").
-		Default("0").DurationVar(&cfg.QueryRangeConfig.MinQuerySplitInterval)
+		Default("0").DurationVar(&cfg.MinQuerySplitInterval)
 
 	cmd.Flag("query-range.max-split-interval", "Split query range below this interval in query-range.horizontal-shards. Queries with a range longer than this value will be split in multiple requests of this length.").
-		Default("0").DurationVar(&cfg.QueryRangeConfig.MaxQuerySplitInterval)
+		Default("0").DurationVar(&cfg.MaxQuerySplitInterval)
 
 	cmd.Flag("query-range.horizontal-shards", "Split queries in this many requests when query duration is below query-range.max-split-interval.").
-		Default("0").Int64Var(&cfg.QueryRangeConfig.HorizontalShards)
+		Default("0").Int64Var(&cfg.HorizontalShards)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
