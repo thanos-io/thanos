@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
@@ -1211,4 +1212,158 @@ func Test_ParseRelabelConfig(t *testing.T) {
     `), SelectorSupportedRelabelActions)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
+}
+
+func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
+	logger := log.NewNopLogger()
+	filter := NewParquetMigratedMetaFilter(logger)
+
+	// Simulate what might happen when extensions are loaded from JSON
+	extensions := struct {
+		ParquetMigrated bool `json:"parquet_migrated"`
+	}{
+		ParquetMigrated: true,
+	}
+
+	for _, c := range []struct {
+		name  string
+		metas map[ulid.ULID]*metadata.Meta
+		check func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error)
+	}{
+		{
+			name: "block with other extensions",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(2, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]interface{}{
+							"other_key": "other_value",
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Ok(t, err)
+				testutil.Equals(t, 1, len(metas))
+			},
+		},
+		{
+			name: "no extensions",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(1, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: nil,
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 1, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+		{
+			name: "block with parquet_migrated=false",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(3, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]interface{}{
+							metadata.ParquetMigratedExtensionKey: false,
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 1, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+		{
+			name: "block with parquet_migrated=true",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(4, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]interface{}{
+							metadata.ParquetMigratedExtensionKey: true,
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 0, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+		{
+			name: "mixed blocks with parquet_migrated",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(5, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]interface{}{
+							metadata.ParquetMigratedExtensionKey: true,
+						},
+					},
+				},
+				ulid.MustNew(6, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]interface{}{
+							metadata.ParquetMigratedExtensionKey: false,
+						},
+					},
+				},
+				ulid.MustNew(7, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: nil,
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 2, len(metas))
+				testutil.Ok(t, err)
+				testutil.Assert(t, metas[ulid.MustNew(6, nil)] != nil, "Expected block with parquet_migrated=false to remain")
+				testutil.Assert(t, metas[ulid.MustNew(7, nil)] != nil, "Expected block without extensions to remain")
+			},
+		},
+		{
+			name: "block with serialized extensions",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(8, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: extensions,
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 0, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := prometheus.NewRegistry()
+
+			synced := promauto.With(r).NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "test_synced",
+					Help: "Test synced metric",
+				},
+				[]string{"state"},
+			)
+			modified := promauto.With(r).NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "test_modified",
+					Help: "Test modified metric",
+				},
+				[]string{"state"},
+			)
+			ctx := context.Background()
+
+			m, err := json.Marshal(c.metas)
+			testutil.Ok(t, err)
+
+			var outmetas map[ulid.ULID]*metadata.Meta
+			testutil.Ok(t, json.Unmarshal(m, &outmetas))
+
+			err = filter.Filter(ctx, outmetas, synced, modified)
+			c.check(t, outmetas, err)
+		})
+	}
 }

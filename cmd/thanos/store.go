@@ -393,14 +393,16 @@ func runStore(
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
-		[]block.MetadataFilter{
-			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
-			block.NewLabelShardedMetaFilter(relabelConfig),
-			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
-			ignoreDeletionMarkFilter,
-			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		})
+	filters := []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
+		ignoreDeletionMarkFilter,
+		block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
+		block.NewParquetMigratedMetaFilter(logger),
+	}
+
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}
