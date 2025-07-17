@@ -12,11 +12,17 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
+
 ### Changed
+
+- [#8370](https://github.com/thanos-io/thanos/pull/8370) Query: announced labelset now reflects relabel-config
 
 ### Removed
 
 ### Fixed
+
+- [#8374](https://github.com/thanos-io/thanos/pull/8374) Query: fix panic when concurrently accessing annotations map
 
 ### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
 
