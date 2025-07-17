@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#8400](https://github.com/thanos-io/thanos/pull/8400) quickstart.sh: Update `thanos query` flag `--store` to `--endpoint`
+- [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 
 ### Added
 
