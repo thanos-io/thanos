@@ -6,7 +6,6 @@ package queryfrontend
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -288,9 +287,11 @@ func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQ
 	}
 
 	// Write to file with newline.
-	if _, err := fmt.Fprintf(m.logFile, "%s\n", jsonData); err != nil {
-		level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
-	}
+	// if _, err := fmt.Fprintf(m.logFile, "%s\n", jsonData); err != nil {
+	// 	level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
+	// }
+
+	_ = jsonData
 }
 
 // Close should be called when the middleware is no longer needed.
