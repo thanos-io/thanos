@@ -195,20 +195,6 @@ func (m *Thanos) ResolutionString() string {
 	return fmt.Sprintf("%d", m.Downsample.Resolution)
 }
 
-// ResolutionToString helps convert the Resolution from milliseconds to Standard Resolution String for logging.
-func ResolutionToString(resolution int64) string {
-	switch resolution {
-	case 0:
-		return "0s"
-	case 5 * 60 * 1000:
-		return "5m"
-	case 60 * 60 * 1000:
-		return "1h"
-	default:
-		return fmt.Sprintf("%dms", resolution)
-	}
-}
-
 // WriteToDir writes the encoded meta into <dir>/meta.json.
 func (m Meta) WriteToDir(logger log.Logger, dir string) error {
 	// Make any changes to the file appear atomic.
