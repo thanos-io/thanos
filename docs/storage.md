@@ -290,13 +290,13 @@ config:
   use_grpc: false
   grpc_conn_pool_size: 0
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
     insecure_skip_verify: false
-    tls_handshake_timeout: 0s
-    expect_continue_timeout: 0s
-    max_idle_conns: 0
-    max_idle_conns_per_host: 0
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
     max_conns_per_host: 0
     tls_config:
       ca_file: ""
@@ -379,12 +379,15 @@ Config file format is the following:
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=azure.Config"
 type: AZURE
 config:
+  az_tenant_id: ""
+  client_id: ""
+  client_secret: ""
   storage_account: ""
   storage_account_key: ""
   storage_connection_string: ""
-  storage_create_container: false
+  storage_create_container: true
   container: ""
-  endpoint: ""
+  endpoint: blob.core.windows.net
   user_assigned_id: ""
   max_retries: 0
   reader_config:
@@ -395,13 +398,13 @@ config:
     retry_delay: 0s
     max_retry_delay: 0s
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
     insecure_skip_verify: false
-    tls_handshake_timeout: 0s
-    expect_continue_timeout: 0s
-    max_idle_conns: 0
-    max_idle_conns_per_host: 0
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
     max_conns_per_host: 0
     tls_config:
       ca_file: ""

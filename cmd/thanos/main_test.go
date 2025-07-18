@@ -91,8 +91,8 @@ func (b *erroringBucket) Attributes(ctx context.Context, name string) (objstore.
 
 // Upload the contents of the reader as an object into the bucket.
 // Upload should be idempotent.
-func (b *erroringBucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	return b.bkt.Upload(ctx, name, r)
+func (b *erroringBucket) Upload(ctx context.Context, name string, r io.Reader, opts ...objstore.ObjectUploadOption) error {
+	return b.bkt.Upload(ctx, name, r, opts...)
 }
 
 // Delete removes the object with the given name.
@@ -114,6 +114,11 @@ func (b *erroringBucket) IterWithAttributes(ctx context.Context, dir string, f f
 // SupportedIterOptions returns the supported iteration options.
 func (b *erroringBucket) SupportedIterOptions() []objstore.IterOptionType {
 	return b.bkt.SupportedIterOptions()
+}
+
+// Provider returns the provider of the bucket.
+func (b *erroringBucket) Provider() objstore.ObjProvider {
+	return b.bkt.Provider()
 }
 
 // Ensures that downsampleBucket() stops its work properly
