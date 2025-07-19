@@ -679,7 +679,9 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
-	warnings = append(warnings, res.Warnings.AsErrors()...)
+	// this prevents a panic when annotations are concurrently accessed
+	safeWarnings := annotations.New().Merge(res.Warnings)
+	warnings = append(warnings, safeWarnings.AsErrors()...)
 
 	var analysis queryTelemetry
 	if qapi.parseQueryAnalyzeParam(r) {
@@ -988,7 +990,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
-	warnings = append(warnings, res.Warnings.AsErrors()...)
+	// this prevents a panic when annotations are concurrently accessed
+	safeWarnings := annotations.New().Merge(res.Warnings)
+	warnings = append(warnings, safeWarnings.AsErrors()...)
 
 	var analysis queryTelemetry
 	if qapi.parseQueryAnalyzeParam(r) {
