@@ -1,0 +1,38 @@
+name: Syncing Tags
+
+on:
+  release:
+    types:
+      - published
+      
+permissions: 
+  contents: write
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Finding SHA with lastest Tag
+        run: |
+          LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
+          COMMIT_SHA=$(git rev-list -n 1 $LATEST_TAG)
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+      
+      - name: Finding Branch with SHA
+        run: |
+          RELEASE_BRANCH=$(git branch -r --contains ${{ env.COMMIT_SHA }})
+          echo "RELEASE_BRANCH=$RELEASE_BRANCH" >> $GITHUB_ENV
+      
+      - name: Merging Release into main
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b main || git checkout main
+          git merge --no-ff ${{ env.RELEASE_BRANCH }} -m "Merge $RELEASE_BRANCH into main after release"
+          git push origin main
