@@ -6,6 +6,7 @@ package queryfrontend
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // MetricsRangeQueryLogging represents the logging information for a range query.
@@ -77,32 +79,63 @@ type UserInfo struct {
 	UserAgent           string
 }
 
+// RangeQueryLogConfig holds configuration for range query logging.
+type RangeQueryLogConfig struct {
+	LogDir     string // Directory to store log files.
+	MaxSizeMB  int    // Maximum size in megabytes before rotation.
+	MaxAge     int    // Maximum number of days to retain old log files.
+	MaxBackups int    // Maximum number of old log files to retain.
+	Compress   bool   // Whether to compress rotated files.
+}
+
+// DefaultRangeQueryLogConfig returns the default configuration for range query logging.
+func DefaultRangeQueryLogConfig() RangeQueryLogConfig {
+	return RangeQueryLogConfig{
+		LogDir:     "/databricks/logs/pantheon-range-query-frontend",
+		MaxSizeMB:  100, // 100MB per file
+		MaxAge:     7,   // Keep logs for 7 days
+		MaxBackups: 10,  // Keep 10 backup files
+		Compress:   true,
+	}
+}
+
 type rangeQueryLoggingMiddleware struct {
-	next    queryrange.Handler
-	logger  log.Logger
-	logFile *os.File
+	next   queryrange.Handler
+	logger log.Logger
+	writer io.WriteCloser
 }
 
 // NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information.
 func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer) queryrange.Middleware {
-	// Create the /databricks/logs directory if it doesn't exist.
-	logDir := "/databricks/logs/pantheon-range-query-frontend"
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		level.Error(logger).Log("msg", "failed to create log directory", "dir", logDir, "err", err)
+	return NewRangeQueryLoggingMiddlewareWithConfig(logger, reg, DefaultRangeQueryLogConfig())
+}
+
+// NewRangeQueryLoggingMiddlewareWithConfig creates a new middleware with custom configuration.
+func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.Registerer, config RangeQueryLogConfig) queryrange.Middleware {
+	// Create the log directory if it doesn't exist.
+	if err := os.MkdirAll(config.LogDir, 0755); err != nil {
+		level.Error(logger).Log("msg", "failed to create log directory", "dir", config.LogDir, "err", err)
 	}
 
-	// Open the log file for range query logging.
-	logFile, err := os.OpenFile(filepath.Join(logDir, "rangequerylogging.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		level.Error(logger).Log("msg", "failed to open range query logging file", "err", err)
-		logFile = nil
+	// Create the rotating file logger.
+	var writer io.WriteCloser
+	logFilePath := filepath.Join(config.LogDir, "rangequerylogging.jsonl")
+
+	rotatingLogger := &lumberjack.Logger{
+		Filename:   logFilePath,
+		MaxSize:    config.MaxSizeMB,
+		MaxAge:     config.MaxAge,
+		MaxBackups: config.MaxBackups,
+		Compress:   config.Compress,
 	}
+
+	writer = rotatingLogger
 
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		return &rangeQueryLoggingMiddleware{
-			next:    next,
-			logger:  logger,
-			logFile: logFile,
+			next:   next,
+			logger: logger,
+			writer: writer,
 		}
 	})
 }
@@ -174,7 +207,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	}
 
 	// Log to file if available.
-	if m.logFile != nil {
+	if m.writer != nil {
 		m.writeToLogFile(rangeQueryLog)
 	}
 
@@ -275,7 +308,7 @@ func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Resp
 }
 
 func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQueryLogging) {
-	if m.logFile == nil {
+	if m.writer == nil {
 		return
 	}
 
@@ -287,17 +320,16 @@ func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQ
 	}
 
 	// Write to file with newline.
-	// if _, err := fmt.Fprintf(m.logFile, "%s\n", jsonData); err != nil {
-	// 	level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
-	// }
-
-	_ = jsonData
+	jsonData = append(jsonData, '\n')
+	if _, err := m.writer.Write(jsonData); err != nil {
+		level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
+	}
 }
 
 // Close should be called when the middleware is no longer needed.
 func (m *rangeQueryLoggingMiddleware) Close() error {
-	if m.logFile != nil {
-		return m.logFile.Close()
+	if m.writer != nil {
+		return m.writer.Close()
 	}
 	return nil
 }
