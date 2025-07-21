@@ -114,13 +114,13 @@ Note that deduplication of HA groups is not supported by the `chain` algorithm.
 
 ## Thanos PromQL Engine (experimental)
 
-By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
+By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-io/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
 
 To learn more, see [the introduction talk](https://youtu.be/pjkWzDVxWk4?t=3609) from [the PromConEU 2022](https://promcon.io/2022-munich/talks/opening-pandoras-box-redesigning/).
 
 This feature is still **experimental** given active development. All queries should be supported due to bulit-in fallback to old PromQL if something is not yet implemented.
 
-For new engine bugs/issues, please use https://github.com/thanos-community/promql-engine GitHub issues.
+For new engine bugs/issues, please use https://github.com/thanos-io/promql-engine GitHub issues.
 
 ### Distributed execution mode
 

@@ -8,6 +8,20 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## Unreleased
+
+### Fixed
+
+### Added
+
+- [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
+
+### Changed
+
+- [#8370](https://github.com/thanos-io/thanos/pull/8370) Query: announced labelset now reflects relabel-config
+
+### Removed
+
 ### [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
 
 ### Fixed
@@ -24,7 +38,7 @@ Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
 - [#8349](https://github.com/thanos-io/thanos/pull/8349) Query-Frontend: properly clean up resources
 - [#8338](https://github.com/thanos-io/thanos/pull/8338) Query-Frontend: use original roundtripper + close immediately
 
-### [v0.39.0](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 25
+## [v0.39.0](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 25
 
 In short: there are a bunch of fixes and small improvements. The shining items in this release are memory usage improvements in Thanos Query and shuffle sharding support in Thanos Receiver. Information about shuffle sharding support is available in the documentation. Thank you to all contributors!
 
@@ -49,7 +63,6 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Fixed
 - [#8199](https://github.com/thanos-io/thanos/pull/8199) Query: handle panics or nil pointer dereference in querier gracefully when query analyze returns nil
-
 - [#8211](https://github.com/thanos-io/thanos/pull/8211) Query: fix panic on nested partial response in distributed instant query
 - [#8216](https://github.com/thanos-io/thanos/pull/8216) Query/Receive: fix iter race between `next()` and `stop()` introduced in https://github.com/thanos-io/thanos/pull/7821.
 - [#8212](https://github.com/thanos-io/thanos/pull/8212) Receive: Ensure forward/replication metrics are incremented in err cases

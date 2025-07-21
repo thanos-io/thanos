@@ -1236,3 +1236,59 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 
 	testStoreAPIsAcceptance(t, startStore)
 }
+
+// TestTSDBSelectorFilteringBehavior tests that TSDBSelector properly filters stores
+// based on relabel configuration, ensuring that only matching stores are included
+// in TSDBInfos, LabelValues, and other metadata operations.
+func TestTSDBSelectorFilteringBehavior(t *testing.T) {
+	t.Parallel()
+
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+			db, err := e2eutil.NewTSDB()
+			testutil.Ok(tt, err)
+			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
+			appendFn(db.Appender(context.Background()))
+
+			return NewTSDBStore(nil, db, component.Rule, extLset)
+		}
+
+		// this TSDB will be selected
+		store1 := startNestedStore(tt, extLset, appendFn)
+
+		// this TSDB should be dropped
+		droppedLset := labels.New(labels.Label{Name: "foo", Value: "bar"})
+		store2 := startNestedStore(tt, droppedLset, appendFn)
+
+		clients := []Client{
+			storetestutil.TestClient{
+				StoreClient: storepb.ServerAsClient(store1),
+				ExtLset:     []labels.Labels{extLset},
+			},
+			storetestutil.TestClient{
+				StoreClient: storepb.ServerAsClient(store2),
+				ExtLset:     []labels.Labels{droppedLset},
+			},
+		}
+
+		// Create relabel config to keep only the labels in the extLset
+		relabelCfgs := []*relabel.Config{{
+			SourceLabels: []model.LabelName{"foo"},
+			Regex:        relabel.MustNewRegexp("bar"),
+			Action:       relabel.Drop,
+		}}
+
+		return NewProxyStore(
+			nil, nil,
+			func() []Client { return clients },
+			component.Query,
+			labels.EmptyLabels(),
+			0*time.Second,
+			RetrievalStrategy(EagerRetrieval),
+			WithTSDBSelector(NewTSDBSelector(relabelCfgs)),
+		)
+	}
+
+	testStoreAPIsAcceptance(t, startStore)
+
+}
