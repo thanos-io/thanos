@@ -92,9 +92,9 @@ type RangeQueryLogConfig struct {
 func DefaultRangeQueryLogConfig() RangeQueryLogConfig {
 	return RangeQueryLogConfig{
 		LogDir:     "/databricks/logs/pantheon-range-query-frontend",
-		MaxSizeMB:  1, // 100MB per file
+		MaxSizeMB:  100, // 100MB per file
 		MaxAge:     7,   // Keep logs for 7 days
-		MaxBackups: 3,  // Keep 10 backup files
+		MaxBackups: 10,  // Keep 10 backup files
 		Compress:   true,
 	}
 }
@@ -119,7 +119,7 @@ func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.
 
 	// Create the rotating file logger.
 	var writer io.WriteCloser
-	logFilePath := filepath.Join(config.LogDir, "PantheonRangeQueryLogging.json")
+	logFilePath := filepath.Join(config.LogDir, "PantheonRangeQueryFrontend.json")
 
 	rotatingLogger := &lumberjack.Logger{
 		Filename:   logFilePath,
