@@ -119,7 +119,7 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 	testutil.Equals(t, id2.String(), failedBlocks[0])
 	testutil.Equals(t, 2, len(metas))
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
-		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+		return metas[i].MinTime < metas[j].MinTime
 	}), true)
 }
 

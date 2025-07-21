@@ -1064,7 +1064,7 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		"--query-range.response-cache-config": string(cacheConfigBytes),
 	}
 
-	if !config.QueryRangeConfig.AlignRangeWithStep {
+	if !config.AlignRangeWithStep {
 		flags["--no-query-range.align-range-with-step"] = ""
 	}
 
@@ -1072,10 +1072,10 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		flags["--query-frontend.vertical-shards"] = strconv.Itoa(config.NumShards)
 	}
 
-	if config.QueryRangeConfig.MinQuerySplitInterval != 0 {
-		flags["--query-range.min-split-interval"] = config.QueryRangeConfig.MinQuerySplitInterval.String()
-		flags["--query-range.max-split-interval"] = config.QueryRangeConfig.MaxQuerySplitInterval.String()
-		flags["--query-range.horizontal-shards"] = strconv.FormatInt(config.QueryRangeConfig.HorizontalShards, 10)
+	if config.MinQuerySplitInterval != 0 {
+		flags["--query-range.min-split-interval"] = config.MinQuerySplitInterval.String()
+		flags["--query-range.max-split-interval"] = config.MaxQuerySplitInterval.String()
+		flags["--query-range.horizontal-shards"] = strconv.FormatInt(config.HorizontalShards, 10)
 		flags["--query-range.split-interval"] = "0"
 	}
 

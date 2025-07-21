@@ -1572,7 +1572,7 @@ func remoteWrite(ctx context.Context, timeseries []prompb.TimeSeries, addr strin
 	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
 
 	// Execute HTTP request
-	res, err := promclient.NewDefaultClient().HTTPClient.Do(req.WithContext(ctx))
+	res, err := promclient.NewDefaultClient().Do(req.WithContext(ctx))
 	if err != nil {
 		return err
 	}

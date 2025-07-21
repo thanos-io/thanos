@@ -116,10 +116,7 @@ func (r *postingsReaderBuilder) Next() bool {
 
 	r.keyID = r.postings[r.pi].keyID
 	r.pi++
-	for {
-		if r.pi >= len(r.postings) {
-			break
-		}
+	for r.pi < len(r.postings) {
 
 		if r.postings[r.pi].ptr.Start == r.postings[r.pi-1].ptr.Start &&
 			r.postings[r.pi].ptr.End == r.postings[r.pi-1].ptr.End {
