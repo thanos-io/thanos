@@ -119,7 +119,7 @@ func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.
 
 	// Create the rotating file logger.
 	var writer io.WriteCloser
-	logFilePath := filepath.Join(config.LogDir, "rangequerylogging.jsonl")
+	logFilePath := filepath.Join(config.LogDir, "PantheonRangeQueryLogging.json")
 
 	rotatingLogger := &lumberjack.Logger{
 		Filename:   logFilePath,
