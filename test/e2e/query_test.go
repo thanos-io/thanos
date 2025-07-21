@@ -1376,7 +1376,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 
-	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
 		res, _, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err

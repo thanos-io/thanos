@@ -189,7 +189,6 @@ require (
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/elastic/go-sysinfo v1.15.3 // indirect
 	github.com/elastic/go-windows v1.0.2 // indirect
-	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
@@ -296,7 +295,7 @@ require (
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
 	howett.net/plist v1.0.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
-	zenhack.net/go/util v0.0.0-20230607025951-8b02fee814ae // indirect
+	zenhack.net/go/util v0.0.0-20230414204917-531d38494cf5 // indirect
 )
 
 replace (
@@ -315,9 +314,9 @@ replace (
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
-	// Pinning grpc due https://github.com/grpc/grpc-go/issues/7314
-	google.golang.org/grpc => google.golang.org/grpc v1.63.2
-
 	// Overriding to use latest commit.
 	gopkg.in/alecthomas/kingpin.v2 => github.com/alecthomas/kingpin v1.3.8-0.20210301060133-17f40c25f497
+
+	// The domain `zenhack.net` expired.
+	zenhack.net/go/util => github.com/zenhack/go-util v0.0.0-20231005031245-66f5419c2aea
 )
