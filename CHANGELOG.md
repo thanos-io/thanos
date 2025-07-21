@@ -10,13 +10,24 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
 ### Added
+
+- [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 
 ### Changed
 
+- [#8370](https://github.com/thanos-io/thanos/pull/8370) Query: announced labelset now reflects relabel-config
+
 ### Removed
 
+### [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
+
 ### Fixed
+
+- [#8374](https://github.com/thanos-io/thanos/pull/8374) Query: fix panic when concurrently accessing annotations map
+- [#8375](https://github.com/thanos-io/thanos/pull/8375) Query: fix native histogram buckets in distributed queries
 
 ### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
 
