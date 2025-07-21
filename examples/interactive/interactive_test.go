@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/thanos-io/objstore"
+
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2einteractive "github.com/efficientgo/e2e/interactive"
@@ -176,7 +178,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//	                    │           │
 	//	                    └───────────┘
 	bkt1Config, err := yaml.Marshal(client.BucketConfig{
-		Type: client.S3,
+		Type: objstore.S3,
 		Config: s3.Config{
 			Bucket:    "bkt1",
 			AccessKey: e2edb.MinioAccessKey,
@@ -198,7 +200,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	)
 
 	bkt2Config, err := yaml.Marshal(client.BucketConfig{
-		Type: client.S3,
+		Type: objstore.S3,
 		Config: s3.Config{
 			Bucket:    "bkt2",
 			AccessKey: e2edb.MinioAccessKey,

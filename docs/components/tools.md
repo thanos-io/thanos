@@ -114,13 +114,13 @@ config:
   use_grpc: false
   grpc_conn_pool_size: 0
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
     insecure_skip_verify: false
-    tls_handshake_timeout: 0s
-    expect_continue_timeout: 0s
-    max_idle_conns: 0
-    max_idle_conns_per_host: 0
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
     max_conns_per_host: 0
     tls_config:
       ca_file: ""
@@ -719,13 +719,13 @@ config:
   use_grpc: false
   grpc_conn_pool_size: 0
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
     insecure_skip_verify: false
-    tls_handshake_timeout: 0s
-    expect_continue_timeout: 0s
-    max_idle_conns: 0
-    max_idle_conns_per_host: 0
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
     max_conns_per_host: 0
     tls_config:
       ca_file: ""
@@ -825,13 +825,13 @@ config:
   use_grpc: false
   grpc_conn_pool_size: 0
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
     insecure_skip_verify: false
-    tls_handshake_timeout: 0s
-    expect_continue_timeout: 0s
-    max_idle_conns: 0
-    max_idle_conns_per_host: 0
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
     max_conns_per_host: 0
     tls_config:
       ca_file: ""
@@ -966,7 +966,7 @@ Flags:
                             object store configuration. See format details:
                             https://thanos.io/tip/thanos/storage.md/#configuration
       --id=ID ...           ID (ULID) of the blocks for rewrite (repeated flag).
-      --tmp.dir="/tmp/thanos-rewrite"
+      --tmp.dir="/var/folders/wf/w8b7kl_1263098ssr_z6cky80000gn/T/thanos-rewrite"
                             Working directory for temporary files
       --[no-]dry-run        Prints the series changes instead of doing them.
                             Defaults to true, for user to double check. (:

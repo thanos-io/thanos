@@ -77,7 +77,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
@@ -413,7 +413,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -645,7 +645,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
@@ -754,7 +754,7 @@ metafile_content_ttl: 0s`
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
@@ -765,7 +765,7 @@ metafile_content_ttl: 0s`
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
@@ -776,7 +776,7 @@ metafile_content_ttl: 0s`
 		e,
 		"3",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
@@ -873,7 +873,7 @@ config:
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
@@ -885,7 +885,7 @@ config:
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
@@ -896,7 +896,7 @@ config:
 		e,
 		"3",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
@@ -1041,7 +1041,7 @@ config:
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1137,7 +1137,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1148,7 +1148,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1294,7 +1294,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1305,7 +1305,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
