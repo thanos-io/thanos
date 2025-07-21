@@ -61,7 +61,9 @@ Since the index-header is built downloading specific segments of the original bl
 
 ## Impact on number of open file descriptors
 
-The Store Gateway stores each block's index-header on the local disk and loads it via mmap. This means that the Gateway keeps a file descriptor for each loaded block. If your Thanos setup has many blocks in the bucket, the Gateway may hit the `file-max` ulimit (maximum number of open file descriptions by a process); in such case, we recommend increasing the limit on your system.
+The Store Gateway stores each block's index-header on the local disk and loads it via mmap. This means that the Gateway keeps a file descriptor for each loaded block. If your Thanos setup has many blocks in the bucket, the Gateway may hit the `file-max` ulimit (maximum number of open file descriptions by a process); in such case, we recommend increasing the limit on your system or running more Store Gateway instances with blocks sharding enabled.
+
+The rule of thumb is that a production system shouldn't have the `file-max` ulimit below `65536`, but higher values are recommended (eg. `1048576`).
 
 ## Impact on CPU, memory and disk
 

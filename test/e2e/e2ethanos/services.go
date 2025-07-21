@@ -954,32 +954,51 @@ receivers:
 	})), "http")
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig, indexCacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2eobs.Observable {
+type StoreGWBuilder struct {
+	e2e.Linkable
+	f       e2e.FutureRunnable
+	name    string
+	envVars map[string]string
+}
+
+// NewStoreGWBuilder is a Store Gateway future that allows extra configuration before initialization.
+func NewStoreGWBuilder(e e2e.Environment, name string) *StoreGWBuilder {
 	f := e.Runnable(fmt.Sprintf("store-gw-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
 		Future()
+	return &StoreGWBuilder{
+		Linkable: f,
+		f:        f,
+		name:     name,
+	}
+}
 
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create store dir"))}
+func (s *StoreGWBuilder) WithEnvVars(envVars map[string]string) *StoreGWBuilder {
+	s.envVars = envVars
+	return s
+}
+func (s *StoreGWBuilder) Init(bucketConfig client.BucketConfig, cacheConfig, indexCacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2eobs.Observable {
+	if err := os.MkdirAll(s.f.Dir(), 0750); err != nil {
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(s.name, errors.Wrap(err, "create store dir"))}
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
-		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(s.name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
 	}
 
 	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
 	if err != nil {
-		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig))}
+		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(s.name, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig))}
 	}
 
 	args := append(e2e.BuildArgs(map[string]string{
-		"--debug.name":        fmt.Sprintf("store-gw-%v", name),
+		"--debug.name":        fmt.Sprintf("store-gw-%v", s.name),
 		"--grpc-address":      ":9091",
 		"--grpc-grace-period": "0s",
 		"--http-address":      ":8080",
 		"--log.level":         infoLogLevel,
-		"--data-dir":          f.InternalDir(),
+		"--data-dir":          s.f.InternalDir(),
 		"--objstore.config":   string(bktConfigBytes),
 		// Accelerated sync time for quicker test (3m by default).
 		"--sync-block-duration":               "3s",
@@ -997,10 +1016,11 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		args = append(args, "--index-cache.config", indexCacheConfig)
 	}
 
-	return e2eobs.AsObservable(f.Init(wrapWithDefaults(e2e.StartOptions{
+	return e2eobs.AsObservable(s.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     DefaultImage(),
 		Command:   e2e.NewCommand("store", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		EnvVars:   s.envVars,
 	})), "http")
 }
 
