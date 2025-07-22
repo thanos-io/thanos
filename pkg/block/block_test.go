@@ -145,7 +145,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 595, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 621, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 
 		// File stats are gathered.
 		testutil.Equals(t, fmt.Sprintf(`{
@@ -154,6 +154,7 @@ func TestUpload(t *testing.T) {
 	"maxTime": 1000,
 	"stats": {
 		"numSamples": 500,
+		"numFloatSamples": 500,
 		"numSeries": 5,
 		"numChunks": 5
 	},
@@ -198,7 +199,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 595, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 621, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Upload with no external labels should be blocked.
@@ -230,7 +231,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 6, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
-		testutil.Equals(t, 574, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
+		testutil.Equals(t, 600, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
 	}
 }
 
