@@ -42,7 +42,8 @@ const FetcherConcurrency = 32
 // to allow depending projects (eg. Cortex) to implement their own custom metadata fetcher while tracking
 // compatible metrics.
 type BaseFetcherMetrics struct {
-	Syncs prometheus.Counter
+	Syncs      prometheus.Counter
+	CacheBusts prometheus.Counter
 }
 
 // FetcherMetrics holds metrics tracked by the metadata fetcher. This struct and its fields are exported
@@ -106,6 +107,11 @@ func NewBaseFetcherMetrics(reg prometheus.Registerer) *BaseFetcherMetrics {
 		Subsystem: FetcherSubSys,
 		Name:      "base_syncs_total",
 		Help:      "Total blocks metadata synchronization attempts by base Fetcher",
+	})
+	m.CacheBusts = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Subsystem: FetcherSubSys,
+		Name:      "base_cache_busts_total",
+		Help:      "Total blocks metadata cache busts by base Fetcher",
 	})
 
 	return &m
@@ -179,7 +185,7 @@ func DefaultModifiedLabelValues() [][]string {
 type Lister interface {
 	// GetActiveAndPartialBlockIDs GetActiveBlocksIDs returning it via channel (streaming) and response.
 	// Active blocks are blocks which contain meta.json, while partial blocks are blocks without meta.json
-	GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error)
+	GetActiveAndPartialBlockIDs(ctx context.Context, activeBlocks chan<- ActiveBlockFetchData) (partialBlocks map[ulid.ULID]bool, err error)
 }
 
 // RecursiveLister lists block IDs by recursively iterating through a bucket.
@@ -195,9 +201,17 @@ func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader
 	}
 }
 
-func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
+type ActiveBlockFetchData struct {
+	lastModified time.Time
+	ulid.ULID
+}
+
+func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, activeBlocks chan<- ActiveBlockFetchData) (partialBlocks map[ulid.ULID]bool, err error) {
 	partialBlocks = make(map[ulid.ULID]bool)
-	err = f.bkt.Iter(ctx, "", func(name string) error {
+
+	err = f.bkt.IterWithAttributes(ctx, "", func(attrs objstore.IterObjectAttributes) error {
+		name := attrs.Name
+
 		parts := strings.Split(name, "/")
 		dir, file := parts[0], parts[len(parts)-1]
 		id, ok := IsBlockDir(dir)
@@ -210,15 +224,20 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch ch
 		if !IsBlockMetaFile(file) {
 			return nil
 		}
-		partialBlocks[id] = false
+
+		lastModified, _ := attrs.LastModified()
+		delete(partialBlocks, id)
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case ch <- id:
+		case activeBlocks <- ActiveBlockFetchData{
+			ULID:         id,
+			lastModified: lastModified,
+		}:
 		}
 		return nil
-	}, objstore.WithRecursiveIter())
+	}, objstore.WithUpdatedAt(), objstore.WithRecursiveIter())
 	return partialBlocks, err
 }
 
@@ -236,10 +255,11 @@ func NewConcurrentLister(logger log.Logger, bkt objstore.InstrumentedBucketReade
 	}
 }
 
-func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch chan<- ulid.ULID) (partialBlocks map[ulid.ULID]bool, err error) {
+func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, activeBlocks chan<- ActiveBlockFetchData) (partialBlocks map[ulid.ULID]bool, err error) {
 	const concurrency = 64
 
 	partialBlocks = make(map[ulid.ULID]bool)
+
 	var (
 		metaChan = make(chan ulid.ULID, concurrency)
 		eg, gCtx = errgroup.WithContext(ctx)
@@ -262,10 +282,14 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, ch c
 					mu.Unlock()
 					continue
 				}
+
 				select {
 				case <-gCtx.Done():
 					return gCtx.Err()
-				case ch <- uid:
+				case activeBlocks <- ActiveBlockFetchData{
+					ULID:         uid,
+					lastModified: time.Time{}, // Not used, cache busting is only implemented by the recursive lister because otherwise we would have to call Attributes() (one extra call).
+				}:
 				}
 			}
 			return nil
@@ -318,12 +342,15 @@ type BaseFetcher struct {
 	blockIDsLister Lister
 
 	// Optional local directory to cache meta.json files.
-	cacheDir string
-	syncs    prometheus.Counter
-	g        singleflight.Group
+	cacheDir   string
+	syncs      prometheus.Counter
+	cacheBusts prometheus.Counter
+	g          singleflight.Group
 
 	mtx    sync.Mutex
 	cached map[ulid.ULID]*metadata.Meta
+
+	modifiedTimestamps map[ulid.ULID]time.Time
 }
 
 // NewBaseFetcher constructs BaseFetcher.
@@ -353,6 +380,7 @@ func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 		cacheDir:       cacheDir,
 		cached:         map[ulid.ULID]*metadata.Meta{},
 		syncs:          metrics.Syncs,
+		cacheBusts:     metrics.CacheBusts,
 	}, nil
 }
 
@@ -394,6 +422,22 @@ var (
 	ErrorSyncMetaNotFound  = errors.New("meta.json not found")
 	ErrorSyncMetaCorrupted = errors.New("meta.json corrupted")
 )
+
+func (f *BaseFetcher) metaUpdated(id ulid.ULID, modified time.Time) bool {
+	if f.modifiedTimestamps[id].IsZero() {
+		return false
+	}
+	return !f.modifiedTimestamps[id].Equal(modified)
+}
+
+func (f *BaseFetcher) bustCacheForID(id ulid.ULID) {
+	f.cacheBusts.Inc()
+
+	delete(f.cached, id)
+	if err := os.RemoveAll(filepath.Join(f.cacheDir, id.String())); err != nil {
+		level.Warn(f.logger).Log("msg", "failed to remove cached meta.json dir", "dir", filepath.Join(f.cacheDir, id.String()), "err", err)
+	}
+}
 
 // loadMeta returns metadata from object storage or error.
 // It returns `ErrorSyncMetaNotFound` and `ErrorSyncMetaCorrupted` sentinel errors in those cases.
@@ -461,8 +505,9 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 }
 
 type response struct {
-	metas   map[ulid.ULID]*metadata.Meta
-	partial map[ulid.ULID]error
+	metas              map[ulid.ULID]*metadata.Meta
+	partial            map[ulid.ULID]error
+	modifiedTimestamps map[ulid.ULID]time.Time
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
 	metaErrs errutil.MultiError
 
@@ -475,21 +520,29 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 
 	var (
 		resp = response{
-			metas:   make(map[ulid.ULID]*metadata.Meta),
-			partial: make(map[ulid.ULID]error),
+			metas:              make(map[ulid.ULID]*metadata.Meta),
+			partial:            make(map[ulid.ULID]error),
+			modifiedTimestamps: make(map[ulid.ULID]time.Time),
 		}
-		eg  errgroup.Group
-		ch  = make(chan ulid.ULID, f.concurrency)
-		mtx sync.Mutex
+		eg             errgroup.Group
+		activeBlocksCh = make(chan ActiveBlockFetchData, f.concurrency)
+		mtx            sync.Mutex
 	)
 	level.Debug(f.logger).Log("msg", "fetching meta data", "concurrency", f.concurrency)
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
-			for id := range ch {
+			for activeBlockFetchMD := range activeBlocksCh {
+				id := activeBlockFetchMD.ULID
+
+				if f.metaUpdated(id, activeBlockFetchMD.lastModified) {
+					f.bustCacheForID(id)
+				}
+
 				meta, err := f.loadMeta(ctx, id)
 				if err == nil {
 					mtx.Lock()
 					resp.metas[id] = meta
+					resp.modifiedTimestamps[id] = activeBlockFetchMD.lastModified
 					mtx.Unlock()
 					continue
 				}
@@ -522,8 +575,8 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	var err error
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
-		defer close(ch)
-		partialBlocks, err = f.blockIDsLister.GetActiveAndPartialBlockIDs(ctx, ch)
+		defer close(activeBlocksCh)
+		partialBlocks, err = f.blockIDsLister.GetActiveAndPartialBlockIDs(ctx, activeBlocksCh)
 		return err
 	})
 
@@ -550,8 +603,14 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		cached[id] = m
 	}
 
+	modifiedTimestamps := make(map[ulid.ULID]time.Time, len(resp.modifiedTimestamps))
+	for id, ts := range resp.modifiedTimestamps {
+		modifiedTimestamps[id] = ts
+	}
+
 	f.mtx.Lock()
 	f.cached = cached
+	f.modifiedTimestamps = modifiedTimestamps
 	f.mtx.Unlock()
 
 	// Best effort cleanup of disk-cached metas.
