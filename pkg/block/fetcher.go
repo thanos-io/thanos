@@ -347,8 +347,9 @@ type BaseFetcher struct {
 	cacheBusts prometheus.Counter
 	g          singleflight.Group
 
-	mtx    sync.Mutex
-	cached map[ulid.ULID]*metadata.Meta
+	mtx sync.Mutex
+
+	cached *sync.Map
 
 	modifiedTimestamps map[ulid.ULID]time.Time
 }
@@ -378,7 +379,7 @@ func NewBaseFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 		bkt:            bkt,
 		blockIDsLister: blockIDsLister,
 		cacheDir:       cacheDir,
-		cached:         map[ulid.ULID]*metadata.Meta{},
+		cached:         &sync.Map{},
 		syncs:          metrics.Syncs,
 		cacheBusts:     metrics.CacheBusts,
 	}, nil
@@ -433,7 +434,7 @@ func (f *BaseFetcher) metaUpdated(id ulid.ULID, modified time.Time) bool {
 func (f *BaseFetcher) bustCacheForID(id ulid.ULID) {
 	f.cacheBusts.Inc()
 
-	delete(f.cached, id)
+	f.cached.Delete(id)
 	if err := os.RemoveAll(filepath.Join(f.cacheDir, id.String())); err != nil {
 		level.Warn(f.logger).Log("msg", "failed to remove cached meta.json dir", "dir", filepath.Join(f.cacheDir, id.String()), "err", err)
 	}
@@ -447,8 +448,8 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
 	)
 
-	if m, seen := f.cached[id]; seen {
-		return m, nil
+	if m, seen := f.cached.Load(id); seen {
+		return m.(*metadata.Meta), nil
 	}
 
 	// Best effort load from local dir.
@@ -598,9 +599,10 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	}
 
 	// Only for complete view of blocks update the cache.
-	cached := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
+
+	cached := &sync.Map{}
 	for id, m := range resp.metas {
-		cached[id] = m
+		cached.Store(id, m)
 	}
 
 	modifiedTimestamps := make(map[ulid.ULID]time.Time, len(resp.modifiedTimestamps))
@@ -693,10 +695,12 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 }
 
 func (f *BaseFetcher) countCached() int {
-	f.mtx.Lock()
-	defer f.mtx.Unlock()
-
-	return len(f.cached)
+	var i int
+	f.cached.Range(func(_, _ interface{}) bool {
+		i++
+		return true
+	})
+	return i
 }
 
 type MetaFetcher struct {

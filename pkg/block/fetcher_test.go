@@ -276,7 +276,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				}
 
 				tcase.do(func() {
-					baseFetcher.cached = make(map[ulid.ULID]*metadata.Meta)
+					baseFetcher.cached.Clear()
 					testutil.Ok(t, os.RemoveAll(filepath.Join(dir, "meta-syncer")))
 				})
 
