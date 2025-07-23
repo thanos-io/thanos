@@ -267,11 +267,13 @@ func setupEndpointSet(
 		resolveCtx, resolveCancel := context.WithTimeout(context.Background(), dnsSDInterval)
 		defer resolveCancel()
 
-		level.Info(logger).Log("msg", "performing initial DNS resolution")
+		level.Info(logger).Log("msg", "performing initial DNS resolution for endpoints")
 
 		endpointConfig := configProvider.config()
 		addresses := make([]string, 0, len(endpointConfig.Endpoints))
 		for _, ecfg := range endpointConfig.Endpoints {
+			// Only resolve non-group dynamic endpoints here.
+			// Group endpoints are resolved by the gRPC resolver in its Build() method.
 			if addr := ecfg.Address; dns.IsDynamicNode(addr) && !ecfg.Group {
 				addresses = append(addresses, addr)
 			}
