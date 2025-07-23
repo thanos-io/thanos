@@ -588,8 +588,8 @@ type errBucket struct {
 	failSuffix string
 }
 
-func (eb errBucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	err := eb.Bucket.Upload(ctx, name, r)
+func (eb errBucket) Upload(ctx context.Context, name string, r io.Reader, opts ...objstore.ObjectUploadOption) error {
+	err := eb.Bucket.Upload(ctx, name, r, opts...)
 	if err != nil {
 		return err
 	}

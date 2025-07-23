@@ -713,7 +713,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
@@ -864,7 +864,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
@@ -2150,7 +2150,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",

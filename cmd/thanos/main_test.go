@@ -33,6 +33,11 @@ type erroringBucket struct {
 	bkt objstore.InstrumentedBucket
 }
 
+// Provider returns the provider of the bucket.
+func (b *erroringBucket) Provider() objstore.ObjProvider {
+	return b.bkt.Provider()
+}
+
 func (b *erroringBucket) Close() error {
 	return b.bkt.Close()
 }
@@ -91,8 +96,8 @@ func (b *erroringBucket) Attributes(ctx context.Context, name string) (objstore.
 
 // Upload the contents of the reader as an object into the bucket.
 // Upload should be idempotent.
-func (b *erroringBucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	return b.bkt.Upload(ctx, name, r)
+func (b *erroringBucket) Upload(ctx context.Context, name string, r io.Reader, opts ...objstore.ObjectUploadOption) error {
+	return b.bkt.Upload(ctx, name, r, opts...)
 }
 
 // Delete removes the object with the given name.
