@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpcresolver "google.golang.org/grpc/resolver"
 )
 
@@ -44,6 +45,13 @@ func (b *builder) Build(t grpcresolver.Target, cc grpcresolver.ClientConn, _ grp
 		interval: b.resolveInterval,
 		logger:   b.logger,
 	}
+
+	// perform initial, synchronous resolution to populate the state.
+	level.Info(r.logger).Log("msg", "performing initial gRPC endpoint resolution", "target", r.target)
+	if err := r.updateResolver(); err != nil {
+		level.Error(r.logger).Log("msg", "initial gRPC endpoint resolution failed", "target", r.target, "err", err)
+	}
+
 	r.wg.Add(1)
 	go r.run()
 
@@ -80,32 +88,36 @@ func (r *resolver) addresses() []string {
 	return r.provider.AddressesForHost(r.target)
 }
 
+func (r *resolver) updateResolver() error {
+	if err := r.resolve(); err != nil {
+		r.cc.ReportError(err)
+		return err
+	}
+	state := grpcresolver.State{}
+	addrs := r.addresses()
+	if len(addrs) == 0 {
+		level.Info(r.logger).Log("msg", "no addresses resolved", "target", r.target)
+		return nil
+	}
+	for _, addr := range addrs {
+		state.Addresses = append(state.Addresses, grpcresolver.Address{Addr: addr})
+	}
+	if err := r.cc.UpdateState(state); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *resolver) run() {
 	defer r.wg.Done()
 	for {
-		func() {
-			if err := r.resolve(); err != nil {
-				r.cc.ReportError(err)
-				r.logger.Log("msg", "failed to resolve", "err", err)
-				return
-			}
-			state := grpcresolver.State{}
-			addrs := r.addresses()
-			if len(addrs) == 0 {
-				r.logger.Log("msg", "no addresses resolved", "target", r.target)
-				return
-			}
-			for _, addr := range addrs {
-				state.Addresses = append(state.Addresses, grpcresolver.Address{Addr: addr})
-			}
-			if err := r.cc.UpdateState(state); err != nil {
-				r.logger.Log("msg", "failed to update state", "err", err)
-			}
-		}()
 		select {
 		case <-r.ctx.Done():
 			return
 		case <-time.After(r.interval):
+			if err := r.updateResolver(); err != nil {
+				level.Error(r.logger).Log("msg", "failed to update state for gRPC resolver", "err", err)
+			}
 		}
 	}
 }

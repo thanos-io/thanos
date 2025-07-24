@@ -261,6 +261,33 @@ func setupEndpointSet(
 	}
 	legacyFileSDCache := cache.New()
 
+	// Perform initial DNS resolution before starting periodic updates.
+	// This ensures that DNS providers have addresses when the first endpoint update runs.
+	{
+		resolveCtx, resolveCancel := context.WithTimeout(context.Background(), dnsSDInterval)
+		defer resolveCancel()
+
+		level.Info(logger).Log("msg", "performing initial DNS resolution for endpoints")
+
+		endpointConfig := configProvider.config()
+		addresses := make([]string, 0, len(endpointConfig.Endpoints))
+		for _, ecfg := range endpointConfig.Endpoints {
+			// Only resolve non-group dynamic endpoints here.
+			// Group endpoints are resolved by the gRPC resolver in its Build() method.
+			if addr := ecfg.Address; dns.IsDynamicNode(addr) && !ecfg.Group {
+				addresses = append(addresses, addr)
+			}
+		}
+		// Note: legacyFileSDCache will be empty at this point since file SD hasn't started yet
+		if len(addresses) > 0 {
+			if err := dnsEndpointProvider.Resolve(resolveCtx, addresses, true); err != nil {
+				level.Error(logger).Log("msg", "initial DNS resolution failed", "err", err)
+			}
+		}
+
+		level.Info(logger).Log("msg", "initial DNS resolution completed")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if fileSD != nil {
