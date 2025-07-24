@@ -73,30 +73,38 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		dir := t.TempDir()
 
 		var ulidToDelete ulid.ULID
-		r := prometheus.NewRegistry()
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := NewConcurrentLister(noopLogger, insBkt)
-		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
+
+		r := prometheus.NewRegistry()
+
+		recursiveLister := NewRecursiveLister(noopLogger, insBkt)
+		recursiveBaseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, recursiveLister, dir, r)
 		testutil.Ok(t, err)
 
-		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{
+		recursiveFetcher := recursiveBaseFetcher.NewMetaFetcher(r, []MetadataFilter{
 			&ulidFilter{ulidToDelete: &ulidToDelete},
 		}, nil)
 
-		for i, tcase := range []struct {
+		for _, tcase := range []struct {
 			name                  string
-			do                    func()
+			do                    func(cleanCache func())
 			filterULID            ulid.ULID
 			expectedMetas         []ulid.ULID
 			expectedCorruptedMeta []ulid.ULID
 			expectedNoMeta        []ulid.ULID
 			expectedFiltered      int
 			expectedMetaErr       error
+			expectedCacheBusts    int
+			expectedSyncs         int
+
+			// If this is set then use it.
+			fetcher     *MetaFetcher
+			baseFetcher *BaseFetcher
 		}{
 			{
 				name: "empty bucket",
-				do:   func() {},
+				do:   func(_ func()) {},
 
 				expectedMetas:         ULIDs(),
 				expectedCorruptedMeta: ULIDs(),
@@ -104,7 +112,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			},
 			{
 				name: "3 metas in bucket",
-				do: func() {
+				do: func(_ func()) {
 					var meta metadata.Meta
 					meta.Version = 1
 					meta.ULID = ULID(1)
@@ -127,28 +135,8 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedNoMeta:        ULIDs(),
 			},
 			{
-				name: "nothing changed",
-				do:   func() {},
-
-				expectedMetas:         ULIDs(1, 2, 3),
-				expectedCorruptedMeta: ULIDs(),
-				expectedNoMeta:        ULIDs(),
-			},
-			{
-				name: "fresh cache",
-				do: func() {
-					baseFetcher.cached = map[ulid.ULID]*metadata.Meta{}
-				},
-
-				expectedMetas:         ULIDs(1, 2, 3),
-				expectedCorruptedMeta: ULIDs(),
-				expectedNoMeta:        ULIDs(),
-			},
-			{
-				name: "fresh cache: meta 2 and 3 have corrupted data on disk ",
-				do: func() {
-					baseFetcher.cached = map[ulid.ULID]*metadata.Meta{}
-
+				name: "meta 2 and 3 have corrupted data on disk ",
+				do: func(cleanCache func()) {
 					testutil.Ok(t, os.Remove(filepath.Join(dir, "meta-syncer", ULID(2).String(), MetaFilename)))
 
 					f, err := os.OpenFile(filepath.Join(dir, "meta-syncer", ULID(3).String(), MetaFilename), os.O_WRONLY, os.ModePerm)
@@ -165,7 +153,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			},
 			{
 				name: "block without meta",
-				do: func() {
+				do: func(_ func()) {
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(4).String(), "some-file"), bytes.NewBuffer([]byte("something"))))
 				},
 
@@ -175,7 +163,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			},
 			{
 				name: "corrupted meta.json",
-				do: func() {
+				do: func(_ func()) {
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(5).String(), MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
 				},
 
@@ -183,46 +171,71 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 			},
-			{
-				name: "some added some deleted",
-				do: func() {
-					testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, ULID(2)))
 
+			{
+				name:       "filter not existing ulid",
+				do:         func(_ func()) {},
+				filterULID: ULID(10),
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+			},
+			{
+				name: "filter ulid 1",
+				do: func(_ func()) {
 					var meta metadata.Meta
 					meta.Version = 1
-					meta.ULID = ULID(6)
+					meta.ULID = ULID(1)
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
-
-				expectedMetas:         ULIDs(1, 3, 6),
-				expectedCorruptedMeta: ULIDs(5),
-				expectedNoMeta:        ULIDs(4),
-			},
-			{
-				name:       "filter not existing ulid",
-				do:         func() {},
-				filterULID: ULID(10),
-
-				expectedMetas:         ULIDs(1, 3, 6),
-				expectedCorruptedMeta: ULIDs(5),
-				expectedNoMeta:        ULIDs(4),
-			},
-			{
-				name:       "filter ulid 1",
-				do:         func() {},
 				filterULID: ULID(1),
 
-				expectedMetas:         ULIDs(3, 6),
+				expectedMetas:         ULIDs(2, 3),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 				expectedFiltered:      1,
 			},
 			{
+				name: "use recursive lister",
+				do: func(cleanCache func()) {
+					cleanCache()
+				},
+				fetcher:     recursiveFetcher,
+				baseFetcher: recursiveBaseFetcher,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+			},
+			{
+				name: "update timestamp, expect a cache bust",
+				do: func(_ func()) {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.MaxTime = 123456
+					meta.ULID = ULID(1)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+				},
+				fetcher:     recursiveFetcher,
+				baseFetcher: recursiveBaseFetcher,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+				expectedFiltered:      0,
+				expectedCacheBusts:    1,
+				expectedSyncs:         2,
+			},
+			{
 				name: "error: not supported meta version",
-				do: func() {
+				do: func(_ func()) {
 					var meta metadata.Meta
 					meta.Version = 20
 					meta.ULID = ULID(7)
@@ -232,14 +245,40 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
 
-				expectedMetas:         ULIDs(1, 3, 6),
+				expectedMetas:         ULIDs(1, 2, 3),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 		} {
 			if ok := t.Run(tcase.name, func(t *testing.T) {
-				tcase.do()
+				r := prometheus.NewRegistry()
+
+				var fetcher *MetaFetcher
+				var baseFetcher *BaseFetcher
+
+				if tcase.baseFetcher != nil {
+					baseFetcher = tcase.baseFetcher
+				} else {
+					lister := NewConcurrentLister(noopLogger, insBkt)
+					bf, err := NewBaseFetcher(noopLogger, 20, insBkt, lister, dir, r)
+					testutil.Ok(t, err)
+
+					baseFetcher = bf
+				}
+
+				if tcase.fetcher != nil {
+					fetcher = tcase.fetcher
+				} else {
+					fetcher = baseFetcher.NewMetaFetcher(r, []MetadataFilter{
+						&ulidFilter{ulidToDelete: &ulidToDelete},
+					}, nil)
+				}
+
+				tcase.do(func() {
+					baseFetcher.cached.Clear()
+					testutil.Ok(t, os.RemoveAll(filepath.Join(dir, "meta-syncer")))
+				})
 
 				ulidToDelete = tcase.filterULID
 				metas, partial, err := fetcher.Fetch(ctx)
@@ -283,8 +322,10 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				if tcase.expectedMetaErr != nil {
 					expectedFailures = 1
 				}
-				testutil.Equals(t, float64(i+1), promtest.ToFloat64(baseFetcher.syncs))
-				testutil.Equals(t, float64(i+1), promtest.ToFloat64(fetcher.metrics.Syncs))
+
+				testutil.Equals(t, float64(max(1, tcase.expectedSyncs)), promtest.ToFloat64(baseFetcher.syncs))
+				testutil.Equals(t, float64(tcase.expectedCacheBusts), promtest.ToFloat64(baseFetcher.cacheBusts))
+				testutil.Equals(t, float64(max(1, tcase.expectedSyncs)), promtest.ToFloat64(fetcher.metrics.Syncs))
 				testutil.Equals(t, float64(len(tcase.expectedMetas)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(LoadedMeta)))
 				testutil.Equals(t, float64(len(tcase.expectedNoMeta)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(NoMeta)))
 				testutil.Equals(t, float64(tcase.expectedFiltered), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues("filtered")))

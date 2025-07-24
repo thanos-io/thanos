@@ -149,7 +149,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket1, minio1.InternalEndpoint("http"), minio1.InternalDir()),
 		},
 		"",
@@ -242,7 +242,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket1, minio1.InternalEndpoint("http"), minio1.InternalDir()),
 		},
 		"",

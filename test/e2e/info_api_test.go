@@ -16,6 +16,7 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 
 	"github.com/efficientgo/core/testutil"
@@ -44,7 +45,7 @@ func TestInfo(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",

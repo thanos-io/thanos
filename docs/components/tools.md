@@ -1054,6 +1054,9 @@ Flags:
                                upload.
       --label=key="value" ...  External labels to add to the uploaded blocks
                                (repeated).
+      --[no-]shipper.upload-compacted
+                               If true shipper will try to upload compacted
+                               blocks as well.
 
 ```
 
