@@ -695,6 +695,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 }
 
 func (f *BaseFetcher) countCached() int {
+	f.mtx.Lock()
+	defer f.mtx.Unlock()
 	var i int
 	f.cached.Range(func(_, _ interface{}) bool {
 		i++
