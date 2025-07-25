@@ -35,7 +35,7 @@ When a block is ready, it is uploaded to the object store with the block externa
 
 #### Exposing Local Data for Queries
 
-During the block-building phase, the data is not accessible to the Store Gateway as it has not been uploaded to the object store yet. To counter that, the Receive component also serves as a data store, making the local data available for query through the `Store API`. This is a common gRPC API used across all Thanos components for time series data access, set with the `--grpc-address` flag. The Receive will serve all data is has. The more data it serves, the more resources it will use for this duty in addition to ingesting client data.
+During the block-building phase, the data is not accessible to the Store Gateway as it has not been uploaded to the object store yet. To counter that, the Receive component also serves as a data store, making the local data available for query through the `Store API`. This is a common gRPC API used across all Thanos components for time series data access, set with the `--grpc-address` flag. The Receive will serve all data it has. The more data it serves, the more resources it will use for this duty in addition to ingesting client data.
 
 <img src="img/life-of-a-sample/receive-store-api.png" alt="Data expansion" style="max-width: 600px; display: block;margin: 0 auto;"/>
 
