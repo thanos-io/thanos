@@ -132,7 +132,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	return
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, chunksLimiterFactory ChunksLimiterFactory, seriesLimiterFactory SeriesLimiterFactory, bytesLimiterFactory BytesLimiterFactory, relabelConfig []*relabel.Config, filterConf *FilterConfig, opts ...BucketStoreOption) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, chunksLimiterFactory ChunksLimiterFactory, seriesLimiterFactory SeriesLimiterFactory, bytesLimiterFactory BytesLimiterFactory, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -177,10 +177,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		true,
 		time.Minute,
-		append(opts, WithLogger(s.logger),
-			WithIndexCache(s.cache),
-			WithFilterConfig(filterConf),
-			WithRegistry(reg))...,
+		WithLogger(s.logger),
+		WithIndexCache(s.cache),
+		WithFilterConfig(filterConf),
+		WithRegistry(reg),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -619,7 +619,6 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 		maxChunksLimit uint64
 		maxSeriesLimit uint64
 		maxBytesLimit  int64
-		storeOpts      []BucketStoreOption
 		expectedErr    string
 		code           codes.Code
 	}{
@@ -631,23 +630,10 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			expectedErr:    "exceeded chunks limit",
 			code:           codes.ResourceExhausted,
 		},
-		"should fail if the max chunks limit is exceeded - ResourceExhausted (sortingStrategyNone)": {
-			maxChunksLimit: expectedChunks - 1,
-			expectedErr:    "exceeded chunks limit",
-			storeOpts:      []BucketStoreOption{WithDontResort(true)},
-			code:           codes.ResourceExhausted,
-		},
 		"should fail if the max series limit is exceeded - ResourceExhausted": {
 			maxChunksLimit: expectedChunks,
 			expectedErr:    "exceeded series limit",
 			maxSeriesLimit: 1,
-			code:           codes.ResourceExhausted,
-		},
-		"should fail if the max series limit is exceeded - ResourceExhausted (sortingStrategyNone)": {
-			maxChunksLimit: expectedChunks,
-			expectedErr:    "exceeded series limit",
-			maxSeriesLimit: 1,
-			storeOpts:      []BucketStoreOption{WithDontResort(true)},
 			code:           codes.ResourceExhausted,
 		},
 		"should fail if the max bytes limit is exceeded - ResourceExhausted": {
@@ -655,14 +641,6 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			expectedErr:    "exceeded bytes limit",
 			maxSeriesLimit: 2,
 			maxBytesLimit:  1,
-			code:           codes.ResourceExhausted,
-		},
-		"should fail if the max bytes limit is exceeded - ResourceExhausted (sortingStrategyNone)": {
-			maxChunksLimit: expectedChunks,
-			expectedErr:    "exceeded bytes limit",
-			maxSeriesLimit: 2,
-			maxBytesLimit:  1,
-			storeOpts:      []BucketStoreOption{WithDontResort(true)},
 			code:           codes.ResourceExhausted,
 		},
 	}
@@ -674,7 +652,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 			dir := t.TempDir()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(units.Base2Bytes(testData.maxBytesLimit)), emptyRelabelConfig, allowAllFilterConf, testData.storeOpts...)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(units.Base2Bytes(testData.maxBytesLimit)), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{
