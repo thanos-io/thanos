@@ -29,8 +29,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/prometheus/prometheus/util/compression"
 	"go.uber.org/atomic"
 
+	"github.com/thanos-io/thanos/pkg/compressutil"
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -102,7 +104,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	var w *wlog.WL
 	var err error
 	if opts.WithWAL {
-		w, err = wlog.New(nil, nil, filepath.Join(opts.TSDBDir, "wal"), wlog.ParseCompressionType(true, string(wlog.CompressionSnappy)))
+		w, err = wlog.New(nil, nil, filepath.Join(opts.TSDBDir, "wal"), compressutil.ParseCompressionType(true, compression.Snappy))
 		testutil.Ok(t, err)
 	} else {
 		testutil.Ok(t, os.MkdirAll(filepath.Join(opts.TSDBDir, "wal"), os.ModePerm))

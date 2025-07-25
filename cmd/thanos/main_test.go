@@ -139,9 +139,9 @@ func TestRegression4960_Deadlock(t *testing.T) {
 		id, err = e2eutil.CreateBlock(
 			ctx,
 			dir,
-			[]labels.Labels{{{Name: "a", Value: "1"}}},
+			[]labels.Labels{labels.FromStrings("a", "1")},
 			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
-			labels.Labels{{Name: "e1", Value: "1"}},
+			labels.FromStrings("e1", "1"),
 			downsample.ResLevel0, metadata.NoneFunc, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String()), metadata.NoneFunc))
@@ -150,9 +150,9 @@ func TestRegression4960_Deadlock(t *testing.T) {
 		id2, err = e2eutil.CreateBlock(
 			ctx,
 			dir,
-			[]labels.Labels{{{Name: "a", Value: "2"}}},
+			[]labels.Labels{labels.FromStrings("a", "2")},
 			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
-			labels.Labels{{Name: "e1", Value: "2"}},
+			labels.FromStrings("e1", "2"),
 			downsample.ResLevel0, metadata.NoneFunc, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id2.String()), metadata.NoneFunc))
@@ -161,9 +161,9 @@ func TestRegression4960_Deadlock(t *testing.T) {
 		id3, err = e2eutil.CreateBlock(
 			ctx,
 			dir,
-			[]labels.Labels{{{Name: "a", Value: "2"}}},
+			[]labels.Labels{labels.FromStrings("a", "2")},
 			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
-			labels.Labels{{Name: "e1", Value: "2"}},
+			labels.FromStrings("e1", "2"),
 			downsample.ResLevel0, metadata.NoneFunc, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id3.String()), metadata.NoneFunc))
@@ -201,9 +201,9 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 		id, err = e2eutil.CreateBlock(
 			ctx,
 			dir,
-			[]labels.Labels{{{Name: "a", Value: "1"}}},
+			[]labels.Labels{labels.FromStrings("a", "1")},
 			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
-			labels.Labels{{Name: "e1", Value: "1"}},
+			labels.FromStrings("e1", "1"),
 			downsample.ResLevel0, metadata.NoneFunc, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String()), metadata.NoneFunc))

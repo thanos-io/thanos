@@ -183,6 +183,13 @@ func (r *remoteEngine) MaxT() int64 {
 	return r.maxt
 }
 
+func (r *remoteEngine) PartitionLabelSets() []labels.Labels {
+	r.labelSetsOnce.Do(func() {
+		r.labelSets = r.adjustedInfos().LabelSets()
+	})
+	return r.labelSets
+}
+
 func (r *remoteEngine) LabelSets() []labels.Labels {
 	r.labelSetsOnce.Do(func() {
 		r.labelSets = r.adjustedInfos().LabelSets()

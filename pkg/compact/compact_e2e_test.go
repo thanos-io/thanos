@@ -237,25 +237,25 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
 
 		// Test label name with slash, regression: https://github.com/thanos-io/thanos/issues/1661.
-		extLabels := labels.Labels{{Name: "e1", Value: "1/weird"}}
-		extLabels2 := labels.Labels{{Name: "e1", Value: "1"}}
+		extLabels := labels.FromStrings("e1", "1/weird")
+		extLabels2 := labels.FromStrings("e1", "1")
 		metas := createAndUpload(t, bkt, []blockgenSpec{
 			{
 				numSamples: 100, mint: 500, maxt: 1000, extLset: extLabels, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
+					labels.FromStrings("a", "1"),
+					labels.FromStrings("a", "2", "b", "2"),
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
 				},
 			},
 			{
 				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
-					{{Name: "a", Value: "5"}},
-					{{Name: "a", Value: "6"}},
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
+					labels.FromStrings("a", "5"),
+					labels.FromStrings("a", "6"),
 				},
 			},
 			// Mix order to make sure compactor is able to deduct min time / max time.
@@ -268,48 +268,40 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
 			{
 				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels, res: 124,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 			// Extra block for "distraction" for different resolution and one for different labels.
 			{
-				numSamples: 100, mint: 5000, maxt: 6000, extLset: labels.Labels{{Name: "e1", Value: "2"}}, res: 124,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				numSamples: 100, mint: 5000, maxt: 6000, extLset: labels.FromStrings("e1", "2"), res: 124,
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 			// Extra block for "distraction" for different resolution and one for different labels.
 			{
 				numSamples: 100, mint: 4000, maxt: 5000, extLset: extLabels, res: 0,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 			// Second group (extLabels2).
 			{
 				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels2, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
-					{{Name: "a", Value: "6"}},
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
+					labels.FromStrings("a", "6"),
 				},
 			},
 			{
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels2, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
+					labels.FromStrings("a", "1"),
+					labels.FromStrings("a", "2", "b", "2"),
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
 				},
 			},
 			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
 			{
 				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels2, res: 124,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 		})
 

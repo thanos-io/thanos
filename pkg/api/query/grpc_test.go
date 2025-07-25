@@ -12,6 +12,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
@@ -31,7 +32,7 @@ import (
 func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
 	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, dedup.AlgorithmPenalty)
 	remoteEndpointsCreator := query.NewRemoteEndpointsCreator(logger, func() []query.Client { return nil }, nil, 1*time.Minute, true, true)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
@@ -39,7 +40,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 
 	expr, err := extpromql.ParseExpr("metric")
 	testutil.Ok(t, err)
-	lplan := logicalplan.NewFromAST(expr, &equery.Options{}, logicalplan.PlanOptions{})
+	lplan, err := logicalplan.NewFromAST(expr, &equery.Options{}, logicalplan.PlanOptions{})
 	testutil.Ok(t, err)
 	// Create a mock query plan.
 	planBytes, err := logicalplan.Marshal(lplan.Root())
@@ -75,7 +76,7 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
 	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, dedup.AlgorithmPenalty)
 	remoteEndpointsCreator := query.NewRemoteEndpointsCreator(logger, func() []query.Client { return nil }, nil, 1*time.Minute, true, true)
 	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
