@@ -9,6 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#8280](https://github.com/thanos-io/thanos/pull/8280) docs: legacy --store flags + alerts examples legacy metrics
 
 ### Fixed
 
