@@ -46,7 +46,7 @@ The amount of data the Receive component serves can be managed through two param
 
 Key points to consider:
 
-* The primary objective of the Receive component is to ensure **reliable data ingestion**. However, the more data it serves through the Store API, the more resources it will use for this duty in addition to ingesting client data. You should set the retention duration to the minimum required for your use case to optimize resource allocation. The minimum value for 2-hour blocks would be a 4-hour retention to account for availability in the Store Gateway after the block is uploaded to object storage. Bear in mind that the shorter the retention duration, the more risk of data loss in case of failures lasting longer than the retention duration, such as a network partition with the object storage.
+* The primary objective of the Receive component is to ensure **reliable data ingestion**. However, the more data it serves through the Store API, the more resources it will use for this duty in addition to ingesting client data. You should set the retention duration to the minimum required for your use case to optimize resource allocation. The minimum value for 2-hour blocks would be a 4-hour retention to account for availability in the Store Gateway after the block is uploaded to object storage. To prevent data loss, if the Receive component fails to upload blocks before the retention limit is reached, it will hold them until the upload succeeds.
 * Even when the retention duration is short, your Receive instance could be overwhelmed by a query selecting too much data. You should set limits in place to ensure the stability of the Receive instances. These limits must be carefully set to enable Store API clients to retrieve the data they need while preventing resource exhaustion. The longer the retention, the higher the limits should be as the number of samples and series will increase.
 
 ### Maintaining Data: Compaction, Downsampling, and Retention
@@ -97,7 +97,7 @@ Key points to consider:
 * The main solution to this is splitting the data into several block streams, as we will see later. This is Thanos's sharding strategy.
 * There are also cases where you might want to limit the size of the blocks. To that effect, you can use the following parameters:
   * You can limit the compaction levels with `--debug.max-compaction-level` to prevent the Compactor from creating blocks that are too big. This is especially useful when you have a high metrics churn rate. Level 1 is the default and will create blocks of 2 hours. Level 2 will create blocks of 8 hours, level 3 of 2 days, and up to level 4 of 14 days. Without this limit, the Compactor will create blocks of up to 2 weeks. This is not a magic bullet; it does not limit the data size of the blocks. It just limits the number of blocks that can be merged together. The downside of using this setting is that it will increase the number of blocks in the object storage. They will use more space, and the query performance might be impacted.
-  * The flag `compact.block-max-index-size` can be used more effectively to specify the maximum index size beyond which the Compactor will stop block compaction, independently of its compaction level. It has a default value of 64 GB. At this stage, the block is marked for no further compaction.
+  * The flag `compact.block-max-index-size` can be used more effectively to specify the maximum index size beyond which the Compactor will stop block compaction, independently of its compaction level. Once a block's index exceeds this size, the system marks it for no further compaction. The default value is 64 GB, which is the maximum index size the TSDB supports. As a result, some block streams might appear discontinuous in the UI, displaying a lower compaction level than the surrounding blocks.
 
 #### Scaling the Compactor: Block Streams
 
@@ -217,7 +217,7 @@ After optimizing the store processing, you can distribute the query load using s
 ```yaml
 - action: hashmod
   source_labels:
-    - __block_id # A special label that will be mapped to the block ID
+    - tenant_id # An external label that identifies some block streams
   target_label: shard
   modulus: 2 # The number of Store Gateways replicas
 - action: keep
@@ -226,7 +226,11 @@ After optimizing the store processing, you can distribute the query load using s
   regex: 0 # The shard number assigned to this Store Gateway
 ```
 
-While being very effective in distributing the load, one potential issue arises from the fact that series are grouped within a block based on their external labels, typically originating from the same data source. In such cases, if the load is predominantly from one source, sharding may be less effective than expected. This is especially true for blocks that have undergone horizontal compaction and cover extensive time ranges, potentially resulting in an uneven query load on a single Store Gateway instance. If you are experiencing such issues, you can adopt more advanced sharding strategies using more complex relabel configurations, such as dedicating scaled-up Store Gateway instances for specific tenants or data sources.
+Sharding based on the `__block_id` is not recommended because it prevents Stores from selecting the most relevant data resolution needed for a query. For example, one store might see only the raw data and return it, while another store sees the downsampled version for the same query and also returns it. This duplication creates unnecessary overhead.
+
+External label based shrading avoids this issue. By giving a store a complete view of a stream's data (both raw and downsampled), it can effectively select the most appropriate resolution.
+
+If external label sharding is not sufficient, you can combine it with time partitioning using the `--min-time` and `--max-time` flags. This process is done at the chunk level, meaning you can use shorter time intervals for recent data in 2 hour blocks, but you must use longer intervals for older data to account for horizontal compaction. The goal is for any store instance to have a complete view of the stream's data at every resolution for a given time slot, allowing it to return the unique and most appropriate data.
 
 ### Conclusion
 
