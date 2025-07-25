@@ -814,7 +814,6 @@ func (l *eagerRespSet) Close() {
 	}
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
-
 }
 
 func (l *eagerRespSet) At() *storepb.SeriesResponse {
