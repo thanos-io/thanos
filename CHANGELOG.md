@@ -12,6 +12,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8393](https://github.com/thanos-io/thanos/pull/8393) Tests: fix flaky TestCompactWithStoreGateway by adding proper readiness checks
+
 ### Added
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
