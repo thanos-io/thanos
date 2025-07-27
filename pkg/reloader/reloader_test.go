@@ -464,7 +464,11 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 			// ├─ rule3-001.yaml -> rule3-source.yaml
 			// └─ rule3-source.yaml
 			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
-			testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+
+// ADD THIS DELAY TO FIX THE FLAKINESS
+time.Sleep(200 * time.Millisecond) // 👈 Insert this line
+
+testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
 			// out1
 			// ├─ rule1.yaml
 			// ├─ rule2.yaml
