@@ -36,7 +36,7 @@ type MetricsRangeQueryLogging struct {
 	Tenant              string `json:"tenant"`
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
-	EmailId               string `json:"emailID"`
+	EmailId             string `json:"emailID"`
 	// Query-related fields
 	StartTimestampMs      int64    `json:"startTimestampMs"`
 	EndTimestampMs        int64    `json:"endTimestampMs"`
@@ -190,7 +190,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		Tenant:              userInfo.Tenant,
 		ForwardedFor:        userInfo.ForwardedFor,
 		UserAgent:           userInfo.UserAgent,
-		EmailId:               email,
+		EmailId:             email,
 		// Query-related fields
 		StartTimestampMs:      req.Start,
 		EndTimestampMs:        req.End,
