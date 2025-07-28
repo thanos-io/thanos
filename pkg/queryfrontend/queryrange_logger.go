@@ -36,6 +36,7 @@ type MetricsRangeQueryLogging struct {
 	Tenant              string `json:"tenant"`
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
+	EmailId               string `json:"emailID"`
 	// Query-related fields
 	StartTimestampMs      int64    `json:"startTimestampMs"`
 	EndTimestampMs        int64    `json:"endTimestampMs"`
@@ -165,6 +166,9 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	success := err == nil
 	userInfo := m.extractUserInfo(req)
 
+	// Extract email from response headers
+	email := m.extractEmailFromResponse(resp)
+
 	// Calculate bytes fetched (only for successful queries).
 	var bytesFetched int64 = 0
 	if success && resp != nil {
@@ -186,6 +190,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		Tenant:              userInfo.Tenant,
 		ForwardedFor:        userInfo.ForwardedFor,
 		UserAgent:           userInfo.UserAgent,
+		EmailId:               email,
 		// Query-related fields
 		StartTimestampMs:      req.Start,
 		EndTimestampMs:        req.End,
@@ -267,6 +272,24 @@ func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeReque
 	}
 
 	return userInfo
+}
+
+// extractEmailFromResponse extracts the email from response headers.
+func (m *rangeQueryLoggingMiddleware) extractEmailFromResponse(resp queryrange.Response) string {
+	if resp == nil {
+		return ""
+	}
+
+	// Check if it's a PrometheusResponse (for range queries)
+	if promResp, ok := resp.(*queryrange.PrometheusResponse); ok {
+		for _, header := range promResp.GetHeaders() {
+			if strings.ToLower(header.Name) == "x-auth-request-email" && len(header.Values) > 0 {
+				return header.Values[0]
+			}
+		}
+	}
+
+	return ""
 }
 
 // convertStoreMatchers converts internal store matchers to logging format.
