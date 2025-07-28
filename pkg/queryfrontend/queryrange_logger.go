@@ -92,9 +92,9 @@ type RangeQueryLogConfig struct {
 func DefaultRangeQueryLogConfig() RangeQueryLogConfig {
 	return RangeQueryLogConfig{
 		LogDir:     "/databricks/logs/pantheon-range-query-frontend",
-		MaxSizeMB:  100, // 100MB per file
+		MaxSizeMB:  2048, // 2GB per file
 		MaxAge:     7,   // Keep logs for 7 days
-		MaxBackups: 10,  // Keep 10 backup files
+		MaxBackups: 5,  // Keep 10 backup files
 		Compress:   true,
 	}
 }
