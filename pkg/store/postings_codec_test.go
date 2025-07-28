@@ -180,7 +180,7 @@ func allPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader) index.P
 }
 
 func matchPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader, m *labels.Matcher) index.Postings {
-	vals, err := ix.LabelValues(ctx, m.Name)
+	vals, err := ix.LabelValues(ctx, m.Name, nil)
 	testutil.Ok(t, err)
 
 	matching := []string(nil)

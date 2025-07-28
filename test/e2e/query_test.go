@@ -713,7 +713,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
@@ -864,7 +864,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
@@ -1376,7 +1376,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 
-	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
 		res, _, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
@@ -1650,7 +1650,7 @@ func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2eobs.Observa
 	samplespb := make([]prompb.TimeSeries, 0, len(series))
 	r := rand.New(rand.NewSource(int64(len(series))))
 	for _, serie := range series {
-		labelspb := make([]prompb.Label, 0, len(serie.intLabels))
+		labelspb := make([]prompb.Label, 0, serie.intLabels.Len())
 		for labelKey, labelValue := range serie.intLabels.Map() {
 			labelspb = append(labelspb, prompb.Label{
 				Name:  labelKey,
@@ -2150,7 +2150,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		e,
 		"s1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",

@@ -455,7 +455,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	}
 
 	bktConfig := client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	}
 
@@ -919,7 +919,7 @@ func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
 	testutil.Ok(t, block.MarkForNoDownsample(context.Background(), logger, bkt, downsampledRawID, metadata.ManualNoDownsampleReason, "why not", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 
 	c := e2ethanos.NewCompactorBuilder(e, "working").Init(client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
 	}, nil)
 	testutil.Ok(t, e2e.StartAndWaitReady(c))
@@ -967,7 +967,7 @@ func TestCompactorIssue6775(t *testing.T) {
 
 	// Downsample them first.
 	bds := e2ethanos.NewToolsBucketDownsample(e, "downsample", client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	})
 	testutil.Ok(t, bds.Start())
@@ -997,7 +997,7 @@ func TestCompactorIssue6775(t *testing.T) {
 
 	// Run the compactor.
 	c := e2ethanos.NewCompactorBuilder(e, "working").Init(client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
 	}, nil, "--compact.enable-vertical-compaction")
 	testutil.Ok(t, e2e.StartAndWaitReady(c))
@@ -1042,7 +1042,7 @@ func TestCompactorDownsampleNativeHistograms(t *testing.T) {
 	testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, rawBlockID.String()), rawBlockID.String()))
 	// Downsample them first.
 	bds := e2ethanos.NewToolsBucketDownsample(e, "downsample", client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	})
 	testutil.Ok(t, bds.Start())
