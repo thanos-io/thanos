@@ -173,7 +173,7 @@ for i in $(seq 0 2); do
     --tsdb.path data/prom"${i}" \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:109${i}1"
+  STORES="${STORES} --endpoint 127.0.0.1:109${i}1"
 
   sleep 0.25
 done
@@ -205,7 +205,7 @@ metafile_content_ttl: 0s
     --store.caching-bucket.config-file=groupcache.yml \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:10905"
+  STORES="${STORES} --endpoint 127.0.0.1:10905"
 fi
 
 sleep 0.5
@@ -231,7 +231,7 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --remote-write.address 0.0.0.0:1${i}908 \
       ${OBJSTORECFG} &
 
-    STORES="${STORES} --store 127.0.0.1:1${i}907"
+    STORES="${STORES} --endpoint 127.0.0.1:1${i}907"
   done
 
   for i in $(seq 0 1 2); do
@@ -298,7 +298,7 @@ ${THANOS_EXECUTABLE} rule \
   "${REMOTE_WRITE_FLAGS}" \
   ${OBJSTORECFG} &
 
-STORES="${STORES} --store 127.0.0.1:19998"
+STORES="${STORES} --endpoint 127.0.0.1:19998"
 
 # Start two query nodes.
 for i in $(seq 0 1); do
