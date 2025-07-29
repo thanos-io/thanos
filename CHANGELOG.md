@@ -12,8 +12,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#8400](https://github.com/thanos-io/thanos/pull/8400) quickstart.sh: Update `thanos query` flag `--store` to `--endpoint`
-
 ### Added
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks

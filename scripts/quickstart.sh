@@ -22,6 +22,18 @@ if [ ! $(command -v "$THANOS_EXECUTABLE") ]; then
   exit 1
 fi
 
+OBJSTORECFG=""
+if [ -n "${MINIO_ENABLED}" ]; then
+  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+else
+  if [ ! -e "$OBJSTORECFG_FILE" ]; then
+    echo "Cannot find ObjStore config file at path \"$OBJSTORECFG_FILE\". Create a config following https://thanos.io/tip/thanos/storage.md/ and set the OBJSTORECFG_FILE env variable to the file's location."
+    exit 1
+  fi
+
+  OBJSTORECFG="--objstore.config-file      ${OBJSTORECFG_FILE}"
+fi
+
 # Start local object storage, if desired.
 # NOTE: If you would like to use an actual S3-compatible API with this setup
 #       set the S3_* environment variables set in the Minio example.
@@ -149,11 +161,6 @@ for i in $(seq 0 2); do
 done
 
 sleep 0.5
-
-OBJSTORECFG=""
-if [ -n "${MINIO_ENABLED}" ]; then
-  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
-fi
 
 # Start one sidecar for each Prometheus server.
 for i in $(seq 0 2); do
