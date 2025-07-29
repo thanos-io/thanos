@@ -7,6 +7,7 @@ on:
       
 permissions: 
   contents: write
+  pull-requests: write
 
 jobs:
   testing:
@@ -16,8 +17,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Finding SHA with lastest Tag
+          ref: main
+      
+      - name: Finding SHA with latest Tag
         run: |
           LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
           COMMIT_SHA=$(git rev-list -n 1 $LATEST_TAG)
@@ -26,13 +28,23 @@ jobs:
       
       - name: Finding Branch with SHA
         run: |
-          RELEASE_BRANCH=$(git branch -r --contains ${{ env.COMMIT_SHA }})
-          echo "RELEASE_BRANCH=$RELEASE_BRANCH" >> $GITHUB_ENV
-      
-      - name: Merging Release into main
+          RELEASE_BRANCH=$(git branch -r --contains ${{ env.COMMIT_SHA }} | head -1 | xargs)
+          BRANCH_NAME=${RELEASE_BRANCH#origin/}
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Create PR if changes exist
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b main || git checkout main
-          git merge --no-ff ${{ env.RELEASE_BRANCH }} -m "Merge $RELEASE_BRANCH into main after release"
-          git push origin main
+          git fetch origin "${{ env.BRANCH_NAME }}"
+          
+          if git diff --quiet main origin/${{ env.BRANCH_NAME }}; then
+            echo "No changes between branches. Skipping PR."
+          else
+            echo "Changes found. Creating PR..."
+            gh pr create \
+              --title "Sync ${{ env.BRANCH_NAME }} into main - Release ${{ env.LATEST_TAG }}" \
+              --body "syncing branch '${{ env.BRANCH_NAME }}' (release ${{ env.LATEST_TAG }}) into 'main'." \
+              --head "${{ env.BRANCH_NAME }}" \
+              --base "main" || echo "PR might already exist"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
