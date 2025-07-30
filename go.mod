@@ -125,6 +125,7 @@ require (
 	go.opentelemetry.io/contrib/propagators/autoprop v0.54.0
 	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect

@@ -6,6 +6,7 @@ package queryfrontend
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,16 +18,20 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // MetricsRangeQueryLogging represents the logging information for a range query.
 type MetricsRangeQueryLogging struct {
-	TimestampMs   int64  `json:"timestampMs"`
-	Source        string `json:"source"`
-	QueryExpr     string `json:"queryExpr"`
-	Success       bool   `json:"success"`
-	BytesFetched  int64  `json:"bytesFetched"`
-	EvalLatencyMs int64  `json:"evalLatencyMs"`
+	TimestampMs       int64  `json:"timestampMs"`
+	Source            string `json:"source"`
+	QueryExpr         string `json:"queryExpr"`
+	Success           bool   `json:"success"`
+	BytesFetched      int64  `json:"bytesFetched"`
+	TimeseriesFetched int64  `json:"timeseriesFetched"`
+	Chunks            int64  `json:"chunks"`
+	Samples           int64  `json:"samples"`
+	EvalLatencyMs     int64  `json:"evalLatencyMs"`
 	// User identification fields
 	GrafanaDashboardUid string `json:"grafanaDashboardUid"`
 	GrafanaPanelId      string `json:"grafanaPanelId"`
@@ -34,6 +39,7 @@ type MetricsRangeQueryLogging struct {
 	Tenant              string `json:"tenant"`
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
+	EmailId             string `json:"emailID"`
 	// Query-related fields
 	StartTimestampMs      int64    `json:"startTimestampMs"`
 	EndTimestampMs        int64    `json:"endTimestampMs"`
@@ -77,32 +83,63 @@ type UserInfo struct {
 	UserAgent           string
 }
 
+// RangeQueryLogConfig holds configuration for range query logging.
+type RangeQueryLogConfig struct {
+	LogDir     string // Directory to store log files.
+	MaxSizeMB  int    // Maximum size in megabytes before rotation.
+	MaxAge     int    // Maximum number of days to retain old log files.
+	MaxBackups int    // Maximum number of old log files to retain.
+	Compress   bool   // Whether to compress rotated files.
+}
+
+// DefaultRangeQueryLogConfig returns the default configuration for range query logging.
+func DefaultRangeQueryLogConfig() RangeQueryLogConfig {
+	return RangeQueryLogConfig{
+		LogDir:     "/databricks/logs/pantheon-range-query-frontend",
+		MaxSizeMB:  2048, // 2GB per file
+		MaxAge:     7,    // Keep logs for 7 days
+		MaxBackups: 5,    // Keep 5 backup files
+		Compress:   true,
+	}
+}
+
 type rangeQueryLoggingMiddleware struct {
-	next    queryrange.Handler
-	logger  log.Logger
-	logFile *os.File
+	next   queryrange.Handler
+	logger log.Logger
+	writer io.WriteCloser
 }
 
 // NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information.
 func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer) queryrange.Middleware {
-	// Create the /databricks/logs directory if it doesn't exist.
-	logDir := "/databricks/logs/pantheon-range-query-frontend"
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		level.Error(logger).Log("msg", "failed to create log directory", "dir", logDir, "err", err)
+	return NewRangeQueryLoggingMiddlewareWithConfig(logger, reg, DefaultRangeQueryLogConfig())
+}
+
+// NewRangeQueryLoggingMiddlewareWithConfig creates a new middleware with custom configuration.
+func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.Registerer, config RangeQueryLogConfig) queryrange.Middleware {
+	// Create the log directory if it doesn't exist.
+	if err := os.MkdirAll(config.LogDir, 0755); err != nil {
+		level.Error(logger).Log("msg", "failed to create log directory", "dir", config.LogDir, "err", err)
 	}
 
-	// Open the log file for range query logging.
-	logFile, err := os.OpenFile(filepath.Join(logDir, "rangequerylogging.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		level.Error(logger).Log("msg", "failed to open range query logging file", "err", err)
-		logFile = nil
+	// Create the rotating file logger.
+	var writer io.WriteCloser
+	logFilePath := filepath.Join(config.LogDir, "PantheonRangeQueryFrontend.json")
+
+	rotatingLogger := &lumberjack.Logger{
+		Filename:   logFilePath,
+		MaxSize:    config.MaxSizeMB,
+		MaxAge:     config.MaxAge,
+		MaxBackups: config.MaxBackups,
+		Compress:   config.Compress,
 	}
+
+	writer = rotatingLogger
 
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		return &rangeQueryLoggingMiddleware{
-			next:    next,
-			logger:  logger,
-			logFile: logFile,
+			next:   next,
+			logger: logger,
+			writer: writer,
 		}
 	})
 }
@@ -132,20 +169,26 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	success := err == nil
 	userInfo := m.extractUserInfo(req)
 
-	// Calculate bytes fetched (only for successful queries).
-	var bytesFetched int64 = 0
+	// Extract email from response headers
+	email := m.extractEmailFromResponse(resp)
+
+	// Calculate stats (only for successful queries).
+	var stats ResponseStats
 	if success && resp != nil {
-		bytesFetched = m.calculateBytesFetched(resp)
+		stats = m.calculateBytesFetched(resp)
 	}
 
 	// Create the range query log entry.
 	rangeQueryLog := MetricsRangeQueryLogging{
-		TimestampMs:   time.Now().UnixMilli(),
-		Source:        userInfo.Source,
-		QueryExpr:     req.Query,
-		Success:       success,
-		BytesFetched:  bytesFetched,
-		EvalLatencyMs: latencyMs,
+		TimestampMs:       time.Now().UnixMilli(),
+		Source:            userInfo.Source,
+		QueryExpr:         req.Query,
+		Success:           success,
+		BytesFetched:      stats.BytesFetched,
+		TimeseriesFetched: stats.TimeseriesFetched,
+		Chunks:            stats.Chunks,
+		Samples:           stats.Samples,
+		EvalLatencyMs:     latencyMs,
 		// User identification fields
 		GrafanaDashboardUid: userInfo.GrafanaDashboardUid,
 		GrafanaPanelId:      userInfo.GrafanaPanelId,
@@ -153,6 +196,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		Tenant:              userInfo.Tenant,
 		ForwardedFor:        userInfo.ForwardedFor,
 		UserAgent:           userInfo.UserAgent,
+		EmailId:             email,
 		// Query-related fields
 		StartTimestampMs:      req.Start,
 		EndTimestampMs:        req.End,
@@ -174,7 +218,7 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	}
 
 	// Log to file if available.
-	if m.logFile != nil {
+	if m.writer != nil {
 		m.writeToLogFile(rangeQueryLog)
 	}
 
@@ -236,6 +280,24 @@ func (m *rangeQueryLoggingMiddleware) extractUserInfo(req *ThanosQueryRangeReque
 	return userInfo
 }
 
+// extractEmailFromResponse extracts the email from response headers.
+func (m *rangeQueryLoggingMiddleware) extractEmailFromResponse(resp queryrange.Response) string {
+	if resp == nil {
+		return ""
+	}
+
+	// Check if it's a PrometheusResponse (for range queries)
+	if promResp, ok := resp.(*queryrange.PrometheusResponse); ok {
+		for _, header := range promResp.GetHeaders() {
+			if strings.ToLower(header.Name) == "x-auth-request-email" && len(header.Values) > 0 {
+				return header.Values[0]
+			}
+		}
+	}
+
+	return ""
+}
+
 // convertStoreMatchers converts internal store matchers to logging format.
 func (m *rangeQueryLoggingMiddleware) convertStoreMatchers(storeMatchers [][]*labels.Matcher) []StoreMatcherSet {
 	if len(storeMatchers) == 0 {
@@ -259,23 +321,36 @@ func (m *rangeQueryLoggingMiddleware) convertStoreMatchers(storeMatchers [][]*la
 	return result
 }
 
-func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Response) int64 {
+// ResponseStats holds statistics extracted from query response.
+type ResponseStats struct {
+	BytesFetched      int64
+	TimeseriesFetched int64
+	Chunks            int64
+	Samples           int64
+}
+
+func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Response) ResponseStats {
+	stats := ResponseStats{}
+
 	if resp == nil {
-		return 0
+		return stats
 	}
 
-	// Use SeriesStatsCounter.Bytes for range queries only.
+	// Use SeriesStatsCounter for range queries only.
 	if r, ok := resp.(*queryrange.PrometheusResponse); ok {
 		if r.Data.SeriesStatsCounter != nil {
-			return r.Data.SeriesStatsCounter.Bytes
+			stats.BytesFetched = r.Data.SeriesStatsCounter.Bytes
+			stats.TimeseriesFetched = r.Data.SeriesStatsCounter.Series
+			stats.Chunks = r.Data.SeriesStatsCounter.Chunks
+			stats.Samples = r.Data.SeriesStatsCounter.Samples
 		}
 	}
 
-	return 0
+	return stats
 }
 
 func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQueryLogging) {
-	if m.logFile == nil {
+	if m.writer == nil {
 		return
 	}
 
@@ -287,17 +362,16 @@ func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQ
 	}
 
 	// Write to file with newline.
-	// if _, err := fmt.Fprintf(m.logFile, "%s\n", jsonData); err != nil {
-	// 	level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
-	// }
-
-	_ = jsonData
+	jsonData = append(jsonData, '\n')
+	if _, err := m.writer.Write(jsonData); err != nil {
+		level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
+	}
 }
 
 // Close should be called when the middleware is no longer needed.
 func (m *rangeQueryLoggingMiddleware) Close() error {
-	if m.logFile != nil {
-		return m.logFile.Close()
+	if m.writer != nil {
+		return m.writer.Close()
 	}
 	return nil
 }
