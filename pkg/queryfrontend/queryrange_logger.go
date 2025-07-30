@@ -23,12 +23,15 @@ import (
 
 // MetricsRangeQueryLogging represents the logging information for a range query.
 type MetricsRangeQueryLogging struct {
-	TimestampMs   int64  `json:"timestampMs"`
-	Source        string `json:"source"`
-	QueryExpr     string `json:"queryExpr"`
-	Success       bool   `json:"success"`
-	BytesFetched  int64  `json:"bytesFetched"`
-	EvalLatencyMs int64  `json:"evalLatencyMs"`
+	TimestampMs       int64  `json:"timestampMs"`
+	Source            string `json:"source"`
+	QueryExpr         string `json:"queryExpr"`
+	Success           bool   `json:"success"`
+	BytesFetched      int64  `json:"bytesFetched"`
+	TimeseriesFetched int64  `json:"timeseriesFetched"`
+	Chunks            int64  `json:"chunks"`
+	Samples           int64  `json:"samples"`
+	EvalLatencyMs     int64  `json:"evalLatencyMs"`
 	// User identification fields
 	GrafanaDashboardUid string `json:"grafanaDashboardUid"`
 	GrafanaPanelId      string `json:"grafanaPanelId"`
@@ -169,20 +172,23 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	// Extract email from response headers
 	email := m.extractEmailFromResponse(resp)
 
-	// Calculate bytes fetched (only for successful queries).
-	var bytesFetched int64 = 0
+	// Calculate stats (only for successful queries).
+	var stats ResponseStats
 	if success && resp != nil {
-		bytesFetched = m.calculateBytesFetched(resp)
+		stats = m.calculateBytesFetched(resp)
 	}
 
 	// Create the range query log entry.
 	rangeQueryLog := MetricsRangeQueryLogging{
-		TimestampMs:   time.Now().UnixMilli(),
-		Source:        userInfo.Source,
-		QueryExpr:     req.Query,
-		Success:       success,
-		BytesFetched:  bytesFetched,
-		EvalLatencyMs: latencyMs,
+		TimestampMs:       time.Now().UnixMilli(),
+		Source:            userInfo.Source,
+		QueryExpr:         req.Query,
+		Success:           success,
+		BytesFetched:      stats.BytesFetched,
+		TimeseriesFetched: stats.TimeseriesFetched,
+		Chunks:            stats.Chunks,
+		Samples:           stats.Samples,
+		EvalLatencyMs:     latencyMs,
 		// User identification fields
 		GrafanaDashboardUid: userInfo.GrafanaDashboardUid,
 		GrafanaPanelId:      userInfo.GrafanaPanelId,
@@ -315,19 +321,32 @@ func (m *rangeQueryLoggingMiddleware) convertStoreMatchers(storeMatchers [][]*la
 	return result
 }
 
-func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Response) int64 {
+// ResponseStats holds statistics extracted from query response.
+type ResponseStats struct {
+	BytesFetched      int64
+	TimeseriesFetched int64
+	Chunks            int64
+	Samples           int64
+}
+
+func (m *rangeQueryLoggingMiddleware) calculateBytesFetched(resp queryrange.Response) ResponseStats {
+	stats := ResponseStats{}
+
 	if resp == nil {
-		return 0
+		return stats
 	}
 
-	// Use SeriesStatsCounter.Bytes for range queries only.
+	// Use SeriesStatsCounter for range queries only.
 	if r, ok := resp.(*queryrange.PrometheusResponse); ok {
 		if r.Data.SeriesStatsCounter != nil {
-			return r.Data.SeriesStatsCounter.Bytes
+			stats.BytesFetched = r.Data.SeriesStatsCounter.Bytes
+			stats.TimeseriesFetched = r.Data.SeriesStatsCounter.Series
+			stats.Chunks = r.Data.SeriesStatsCounter.Chunks
+			stats.Samples = r.Data.SeriesStatsCounter.Samples
 		}
 	}
 
-	return 0
+	return stats
 }
 
 func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQueryLogging) {
