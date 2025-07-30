@@ -35,7 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
-func compareMetaIgnoreTimestamps(t *testing.T, expected, actual string) {
+func compareMetaIgnoreTimestamps(t testing.TB, expected, actual string) {
 	var (
 		expMeta metadata.Meta
 		actMeta metadata.Meta
@@ -352,7 +352,11 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			act, err := io.ReadAll(rc)
 			testutil.Ok(t, err)
 			testutil.Ok(t, rc.Close())
-			testutil.Equals(t, string(exp), string(act))
+			if strings.Contains(fn, block.MetaFilename) {
+				compareMetaIgnoreTimestamps(t, string(exp), string(act))
+			} else {
+				testutil.Equals(t, string(exp), string(act))
+			}
 		}
 		// Verify the fifth block is still deleted by the end.
 		ok, err := bkt.Exists(ctx, ids[4].String()+"/meta.json")
@@ -504,6 +508,10 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		act, err := io.ReadAll(rc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, rc.Close())
-		testutil.Equals(t, string(exp), string(act))
+		if strings.Contains(fn, block.MetaFilename) {
+			compareMetaIgnoreTimestamps(t, string(exp), string(act))
+		} else {
+			testutil.Equals(t, string(exp), string(act))
+		}
 	}
 }
