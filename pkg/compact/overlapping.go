@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
@@ -22,8 +23,13 @@ import (
 const (
 	overlappingReason = "blocks-overlapping"
 
+	// 2 errors: add series: symbol table size exceeds.
 	symbolTableSizeExceedsError = "symbol table size exceeds"
-	symbolTableSizeLimit        = 512 * 1024 // lower this limits
+	// handled 0 errors: postings offset table length/crc32 write error: length size exceeds.
+	lengthSizeExceedsError = "length size exceeds"
+
+	// only mark blocks larger than this limit for no compact.
+	errorBlockSeriesLimit = 512 * 1024 // lower this limits
 )
 
 type OverlappingCompactionLifecycleCallback struct {
@@ -130,24 +136,31 @@ func (o OverlappingCompactionLifecycleCallback) GetBlockPopulator(_ context.Cont
 	return tsdb.DefaultBlockPopulator{}, nil
 }
 
-func (o OverlappingCompactionLifecycleCallback) HandleError(ctx context.Context, logger log.Logger, g *Group, toCompact []*metadata.Meta, compactErr error) int {
+func (o OverlappingCompactionLifecycleCallback) markBlocksNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucket, toCompact []*metadata.Meta, errPattern string) int {
 	handledErrs := 0
-	if compactErr == nil {
-		return handledErrs
-	}
-	level.Error(logger).Log("msg", "failed to compact blocks", "err", compactErr)
-	if strings.Contains(compactErr.Error(), symbolTableSizeExceedsError) {
-		for _, m := range toCompact {
-			if m.Stats.NumSeries < symbolTableSizeLimit {
-				level.Warn(logger).Log("msg", "bypass small blocks", "block", m.String(), "series", m.Stats.NumSeries)
-				continue
-			}
-			handledErrs++
-			if err := block.MarkForNoCompact(ctx, logger, g.bkt, m.ULID, symbolTableSizeExceedsError,
-				fmt.Sprintf("failed to compact blocks: %s", m.ULID.String()), o.noCompaction); err != nil {
-				level.Error(logger).Log("msg", "failed to mark block for no compact", "block", m.String(), "err", err)
-			}
+	for _, m := range toCompact {
+		if m.Stats.NumSeries < errorBlockSeriesLimit {
+			level.Warn(logger).Log("msg", "bypass small blocks", "block", m.String(), "series", m.Stats.NumSeries)
+			continue
+		}
+		handledErrs++
+		if err := block.MarkForNoCompact(ctx, logger, bkt, m.ULID, metadata.NoCompactReason(errPattern),
+			fmt.Sprintf("failed to compact blocks: %s", m.ULID.String()), o.noCompaction); err != nil {
+			level.Error(logger).Log("msg", "failed to mark block for no compact", "block", m.String(), "err", err)
 		}
 	}
 	return handledErrs
+}
+
+func (o OverlappingCompactionLifecycleCallback) HandleError(ctx context.Context, logger log.Logger, g *Group, toCompact []*metadata.Meta, compactErr error) int {
+	if compactErr == nil {
+		return 0
+	}
+	level.Error(logger).Log("msg", "failed to compact blocks", "err", compactErr)
+	if strings.Contains(compactErr.Error(), symbolTableSizeExceedsError) {
+		return o.markBlocksNoCompact(ctx, logger, g.bkt, toCompact, symbolTableSizeExceedsError)
+	} else if strings.Contains(compactErr.Error(), lengthSizeExceedsError) {
+		return o.markBlocksNoCompact(ctx, logger, g.bkt, toCompact, lengthSizeExceedsError)
+	}
+	return 0
 }
