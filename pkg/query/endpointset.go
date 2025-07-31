@@ -790,8 +790,8 @@ func (er *endpointRef) SupportsWithoutReplicaLabels() bool {
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(
-		"Addr: %s LabelSets: %v MinTime: %d MaxTime: %d",
-		er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
+		"Addr: %s MinTime: %d MaxTime: %d",
+		er.addr, mint, maxt,
 	)
 }
 
