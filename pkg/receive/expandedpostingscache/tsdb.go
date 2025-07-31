@@ -68,7 +68,7 @@ func newBlockBaseQuerier(b prom_tsdb.BlockReader, mint, maxt int64) (*blockBaseQ
 }
 
 func (q *blockBaseQuerier) LabelValues(ctx context.Context, name string, hints *storage.LabelHints, matchers ...*labels.Matcher) ([]string, annotations.Annotations, error) {
-	res, err := q.index.SortedLabelValues(ctx, name, matchers...)
+	res, err := q.index.SortedLabelValues(ctx, name, hints, matchers...)
 	return res, nil, err
 }
 

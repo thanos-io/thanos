@@ -77,7 +77,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
@@ -413,7 +413,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -645,7 +645,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
@@ -754,7 +754,7 @@ metafile_content_ttl: 0s`
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
@@ -765,7 +765,7 @@ metafile_content_ttl: 0s`
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
@@ -776,7 +776,7 @@ metafile_content_ttl: 0s`
 		e,
 		"3",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
@@ -873,7 +873,7 @@ config:
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
@@ -885,7 +885,7 @@ config:
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
@@ -896,7 +896,7 @@ config:
 		e,
 		"3",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		string(cacheCfg),
@@ -1041,7 +1041,7 @@ config:
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1137,7 +1137,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1148,7 +1148,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1294,7 +1294,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1305,7 +1305,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		e,
 		"2",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -1339,12 +1339,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	statusCodes := []string{"200", "400", "404", "500", "502"}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	for i := 0; i < numSeries; i++ {
-		lbl := labels.Labels{
-			{Name: labels.MetricName, Value: metricName},
-			{Name: "job", Value: "test"},
-			{Name: "series", Value: strconv.Itoa(i % 200)},
-			{Name: "status_code", Value: statusCodes[i%5]},
-		}
+		lbl := labels.FromStrings(labels.MetricName, metricName, "job", "test", "series", strconv.Itoa(i%200), "status_code", statusCodes[i%5])
 		lbls = append(lbls, lbl)
 	}
 	id, err := e2eutil.CreateBlockWithChurn(ctx, rnd, dir, lbls, numSamples, startMs, endMs, extLset, 0, scrapeInterval, 10)

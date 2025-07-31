@@ -22,6 +22,18 @@ if [ ! $(command -v "$THANOS_EXECUTABLE") ]; then
   exit 1
 fi
 
+OBJSTORECFG=""
+if [ -n "${MINIO_ENABLED}" ]; then
+  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+else
+  if [ ! -e "$OBJSTORECFG_FILE" ]; then
+    echo "Cannot find ObjStore config file at path \"$OBJSTORECFG_FILE\". Create a config following https://thanos.io/tip/thanos/storage.md/ and set the OBJSTORECFG_FILE env variable to the file's location."
+    exit 1
+  fi
+
+  OBJSTORECFG="--objstore.config-file      ${OBJSTORECFG_FILE}"
+fi
+
 # Start local object storage, if desired.
 # NOTE: If you would like to use an actual S3-compatible API with this setup
 #       set the S3_* environment variables set in the Minio example.
@@ -150,11 +162,6 @@ done
 
 sleep 0.5
 
-OBJSTORECFG=""
-if [ -n "${MINIO_ENABLED}" ]; then
-  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
-fi
-
 # Start one sidecar for each Prometheus server.
 for i in $(seq 0 2); do
   if [ -z ${CODESPACE_NAME+x} ]; then
@@ -173,7 +180,7 @@ for i in $(seq 0 2); do
     --tsdb.path data/prom"${i}" \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:109${i}1"
+  STORES="${STORES} --endpoint 127.0.0.1:109${i}1"
 
   sleep 0.25
 done
@@ -205,7 +212,7 @@ metafile_content_ttl: 0s
     --store.caching-bucket.config-file=groupcache.yml \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:10905"
+  STORES="${STORES} --endpoint 127.0.0.1:10905"
 fi
 
 sleep 0.5
@@ -231,7 +238,7 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --remote-write.address 0.0.0.0:1${i}908 \
       ${OBJSTORECFG} &
 
-    STORES="${STORES} --store 127.0.0.1:1${i}907"
+    STORES="${STORES} --endpoint 127.0.0.1:1${i}907"
   done
 
   for i in $(seq 0 1 2); do
@@ -298,7 +305,7 @@ ${THANOS_EXECUTABLE} rule \
   "${REMOTE_WRITE_FLAGS}" \
   ${OBJSTORECFG} &
 
-STORES="${STORES} --store 127.0.0.1:19998"
+STORES="${STORES} --endpoint 127.0.0.1:19998"
 
 # Start two query nodes.
 for i in $(seq 0 1); do

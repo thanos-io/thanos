@@ -39,10 +39,11 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 	qryExpr, err := extpromql.ParseExpr("up")
 	testutil.Ok(t, err)
 
-	plan := logicalplan.NewFromAST(qryExpr, &query.Options{
+	plan, err := logicalplan.NewFromAST(qryExpr, &query.Options{
 		Start: time.Now(),
 		End:   time.Now().Add(2 * time.Hour),
 	}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
 
 	t.Run("instant_query", func(t *testing.T) {
 		qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)
@@ -77,10 +78,11 @@ func TestRemoteEngine_PartialResponse(t *testing.T) {
 	qryExpr, err := extpromql.ParseExpr("up")
 	testutil.Ok(t, err)
 
-	plan := logicalplan.NewFromAST(qryExpr, &query.Options{
+	plan, err := logicalplan.NewFromAST(qryExpr, &query.Options{
 		Start: time.Now(),
 		End:   time.Now().Add(2 * time.Hour),
 	}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
 
 	t.Run("instant_query", func(t *testing.T) {
 		qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)

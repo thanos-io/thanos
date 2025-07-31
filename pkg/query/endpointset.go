@@ -220,6 +220,10 @@ type EndpointSet struct {
 	endpointsMtx    sync.RWMutex
 	endpoints       map[string]*endpointRef
 	endpointsMetric *endpointSetNodeCollector
+
+	// Track if the first update has completed
+	firstUpdateOnce sync.Once
+	firstUpdateChan chan struct{}
 }
 
 // nowFunc is a function that returns time.Time.
@@ -264,7 +268,24 @@ func NewEndpointSet(
 			}
 			return res
 		},
-		endpoints: make(map[string]*endpointRef),
+		endpoints:       make(map[string]*endpointRef),
+		firstUpdateChan: make(chan struct{}),
+	}
+}
+
+// WaitForFirstUpdate blocks until the first endpoint update has completed.
+// It returns immediately if the first update has already been done.
+// The context can be used to set a timeout for waiting.
+func (e *EndpointSet) WaitForFirstUpdate(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case _, ok := <-e.firstUpdateChan:
+		if !ok {
+			// Channel is closed, first update already completed
+			return nil
+		}
+		return nil
 	}
 }
 
@@ -373,6 +394,11 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	}
 
 	e.endpointsMetric.Update(stats)
+
+	// Signal that the first update has completed
+	e.firstUpdateOnce.Do(func() {
+		close(e.firstUpdateChan)
+	})
 }
 
 func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec, er *endpointRef) {
@@ -764,8 +790,8 @@ func (er *endpointRef) SupportsWithoutReplicaLabels() bool {
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(
-		"Addr: %s LabelSets: %v MinTime: %d MaxTime: %d",
-		er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
+		"Addr: %s MinTime: %d MaxTime: %d",
+		er.addr, mint, maxt,
 	)
 }
 

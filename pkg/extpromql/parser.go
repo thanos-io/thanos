@@ -11,16 +11,16 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 
-	"github.com/thanos-io/promql-engine/execution/function"
+	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(function.XFunctions)+len(parser.Functions))
+	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
 	for k, v := range parser.Functions {
 		allFuncs[k] = v
 	}
-	for k, v := range function.XFunctions {
+	for k, v := range parse.XFunctions {
 		allFuncs[k] = v
 	}
 	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
