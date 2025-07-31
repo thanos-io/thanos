@@ -1352,10 +1352,6 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			return
 		}
 	}
-
-	// Wait until the last goroutine exits which is stuck on time.Sleep().
-	// Otherwise, goleak complains.
-	time.Sleep(2 * time.Second)
 }
 
 func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {

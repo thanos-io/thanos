@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
 - [#8400](https://github.com/thanos-io/thanos/pull/8400) quickstart.sh: Update `thanos query` flag `--store` to `--endpoint`
+- [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 
 ### Added
 
