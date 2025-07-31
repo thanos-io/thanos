@@ -181,6 +181,26 @@ func TestHandleError(t *testing.T) {
 			handledErrs: 1,
 			errBlockIdx: 2,
 		},
+		{
+			testName: "length size exceeds error - only large blocks marked",
+			input: []*metadata.Meta{
+				createCustomBlockMeta(1, 1, 2, metadata.ReceiveSource, 1024),
+				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 2*1024*1024),
+			},
+			err:         errors.New(lengthSizeExceedsError + " postings offset table"),
+			handledErrs: 1,
+			errBlockIdx: 1,
+		},
+		{
+			testName: "symbol table size exceeds with small blocks bypassed",
+			input: []*metadata.Meta{
+				createCustomBlockMeta(1, 1, 2, metadata.ReceiveSource, 1024),
+				createCustomBlockMeta(2, 1, 6, metadata.CompactorSource, 2*1024*1024),
+			},
+			err:         errors.New(symbolTableSizeExceedsError + " too large"),
+			handledErrs: 1,
+			errBlockIdx: 1,
+		},
 	} {
 		t.Run(tcase.testName, func(t *testing.T) {
 			ctx := context.Background()
