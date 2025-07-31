@@ -13,6 +13,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
@@ -71,7 +72,7 @@ func TestQuerier_Proxy(t *testing.T) {
 			logger,
 			nil,
 			store.NewProxyStore(logger, nil, func() []store.Client { return sc.get() },
-				component.Debug, nil, 5*time.Minute, store.EagerRetrieval, store.WithMatcherCache(cache)),
+				component.Debug, labels.EmptyLabels(), 5*time.Minute, store.EagerRetrieval, store.WithMatcherCache(cache)),
 			1000000,
 			5*time.Minute,
 			dedup.AlgorithmPenalty,
@@ -85,7 +86,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				// TODO(bwplotka): Parse external labels.
 				sc.append(&storetestutil.TestClient{
 					Name:        fmt.Sprintf("store number %v", i),
-					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, nil), m, st.mint, st.maxt)),
+					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, labels.EmptyLabels()), m, st.mint, st.maxt)),
 					MinTime:     st.mint,
 					MaxTime:     st.maxt,
 				})

@@ -1339,12 +1339,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	statusCodes := []string{"200", "400", "404", "500", "502"}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	for i := 0; i < numSeries; i++ {
-		lbl := labels.Labels{
-			{Name: labels.MetricName, Value: metricName},
-			{Name: "job", Value: "test"},
-			{Name: "series", Value: strconv.Itoa(i % 200)},
-			{Name: "status_code", Value: statusCodes[i%5]},
-		}
+		lbl := labels.FromStrings(labels.MetricName, metricName, "job", "test", "series", strconv.Itoa(i%200), "status_code", statusCodes[i%5])
 		lbls = append(lbls, lbl)
 	}
 	id, err := e2eutil.CreateBlockWithChurn(ctx, rnd, dir, lbls, numSamples, startMs, endMs, extLset, 0, scrapeInterval, 10)

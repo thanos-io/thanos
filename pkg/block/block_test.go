@@ -145,52 +145,21 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 595, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, true, 600 < len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 
-		// File stats are gathered.
-		testutil.Equals(t, fmt.Sprintf(`{
-	"ulid": "%s",
-	"minTime": 0,
-	"maxTime": 1000,
-	"stats": {
-		"numSamples": 500,
-		"numSeries": 5,
-		"numChunks": 5
-	},
-	"compaction": {
-		"level": 1,
-		"sources": [
-			"%s"
-		]
-	},
-	"version": 1,
-	"thanos": {
-		"labels": {
-			"ext1": "val1"
-		},
-		"downsample": {
-			"resolution": 124
-		},
-		"source": "test",
-		"files": [
-			{
-				"rel_path": "chunks/000001",
-				"size_bytes": 3727
-			},
-			{
-				"rel_path": "index",
-				"size_bytes": 401
-			},
-			{
-				"rel_path": "meta.json"
-			}
-		],
-		"index_stats": {
-			"series_max_size": 16
-		}
-	}
-}
-`, b1.String(), b1.String()), string(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		m := &metadata.Meta{}
+		testutil.Ok(t, json.Unmarshal(bkt.Objects()[path.Join(b1.String(), MetaFilename)], m))
+		testutil.Equals(t, b1, m.ULID)
+		testutil.Equals(t, int64(1000), m.MaxTime)
+		testutil.Equals(t, int64(0), m.MinTime)
+		testutil.Equals(t, uint64(500), m.Stats.NumSamples)
+		testutil.Equals(t, uint64(500), m.Stats.NumFloatSamples)
+		testutil.Equals(t, uint64(5), m.Stats.NumSeries)
+		testutil.Equals(t, uint64(5), m.Stats.NumChunks)
+		testutil.Equals(t, 1, len(m.Compaction.Sources))
+		testutil.Equals(t, labels.FromStrings("ext1", "val1"), labels.FromMap(m.Thanos.Labels))
+		testutil.Equals(t, 3, len(m.Thanos.Files))
+
 	}
 	{
 		// Test Upload is idempotent.
@@ -198,7 +167,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 595, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, true, 600 < len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Upload with no external labels should be blocked.
@@ -230,7 +199,18 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 6, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
-		testutil.Equals(t, 574, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
+
+		m := &metadata.Meta{}
+		testutil.Ok(t, json.Unmarshal(bkt.Objects()[path.Join(b2.String(), MetaFilename)], m))
+		testutil.Equals(t, b2, m.ULID)
+		testutil.Equals(t, int64(1000), m.MaxTime)
+		testutil.Equals(t, int64(0), m.MinTime)
+		testutil.Equals(t, uint64(500), m.Stats.NumSamples)
+		testutil.Equals(t, uint64(500), m.Stats.NumFloatSamples)
+		testutil.Equals(t, uint64(5), m.Stats.NumSeries)
+		testutil.Equals(t, uint64(5), m.Stats.NumChunks)
+		testutil.Equals(t, 1, len(m.Compaction.Sources))
+		testutil.Equals(t, 3, len(m.Thanos.Files))
 	}
 }
 
@@ -560,8 +540,9 @@ func TestUploadCleanup(t *testing.T) {
 		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
-		// If upload of index fails, block is deleted.
-		testutil.Equals(t, 0, len(bkt.Objects()))
+		// If upload of index fails, the objects remain because the deletion of partial blocks
+		// is taken care of by the Compactor.
+		testutil.Equals(t, 2, len(bkt.Objects()))
 		testutil.Assert(t, len(bkt.Objects()[path.Join(DebugMetas, fmt.Sprintf("%s.json", b1.String()))]) == 0)
 	}
 
