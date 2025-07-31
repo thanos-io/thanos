@@ -78,6 +78,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryRangeLimits,
 		queryInstantCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
+		logger,
 		config.ForwardHeaders,
 		config.CortexHandlerConfig.QueryStatsEnabled,
 	)
@@ -348,6 +349,7 @@ func newInstantQueryTripperware(
 	limits queryrange.Limits,
 	codec queryrange.Codec,
 	reg prometheus.Registerer,
+	logger log.Logger,
 	forwardHeaders []string,
 	forceStats bool,
 ) queryrange.Tripperware {
@@ -365,6 +367,13 @@ func newInstantQueryTripperware(
 	instantQueryMiddlewares = append(
 		instantQueryMiddlewares,
 		queryrange.NewStatsMiddleware(forceStats),
+	)
+
+	// Add instant query logging middleware.
+	instantQueryMiddlewares = append(
+		instantQueryMiddlewares,
+		queryrange.InstrumentMiddleware("instantquerylogging", m, logger),
+		NewInstantQueryLoggingMiddleware(logger, reg),
 	)
 
 	return func(next http.RoundTripper) http.RoundTripper {

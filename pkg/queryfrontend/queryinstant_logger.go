@@ -18,8 +18,8 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// MetricsRangeQueryLogging represents the logging information for a range query.
-type MetricsRangeQueryLogging struct {
+// MetricsInstantQueryLogging represents the logging information for an instant query.
+type MetricsInstantQueryLogging struct {
 	TimestampMs       int64  `json:"timestampMs"`
 	Source            string `json:"source"`
 	QueryExpr         string `json:"queryExpr"`
@@ -37,33 +37,30 @@ type MetricsRangeQueryLogging struct {
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
 	EmailId             string `json:"emailID"`
-	// Query-related fields
-	StartTimestampMs      int64    `json:"startTimestampMs"`
-	EndTimestampMs        int64    `json:"endTimestampMs"`
-	StepMs                int64    `json:"stepMs"`
+	// Query-related fields (instant query specific)
+	QueryTimestampMs      int64    `json:"queryTimestampMs"` // Query timestamp for instant queries
 	Path                  string   `json:"path"`
 	Dedup                 bool     `json:"dedup"`                 // Whether deduplication is enabled
 	PartialResponse       bool     `json:"partialResponse"`       // Whether partial responses are allowed
 	AutoDownsampling      bool     `json:"autoDownsampling"`      // Whether automatic downsampling is enabled
 	MaxSourceResolutionMs int64    `json:"maxSourceResolutionMs"` // Maximum source resolution in milliseconds
-	ReplicaLabels         []string `json:"replicaLabels"`         // Labels used for replica deduplication
-	StoreMatchersCount    int      `json:"storeMatchersCount"`    // Number of store matcher sets
-	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`       // Lookback delta in milliseconds
-	Analyze               bool     `json:"analyze"`               // Whether query analysis is enabled
-	Engine                string   `json:"engine"`                // Query engine being used
-	SplitIntervalMs       int64    `json:"splitIntervalMs"`       // Query splitting interval in milliseconds
-	Stats                 string   `json:"stats"`                 // Query statistics information
+	ReplicaLabels         []string `json:"replicaLabels"`
+	StoreMatchersCount    int      `json:"storeMatchersCount"` // Number of store matcher sets
+	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`    // Lookback delta in milliseconds
+	Analyze               bool     `json:"analyze"`            // Whether query analysis is enabled
+	Engine                string   `json:"engine"`             // Query engine being used
+	Stats                 string   `json:"stats"`              // Query statistics information
 	// Store-matcher details
 	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
 }
 
-// RangeQueryLogConfig holds configuration for range query logging.
-type RangeQueryLogConfig = QueryLogConfig
+// InstantQueryLogConfig holds configuration for instant query logging.
+type InstantQueryLogConfig = QueryLogConfig
 
-// DefaultRangeQueryLogConfig returns the default configuration for range query logging.
-func DefaultRangeQueryLogConfig() RangeQueryLogConfig {
-	return RangeQueryLogConfig{
-		LogDir:     "/databricks/logs/pantheon-range-query-frontend",
+// DefaultInstantQueryLogConfig returns the default configuration for instant query logging.
+func DefaultInstantQueryLogConfig() InstantQueryLogConfig {
+	return InstantQueryLogConfig{
+		LogDir:     "/databricks/logs/pantheon-instant-query-frontend",
 		MaxSizeMB:  2048, // 2GB per file
 		MaxAge:     7,    // Keep logs for 7 days
 		MaxBackups: 5,    // Keep 5 backup files
@@ -71,19 +68,19 @@ func DefaultRangeQueryLogConfig() RangeQueryLogConfig {
 	}
 }
 
-type rangeQueryLoggingMiddleware struct {
+type instantQueryLoggingMiddleware struct {
 	next   queryrange.Handler
 	logger log.Logger
 	writer io.WriteCloser
 }
 
-// NewRangeQueryLoggingMiddleware creates a new middleware that logs range query information.
-func NewRangeQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer) queryrange.Middleware {
-	return NewRangeQueryLoggingMiddlewareWithConfig(logger, reg, DefaultRangeQueryLogConfig())
+// NewInstantQueryLoggingMiddleware creates a new middleware that logs instant query information.
+func NewInstantQueryLoggingMiddleware(logger log.Logger, reg prometheus.Registerer) queryrange.Middleware {
+	return NewInstantQueryLoggingMiddlewareWithConfig(logger, reg, DefaultInstantQueryLogConfig())
 }
 
-// NewRangeQueryLoggingMiddlewareWithConfig creates a new middleware with custom configuration.
-func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.Registerer, config RangeQueryLogConfig) queryrange.Middleware {
+// NewInstantQueryLoggingMiddlewareWithConfig creates a new middleware with custom configuration.
+func NewInstantQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.Registerer, config InstantQueryLogConfig) queryrange.Middleware {
 	// Create the log directory if it doesn't exist.
 	if err := os.MkdirAll(config.LogDir, 0755); err != nil {
 		level.Error(logger).Log("msg", "failed to create log directory", "dir", config.LogDir, "err", err)
@@ -91,7 +88,7 @@ func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.
 
 	// Create the rotating file logger.
 	var writer io.WriteCloser
-	logFilePath := filepath.Join(config.LogDir, "PantheonRangeQueryLog.json")
+	logFilePath := filepath.Join(config.LogDir, "PantheonInstantQueryLog.json")
 
 	rotatingLogger := &lumberjack.Logger{
 		Filename:   logFilePath,
@@ -104,7 +101,7 @@ func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.
 	writer = rotatingLogger
 
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
-		return &rangeQueryLoggingMiddleware{
+		return &instantQueryLoggingMiddleware{
 			next:   next,
 			logger: logger,
 			writer: writer,
@@ -112,9 +109,9 @@ func NewRangeQueryLoggingMiddlewareWithConfig(logger log.Logger, reg prometheus.
 	})
 }
 
-func (m *rangeQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
-	// Only log for range queries.
-	rangeReq, ok := r.(*ThanosQueryRangeRequest)
+func (m *instantQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
+	// Only log for instant queries.
+	instantReq, ok := r.(*ThanosQueryInstantRequest)
 	if !ok {
 		return m.next.Do(ctx, r)
 	}
@@ -127,18 +124,24 @@ func (m *rangeQueryLoggingMiddleware) Do(ctx context.Context, r queryrange.Reque
 	// Calculate latency.
 	latencyMs := time.Since(startTime).Milliseconds()
 
-	// Log the range query.
-	m.logRangeQuery(rangeReq, resp, err, latencyMs)
+	// Log the instant query.
+	m.logInstantQuery(instantReq, resp, err, latencyMs)
 
 	return resp, err
 }
 
-func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest, resp queryrange.Response, err error, latencyMs int64) {
+func (m *instantQueryLoggingMiddleware) logInstantQuery(req *ThanosQueryInstantRequest, resp queryrange.Response, err error, latencyMs int64) {
 	success := err == nil
 	userInfo := ExtractUserInfoFromHeaders(req.Headers)
 
 	// Extract email from response headers
 	email := ExtractEmailFromResponse(resp)
+
+	// If email is empty, don't log the query.
+	// This is to avoid logging queries that come from rule manager.
+	if email == "" {
+		return
+	}
 
 	// Calculate stats (only for successful queries).
 	var stats ResponseStats
@@ -146,8 +149,8 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		stats = GetResponseStats(resp)
 	}
 
-	// Create the range query log entry.
-	rangeQueryLog := MetricsRangeQueryLogging{
+	// Create the instant query log entry.
+	instantQueryLog := MetricsInstantQueryLogging{
 		TimestampMs:       time.Now().UnixMilli(),
 		Source:            userInfo.Source,
 		QueryExpr:         req.Query,
@@ -165,10 +168,8 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		ForwardedFor:        userInfo.ForwardedFor,
 		UserAgent:           userInfo.UserAgent,
 		EmailId:             email,
-		// Query-related fields
-		StartTimestampMs:      req.Start,
-		EndTimestampMs:        req.End,
-		StepMs:                req.Step,
+		// Query-related fields (instant query specific)
+		QueryTimestampMs:      req.Time,
 		Path:                  req.Path,
 		Dedup:                 req.Dedup,
 		PartialResponse:       req.PartialResponse,
@@ -179,7 +180,6 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		LookbackDeltaMs:       req.LookbackDelta,
 		Analyze:               req.Analyze,
 		Engine:                req.Engine,
-		SplitIntervalMs:       req.SplitInterval.Milliseconds(),
 		Stats:                 req.Stats,
 		// Store-matcher details
 		StoreMatchers: ConvertStoreMatchers(req.StoreMatchers),
@@ -187,20 +187,19 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 
 	// Log to file if available.
 	if m.writer != nil {
-		m.writeToLogFile(rangeQueryLog)
+		m.writeToLogFile(instantQueryLog)
 	}
-
 }
 
-func (m *rangeQueryLoggingMiddleware) writeToLogFile(rangeQueryLog MetricsRangeQueryLogging) {
-	err := WriteJSONLogToFile(m.logger, m.writer, rangeQueryLog, "range")
+func (m *instantQueryLoggingMiddleware) writeToLogFile(instantQueryLog MetricsInstantQueryLogging) {
+	err := WriteJSONLogToFile(m.logger, m.writer, instantQueryLog, "instant")
 	if err != nil {
-		level.Error(m.logger).Log("msg", "failed to write range query log to file", "err", err)
+		level.Error(m.logger).Log("msg", "failed to write instant query log to file", "err", err)
 	}
 }
 
 // Close should be called when the middleware is no longer needed.
-func (m *rangeQueryLoggingMiddleware) Close() error {
+func (m *instantQueryLoggingMiddleware) Close() error {
 	if m.writer != nil {
 		return m.writer.Close()
 	}
