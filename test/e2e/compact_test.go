@@ -469,6 +469,10 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	q := e2ethanos.NewQuerierBuilder(e, "1", str.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics(), e2emon.WithLabelMatchers(
+		matchers.MustNewMatcher(matchers.MatchEqual, "store_type", "store"),
+	)))
+
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
