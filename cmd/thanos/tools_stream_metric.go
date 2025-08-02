@@ -69,7 +69,7 @@ func streamMetric(conf *rawMetricConfig, logger log.Logger) error {
 	nowTime := time.Now()
 	startTime := nowTime.Add(-time.Duration(conf.hoursAgo) * time.Hour)
 	endTime := startTime.Add(time.Duration(conf.hours) * time.Hour)
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		conf.storeAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
