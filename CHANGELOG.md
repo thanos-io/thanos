@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#8393](https://github.com/thanos-io/thanos/pull/8393) Tests: fix flaky TestCompactWithStoreGateway by adding proper readiness checks
+- [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
 
 ### Added
 
