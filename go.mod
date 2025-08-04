@@ -2,6 +2,8 @@ module github.com/thanos-io/thanos
 
 go 1.23.0
 
+toolchain go1.23.11
+
 require (
 	cloud.google.com/go/storage v1.43.0 // indirect
 	cloud.google.com/go/trace v1.10.12
@@ -80,10 +82,10 @@ require (
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.32.0
-	golang.org/x/net v0.34.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/text v0.21.0
+	golang.org/x/crypto v0.40.0
+	golang.org/x/net v0.41.0
+	golang.org/x/sync v0.16.0
+	golang.org/x/text v0.27.0
 	golang.org/x/time v0.7.0
 	google.golang.org/api v0.195.0 // indirect
 	google.golang.org/genproto v0.0.0-20240823204242-4ba0660f739c // indirect
@@ -112,7 +114,7 @@ require (
 )
 
 require (
-	capnproto.org/go/capnp/v3 v3.0.0-alpha.30
+	capnproto.org/go/capnp/v3 v3.0.0-alpha.29
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.4.0
 	github.com/cortexproject/promqlsmith v0.0.0-20240506042652-6cfdd9739a5e
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
@@ -143,7 +145,7 @@ require (
 	github.com/go-openapi/runtime v0.27.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/jcchavezs/porto v0.1.0 // indirect
@@ -276,10 +278,10 @@ require (
 	go.opentelemetry.io/otel/metric v1.31.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/mod v0.21.0 // indirect
-	golang.org/x/oauth2 v0.23.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/tools v0.24.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/tools v0.34.0 // indirect
 	gonum.org/v1/gonum v0.15.0 // indirect
 	google.golang.org/protobuf v1.35.1
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
