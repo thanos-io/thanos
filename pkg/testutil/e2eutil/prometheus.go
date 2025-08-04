@@ -521,6 +521,9 @@ func createBlockWithDelay(ctx context.Context, dir string, series []labels.Label
 	logger := log.NewNopLogger()
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
+	if blockDelay > 0 {
+		m.Thanos.UploadTime = timestamp.Time(int64(blockID.Time())).Add(-blockDelay)
+	}
 	if err := m.WriteToDir(logger, path.Join(dir, blockID.String())); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
 	}

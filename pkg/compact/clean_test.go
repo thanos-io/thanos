@@ -31,7 +31,8 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+	mb := objstore.NewInMemBucket()
+	bkt := objstore.WithNoopInstr(mb)
 	logger := log.NewNopLogger()
 
 	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
@@ -45,6 +46,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	var fakeChunk bytes.Buffer
 	fakeChunk.Write([]byte{0, 1, 2, 3})
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"), &fakeChunk))
+	testutil.Ok(t, mb.ChangeLastModified(path.Join(shouldDeleteID.String(), "chunks", "000001"), time.Now().Add(-PartialUploadThresholdAge-1*time.Hour)))
 
 	// 2.  Old block with meta, so should be kept.
 	shouldIgnoreID1, err := ulid.New(uint64(time.Now().Add(-PartialUploadThresholdAge-2*time.Hour).Unix()*1000), nil)
@@ -91,8 +93,15 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 func TestGetLastModifiedTime(t *testing.T) {
 	now := time.Now().UTC()
 	u := ulid.MustNewDefault(now)
-	tm, err := getOldestModifiedTime(context.Background(), u, objstore.NewInMemBucket())
+	bkt := objstore.NewInMemBucket()
+	tmCreated, err := getOldestModifiedTime(context.Background(), u, bkt)
 	testutil.NotOk(t, err)
 	// NOTE(GiedriusS): ULIDs use millisecond precision.
-	testutil.Equals(t, now.Truncate(time.Second), tm.Truncate(time.Second))
+	testutil.Equals(t, now.Truncate(time.Second), tmCreated.Truncate(time.Second))
+
+	testutil.Ok(t, bkt.Upload(context.Background(), path.Join(u.String(), "chunks", "000001"), bytes.NewBufferString("test")))
+	tmUploaded, err := getOldestModifiedTime(context.Background(), u, bkt)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, true, !tmUploaded.Equal(tmCreated))
 }

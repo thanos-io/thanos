@@ -31,7 +31,7 @@ const (
 func getOldestModifiedTime(ctx context.Context, blockID ulid.ULID, bkt objstore.Bucket) (time.Time, error) {
 	var lastModifiedTime time.Time
 
-	err := bkt.IterWithAttributes(ctx, bkt.Name(), func(attrs objstore.IterObjectAttributes) error {
+	err := bkt.IterWithAttributes(ctx, blockID.String(), func(attrs objstore.IterObjectAttributes) error {
 		lm, ok := attrs.LastModified()
 		if !ok {
 			return nil
