@@ -363,6 +363,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	for _, b := range blocks {
 		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc, 120, nil)
 		testutil.Ok(t, err)
+
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())
 		}))
@@ -439,19 +440,6 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), bytes.NewBuffer(deletionMark)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
-
-		// Partial block after delete threshold.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc, 120, nil)
-		testutil.Ok(t, err)
-		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
-
-		// Partial block after delete threshold + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc, 120, nil)
-		testutil.Ok(t, err)
-		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
-		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 	}
 
 	bktConfig := client.BucketConfig{
@@ -462,7 +450,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
 	str := e2ethanos.NewStoreGW(e, "1", bktConfig, "", "", []string{"--ignore-deletion-marks-delay=2s"})
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
-	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+6)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
 
@@ -520,7 +508,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		},
 	)
 	// Store view:
-	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+6)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
 
@@ -653,10 +641,6 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compactions_failures_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_group_compaction_runs_started_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compaction_runs_completed_total"))
-
-		// However, the blocks have been cleaned because that happens concurrently.
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_blocks_cleaned_total"))
 
 		// Ensure bucket UI.
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "global"))

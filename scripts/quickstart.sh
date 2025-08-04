@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Starts three Prometheus servers scraping themselves and sidecars for each.
+# Starts three Prometheus servers scraping themselves and sidecars or receivers for each.
 # Two query nodes are started and all are clustered together.
 
 trap 'kill 0' SIGTERM
@@ -162,28 +162,30 @@ done
 
 sleep 0.5
 
-# Start one sidecar for each Prometheus server.
-for i in $(seq 0 2); do
-  if [ -z ${CODESPACE_NAME+x} ]; then
-    PROMETHEUS_URL="http://localhost:909${i}"
-  else
-    PROMETHEUS_URL="https://${CODESPACE_NAME}-909${i}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
-  fi
-  ${THANOS_EXECUTABLE} sidecar \
-    --debug.name sidecar-"${i}" \
-    --log.level debug \
-    --grpc-address 0.0.0.0:109"${i}"1 \
-    --grpc-grace-period 1s \
-    --http-address 0.0.0.0:109"${i}"2 \
-    --http-grace-period 1s \
-    --prometheus.url "${PROMETHEUS_URL}" \
-    --tsdb.path data/prom"${i}" \
-    ${OBJSTORECFG} &
+if [ ! -n "${REMOTE_WRITE_ENABLED}" ]; then
+  # Start one sidecar for each Prometheus server.
+  for i in $(seq 0 2); do
+    if [ -z ${CODESPACE_NAME+x} ]; then
+      PROMETHEUS_URL="http://localhost:909${i}"
+    else
+      PROMETHEUS_URL="https://${CODESPACE_NAME}-909${i}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    fi
+    ${THANOS_EXECUTABLE} sidecar \
+      --debug.name sidecar-"${i}" \
+      --log.level debug \
+      --grpc-address 0.0.0.0:109"${i}"1 \
+      --grpc-grace-period 1s \
+      --http-address 0.0.0.0:109"${i}"2 \
+      --http-grace-period 1s \
+      --prometheus.url "${PROMETHEUS_URL}" \
+      --tsdb.path data/prom"${i}" \
+      ${OBJSTORECFG} &
 
-  STORES="${STORES} --endpoint 127.0.0.1:109${i}1"
+    STORES="${STORES} --endpoint 127.0.0.1:109${i}1"
 
-  sleep 0.25
-done
+    sleep 0.25
+  done
+fi
 
 sleep 0.5
 
@@ -219,7 +221,7 @@ sleep 0.5
 
 if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
 
-  for i in $(seq 0 1 2); do
+  for i in $(seq 0 2); do
     ${THANOS_EXECUTABLE} receive \
       --debug.name receive${i} \
       --log.level debug \
