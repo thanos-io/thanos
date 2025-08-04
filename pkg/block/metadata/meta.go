@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
@@ -103,6 +104,10 @@ type Thanos struct {
 
 	// Extensions are used for plugin any arbitrary additional information for block. Optional.
 	Extensions any `json:"extensions,omitempty"`
+
+	// UploadTime is used to track when the meta.json file was uploaded to the object storage
+	// without an extra Attributes call. Used for consistency filter.
+	UploadTime time.Time `json:"upload_time,omitempty"`
 }
 
 type IndexStats struct {

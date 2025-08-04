@@ -82,3 +82,4 @@ issues:
   exclude-dirs:
     - vendor
     - internal/cortex
+    - .bingo

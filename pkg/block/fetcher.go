@@ -1001,10 +1001,18 @@ func NewConsistencyDelayMetaFilterWithoutMetrics(logger log.Logger, consistencyD
 // Filter filters out blocks that filters blocks that have are created before a specified consistency delay.
 func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	for id, meta := range metas {
+		var metaUploadTime = meta.Thanos.UploadTime
+
+		var tooFresh bool
+		if !metaUploadTime.IsZero() {
+			tooFresh = time.Since(metaUploadTime) < f.consistencyDelay
+		} else {
+			tooFresh = ulid.Now()-id.Time() < uint64(f.consistencyDelay/time.Millisecond)
+		}
+
 		// TODO(khyatisoneji): Remove the checks about Thanos Source
 		//  by implementing delete delay to fetch metas.
-		// TODO(bwplotka): Check consistency delay based on file upload / modification time instead of ULID.
-		if ulid.Now()-id.Time() < uint64(f.consistencyDelay/time.Millisecond) &&
+		if tooFresh &&
 			meta.Thanos.Source != metadata.BucketRepairSource &&
 			meta.Thanos.Source != metadata.CompactorSource &&
 			meta.Thanos.Source != metadata.CompactorRepairSource {

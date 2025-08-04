@@ -213,7 +213,7 @@ func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
 		for _, s := range ss {
 			s := s
 
-			switch isFoo := strings.Contains(s.String(), "foo"); isFoo {
+			switch isFoo := strings.Contains(labelpb.PromLabelSetsToString(s.LabelSets()), "foo"); isFoo {
 			case true:
 				g.Go(func() error {
 					return getResponses(s, respFoo)
