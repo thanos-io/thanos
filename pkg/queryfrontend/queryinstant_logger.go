@@ -36,7 +36,7 @@ type MetricsInstantQueryLogging struct {
 	Tenant              string `json:"tenant"`
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
-	EmailId             string `json:"emailID"`
+	EmailId             string `json:"emailId"`
 	// Query-related fields (instant query specific)
 	QueryTimestampMs      int64    `json:"queryTimestampMs"` // Query timestamp for instant queries
 	Path                  string   `json:"path"`

@@ -36,7 +36,7 @@ type MetricsRangeQueryLogging struct {
 	Tenant              string `json:"tenant"`
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
-	EmailId             string `json:"emailID"`
+	EmailId             string `json:"emailId"`
 	// Query-related fields
 	StartTimestampMs      int64    `json:"startTimestampMs"`
 	EndTimestampMs        int64    `json:"endTimestampMs"`
