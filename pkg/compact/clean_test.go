@@ -91,8 +91,15 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 func TestGetLastModifiedTime(t *testing.T) {
 	now := time.Now().UTC()
 	u := ulid.MustNewDefault(now)
-	tm, err := getOldestModifiedTime(context.Background(), u, objstore.NewInMemBucket())
+	bkt := objstore.NewInMemBucket()
+	tmCreated, err := getOldestModifiedTime(context.Background(), u, bkt)
 	testutil.NotOk(t, err)
 	// NOTE(GiedriusS): ULIDs use millisecond precision.
-	testutil.Equals(t, now.Truncate(time.Second), tm.Truncate(time.Second))
+	testutil.Equals(t, now.Truncate(time.Second), tmCreated.Truncate(time.Second))
+
+	testutil.Ok(t, bkt.Upload(context.Background(), path.Join(u.String(), "chunks", "000001"), bytes.NewBufferString("test")))
+	tmUploaded, err := getOldestModifiedTime(context.Background(), u, bkt)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, true, !tmUploaded.Equal(tmCreated))
 }
