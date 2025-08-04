@@ -31,7 +31,8 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+	mb := objstore.NewInMemBucket()
+	bkt := objstore.WithNoopInstr(mb)
 	logger := log.NewNopLogger()
 
 	baseBlockIDsFetcher := block.NewConcurrentLister(logger, bkt)
@@ -45,6 +46,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	var fakeChunk bytes.Buffer
 	fakeChunk.Write([]byte{0, 1, 2, 3})
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"), &fakeChunk))
+	testutil.Ok(t, mb.ChangeLastModified(path.Join(shouldDeleteID.String(), "chunks", "000001"), time.Now().Add(-PartialUploadThresholdAge-1*time.Hour)))
 
 	// 2.  Old block with meta, so should be kept.
 	shouldIgnoreID1, err := ulid.New(uint64(time.Now().Add(-PartialUploadThresholdAge-2*time.Hour).Unix()*1000), nil)
