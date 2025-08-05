@@ -442,7 +442,7 @@ func runCompact(
 			return errors.Wrap(err, "syncing metas")
 		}
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures, ignoreDeletionMarkFilter.DeletionMarkBlocks())
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "cleaning marked blocks")
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
 const (
@@ -61,10 +62,19 @@ func BestEffortCleanAbortedPartialUploads(
 	deleteAttempts prometheus.Counter,
 	blockCleanups prometheus.Counter,
 	blockCleanupFailures prometheus.Counter,
+	deletionMarkBlocks map[ulid.ULID]*metadata.DeletionMark,
 ) {
 	level.Info(logger).Log("msg", "started cleaning of aborted partial uploads")
 
 	for id := range partial {
+		// NOTE(GiedriusS): we start to delete blocks from meta.json so at that point they are marked as partial.
+		// If you have multiple compactor shards then they might try to delete the same block here.
+		// We do not want to delete blocks that are marked for deletion, as they are already scheduled for deletion in the blocks cleaner.
+		if _, ok := deletionMarkBlocks[id]; ok {
+			level.Debug(logger).Log("msg", "ignoring block marked for deletion", "block", id)
+			continue
+		}
+
 		lastModifiedTime, err := getOldestModifiedTime(ctx, id, bkt)
 		if err != nil {
 			level.Warn(logger).Log("msg", "failed to get last modified time for block; falling back to block creation time", "block", id, "err", err)

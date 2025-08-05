@@ -72,7 +72,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	_, partial, err := metaFetcher.Fetch(ctx)
 	testutil.Ok(t, err)
 
-	BestEffortCleanAbortedPartialUploads(ctx, logger, partial, bkt, deleteAttempts, blockCleanups, blockCleanupFailures)
+	BestEffortCleanAbortedPartialUploads(ctx, logger, partial, bkt, deleteAttempts, blockCleanups, blockCleanupFailures, map[ulid.ULID]*metadata.DeletionMark{})
 	testutil.Equals(t, 1.0, promtest.ToFloat64(deleteAttempts))
 	testutil.Equals(t, 1.0, promtest.ToFloat64(blockCleanups))
 	testutil.Equals(t, 0.0, promtest.ToFloat64(blockCleanupFailures))
@@ -86,6 +86,23 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	testutil.Equals(t, true, exists)
 
 	exists, err = bkt.Exists(ctx, path.Join(shouldIgnoreID2.String(), "chunks", "000001"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, true, exists)
+
+	// It has been marked for deletion, so it should not be deleted.
+	shouldDeleteID, err = ulid.New(uint64(time.Now().Add(-PartialUploadThresholdAge-1*time.Hour).Unix()*1000), nil)
+	testutil.Ok(t, err)
+
+	fakeChunk.Reset()
+	fakeChunk.Write([]byte{0, 1, 2, 3})
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"), &fakeChunk))
+	testutil.Ok(t, mb.ChangeLastModified(path.Join(shouldDeleteID.String(), "chunks", "000001"), time.Now().Add(-PartialUploadThresholdAge-1*time.Hour)))
+
+	BestEffortCleanAbortedPartialUploads(ctx, logger, partial, bkt, deleteAttempts, blockCleanups, blockCleanupFailures, map[ulid.ULID]*metadata.DeletionMark{
+		shouldDeleteID: {},
+	})
+
+	exists, err = bkt.Exists(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"))
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, exists)
 }
