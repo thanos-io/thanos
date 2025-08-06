@@ -392,15 +392,19 @@ func runStore(
 	default:
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
 	filters := []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 		block.NewLabelShardedMetaFilter(relabelConfig),
 		block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
-		ignoreDeletionMarkFilter,
-		block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		block.NewParquetMigratedMetaFilter(logger),
 	}
+
+	// When ignoreDeletionMarksDelay 0h, not filter deletion-mark file
+	if time.Duration(conf.ignoreDeletionMarksDelay) > 0 {
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+		filters = append(filters, ignoreDeletionMarkFilter)
+	}
+
+	filters = append(filters, block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency), block.NewParquetMigratedMetaFilter(logger))
 
 	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
 	if err != nil {
