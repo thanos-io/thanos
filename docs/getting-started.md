@@ -147,8 +147,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 * 2022:
   * [Thanos at Medallia: A Hybrid Architecture Scaled to Support 1 Billion+ Series Across 40+ Data Centers](https://thanos.io/blog/2022-09-08-thanos-at-medallia/)
   * [Deploy Thanos Receive with native OCI Object Storage on Oracle Kubernetes Engine](https://medium.com/@lmukadam/deploy-thanos-receive-with-native-oci-object-storage-on-kubernetes-829326ea0bc6)
-  * [Leveraging Consul for Thanos Query Discovery](https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
-
+  * [Leveraging Consul for Thanos Query Discovery](https://web.archive.org/web/20220525110330/https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
 * 2021:
   * [Adopting Thanos at LastPass](https://krisztianfekete.org/adopting-thanos-at-lastpass/)
 
