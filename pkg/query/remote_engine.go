@@ -366,6 +366,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				warnings.Add(errors.Errorf("remote query warning (%s): %s", r.remoteAddr, warn))
 				continue
 			}
+			for warn := range msg.GetWarningsSlice().Warnings {
+				warnings.Add(errors.Errorf("remote query warning (%s): %s", r.remoteAddr, warn))
+			}
+
 			if s := msg.GetStats(); s != nil {
 				qryStats = *s
 				continue
@@ -433,6 +437,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			warnings.Add(errors.Errorf("remote query warning (%s): %s", r.remoteAddr, warn))
 			continue
 		}
+		for warn := range msg.GetWarningsSlice().Warnings {
+			warnings.Add(errors.Errorf("remote query warning (%s): %s", r.remoteAddr, warn))
+		}
+
 		if s := msg.GetStats(); s != nil {
 			qryStats = *s
 			continue
