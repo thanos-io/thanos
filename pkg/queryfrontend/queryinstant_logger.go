@@ -137,9 +137,8 @@ func (m *instantQueryLoggingMiddleware) logInstantQuery(req *ThanosQueryInstantR
 	// Extract email from response headers
 	email := ExtractEmailFromResponse(resp)
 
-	// If email is empty, don't log the query.
 	// This is to avoid logging queries that come from rule manager.
-	if email == "" {
+	if userInfo.UserAgent == "Databricks-RuleManager/1.0" {
 		return
 	}
 
