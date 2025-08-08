@@ -337,6 +337,7 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 ### Changed
 
 - [#6539](https://github.com/thanos-io/thanos/pull/6539) Store: *breaking :warning:* Changed `--sync-block-duration` default 3m to 15m.
+- [#7040](https://github.com/thanos-io/thanos/pull/7040) Optimize docker image size. Note that this changed the default user in container image from 1001(thanos) to 65534(nobody), which is unified with prometheus and alertmanager images.
 
 ### Removed
 
