@@ -5,7 +5,9 @@ package dns
 
 import (
 	"context"
+	"maps"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 
@@ -143,9 +145,8 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string, flushOld bool) e
 	if flushOld && len(errs) == 0 {
 		p.resolved = map[string][]string{}
 	}
-	for name, addrs := range resolvedAddrs {
-		p.resolved[name] = addrs
-	}
+	maps.Copy(p.resolved, resolvedAddrs)
+
 	for name, addrs := range p.resolved {
 		p.resolverAddrs.WithLabelValues(name).Set(float64(len(addrs)))
 	}
@@ -163,6 +164,8 @@ func (p *Provider) Addresses() []string {
 	for _, addrs := range p.resolved {
 		result = append(result, addrs...)
 	}
+
+	sort.Strings(result)
 	return result
 }
 
@@ -173,8 +176,9 @@ func (p *Provider) AddressesForHost(host string) []string {
 
 	addrs := p.resolved[host]
 
-	res := make([]string, len(addrs))
-	copy(res, addrs)
+	result := make([]string, len(addrs))
+	copy(result, addrs)
 
-	return res
+	sort.Strings(result)
+	return result
 }
