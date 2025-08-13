@@ -74,16 +74,6 @@ func ExtractUserInfoFromHeaders(headers []*RequestHeader) UserInfo {
 				userAgentLower := strings.ToLower(headerValue)
 				if strings.Contains(userAgentLower, "grafana") {
 					userInfo.Source = "Grafana"
-				} else if strings.Contains(userAgentLower, "bronson") {
-					userInfo.Source = "Bronson"
-				} else if strings.Contains(userAgentLower, "pandora") {
-					userInfo.Source = "Pandora"
-				} else {
-					// Return the first part of the user agent if no specific match.
-					parts := strings.Split(userAgentLower, " ")
-					if len(parts) > 0 {
-						userInfo.Source = parts[0]
-					}
 				}
 			}
 		case "x-dashboard-uid":

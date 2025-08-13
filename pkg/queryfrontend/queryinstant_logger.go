@@ -20,38 +20,38 @@ import (
 
 // MetricsInstantQueryLogging represents the logging information for an instant query.
 type MetricsInstantQueryLogging struct {
-	TimestampMs       int64  `json:"timestampMs"`
+	TimestampMs       int64  `json:"timestamp_ms"`
 	Source            string `json:"source"`
-	QueryExpr         string `json:"queryExpr"`
+	QueryExpr         string `json:"query_expr"`
 	Success           bool   `json:"success"`
-	BytesFetched      int64  `json:"bytesFetched"`
-	TimeseriesFetched int64  `json:"timeseriesFetched"`
+	BytesFetched      int64  `json:"bytes_fetched"`
+	TimeseriesFetched int64  `json:"timeseries_fetched"`
 	Chunks            int64  `json:"chunks"`
 	Samples           int64  `json:"samples"`
-	EvalLatencyMs     int64  `json:"evalLatencyMs"`
+	EvalLatencyMs     int64  `json:"eval_latency_ms"`
 	// User identification fields
-	GrafanaDashboardUid string `json:"grafanaDashboardUid"`
-	GrafanaPanelId      string `json:"grafanaPanelId"`
-	RequestId           string `json:"requestId"`
+	GrafanaDashboardUid string `json:"grafana_dashboard_uid"`
+	GrafanaPanelId      string `json:"grafana_panel_id"`
+	RequestId           string `json:"request_id"`
 	Tenant              string `json:"tenant"`
-	ForwardedFor        string `json:"forwardedFor"`
-	UserAgent           string `json:"userAgent"`
-	EmailId             string `json:"emailId"`
+	ForwardedFor        string `json:"forwarded_for"`
+	UserAgent           string `json:"user_agent"`
+	EmailId             string `json:"email_id"`
 	// Query-related fields (instant query specific)
-	QueryTimestampMs      int64    `json:"queryTimestampMs"` // Query timestamp for instant queries
+	QueryTimestampMs      int64    `json:"query_timestamp_ms"` // Query timestamp for instant queries
 	Path                  string   `json:"path"`
-	Dedup                 bool     `json:"dedup"`                 // Whether deduplication is enabled
-	PartialResponse       bool     `json:"partialResponse"`       // Whether partial responses are allowed
-	AutoDownsampling      bool     `json:"autoDownsampling"`      // Whether automatic downsampling is enabled
-	MaxSourceResolutionMs int64    `json:"maxSourceResolutionMs"` // Maximum source resolution in milliseconds
-	ReplicaLabels         []string `json:"replicaLabels"`
-	StoreMatchersCount    int      `json:"storeMatchersCount"` // Number of store matcher sets
-	LookbackDeltaMs       int64    `json:"lookbackDeltaMs"`    // Lookback delta in milliseconds
-	Analyze               bool     `json:"analyze"`            // Whether query analysis is enabled
-	Engine                string   `json:"engine"`             // Query engine being used
-	Stats                 string   `json:"stats"`              // Query statistics information
+	Dedup                 bool     `json:"dedup"`                    // Whether deduplication is enabled
+	PartialResponse       bool     `json:"partial_response"`         // Whether partial responses are allowed
+	AutoDownsampling      bool     `json:"auto_downsampling"`        // Whether automatic downsampling is enabled
+	MaxSourceResolutionMs int64    `json:"max_source_resolution_ms"` // Maximum source resolution in milliseconds
+	ReplicaLabels         []string `json:"replica_labels"`
+	StoreMatchersCount    int      `json:"store_matchers_count"` // Number of store matcher sets
+	LookbackDeltaMs       int64    `json:"lookback_delta_ms"`    // Lookback delta in milliseconds
+	Analyze               bool     `json:"analyze"`              // Whether query analysis is enabled
+	Engine                string   `json:"engine"`               // Query engine being used
+	Stats                 string   `json:"stats"`                // Query statistics information
 	// Store-matcher details
-	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
+	StoreMatchers []StoreMatcherSet `json:"store_matchers"`
 }
 
 // InstantQueryLogConfig holds configuration for instant query logging.
