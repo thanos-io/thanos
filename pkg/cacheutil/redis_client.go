@@ -108,7 +108,7 @@ type RedisClientConfig struct {
 	// If not zero then client-side caching is enabled.
 	// Client-side caching is when data is stored in memory
 	// instead of fetching data each time.
-	// See https://redis.io/docs/manual/client-side-caching/ for info.
+	// See https://redis.io/docs/latest/develop/reference/client-side-caching/ for info.
 	CacheSize model.Bytes `yaml:"cache_size"`
 
 	// MasterName specifies the master's name. Must be not empty
