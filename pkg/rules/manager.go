@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"github.com/prometheus/prometheus/rules"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -286,9 +286,14 @@ func (g configRuleAdapter) validate() (errs []error) {
 // TODO(bwplotka): Replace this with upstream implementation after https://github.com/prometheus/prometheus/issues/7128 is fixed.
 func ValidateAndCount(group io.Reader) (numRules int, errs errutil.MultiError) {
 	var rgs configGroups
-	d := yaml.NewDecoder(group)
-	d.KnownFields(true)
-	if err := d.Decode(&rgs); err != nil {
+
+	b, err := io.ReadAll(group)
+	if err != nil {
+		errs.Add(err)
+		return 0, errs
+	}
+
+	if err := yaml.UnmarshalStrict(b, &rgs); err != nil {
 		errs.Add(err)
 		return 0, errs
 	}
