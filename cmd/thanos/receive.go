@@ -58,8 +58,9 @@ import (
 )
 
 const (
-	compressionNone   = "none"
-	metricNamesFilter = "metric-names-filter"
+	compressionNone          = "none"
+	metricNamesFilter        = "metric-names-filter"
+	grpcReadinessInterceptor = "grpc-readiness-interceptor"
 )
 
 func registerReceive(app *extkingpin.App) {
@@ -144,10 +145,15 @@ func runReceive(
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
 	multiTSDBOptions := []receive.MultiTSDBOption{}
+	var enableGRPCReadinessInterceptor bool
 	for _, feature := range *conf.featureList {
 		if feature == metricNamesFilter {
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
 			level.Info(logger).Log("msg", "metric name filter feature enabled")
+		}
+		if feature == grpcReadinessInterceptor {
+			enableGRPCReadinessInterceptor = true
+			level.Info(logger).Log("msg", "gRPC readiness interceptor feature enabled")
 		}
 	}
 
@@ -462,7 +468,7 @@ func runReceive(
 			info.WithExemplarsInfoFunc(),
 		)
 
-		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
+		grpcOptions := []grpcserver.Option{
 			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
@@ -471,7 +477,13 @@ func runReceive(
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
-		)
+		}
+
+		if enableGRPCReadinessInterceptor {
+			grpcOptions = append(grpcOptions, receive.NewReadinessGRPCOptions(httpProbe)...)
+		}
+
+		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe, grpcOptions...)
 
 		g.Add(
 			func() error {
@@ -1174,7 +1186,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("0").IntVar(&rc.matcherConverterCacheCapacity)
 	cmd.Flag("receive.max-pending-grcp-write-requests", "Reject right away gRPC write requests when this number of requests are pending. Value 0 disables this feature.").
 		Default("0").IntVar(&rc.maxPendingGrpcWriteRequests)
-	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
+	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+", "+grpcReadinessInterceptor+".").Default("").Strings()
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
 }
