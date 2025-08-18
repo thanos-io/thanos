@@ -12,8 +12,10 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"unsafe"
 
+	"github.com/VictoriaMetrics/easyproto"
 	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -424,4 +426,68 @@ func (z ZLabelSets) Less(i, j int) bool {
 	}
 
 	return l == lenI
+}
+
+type CustomLabelset labels.Labels
+
+var builderPool = &sync.Pool{
+	New: func() interface{} {
+		b := labels.NewScratchBuilder(8)
+		return &b
+	},
+}
+
+func (l *CustomLabelset) UnmarshalProtobuf(src []byte) (err error) {
+	b := builderPool.Get().(*labels.ScratchBuilder)
+	b.Reset()
+
+	defer builderPool.Put(b)
+
+	var fc easyproto.FieldContext
+
+	for len(src) > 0 {
+		src, err = fc.NextField(src)
+		if err != nil {
+			return errors.Wrap(err, "unmarshal next field")
+		}
+
+		if fc.FieldNum != 1 {
+			return fmt.Errorf("expected field 1, got %d", fc.FieldNum)
+		}
+
+		dat, ok := fc.MessageData()
+		if !ok {
+			return fmt.Errorf("expected message data for field %d", fc.FieldNum)
+		}
+
+		var n, v string
+		var msgFc easyproto.FieldContext
+		for len(dat) > 0 {
+			dat, err = msgFc.NextField(dat)
+			if err != nil {
+				return errors.Wrap(err, "unmarshal next field in message")
+			}
+
+			switch msgFc.FieldNum {
+			case 1:
+				n, ok = msgFc.String()
+				if !ok {
+					return fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
+				}
+			case 2:
+				v, ok = msgFc.String()
+				if !ok {
+					return fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
+				}
+			default:
+				return fmt.Errorf("unexpected field %d in label message", msgFc.FieldNum)
+			}
+		}
+
+		b.Add(n, v)
+
+	}
+
+	*l = CustomLabelset(b.Labels())
+	return nil
 }
