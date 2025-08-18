@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 )
@@ -539,4 +540,51 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 			benchmarkLabelsResult = h
 		})
 	}
+}
+
+func BenchmarkLabelUnmarshal(b *testing.B) {
+	lblset := LabelSet{
+		Labels: []Label{},
+	}
+
+	for i := 0; i < 1000; i++ {
+		lblset.Labels = append(lblset.Labels, Label{Name: fmt.Sprintf("label%d", i), Value: fmt.Sprintf("value%d", i)})
+	}
+
+	lblsetm, err := lblset.Marshal()
+	testutil.Ok(b, err)
+
+	b.Run("Unmarshal regular", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			l := LabelSet{}
+
+			require.NoError(b, l.Unmarshal(lblsetm))
+		}
+	})
+
+	b.Run("Unmarshal ZLabel", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			l := ZLabelSet{}
+
+			require.NoError(b, l.Unmarshal(lblsetm))
+		}
+	})
+
+	b.Run("Unmarshal easyproto", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			l := CustomLabelset{}
+
+			require.NoError(b, l.UnmarshalProtobuf(lblsetm))
+		}
+	})
+
 }
