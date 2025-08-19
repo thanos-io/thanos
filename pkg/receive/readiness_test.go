@@ -9,11 +9,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/core/testutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/grpc/status"
 
+	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
+	"github.com/opentracing/opentracing-go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -35,46 +42,64 @@ func TestNewReadinessGRPCOptions(t *testing.T) {
 	testutil.Equals(t, 2, len(options))
 }
 
-func TestReadinessInterceptorUnary(t *testing.T) {
-	lis := bufconn.Listen(1024 * 1024)
-	defer lis.Close()
-
+func TestReadinessInterceptors(t *testing.T) {
 	checker := &mockReadinessChecker{ready: false}
-	unaryInterceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		if !checker.IsReady() {
-			return nil, nil
-		}
-		return handler(ctx, req)
-	}
 
-	s := grpc.NewServer(grpc.UnaryInterceptor(unaryInterceptor))
+	// Test the actual NewReadinessGRPCOptions function
+	readinessOptions := NewReadinessGRPCOptions(checker)
+	testutil.Equals(t, 2, len(readinessOptions)) // Should have unary and stream interceptors
+
+	// Create grpcserver with actual readiness options (tests both unary and stream interceptors)
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+	comp := component.Receive
+	grpcProbe := prober.NewGRPC()
+
+	// Find a free port for testing
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	testutil.Ok(t, err)
+	addr := listener.Addr().String()
+	listener.Close()
 
 	mockSrv := &mockWriteableStoreServer{}
-	storepb.RegisterWriteableStoreServer(s, mockSrv)
+	var grpcOptions []grpcserver.Option
+	grpcOptions = append(grpcOptions, grpcserver.WithListen(addr))
+	grpcOptions = append(grpcOptions, readinessOptions...) // Use actual readiness options (both unary and stream)
+	grpcOptions = append(grpcOptions, grpcserver.WithServer(func(s *grpc.Server) {
+		storepb.RegisterWriteableStoreServer(s, mockSrv)
+	}))
+
+	srv := grpcserver.New(logger, reg, opentracing.NoopTracer{}, nil, nil, comp, grpcProbe, grpcOptions...)
+
+	// Start server
 	go func() {
-		if err := s.Serve(lis); err != nil && err != grpc.ErrServerStopped {
+		if err := srv.ListenAndServe(); err != nil {
 			t.Errorf("Server failed: %v", err)
 		}
 	}()
-	defer s.Stop()
+	defer srv.Shutdown(nil)
 
-	conn, err := grpc.DialContext(context.Background(), "bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Wait for server to start
+	time.Sleep(100 * time.Millisecond)
+
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
 	defer conn.Close()
 
 	client := storepb.NewWriteableStoreClient(conn)
 
+	// Test when not ready - this tests the unary interceptor (RemoteWrite is unary)
+	// Stream interceptors are also applied but RemoteWrite doesn't use streaming
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	resp, err := client.RemoteWrite(ctx, &storepb.WriteRequest{})
-	testutil.Ok(t, err)
-	testutil.Assert(t, resp != nil)
+	testutil.Assert(t, err != nil)
+	testutil.Equals(t, codes.Unavailable, status.Code(err))
+	testutil.Assert(t, resp == nil)
 	testutil.Equals(t, 0, mockSrv.callCount)
+
+	// Test when ready
 	checker.SetReady(true)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
@@ -84,42 +109,16 @@ func TestReadinessInterceptorUnary(t *testing.T) {
 	testutil.Ok(t, err2)
 	testutil.Assert(t, resp2 != nil)
 	testutil.Equals(t, 1, mockSrv.callCount)
-}
 
-func TestReadinessInterceptorStream(t *testing.T) {
-	lis := bufconn.Listen(1024 * 1024)
-	defer lis.Close()
-
-	checker := &mockReadinessChecker{ready: false}
-	streamInterceptor := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if !checker.IsReady() {
-			return nil
-		}
-		return handler(srv, ss)
-	}
-
-	s := grpc.NewServer(grpc.StreamInterceptor(streamInterceptor))
-
-	mockSrv := &mockWriteableStoreServer{}
-	storepb.RegisterWriteableStoreServer(s, mockSrv)
-	go func() {
-		if err := s.Serve(lis); err != nil && err != grpc.ErrServerStopped {
-			t.Errorf("Server failed: %v", err)
-		}
-	}()
-	defer s.Stop()
-
-	testutil.Assert(t, true)
-}
-
-func TestReadinessCheckerInterface(t *testing.T) {
-	checker := &mockReadinessChecker{ready: false}
-	var _ ReadinessChecker = checker
-	testutil.Equals(t, false, checker.IsReady())
-
-	checker.SetReady(true)
-	testutil.Equals(t, true, checker.IsReady())
-
+	// Test not ready again
 	checker.SetReady(false)
-	testutil.Equals(t, false, checker.IsReady())
+
+	ctx3, cancel3 := context.WithTimeout(context.Background(), time.Second)
+	defer cancel3()
+
+	resp3, err3 := client.RemoteWrite(ctx3, &storepb.WriteRequest{})
+	testutil.Assert(t, err3 != nil)
+	testutil.Equals(t, codes.Unavailable, status.Code(err3))
+	testutil.Assert(t, resp3 == nil)
+	testutil.Equals(t, 1, mockSrv.callCount) // Should not increment
 }

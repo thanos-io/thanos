@@ -12,7 +12,9 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
@@ -113,14 +115,16 @@ func testReadinessWithGRPCServer(t *testing.T, enableReadiness bool) {
 	defer cancel1()
 
 	resp1, err1 := client.RemoteWrite(ctx1, &storepb.WriteRequest{})
-	testutil.Ok(t, err1)
 
 	if enableReadiness {
-		// When readiness is enabled and probe is not ready, interceptor returns empty response
-		testutil.Assert(t, resp1 != nil)
+		// When readiness is enabled and probe is not ready, interceptor returns Unavailable error
+		testutil.Assert(t, err1 != nil)
+		testutil.Equals(t, codes.Unavailable, status.Code(err1))
+		testutil.Assert(t, resp1 == nil)
 		testutil.Equals(t, 0, mockSrv.callCount) // Service not called due to readiness interceptor
 	} else {
 		// When readiness is disabled, service should be called normally
+		testutil.Ok(t, err1)
 		testutil.Assert(t, resp1 != nil)
 		testutil.Equals(t, 1, mockSrv.callCount)
 	}
@@ -153,14 +157,16 @@ func testReadinessWithGRPCServer(t *testing.T, enableReadiness bool) {
 	defer cancel3()
 
 	resp3, err3 := client.RemoteWrite(ctx3, &storepb.WriteRequest{})
-	testutil.Ok(t, err3)
 
 	if enableReadiness {
-		// Back to not ready - should not call service
-		testutil.Assert(t, resp3 != nil)
+		// Back to not ready - should return Unavailable error and not call service
+		testutil.Assert(t, err3 != nil)
+		testutil.Equals(t, codes.Unavailable, status.Code(err3))
+		testutil.Assert(t, resp3 == nil)
 		testutil.Equals(t, 1, mockSrv.callCount) // Count should not increase
 	} else {
 		// Service called again (third time)
+		testutil.Ok(t, err3)
 		testutil.Assert(t, resp3 != nil)
 		testutil.Equals(t, 3, mockSrv.callCount)
 	}

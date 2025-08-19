@@ -7,6 +7,8 @@ import (
 	"context"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/prober"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -25,7 +27,7 @@ func NewReadinessGRPCOptions(probe ReadinessChecker) []grpcserver.Option {
 		if !probe.IsReady() {
 			// Return empty response instead of processing the request.
 			// This prevents timeouts while pods are starting up when using publishNotReadyAddresses: true.
-			return nil, nil
+			return nil, status.Errorf(codes.Unavailable, "service is not ready yet")
 		}
 		return handler(ctx, req)
 	}
