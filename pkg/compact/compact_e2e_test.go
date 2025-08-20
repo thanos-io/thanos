@@ -107,13 +107,13 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		blockMarkedForNoCompact := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour, fetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewDefaultDeletionMarkFilter(nil, nil, 48*time.Hour, fetcherConcurrency)
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 0)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		var rem []ulid.ULID
 		err = bkt.Iter(ctx, "", func(n string) error {
@@ -140,7 +140,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// After another sync the changes should also be reflected in the local groups.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
 		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10)
@@ -196,7 +196,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		reg := prometheus.NewRegistry()
 
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewDefaultDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
 		insBkt := objstore.WithNoopInstr(bkt)
@@ -468,7 +468,8 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// Create all blocks in the bucket.
 		for _, m := range append(metas, &m1) {
-			fmt.Println("create", m.ULID)
+			t.Log("create", m.ULID)
+
 			var buf bytes.Buffer
 			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
@@ -476,7 +477,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewDefaultDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		insBkt := objstore.WithNoopInstr(bkt)
@@ -492,7 +493,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(garbageCollectedBlocks))
 
 		rem, err := listBlocksMarkedForDeletion(ctx, bkt)
@@ -511,7 +512,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// After another garbage-collect, we should not find new blocks that are deleted with new deletion mark files.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		rem, err = listBlocksMarkedForDeletion(ctx, bkt)
 		testutil.Ok(t, err)

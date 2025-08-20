@@ -1124,7 +1124,7 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 		defer cancel()
 
 		now := time.Now()
-		f := NewIgnoreDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 48*time.Hour, 32)
+		f := NewDefaultDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 48*time.Hour, 32)
 
 		shouldFetch := &metadata.DeletionMark{
 			ID:           ULID(1),

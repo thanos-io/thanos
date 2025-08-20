@@ -233,7 +233,7 @@ func runCompact(
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkFilter := block.NewDefaultDeletionMarkFilter(logger, insBkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
 	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
 	noDownsampleMarkerFilter := downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
@@ -434,7 +434,7 @@ func runCompact(
 
 	var cleanMtx sync.Mutex
 	// TODO(GiedriusS): we could also apply retention policies here but the logic would be a bit more complex.
-	cleanPartialMarked := func() error {
+	cleanBlocks := func() error {
 		cleanMtx.Lock()
 		defer cleanMtx.Unlock()
 
@@ -443,8 +443,19 @@ func runCompact(
 		}
 
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures, ignoreDeletionMarkFilter.DeletionMarkBlocks())
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+
+		deletedBlocks, err := blocksCleaner.DeleteMarkedBlocks(ctx)
+		if err != nil {
 			return errors.Wrap(err, "cleaning marked blocks")
+		}
+
+		// NOTE(GiedriusS): there's a dependency between marked block deletion and garbage collection. If a marked block is deleted
+		// then we need to ignore those blocks because there could be a possibility that metas sync happens somewhere
+		// in the background between deletion mark fetching & duplicate IDs gathering. Without this, it could happen (rarely) that
+		// we mark a duplicated block for deletion even though it was already deleted.
+		// Without passing this info to this function, we would have to do another SyncMetas call which would be wasteful.
+		if err := sy.GarbageCollect(ctx, deletedBlocks); err != nil {
+			return errors.Wrap(err, "garbage")
 		}
 		compactMetrics.cleanups.Inc()
 
@@ -534,7 +545,7 @@ func runCompact(
 			return errors.Wrap(err, "retention failed")
 		}
 
-		return cleanPartialMarked()
+		return cleanBlocks()
 	}
 
 	g.Add(func() error {
@@ -629,7 +640,7 @@ func runCompact(
 		if conf.cleanupBlocksInterval > 0 {
 			g.Add(func() error {
 				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), func() error {
-					err := cleanPartialMarked()
+					err := cleanBlocks()
 					if err != nil && compact.IsRetryError(err) {
 						// The RetryError signals that we hit an retriable error (transient error, no connection).
 						// You should alert on this being triggered too frequently.

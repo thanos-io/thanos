@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
@@ -626,4 +627,74 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		cancel()
 	})
 	testutil.Ok(t, g.Run())
+}
+
+type deletionMarkFilterNoop struct{}
+
+func (f *deletionMarkFilterNoop) DeletionMarkBlocks() map[ulid.ULID]*metadata.DeletionMark {
+	return map[ulid.ULID]*metadata.DeletionMark{}
+}
+
+type duplicateMarkFilterNoop struct {
+	duplicateIDs []ulid.ULID
+}
+
+func (f *duplicateMarkFilterNoop) DuplicateIDs() []ulid.ULID {
+	return f.duplicateIDs
+}
+
+func TestGarbageCollection_IgnoresDeletedBlocks(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewLogfmtLogger(io.Discard)
+	bkt := objstore.NewInMemBucket()
+
+	f, err := block.NewMetaFetcher(
+		logger, 1, objstore.WithNoopInstr(bkt), block.NewConcurrentLister(logger, objstore.WithNoopInstr(bkt)),
+		t.TempDir(), prometheus.NewRegistry(), []block.MetadataFilter{},
+	)
+	testutil.Ok(t, err)
+
+	u := ulid.MustNewDefault(time.Now())
+
+	r := prometheus.NewRegistry()
+
+	garbageCollectedBlocksCounter := promauto.With(r).NewCounter(prometheus.CounterOpts{
+		Name: "garbage_collected_blocks_total",
+	})
+	markedForDeletionCounter := promauto.With(r).NewCounter(prometheus.CounterOpts{
+		Name: "marked_deletion_total",
+	})
+	syncer, err := NewMetaSyncer(
+		logger,
+		r,
+		bkt,
+		f,
+		&duplicateMarkFilterNoop{
+			duplicateIDs: []ulid.ULID{u},
+		},
+		&deletionMarkFilterNoop{},
+		markedForDeletionCounter,
+		garbageCollectedBlocksCounter,
+		1*time.Second,
+	)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, syncer.SyncMetas(context.Background()))
+	testutil.Ok(t, syncer.GarbageCollect(
+		context.Background(),
+		map[ulid.ULID]struct{}{
+			u: {},
+		},
+	))
+
+	testutil.Equals(t, 0.0, promtest.ToFloat64(garbageCollectedBlocksCounter))
+
+	testutil.Ok(t, syncer.GarbageCollect(
+		context.Background(),
+		map[ulid.ULID]struct{}{},
+	))
+
+	testutil.Equals(t, 1.0, promtest.ToFloat64(garbageCollectedBlocksCounter))
+
 }

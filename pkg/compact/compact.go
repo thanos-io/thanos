@@ -60,7 +60,7 @@ type Syncer struct {
 	partial                  map[ulid.ULID]error
 	metrics                  *SyncerMetrics
 	duplicateBlocksFilter    block.DeduplicateFilter
-	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
+	ignoreDeletionMarkFilter block.DeletionMarkFilter
 	syncMetasTimeout         time.Duration
 
 	g singleflight.Group
@@ -102,7 +102,7 @@ func NewSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter, syncMetasTimeout time.Duration) (*Syncer, error) {
+func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter block.DeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter, syncMetasTimeout time.Duration) (*Syncer, error) {
 	return NewMetaSyncerWithMetrics(logger,
 		NewSyncerMetrics(reg, blocksMarkedForDeletion, garbageCollectedBlocks),
 		bkt,
@@ -113,7 +113,7 @@ func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bu
 	)
 }
 
-func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, syncMetasTimeout time.Duration) (*Syncer, error) {
+func NewMetaSyncerWithMetrics(logger log.Logger, metrics *SyncerMetrics, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter block.DeduplicateFilter, ignoreDeletionMarkFilter block.DeletionMarkFilter, syncMetasTimeout time.Duration) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -196,7 +196,7 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 // GarbageCollect marks blocks for deletion from bucket if their data is available as part of a
 // block with a higher compaction level.
 // Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
-func (s *Syncer) GarbageCollect(ctx context.Context) error {
+func (s *Syncer) GarbageCollect(ctx context.Context, ignoreBlocks map[ulid.ULID]struct{}) error {
 	begin := time.Now()
 
 	// Ignore filter exists before deduplicate filter.
@@ -208,6 +208,9 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 	garbageIDs := []ulid.ULID{}
 	for _, id := range duplicateIDs {
 		if _, exists := deletionMarkMap[id]; exists {
+			continue
+		}
+		if _, ok := ignoreBlocks[id]; ok {
 			continue
 		}
 		garbageIDs = append(garbageIDs, id)
@@ -1519,13 +1522,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		level.Info(c.logger).Log("msg", "start sync of metas")
 		if err := c.sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync")
-		}
-
-		level.Info(c.logger).Log("msg", "start of GC")
-		// Blocks that were compacted are garbage collected after each Compaction.
-		// However if compactor crashes we need to resolve those on startup.
-		if err := c.sy.GarbageCollect(ctx); err != nil {
-			return errors.Wrap(err, "garbage")
 		}
 
 		groups, err := c.grouper.Groups(c.sy.Metas())

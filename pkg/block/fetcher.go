@@ -824,10 +824,10 @@ func NewDeduplicateFilter(concurrency int) *DefaultDeduplicateFilter {
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
 func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
-	f.duplicateIDs = f.duplicateIDs[:0]
-
 	var wg sync.WaitGroup
 	var groupChan = make(chan []*metadata.Meta)
+
+	var duplicateIDs = make(chan ulid.ULID)
 
 	// Start up workers to deduplicate workgroups when they're ready.
 	for i := 0; i < f.concurrency; i++ {
@@ -835,10 +835,29 @@ func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID
 		go func() {
 			defer wg.Done()
 			for group := range groupChan {
-				f.filterGroup(group, metas, synced)
+				f.filterGroup(group, duplicateIDs)
 			}
 		}()
 	}
+
+	doneCh := make(chan struct{})
+	go func() {
+		dups := make([]ulid.ULID, len(f.duplicateIDs))
+		for duplicate := range duplicateIDs {
+			if metas[duplicate] != nil {
+				dups = append(dups, duplicate)
+			}
+			synced.WithLabelValues(duplicateMeta).Inc()
+			delete(metas, duplicate)
+		}
+
+		f.mu.Lock()
+		f.duplicateIDs = f.duplicateIDs[:0]
+		f.duplicateIDs = append(f.duplicateIDs, dups...)
+		f.mu.Unlock()
+
+		close(doneCh)
+	}()
 
 	// We need only look within a compaction group for duplicates, so splitting by group key gives us parallelizable streams.
 	metasByCompactionGroup := make(map[string][]*metadata.Meta)
@@ -850,12 +869,15 @@ func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID
 		groupChan <- group
 	}
 	close(groupChan)
+
 	wg.Wait()
+	close(duplicateIDs)
+	<-doneCh
 
 	return nil
 }
 
-func (f *DefaultDeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec) {
+func (f *DefaultDeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, duplicateIDs chan ulid.ULID) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -886,15 +908,9 @@ childLoop:
 		coveringSet = append(coveringSet, child)
 	}
 
-	f.mu.Lock()
 	for _, duplicate := range duplicates {
-		if metas[duplicate] != nil {
-			f.duplicateIDs = append(f.duplicateIDs, duplicate)
-		}
-		synced.WithLabelValues(duplicateMeta).Inc()
-		delete(metas, duplicate)
+		duplicateIDs <- duplicate
 	}
-	f.mu.Unlock()
 }
 
 // DuplicateIDs returns slice of block ids that are filtered out by DefaultDeduplicateFilter.
@@ -1026,11 +1042,15 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 	return nil
 }
 
-// IgnoreDeletionMarkFilter is a filter that filters out the blocks that are marked for deletion after a given delay.
+type DeletionMarkFilter interface {
+	DeletionMarkBlocks() map[ulid.ULID]*metadata.DeletionMark
+}
+
+// DefaultDeletionMarkFilter is a filter that filters out the blocks that are marked for deletion after a given delay.
 // The delay duration is to make sure that the replacement block can be fetched before we filter out the old block.
 // Delay is not considered when computing DeletionMarkBlocks map.
 // Not go-routine safe.
-type IgnoreDeletionMarkFilter struct {
+type DefaultDeletionMarkFilter struct {
 	logger      log.Logger
 	delay       time.Duration
 	concurrency int
@@ -1040,9 +1060,8 @@ type IgnoreDeletionMarkFilter struct {
 	deletionMarkMap map[ulid.ULID]*metadata.DeletionMark
 }
 
-// NewIgnoreDeletionMarkFilter creates IgnoreDeletionMarkFilter.
-func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, delay time.Duration, concurrency int) *IgnoreDeletionMarkFilter {
-	return &IgnoreDeletionMarkFilter{
+func NewDefaultDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, delay time.Duration, concurrency int) *DefaultDeletionMarkFilter {
+	return &DefaultDeletionMarkFilter{
 		logger:      logger,
 		bkt:         bkt,
 		delay:       delay,
@@ -1050,8 +1069,7 @@ func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBuc
 	}
 }
 
-// DeletionMarkBlocks returns block ids that were marked for deletion.
-func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.DeletionMark {
+func (f *DefaultDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.DeletionMark {
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
 
@@ -1065,7 +1083,7 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
-func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+func (f *DefaultDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark)
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues

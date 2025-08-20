@@ -392,7 +392,7 @@ func runStore(
 	default:
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkFilter := block.NewDefaultDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
 	filters := []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 		block.NewLabelShardedMetaFilter(relabelConfig),
