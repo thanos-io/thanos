@@ -8,7 +8,6 @@
 | Lucas Servén Marín    | <lserven@gmail.com>         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
 | Prem Saraswat         | <prmsrswt@gmail.com>        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
 | Ben Ye                | <yb532204897@gmail.com>     | `@yeya24`                | [@yeya24](https://github.com/yeya24)               | Amazon Web Services |
-| Matej Gera            | <matejgera@gmail.com>       | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)             | Coralogix           |
 | Filip Petkovski       | <filip.petkovsky@gmail.com> | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)       | Shopify             |
 | Saswata Mukherjee     | <saswata.mukhe@gmail.com>   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode)   | Red Hat             |
 | Michael Hoffmann      | <mhoffm@posteo.de>          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Cloudflare          |
@@ -114,3 +113,4 @@ Fabian Reinartz [@fabxc](https://github.com/fabxc) and Bartłomiej Płotka [@bwp
 | Marco Pracucci      | [@pracucci](https://github.com/pracucci)           |
 | Matthias Loibl      | [@metalmatze](https://github.com/metalmatze)       |
 | Kemal Akkoyun       | [@kakkoyun](https://github.com/kakkoyun)           |
+| Matej Gera          | [@matej-g](https://github.com/matej-g)             |
