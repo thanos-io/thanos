@@ -1652,3 +1652,50 @@ func TestDeadlockLocking(t *testing.T) {
 
 	testutil.Ok(t, g.Wait())
 }
+
+func TestDefaultTimeRange(t *testing.T) {
+	t.Parallel()
+
+	{
+		endpointRef := &endpointRef{
+			groupKey: "store-grpc-group-svc-pantheon-long-range-store",
+		}
+		minTime, maxTime := endpointRef.timeRange()
+
+		testutil.Assert(t, minTime != math.MinInt64, "minTime should not be math.MinInt64")
+		testutil.Assert(t, maxTime != math.MaxInt64, "maxTime should not be math.MaxInt64")
+
+		now := time.Now()
+		testutil.Equals(t, now.Add(-9600*time.Hour).Unix()/60, minTime/(1000*60))
+		testutil.Equals(t, now.Add(-11490*time.Minute).Unix()/60, maxTime/(1000*60))
+	}
+	{
+		endpointRef := &endpointRef{
+			groupKey: "store-grpc-group-svc-pantheon-store",
+		}
+		minTime, maxTime := endpointRef.timeRange()
+
+		testutil.Assert(t, minTime != math.MinInt64, "minTime should not be math.MinInt64")
+		testutil.Assert(t, maxTime != math.MaxInt64, "maxTime should not be math.MaxInt64")
+
+		now := time.Now()
+		testutil.Equals(t, now.Add(-192*time.Hour).Unix()/60, minTime/(1000*60))
+		testutil.Equals(t, now.Add(-1410*time.Minute).Unix()/60, maxTime/(1000*60))
+	}
+	{
+		endpointRef := &endpointRef{
+			groupKey: "store-grpc-group-svc-pantheon-db",
+		}
+		minTime, maxTime := endpointRef.timeRange()
+
+		testutil.Equals(t, int64(math.MinInt64), minTime)
+		testutil.Equals(t, int64(math.MaxInt64), maxTime)
+	}
+	{
+		endpointRef := &endpointRef{}
+		minTime, maxTime := endpointRef.timeRange()
+
+		testutil.Equals(t, int64(math.MinInt64), minTime)
+		testutil.Equals(t, int64(math.MaxInt64), maxTime)
+	}
+}

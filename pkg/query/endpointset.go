@@ -19,7 +19,9 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -853,8 +855,36 @@ func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
 	return er.metadata.Store.TsdbInfos
 }
 
+// Return timestamps in milliseconds.
 func (er *endpointRef) timeRange() (int64, int64) {
+	timeSub := func(sub model.Duration) int64 {
+		return timestamp.FromTime(time.Now().Add(-time.Duration(sub)))
+	}
+
 	if er.metadata == nil || er.metadata.Store == nil {
+		// This is to fix a corner case manifested as the following event sequence:
+		/*
+			1. A long range store pod becomes ready and visible to the range querier.
+			2. The range querier creates an endpoint for the long range store pod.
+			3. The long range store pod quickly starts to OOM.
+			4. The range querier tries to get the long range store pod’s meta info through info() gRPC call to get it’s time range.
+			   The gRPC calls keep failing.
+			5. The range querier uses the default time range [min-int64, max-int64] for the long range store pod to match any in-coming query.
+			   This way, the long range store pod is incorrectly included in the fan-out endpoints.
+		*/
+		// TODO: replace this hacky fix with a better one.
+		var longRangeMaxSub, longRangeMinSub, shortRangeMaxSub, shortRangeMinSub model.Duration
+		_ = longRangeMaxSub.Set("9600h")
+		_ = longRangeMinSub.Set("11490m")
+		_ = shortRangeMaxSub.Set("192h")
+		_ = shortRangeMinSub.Set("1410m")
+
+		switch er.groupKey {
+		case "store-grpc-group-svc-pantheon-long-range-store":
+			return timeSub(longRangeMaxSub), timeSub(longRangeMinSub)
+		case "store-grpc-group-svc-pantheon-store":
+			return timeSub(shortRangeMaxSub), timeSub(shortRangeMinSub)
+		}
 		return math.MinInt64, math.MaxInt64
 	}
 
