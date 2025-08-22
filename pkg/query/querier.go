@@ -382,7 +382,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	// This however require big refactor, caring about correct AggrChunk to iterator conversion and counter reset apply.
 	// For now we apply simple logic that splits potential overlapping chunks into separate replica series, so we can split the work.
 	set := NewPromSeriesSet(
-		dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
+		dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet), hints.Func),
 		q.mint,
 		q.maxt,
 		aggrs,
