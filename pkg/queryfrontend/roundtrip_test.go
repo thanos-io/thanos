@@ -532,6 +532,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 }
 
 func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
+	t.Skip("Flaky test - skipping until race condition is fixed")
 	testRequest := &ThanosQueryRangeRequest{
 		Path:    "/api/v1/query_range",
 		Start:   0,

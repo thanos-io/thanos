@@ -324,29 +324,29 @@ func TestParseRetentionPolicyByTenant(t *testing.T) {
 		},
 		{
 			"valid",
-			[]string{"tenant-1:2021-01-01", "tenant-2:11d", "tenant-3:2024-10-17:lvl1"},
+			[]string{"tenant-1:2021-01-01", "tenant-2:11d", "tenant-3:2024-10-17:all"},
 			map[string]compact.RetentionPolicy{
 				"tenant-1": {
 					CutoffDate:        time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),
 					RetentionDuration: time.Duration(0),
-					Level1:            false,
+					IsAll:             false,
 				},
 				"tenant-2": {
 					CutoffDate:        time.Time{},
 					RetentionDuration: 11 * 24 * time.Hour,
-					Level1:            false,
+					IsAll:             false,
 				},
 				"tenant-3": {
 					CutoffDate:        time.Date(2024, 10, 17, 0, 0, 0, 0, time.UTC),
 					RetentionDuration: time.Duration(0),
-					Level1:            true,
+					IsAll:             true,
 				},
 			},
 			false,
 		},
 		{
 			"invalid string",
-			[]string{"ewrwerwerw:werqj:Werw", "tenant#2:1:lvl1"},
+			[]string{"ewrwerwerw:werqj:Werw", "tenant#2:1:all"},
 			nil,
 			true,
 		},
@@ -529,7 +529,7 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 			false,
 		},
 		{
-			"tenant retention with duration and lvl1 only",
+			"tenant retention with duration and level 1 only (default)",
 			[]testBlock{
 				{
 					"01CPHBEX20729MJQZXE3W0BW48",
@@ -564,7 +564,7 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 				"tenant": {
 					CutoffDate:        time.Time{},
 					RetentionDuration: 10 * time.Hour,
-					Level1:            true,
+					IsAll:             false, // Default behavior: only level 1 blocks
 				},
 			},
 			[]string{

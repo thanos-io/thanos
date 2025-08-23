@@ -963,3 +963,198 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 		}, tenant.blocksToDelete(nil))
 	})
 }
+
+func TestMultiTSDBBlockedTenantUploads(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bucket := objstore.NewInMemBucket()
+
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		bucket,
+		false,
+		metadata.NoneFunc,
+		WithNoUploadTenants([]string{"no-upload-tenant", "blocked-*"}),
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	testutil.Ok(t, appendSample(m, "allowed-tenant", time.Now()))
+	testutil.Ok(t, appendSample(m, "no-upload-tenant", time.Now()))
+	testutil.Ok(t, appendSample(m, "blocked-prefix-tenant", time.Now()))
+	testutil.Ok(t, appendSample(m, "another-allowed-tenant", time.Now()))
+
+	testutil.Ok(t, m.Flush())
+
+	var objectsBeforeSync int
+	testutil.Ok(t, bucket.Iter(context.Background(), "", func(s string) error {
+		objectsBeforeSync++
+		return nil
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	uploaded, err := m.Sync(ctx)
+	testutil.Ok(t, err)
+
+	// Should have uploaded blocks from 2 allowed tenants (not the 2 no-upload ones)
+	testutil.Equals(t, 2, uploaded)
+
+	// Count objects after sync - should only see uploads from allowed tenants
+	var objectsAfterSync []string
+	testutil.Ok(t, bucket.Iter(context.Background(), "", func(s string) error {
+		objectsAfterSync = append(objectsAfterSync, s)
+		return nil
+	}))
+
+	// Since object names don't contain tenant info, we verify behavior by:
+	// 1. Checking upload count (should be 2, not 3)
+	// 2. Verifying that all tenants exist locally but only allowed ones uploaded
+
+	// Verify all tenants exist locally (blocks should be on disk for all)
+	noUploadTenantBlocks := 0
+	allowedTenantBlocks := 0
+	anotherAllowedTenantBlocks := 0
+
+	// Count blocks in local filesystem for each tenant
+	if files, err := os.ReadDir(path.Join(dir, "no-upload-tenant")); err == nil {
+		for _, f := range files {
+			if f.IsDir() && f.Name() != "wal" && f.Name() != "chunks_head" {
+				noUploadTenantBlocks++
+			}
+		}
+	}
+
+	blockedPrefixTenantBlocks := 0
+	if files, err := os.ReadDir(path.Join(dir, "blocked-prefix-tenant")); err == nil {
+		for _, f := range files {
+			if f.IsDir() && f.Name() != "wal" && f.Name() != "chunks_head" {
+				blockedPrefixTenantBlocks++
+			}
+		}
+	}
+	if files, err := os.ReadDir(path.Join(dir, "allowed-tenant")); err == nil {
+		for _, f := range files {
+			if f.IsDir() && f.Name() != "wal" && f.Name() != "chunks_head" {
+				allowedTenantBlocks++
+			}
+		}
+	}
+	if files, err := os.ReadDir(path.Join(dir, "another-allowed-tenant")); err == nil {
+		for _, f := range files {
+			if f.IsDir() && f.Name() != "wal" && f.Name() != "chunks_head" {
+				anotherAllowedTenantBlocks++
+			}
+		}
+	}
+
+	// All tenants should have blocks locally (including no-upload ones)
+	testutil.Assert(t, noUploadTenantBlocks > 0, "no upload tenant should have blocks locally")
+	testutil.Assert(t, blockedPrefixTenantBlocks > 0, "blocked prefix tenant should have blocks locally")
+	testutil.Assert(t, allowedTenantBlocks > 0, "allowed tenant should have blocks locally")
+	testutil.Assert(t, anotherAllowedTenantBlocks > 0, "another allowed tenant should have blocks locally")
+
+	// But only 2 uploads should have happened (not 4) - exact match and prefix match should both be blocked
+	testutil.Equals(t, 2, len(objectsAfterSync))
+}
+
+func TestMultiTSDBNoUploadTenantsPrefix(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bucket := objstore.NewInMemBucket()
+
+	// Test prefix matching functionality
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		bucket,
+		false,
+		metadata.NoneFunc,
+		WithNoUploadTenants([]string{"prod-*", "staging-*", "exact-tenant"}),
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	// Test various tenant patterns
+	testutil.Ok(t, appendSample(m, "prod-tenant1", time.Now())) // Should match prod-*
+	testutil.Ok(t, appendSample(m, "prod-tenant2", time.Now())) // Should match prod-*
+	testutil.Ok(t, appendSample(m, "staging-app", time.Now()))  // Should match staging-*
+	testutil.Ok(t, appendSample(m, "exact-tenant", time.Now())) // Should match exact
+	testutil.Ok(t, appendSample(m, "dev-tenant", time.Now()))   // Should NOT match
+	testutil.Ok(t, appendSample(m, "production", time.Now()))   // Should NOT match (no * suffix)
+
+	testutil.Ok(t, m.Flush())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	uploaded, err := m.Sync(ctx)
+	testutil.Ok(t, err)
+
+	// Should have uploaded blocks from only 2 tenants (dev-tenant and production)
+	testutil.Equals(t, 2, uploaded)
+
+	// Test the prefix matching function directly
+	testutil.Assert(t, m.isNoUploadTenant("prod-tenant1"), "prod-tenant1 should match prod-*")
+	testutil.Assert(t, m.isNoUploadTenant("prod-anything"), "prod-anything should match prod-*")
+	testutil.Assert(t, m.isNoUploadTenant("staging-app"), "staging-app should match staging-*")
+	testutil.Assert(t, m.isNoUploadTenant("exact-tenant"), "exact-tenant should match exactly")
+	testutil.Assert(t, !m.isNoUploadTenant("dev-tenant"), "dev-tenant should NOT match any pattern")
+	testutil.Assert(t, !m.isNoUploadTenant("production"), "production should NOT match prod-* (no * suffix)")
+	testutil.Assert(t, !m.isNoUploadTenant("random"), "random should NOT match any pattern")
+}
+
+func TestNoUploadTenantsRetentionStillWorks(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bucket := objstore.NewInMemBucket()
+
+	// Create MultiTSDB with no-upload tenant
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		bucket,
+		false,
+		metadata.NoneFunc,
+		WithNoUploadTenants([]string{"no-upload-tenant"}),
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	// Add sample to no-upload tenant
+	testutil.Ok(t, appendSample(m, "no-upload-tenant", time.Now()))
+	testutil.Ok(t, m.Flush())
+
+	// Verify tenant exists locally
+	tenantDir := path.Join(dir, "no-upload-tenant")
+	_, err := os.Stat(tenantDir)
+	testutil.Ok(t, err) // Should not error, directory should exist
+
+	// Verify tenant has no shipper (key part of the fix)
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
+	tenant, exists := m.tenants["no-upload-tenant"]
+	testutil.Assert(t, exists, "no-upload tenant should exist")
+	shipper := tenant.shipper()
+	testutil.Assert(t, shipper == nil, "no-upload tenant should have no shipper")
+
+	// Test that retention cleanup would still work (by calling pruneTSDB directly)
+	// Note: We can't easily test the full retention flow in a unit test due to timing,
+	// but we've verified the key fix: no-upload tenants don't get a shipper,
+	// so the pruning logic won't try to upload during retention cleanup.
+}

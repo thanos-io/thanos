@@ -25,8 +25,9 @@ import (
 
 const (
 	// tenantRetentionRegex is the regex pattern for parsing tenant retention.
-	// valid format is `<tenant>:(<yyyy-mm-dd>|<duration>d)(:lvl1)?` where <duration> > 0.
-	tenantRetentionRegex = `^([\w-]+):((\d{4}-\d{2}-\d{2})|(\d+d))(:lvl1)?$`
+	// valid format is `<tenant>:(<yyyy-mm-dd>|<duration>d)(:all)?` where <duration> > 0.
+	// Default behavior is to delete only level 1 blocks, use :all to delete all blocks.
+	tenantRetentionRegex = `^([\w-]+):((\d{4}-\d{2}-\d{2})|(\d+d))(:all)?$`
 
 	Level1 = 1 // compaction level 1 indicating a new block
 	Level2 = 2 // compaction level 2 indicating a compacted block
@@ -73,7 +74,7 @@ func ApplyRetentionPolicyByResolution(
 type RetentionPolicy struct {
 	CutoffDate        time.Time
 	RetentionDuration time.Duration
-	Level1            bool // Lvl1 indicates if the retention policy is only for level 1 blocks.
+	IsAll             bool // IsAll indicates if the retention policy applies to all blocks. Default is false (level 1 only).
 }
 
 func (r RetentionPolicy) isExpired(blockMaxTime time.Time) bool {
@@ -88,7 +89,7 @@ func ParesRetentionPolicyByTenant(logger log.Logger, retentionTenants []string) 
 	retentionByTenant := make(map[string]RetentionPolicy, len(retentionTenants))
 	for _, tenantRetention := range retentionTenants {
 		matches := pattern.FindStringSubmatch(tenantRetention)
-		invalidFormat := errors.Errorf("invalid retention format for tenant: %s, must be `<tenant>:(<yyyy-mm-dd>|<duration>d)`", tenantRetention)
+		invalidFormat := errors.Errorf("invalid retention format for tenant: %s, must be `<tenant>:(<yyyy-mm-dd>|<duration>d)(:all)?`", tenantRetention)
 		if matches == nil {
 			return nil, errors.Wrapf(invalidFormat, "matched size %d", len(matches))
 		}
@@ -111,7 +112,7 @@ func ParesRetentionPolicyByTenant(logger log.Logger, retentionTenants []string) 
 			}
 			policy.RetentionDuration = time.Duration(duration)
 		}
-		policy.Level1 = len(matches) > 5 && matches[5] == ":lvl1"
+		policy.IsAll = len(matches) > 5 && matches[5] == ":all"
 		level.Info(logger).Log("msg", "retention policy for tenant is enabled", "tenant", tenant, "retention policy", fmt.Sprintf("%v", policy))
 		retentionByTenant[tenant] = policy
 	}
@@ -139,7 +140,8 @@ func ApplyRetentionPolicyByTenant(
 			continue
 		}
 		maxTime := time.Unix(m.MaxTime/1000, 0)
-		if policy.Level1 && m.Compaction.Level != Level1 {
+		// Default behavior: only delete level 1 blocks unless IsAll is true
+		if !policy.IsAll && m.Compaction.Level != Level1 {
 			continue
 		}
 		if policy.isExpired(maxTime) {
