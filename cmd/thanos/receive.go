@@ -159,7 +159,7 @@ func runReceive(
 
 	if len(*conf.noUploadTenants) > 0 {
 		multiTSDBOptions = append(multiTSDBOptions, receive.WithNoUploadTenants(*conf.noUploadTenants))
-		level.Info(logger).Log("msg", "configured tenants for local storage only", "tenants", *conf.noUploadTenants)
+		level.Info(logger).Log("msg", "configured tenants for local storage only", "tenants", strings.Join(*conf.noUploadTenants, ","))
 	}
 
 	// Create a matcher converter if specified by command line to cache expensive regex matcher conversions.
