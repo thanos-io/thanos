@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -166,12 +167,21 @@ func (d *responseDeduplicator) At() *storepb.SeriesResponse {
 	return d.bufferedResp[d.buffRespI]
 }
 
-// NewProxyResponseLoserTree returns heap that k-way merge series together.
-// It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
-func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.SeriesResponse, respSet] {
-	var maxVal *storepb.SeriesResponse = storepb.NewSeriesResponse(nil)
+type seriesResponseWithStoreLabelset struct {
+	labelset string
+	response *storepb.SeriesResponse
+}
 
-	less := func(a, b *storepb.SeriesResponse) bool {
+type proxyResponseLoserTree struct {
+	tree *losertree.Tree[seriesResponseWithStoreLabelset, respSet]
+}
+
+// NewProxyResponseLoserTree returns heap that k-way merge series together.
+// It's agnostic to duplicates and overlaps, it forwards all duplicated series ordered by the labelset of their endpoint.
+func NewProxyResponseLoserTree(seriesSets ...respSet) *proxyResponseLoserTree {
+	var maxVal seriesResponseWithStoreLabelset = seriesResponseWithStoreLabelset{}
+
+	less := func(a, b seriesResponseWithStoreLabelset) bool {
 		if a == maxVal && b != maxVal {
 			return false
 		}
@@ -181,29 +191,52 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 		if a == maxVal && b == maxVal {
 			return true
 		}
-		if a.GetSeries() != nil && b.GetSeries() != nil {
-			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
-			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
+		ar, br := a.response, b.response
 
-			return labels.Compare(iLbls, jLbls) < 0
-		} else if a.GetSeries() == nil && b.GetSeries() != nil {
+		if ar.GetSeries() != nil && br.GetSeries() != nil {
+			aLbls := labelpb.ZLabelsToPromLabels(ar.GetSeries().Labels)
+			bLbls := labelpb.ZLabelsToPromLabels(br.GetSeries().Labels)
+
+			if cmp := labels.Compare(aLbls, bLbls); cmp == 0 {
+				// use store labelset as tiebreaker for a stable order of responses and predictable deduplication
+				return strings.Compare(a.labelset, b.labelset) < 0
+			} else {
+				return cmp < 0
+			}
+		} else if ar.GetSeries() == nil && br.GetSeries() != nil {
 			return true
-		} else if a.GetSeries() != nil && b.GetSeries() == nil {
+		} else if ar.GetSeries() != nil && br.GetSeries() == nil {
 			return false
 		}
 
-		if a.GetWarning() != "" && b.GetWarning() != "" {
-			return len(a.GetWarning()) < len(b.GetWarning())
+		if ar.GetWarning() != "" && br.GetWarning() != "" {
+			return len(ar.GetWarning()) < len(br.GetWarning())
 		}
-
 		return false
 	}
 
-	return losertree.New[*storepb.SeriesResponse, respSet](seriesSets, maxVal, func(s respSet) *storepb.SeriesResponse {
-		return s.At()
-	}, less, func(s respSet) {
-		s.Close()
-	})
+	return &proxyResponseLoserTree{
+		tree: losertree.New(
+			seriesSets,
+			maxVal,
+			func(s respSet) seriesResponseWithStoreLabelset {
+				return seriesResponseWithStoreLabelset{response: s.At(), labelset: s.Labelset()}
+			},
+			less,
+			func(s respSet) { s.Close() },
+		)}
+}
+
+func (lt *proxyResponseLoserTree) Next() bool {
+	return lt.tree.Next()
+}
+
+func (lt *proxyResponseLoserTree) At() *storepb.SeriesResponse {
+	return lt.tree.At().response
+}
+
+func (lt *proxyResponseLoserTree) Close() {
+	lt.tree.Close()
 }
 
 func (l *lazyRespSet) StoreID() string {
