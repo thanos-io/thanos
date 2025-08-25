@@ -1,6 +1,6 @@
 module github.com/thanos-io/thanos
 
-go 1.24.0
+go 1.25.0
 
 require (
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.1
