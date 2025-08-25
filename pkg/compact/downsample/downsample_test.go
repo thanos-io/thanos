@@ -2789,7 +2789,7 @@ func expectedFloatHistogramsCounter(floatHistograms []*histogram.FloatHistogram,
 }
 
 func sumHistograms(floatHistograms []*histogram.FloatHistogram) *histogram.FloatHistogram {
-	var res *histogram.FloatHistogram = floatHistograms[0].Copy()
+	var res = floatHistograms[0].Copy()
 
 	for _, h := range floatHistograms[1:] {
 		added, err := res.Add(h)

@@ -20,7 +20,7 @@ func TestAsyncOp(t *testing.T) {
 func runTest(t *testing.T) {
 	p := NewAsyncOperationProcessor(100, 10)
 	mtx := sync.Mutex{}
-	var acc int = 0
+	var acc = 0
 
 	for i := 0; i < 100; i++ {
 		err := p.EnqueueAsync(func() {

@@ -1,5 +1,6 @@
 go:
-  version: 1.23
+  # This will fail until https://github.com/prometheus/golang-builder/pull/317 is merged.
+  version: 1.24
 repository:
   path: github.com/thanos-io/thanos
 build:
