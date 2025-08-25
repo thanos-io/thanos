@@ -989,10 +989,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 
 func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []ulid.ULID) {
 	_, file, line, _ := runtime.Caller(1)
-	matching := true
-	if len(m) != len(s) {
-		matching = false
-	}
+	matching := len(m) == len(s)
 
 	for _, val := range s {
 		if m[val] == nil {

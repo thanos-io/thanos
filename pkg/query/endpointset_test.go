@@ -1598,10 +1598,7 @@ func TestDeadlockLocking(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.update(time.Now, &endpointMetadata{
 				InfoResponse: &infopb.InfoResponse{},
 			}, nil)
@@ -1610,10 +1607,7 @@ func TestDeadlockLocking(t *testing.T) {
 	})
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.HasStoreAPI()
 			mockEndpointRef.HasExemplarsAPI()
 			mockEndpointRef.HasMetricMetadataAPI()
