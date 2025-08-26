@@ -254,6 +254,8 @@ func registerQuery(app *extkingpin.App) {
 	grpcStoreClientKeepAlivePingInterval := extkingpin.ModelDuration(cmd.Flag("query.grcp-store-client-keep-alive-ping-interval", "This value defines how often a store client sends a keepalive ping on an established gRPC stream. 0 means not to set. NB: a client is keeping a long‐running gRPC stream open. It still has active RPCs on the wire—even if Recv() is not called in a while. Setting PermitWithoutStream=false only stops pings when no streams exist; it does not suppress pings during an open stream").
 		Default("0s"))
 
+	blockQueryMetricsWithoutFilter := cmd.Flag("query.block-query-metrics-without-filter", "Comma-separated list of metric patterns to block queries without sufficient label filters. Helps prevent high-cardinality metric queries.").Default("").String()
+
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -313,6 +315,16 @@ func registerQuery(app *extkingpin.App) {
 		tsdbSelector, err := block.ParseRelabelConfig(tsdbRelabelConfig, block.SelectorSupportedRelabelActions)
 		if err != nil {
 			return err
+		}
+
+		// Parse blocked metric patterns
+		var blockedMetricPatterns []string
+		if *blockQueryMetricsWithoutFilter != "" {
+			blockedMetricPatterns = strings.Split(*blockQueryMetricsWithoutFilter, ",")
+			for i, pattern := range blockedMetricPatterns {
+				blockedMetricPatterns[i] = strings.TrimSpace(pattern)
+			}
+			level.Info(logger).Log("msg", "blocking query metrics without filter feature enabled", "patterns", strings.Join(blockedMetricPatterns, ","))
 		}
 
 		return runQuery(
@@ -397,6 +409,7 @@ func registerQuery(app *extkingpin.App) {
 			*rewriteAggregationLabelTo,
 			*lazyRetrievalMaxBufferedResponses,
 			time.Duration(*grpcStoreClientKeepAlivePingInterval),
+			blockedMetricPatterns,
 		)
 	})
 }
@@ -485,6 +498,7 @@ func runQuery(
 	rewriteAggregationLabelTo string,
 	lazyRetrievalMaxBufferedResponses int,
 	grpcStoreClientKeepAlivePingInterval time.Duration,
+	blockedMetricPatterns []string,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -578,6 +592,11 @@ func runQuery(
 		store.WithProxyStoreDebugLogging(debugLogging),
 		store.WithQuorumChunkDedup(queryDeduplicationFunc == dedup.AlgorithmQuorum),
 		store.WithLazyRetrievalMaxBufferedResponsesForProxy(lazyRetrievalMaxBufferedResponses),
+	}
+
+	// Add blocked metric patterns option if specified
+	if len(blockedMetricPatterns) > 0 {
+		options = append(options, store.WithBlockedMetricPatterns(blockedMetricPatterns))
 	}
 
 	// Parse and sanitize the provided replica labels flags.
