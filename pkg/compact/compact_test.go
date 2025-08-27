@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -626,4 +628,118 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		cancel()
 	})
 	testutil.Ok(t, g.Run())
+}
+
+func TestGarbageCollect_FilterRace(t *testing.T) {
+	t.Skip("expected to fail")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	bkt := objstore.NewInMemBucket()
+
+	var metaParent metadata.Meta
+	metaParent.Version = 1
+	metaParent.ULID = ulid.MustNew(uint64(0), nil)
+
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&metaParent))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(metaParent.ULID.String(), metadata.MetaFilename), &buf))
+
+	createBlocks := func() {
+		for i := 1; i <= 3; i++ {
+			var metaChild metadata.Meta
+			metaChild.Version = 1
+			metaChild.ULID = ulid.MustNew(uint64(i), nil)
+			metaChild.Compaction.Sources = []ulid.ULID{metaParent.ULID}
+
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&metaChild))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(metaChild.ULID.String(), metadata.MetaFilename), &buf))
+		}
+	}
+
+	reg := prometheus.NewRegistry()
+
+	baseFetcher, err := block.NewBaseFetcher(
+		log.NewNopLogger(),
+		10,
+		objstore.WithNoopInstr(bkt),
+		block.NewConcurrentLister(log.NewNopLogger(), objstore.WithNoopInstr(bkt)),
+		t.TempDir(),
+		reg,
+	)
+	testutil.Ok(t, err)
+
+	df := block.NewIgnoreDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 0*time.Second, 1)
+
+	duplicateFilter := block.NewDeduplicateFilter(5)
+	mf := baseFetcher.NewMetaFetcher(reg, []block.MetadataFilter{df, duplicateFilter})
+
+	garbageCollection := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_gc_counter",
+	})
+
+	syncer, err := NewMetaSyncer(log.NewNopLogger(), reg, bkt, mf, duplicateFilter, df, promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{
+		Name: "test_meta_syncer_syncs",
+	}), garbageCollection, 5*time.Minute)
+	testutil.Ok(t, err)
+
+	blocksCleanedMetric := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_block_cleaned",
+	})
+	blocksCleaner := NewBlocksCleaner(log.NewNopLogger(), objstore.WithNoopInstr(bkt), df, 0*time.Second, blocksCleanedMetric, promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_block_cleaner_errors",
+	}))
+
+	for t.Context().Err() == nil {
+		t.Log("doing iteration")
+
+		testutil.Equals(t, float64(0.0), promtestutil.ToFloat64(garbageCollection))
+
+		createBlocks()
+		testutil.Ok(t, block.MarkForDeletion(context.Background(), log.NewNopLogger(), objstore.WithNoopInstr(bkt), ulid.MustNew(1, nil), "foo", promauto.With(prometheus.NewRegistry()).NewCounter(
+			prometheus.CounterOpts{Name: "test_block_marked_for_deletion"},
+		)))
+		testutil.Ok(t, block.MarkForDeletion(context.Background(), log.NewNopLogger(), objstore.WithNoopInstr(bkt), ulid.MustNew(2, nil), "foo", promauto.With(prometheus.NewRegistry()).NewCounter(
+			prometheus.CounterOpts{Name: "test_block_marked_for_deletion"},
+		)))
+		testutil.Ok(t, block.MarkForDeletion(context.Background(), log.NewNopLogger(), objstore.WithNoopInstr(bkt), ulid.MustNew(3, nil), "foo", promauto.With(prometheus.NewRegistry()).NewCounter(
+			prometheus.CounterOpts{Name: "test_block_marked_for_deletion"},
+		)))
+		testutil.Ok(t, syncer.SyncMetas(context.Background()))
+
+		startWg := &sync.WaitGroup{}
+		startWg.Add(1)
+
+		wg := &sync.WaitGroup{}
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			r := rand.Uint32N(20)
+			time.Sleep(time.Duration(r) * time.Millisecond)
+			testutil.Ok(t, syncer.GarbageCollect(context.Background()))
+		}()
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			r := rand.Uint32N(20)
+			time.Sleep(time.Duration(r) * time.Millisecond)
+			testutil.Ok(t, blocksCleaner.DeleteMarkedBlocks(context.Background()))
+		}()
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			for i := 0; i < 100; i++ {
+				testutil.Ok(t, syncer.SyncMetas(context.Background()))
+			}
+		}()
+
+		startWg.Done()
+		wg.Wait()
+	}
 }
