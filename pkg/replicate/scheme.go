@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"slices"
 	"sort"
 
 	"github.com/go-kit/log"
@@ -74,12 +75,7 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 
 	// If required block IDs are set, we only match required blocks and ignore others.
 	if len(bf.blockIDs) > 0 {
-		for _, id := range bf.blockIDs {
-			if b.ULID == id {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(bf.blockIDs, b.ULID)
 	}
 
 	blockLabels := labels.FromMap(b.Thanos.Labels)

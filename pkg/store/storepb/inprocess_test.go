@@ -74,7 +74,7 @@ func TestServerAsClient(t *testing.T) {
 				}),
 			}}
 		t.Run("ok", func(t *testing.T) {
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &SeriesRequest{
 					MinTime:                 -214,
 					MaxTime:                 213,
@@ -99,7 +99,7 @@ func TestServerAsClient(t *testing.T) {
 		})
 		t.Run("ok, close send", func(t *testing.T) {
 			s.err = errors.New("some error")
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &SeriesRequest{
 					MinTime:                 -214,
 					MaxTime:                 213,
@@ -127,7 +127,7 @@ func TestServerAsClient(t *testing.T) {
 			}
 		})
 		t.Run("error", func(t *testing.T) {
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &SeriesRequest{
 					MinTime:                 -214,
 					MaxTime:                 213,
@@ -155,7 +155,7 @@ func TestServerAsClient(t *testing.T) {
 		})
 		t.Run("race", func(t *testing.T) {
 			s.err = nil
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &SeriesRequest{
 					MinTime:                 -214,
 					MaxTime:                 213,
@@ -165,16 +165,14 @@ func TestServerAsClient(t *testing.T) {
 				client, err := ServerAsClient(s).Series(ctx, r)
 				testutil.Ok(t, err)
 				var wg sync.WaitGroup
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					for {
 						_, err := client.Recv()
 						if err != nil {
 							break
 						}
 					}
-				}()
+				})
 				testutil.Ok(t, client.CloseSend())
 				wg.Wait()
 				s.seriesLastReq = nil
@@ -184,7 +182,7 @@ func TestServerAsClient(t *testing.T) {
 	t.Run("LabelNames", func(t *testing.T) {
 		s := &testStoreServer{}
 		t.Run("ok", func(t *testing.T) {
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &LabelNamesRequest{
 					Start:                   -1,
 					End:                     234,
@@ -199,7 +197,7 @@ func TestServerAsClient(t *testing.T) {
 		})
 		t.Run("error", func(t *testing.T) {
 			s.err = errors.New("some error")
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &LabelNamesRequest{
 					Start:                   -1,
 					End:                     234,
@@ -219,7 +217,7 @@ func TestServerAsClient(t *testing.T) {
 			},
 		}
 		t.Run("ok", func(t *testing.T) {
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &LabelValuesRequest{
 					Label:                   "__name__",
 					Start:                   -1,
@@ -235,7 +233,7 @@ func TestServerAsClient(t *testing.T) {
 		})
 		t.Run("error", func(t *testing.T) {
 			s.err = errors.New("some error")
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				r := &LabelValuesRequest{
 					Label:                   "__name__",
 					Start:                   -1,

@@ -100,14 +100,14 @@ type Thanos struct {
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
 
 	// IndexStats contains stats info related to block index.
-	IndexStats IndexStats `json:"index_stats,omitempty"`
+	IndexStats IndexStats `json:"index_stats"`
 
 	// Extensions are used for plugin any arbitrary additional information for block. Optional.
 	Extensions any `json:"extensions,omitempty"`
 
 	// UploadTime is used to track when the meta.json file was uploaded to the object storage
 	// without an extra Attributes call. Used for consistency filter.
-	UploadTime time.Time `json:"upload_time,omitempty"`
+	UploadTime time.Time `json:"upload_time"`
 }
 
 type IndexStats struct {

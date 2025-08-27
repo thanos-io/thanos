@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"maps"
 	"net"
 	"net/http"
 	"time"
@@ -300,9 +301,7 @@ func runQueryFrontend(
 	}
 
 	if cfg.EnableXFunctions {
-		for fname, v := range parse.XFunctions {
-			parser.Functions[fname] = v
-		}
+		maps.Copy(parser.Functions, parse.XFunctions)
 	}
 
 	if len(cfg.EnableFeatures) > 0 {

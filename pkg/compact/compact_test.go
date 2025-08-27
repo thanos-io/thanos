@@ -569,7 +569,7 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		Name: "coolcounter",
 	})
 
-	for i := 0; i < blocksNum; i++ {
+	for i := range blocksNum {
 		var meta metadata.Meta
 		meta.Version = 1
 		meta.ULID = ulid.MustNew(uint64(i), nil)
@@ -734,7 +734,7 @@ func TestGarbageCollect_FilterRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			startWg.Wait()
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				testutil.Ok(t, syncer.SyncMetas(context.Background()))
 			}
 		}()

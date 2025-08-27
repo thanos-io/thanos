@@ -775,7 +775,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		}
 	}()
 
-	logTags := []interface{}{"tenant", params.tenant}
+	logTags := []any{"tenant", params.tenant}
 	if id, ok := middleware.RequestIDFromContext(ctx); ok {
 		logTags = append(logTags, "request-id", id)
 	}

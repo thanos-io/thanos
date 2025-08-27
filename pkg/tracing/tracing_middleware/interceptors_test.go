@@ -214,7 +214,7 @@ func (s *OpentracingSuite) TestPingEmpty_NotSampleTraces() {
 
 type jaegerFormatInjector struct{}
 
-func (jaegerFormatInjector) Inject(ctx mocktracer.MockSpanContext, carrier interface{}) error {
+func (jaegerFormatInjector) Inject(ctx mocktracer.MockSpanContext, carrier any) error {
 	w := carrier.(opentracing.TextMapWriter)
 	flags := 0
 	if ctx.Sampled {
@@ -227,7 +227,7 @@ func (jaegerFormatInjector) Inject(ctx mocktracer.MockSpanContext, carrier inter
 
 type jaegerFormatExtractor struct{}
 
-func (jaegerFormatExtractor) Extract(carrier interface{}) (mocktracer.MockSpanContext, error) {
+func (jaegerFormatExtractor) Extract(carrier any) (mocktracer.MockSpanContext, error) {
 	rval := mocktracer.MockSpanContext{Sampled: true}
 	reader, ok := carrier.(opentracing.TextMapReader)
 	if !ok {

@@ -82,7 +82,7 @@ type RedisResponseCacheConfig struct {
 // Based on the config type the config is then parsed into a specific cache provider.
 type CacheProviderConfig struct {
 	Type   ResponseCacheProvider `yaml:"type"`
-	Config interface{}           `yaml:"config"`
+	Config any                   `yaml:"config"`
 }
 
 // NewCacheConfig is a parser that converts a Thanos cache config yaml into a cortex cache config struct.

@@ -338,7 +338,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 					// Simulate very long external labels.
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
-						for i := 0; i < 1000; i++ {
+						for range 1000 {
 							sLabel = append(sLabel, "lbl")
 							sLabel = append(sLabel, "val")
 						}
@@ -595,14 +595,12 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	defer endpointSet.Close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Never(t, func() bool {
 			numStatuses := len(endpointSet.GetStoreClients())
 			return numStatuses != numResponses && numStatuses != 0
 		}, 3*time.Second, 100*time.Millisecond)
-	}()
+	})
 
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, numResponses, len(endpointSet.GetEndpointStatus()))
@@ -1429,7 +1427,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 func makeInfoResponses(n int) []testEndpointMeta {
 	responses := make([]testEndpointMeta, 0, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		responses = append(responses, testEndpointMeta{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) []labelpb.ZLabelSet {
@@ -1765,7 +1763,7 @@ func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 		var wg sync.WaitGroup
 		errors := make([]error, 3)
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -1815,7 +1813,7 @@ func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 		defer endpointSet.Close()
 
 		// Call Update multiple times
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			endpointSet.Update(context.Background())
 		}
 

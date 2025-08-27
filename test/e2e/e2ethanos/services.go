@@ -1269,7 +1269,7 @@ scrape_configs:
 		config = fmt.Sprintf(`
 %s
 remote_write:`, config)
-		for _, url := range strings.Split(remoteWriteEndpoint, ",") {
+		for url := range strings.SplitSeq(remoteWriteEndpoint, ",") {
 			config = fmt.Sprintf(`
 %s
 - url: "%s"

@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -750,7 +751,7 @@ func StatsMerge(resps []Response) *PrometheusResponseStats {
 		keys = append(keys, key)
 	}
 
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	slices.Sort(keys)
 
 	result := &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{
 		PeakSamples:           peakSamples,
@@ -935,7 +936,7 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 }
 
 func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}

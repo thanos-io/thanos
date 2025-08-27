@@ -68,7 +68,7 @@ func (sapi *StatusAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	r.Get("/api/v1/status/tsdb", instr("tsdb_status", sapi.httpServeStats))
 }
 
-func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (sapi *StatusAPI) httpServeStats(r *http.Request) (any, []error, *api.ApiError, func()) {
 	stats, sterr := sapi.getTSDBStats(r, labels.MetricName)
 	if sterr != nil {
 		return nil, nil, sterr, func() {}

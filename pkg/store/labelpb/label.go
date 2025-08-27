@@ -431,7 +431,7 @@ func (z ZLabelSets) Less(i, j int) bool {
 type CustomLabelset labels.Labels
 
 var builderPool = &sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		b := labels.NewScratchBuilder(8)
 		return &b
 	},

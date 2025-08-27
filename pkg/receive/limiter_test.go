@@ -37,8 +37,7 @@ func TestLimiter_StartConfigReloader(t *testing.T) {
 	limiter, err := NewLimiter(goodLimits, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout), 1*time.Second)
 	testutil.Ok(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	err = limiter.StartConfigReloader(ctx)
 	testutil.Ok(t, err)
 

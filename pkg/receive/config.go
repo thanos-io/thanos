@@ -124,9 +124,9 @@ type HashringConfig struct {
 	TenantMatcherType tenantMatcher     `json:"tenant_matcher_type,omitempty"`
 	Endpoints         []Endpoint        `json:"endpoints"`
 	Algorithm         HashringAlgorithm `json:"algorithm,omitempty"`
-	ExternalLabels    labels.Labels     `json:"external_labels,omitempty"`
+	ExternalLabels    labels.Labels     `json:"external_labels"`
 	// If non-zero then enable shuffle sharding.
-	ShuffleShardingConfig ShuffleShardingConfig `json:"shuffle_sharding_config,omitempty"`
+	ShuffleShardingConfig ShuffleShardingConfig `json:"shuffle_sharding_config"`
 }
 
 type ShuffleShardingOverrideConfig struct {

@@ -40,10 +40,7 @@ func DoRequests(ctx context.Context, downstream Handler, reqs []Request, limits 
 	}()
 
 	respChan, errChan := make(chan RequestResponse), make(chan error)
-	parallelism := validation.SmallestPositiveIntPerTenant(tenantIDs, limits.MaxQueryParallelism)
-	if parallelism > len(reqs) {
-		parallelism = len(reqs)
-	}
+	parallelism := min(validation.SmallestPositiveIntPerTenant(tenantIDs, limits.MaxQueryParallelism), len(reqs))
 	for i := 0; i < parallelism; i++ {
 		go func() {
 			for req := range intermediate {

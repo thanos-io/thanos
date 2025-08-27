@@ -6,6 +6,7 @@ package compact
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -158,7 +159,7 @@ func (s *Syncer) SyncMetas(ctx context.Context) error {
 		partial map[ulid.ULID]error
 	}
 
-	container, err := s.g.Do("", func() (interface{}, error) {
+	container, err := s.g.Do("", func() (any, error) {
 		metas, partial, err := s.fetcher.Fetch(ctx)
 		return metasContainer{metas, partial}, err
 	})
@@ -186,9 +187,7 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 	defer s.mtx.Unlock()
 
 	metas := make(map[ulid.ULID]*metadata.Meta, len(s.blocks))
-	for k, v := range s.blocks {
-		metas[k] = v
-	}
+	maps.Copy(metas, s.blocks)
 
 	return metas
 }
@@ -1471,9 +1470,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		// Set up workers who will compact the groups when the groups are ready.
 		// They will compact available groups until they encounter an error, after which they will stop.
 		for i := 0; i < c.concurrency; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for g := range groupChan {
 					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
 					if err == nil {
@@ -1513,7 +1510,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					errChan <- errors.Wrapf(err, "group %s", g.Key())
 					return
 				}
-			}()
+			})
 		}
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
@@ -1610,9 +1607,7 @@ func NewGatherNoCompactionMarkFilter(logger log.Logger, bkt objstore.Instrumente
 func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*metadata.NoCompactMark {
 	f.mtx.Lock()
 	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(f.noCompactMarkedMap))
-	for k, v := range f.noCompactMarkedMap {
-		copiedNoCompactMarked[k] = v
-	}
+	maps.Copy(copiedNoCompactMarked, f.noCompactMarkedMap)
 	f.mtx.Unlock()
 
 	return copiedNoCompactMarked

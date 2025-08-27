@@ -132,7 +132,6 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 			),
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			merged := m(tc.input...)
@@ -450,7 +449,6 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m := NewChunkSeriesMerger()
@@ -469,7 +467,7 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 func createSamplesWithStep(start, numOfSamples, step int) []chunks.Sample {
 	res := make([]chunks.Sample, numOfSamples)
 	cur := start
-	for i := 0; i < numOfSamples; i++ {
+	for i := range numOfSamples {
 		res[i] = sample{t: int64(cur), f: float64(cur)}
 		cur += step
 	}
