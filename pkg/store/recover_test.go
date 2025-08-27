@@ -4,7 +4,6 @@
 package store
 
 import (
-	"context"
 	"io"
 	"testing"
 
