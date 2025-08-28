@@ -195,7 +195,9 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 // GarbageCollect marks blocks for deletion from bucket if their data is available as part of a
 // block with a higher compaction level.
 // Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
-func (s *Syncer) GarbageCollect(ctx context.Context) error {
+// There is a temporal dependency on deleting marked blocks because otherwise the filters might
+// return inconsistent state if syncing of metas is happening in the background.
+func (s *Syncer) GarbageCollect(ctx context.Context, justDeletedBlocks map[ulid.ULID]struct{}) error {
 	begin := time.Now()
 
 	// Ignore filter exists before deduplicate filter.
@@ -205,10 +207,16 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 	// GarbageIDs contains the duplicateIDs, since these blocks can be replaced with other blocks.
 	// We also remove ids present in deletionMarkMap since these blocks are already marked for deletion.
 	garbageIDs := []ulid.ULID{}
+
 	for _, id := range duplicateIDs {
 		if _, exists := deletionMarkMap[id]; exists {
 			continue
 		}
+
+		if _, exists := justDeletedBlocks[id]; exists {
+			continue
+		}
+
 		garbageIDs = append(garbageIDs, id)
 	}
 
@@ -1511,18 +1519,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					return
 				}
 			})
-		}
-
-		level.Info(c.logger).Log("msg", "start sync of metas")
-		if err := c.sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync")
-		}
-
-		level.Info(c.logger).Log("msg", "start of GC")
-		// Blocks that were compacted are garbage collected after each Compaction.
-		// However if compactor crashes we need to resolve those on startup.
-		if err := c.sy.GarbageCollect(ctx); err != nil {
-			return errors.Wrap(err, "garbage")
 		}
 
 		groups, err := c.grouper.Groups(c.sy.Metas())

@@ -443,9 +443,16 @@ func runCompact(
 		}
 
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures, ignoreDeletionMarkFilter.DeletionMarkBlocks())
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+
+		deletedBlocks, err := blocksCleaner.DeleteMarkedBlocks(ctx)
+		if err != nil {
 			return errors.Wrap(err, "cleaning marked blocks")
 		}
+
+		if err := sy.GarbageCollect(ctx, deletedBlocks); err != nil {
+			return errors.Wrap(err, "garbage collecting blocks")
+		}
+
 		compactMetrics.cleanups.Inc()
 
 		return nil
@@ -706,6 +713,18 @@ func runCompact(
 				cancel()
 			})
 		}
+	}
+
+	// Blocks that were compacted are garbage collected after each Compaction.
+	// However if compactor crashes we need to resolve those on startup.
+	level.Info(logger).Log("msg", "start initial sync of metas")
+	if err := sy.SyncMetas(ctx); err != nil {
+		return errors.Wrap(err, "sync")
+	}
+
+	level.Info(logger).Log("msg", "start of initial garbage collection")
+	if err := sy.GarbageCollect(ctx, nil); err != nil {
+		return errors.Wrap(err, "garbage")
 	}
 
 	level.Info(logger).Log("msg", "starting compact node")
