@@ -48,7 +48,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			var m metadata.Meta
 
 			m.Version = 1
@@ -447,7 +447,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			var m metadata.Meta
 
 			m.Version = 1

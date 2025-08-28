@@ -236,7 +236,7 @@ func prettyPrintJsonBody(t *testing.T, body io.ReadCloser) string {
 	bodyContent, err := io.ReadAll(body)
 	require.NoError(t, err)
 
-	var jsonData interface{}
+	var jsonData any
 	err = json.Unmarshal(bodyContent, &jsonData)
 	require.NoError(t, err)
 

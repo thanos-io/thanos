@@ -254,12 +254,12 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 	b.Run("Label", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := LabelSet{Labels: make([]Label, 0, num)}
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls.Labels = append(lbls.Labels, Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			data, err := lbls.Marshal()
 			testutil.Ok(b, err)
 
@@ -271,12 +271,12 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 	b.Run("ZLabel", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := ZLabelSet{Labels: make([]ZLabel, 0, num)}
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls.Labels = append(lbls.Labels, ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			data, err := lbls.Marshal()
 			testutil.Ok(b, err)
 
@@ -306,24 +306,24 @@ func benchmarkTransformWithAndWithoutCopy(b *testing.B, num int) {
 	b.Run("ZLabelsToPromLabels", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := make([]ZLabel, num)
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})
 	b.Run("ZLabelsToPromLabelsWithRealloc", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := make([]ZLabel, num)
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			ReAllocZLabelsStrings(&lbls, true)
 			ret = ZLabelsToPromLabels(lbls)
 		}
@@ -496,7 +496,7 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 			name: "typical labels under 1KB",
 			lbls: func() []ZLabel {
 				lbls := make([]ZLabel, 10)
-				for i := 0; i < len(lbls); i++ {
+				for i := range lbls {
 					// ZLabel ~20B name, 50B value.
 					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
@@ -507,7 +507,7 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 			name: "bigger labels over 1KB",
 			lbls: func() []ZLabel {
 				lbls := make([]ZLabel, 10)
-				for i := 0; i < len(lbls); i++ {
+				for i := range lbls {
 					//ZLabel ~50B name, 50B value.
 					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
@@ -534,7 +534,7 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				h = HashWithPrefix(prefix, tcase.lbls)
 			}
 			benchmarkLabelsResult = h
@@ -547,7 +547,7 @@ func BenchmarkLabelUnmarshal(b *testing.B) {
 		Labels: []Label{},
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		lblset.Labels = append(lblset.Labels, Label{Name: fmt.Sprintf("label%d", i), Value: fmt.Sprintf("value%d", i)})
 	}
 

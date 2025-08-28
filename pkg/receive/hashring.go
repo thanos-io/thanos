@@ -527,10 +527,8 @@ func (s *shuffleShardHashring) getShardSize(tenant string) int {
 	for _, override := range s.shuffleShardingConfig.Overrides {
 		switch override.TenantMatcherType {
 		case TenantMatcherTypeExact:
-			for _, t := range override.Tenants {
-				if t == tenant {
-					return override.ShardSize
-				}
+			if slices.Contains(override.Tenants, tenant) {
+				return override.ShardSize
 			}
 		case TenantMatcherGlob:
 			for _, t := range override.Tenants {

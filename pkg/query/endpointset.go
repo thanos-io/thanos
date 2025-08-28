@@ -306,7 +306,6 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	)
 
 	for _, spec := range e.endpointSpecs() {
-		spec := spec
 
 		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
 			wg.Add(1)

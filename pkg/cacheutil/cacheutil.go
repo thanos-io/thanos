@@ -38,10 +38,7 @@ func doWithBatch(ctx context.Context, totalSize int, batchSize int, ga gate.Gate
 	}
 	g, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < totalSize; i += batchSize {
-		j := i + batchSize
-		if j > totalSize {
-			j = totalSize
-		}
+		j := min(i+batchSize, totalSize)
 		if ga != nil {
 			if err := ga.Start(ctx); err != nil {
 				return nil

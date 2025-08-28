@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -265,7 +266,7 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, acti
 		eg, gCtx = errgroup.WithContext(ctx)
 		mu       sync.Mutex
 	)
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		eg.Go(func() error {
 			for uid := range metaChan {
 				// TODO(bwplotka): If that causes problems (obj store rate limits), add longer ttl to cached items.
@@ -410,12 +411,12 @@ func NewMetaFetcherWithMetrics(logger log.Logger, concurrency int, bkt objstore.
 }
 
 // NewMetaFetcher transforms BaseFetcher into actually usable *MetaFetcher.
-func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, logTags ...interface{}) *MetaFetcher {
+func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, logTags ...any) *MetaFetcher {
 	return f.NewMetaFetcherWithMetrics(NewFetcherMetrics(reg, nil, nil), filters, logTags...)
 }
 
 // NewMetaFetcherWithMetrics transforms BaseFetcher into actually usable *MetaFetcher.
-func (f *BaseFetcher) NewMetaFetcherWithMetrics(fetcherMetrics *FetcherMetrics, filters []MetadataFilter, logTags ...interface{}) *MetaFetcher {
+func (f *BaseFetcher) NewMetaFetcherWithMetrics(fetcherMetrics *FetcherMetrics, filters []MetadataFilter, logTags ...any) *MetaFetcher {
 	return &MetaFetcher{metrics: fetcherMetrics, wrapped: f, filters: filters, logger: log.With(f.logger, logTags...)}
 }
 
@@ -516,7 +517,7 @@ type response struct {
 	corruptedMetas float64
 }
 
-func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
+func (f *BaseFetcher) fetchMetadata(ctx context.Context) (any, error) {
 	f.syncs.Inc()
 
 	var (
@@ -606,9 +607,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	}
 
 	modifiedTimestamps := make(map[ulid.ULID]time.Time, len(resp.modifiedTimestamps))
-	for id, ts := range resp.modifiedTimestamps {
-		modifiedTimestamps[id] = ts
-	}
+	maps.Copy(modifiedTimestamps, resp.modifiedTimestamps)
 
 	f.mtx.Lock()
 	f.cached = cached
@@ -658,7 +657,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 
 	// Run this in thread safe run group.
 	// TODO(bwplotka): Consider custom singleflight with ttl.
-	v, err := f.g.Do("", func() (i interface{}, err error) {
+	v, err := f.g.Do("", func() (i any, err error) {
 		// NOTE: First go routine context will go through.
 		return f.fetchMetadata(ctx)
 	})
@@ -669,9 +668,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 
 	// Copy as same response might be reused by different goroutines.
 	metas := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
-	for id, m := range resp.metas {
-		metas[id] = m
-	}
+	maps.Copy(metas, resp.metas)
 
 	metrics.Synced.WithLabelValues(FailedMeta).Set(float64(len(resp.metaErrs)))
 	metrics.Synced.WithLabelValues(NoMeta).Set(resp.noMetas)
@@ -698,7 +695,7 @@ func (f *BaseFetcher) countCached() int {
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
 	var i int
-	f.cached.Range(func(_, _ interface{}) bool {
+	f.cached.Range(func(_, _ any) bool {
 		i++
 		return true
 	})
@@ -831,13 +828,11 @@ func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID
 
 	// Start up workers to deduplicate workgroups when they're ready.
 	for i := 0; i < f.concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for group := range groupChan {
 				f.filterGroup(group, metas, synced)
 			}
-		}()
+		})
 	}
 
 	// We need only look within a compaction group for duplicates, so splitting by group key gives us parallelizable streams.
@@ -941,9 +936,7 @@ func (r *ReplicaLabelRemover) Filter(_ context.Context, metas map[ulid.ULID]*met
 	countReplicaLabelRemoved := make(map[string]int, len(metas))
 	for u, meta := range metas {
 		l := make(map[string]string)
-		for n, v := range meta.Thanos.Labels {
-			l[n] = v
-		}
+		maps.Copy(l, meta.Thanos.Labels)
 
 		for _, replicaLabel := range r.replicaLabels {
 			if _, exists := l[replicaLabel]; exists {
@@ -1056,9 +1049,7 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 	defer f.mtx.Unlock()
 
 	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark, len(f.deletionMarkMap))
-	for id, meta := range f.deletionMarkMap {
-		deletionMarkMap[id] = meta
-	}
+	maps.Copy(deletionMarkMap, f.deletionMarkMap)
 
 	return deletionMarkMap
 }
@@ -1188,7 +1179,7 @@ func (f *ParquetMigratedMetaFilter) Filter(_ context.Context, metas map[ulid.ULI
 			continue
 		}
 
-		extensionsMap, ok := meta.Thanos.Extensions.(map[string]interface{})
+		extensionsMap, ok := meta.Thanos.Extensions.(map[string]any)
 		if !ok {
 			continue
 		}

@@ -39,7 +39,7 @@ func (r *RuleGroup) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*plain)(r))
 }
 
-type Rule interface{}
+type Rule any
 
 type AlertAPI struct {
 	Alerts []*Alert `json:"alerts"`

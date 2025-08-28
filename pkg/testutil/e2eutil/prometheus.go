@@ -143,7 +143,7 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 		paths = PrometheusBinary()
 	}
 
-	for _, path := range strings.Split(paths, " ") {
+	for path := range strings.SplitSeq(paths, " ") {
 		if ok := t.Run(path, func(t *testing.T) {
 			p, err := newPrometheus(path, "")
 			testutil.Ok(t, err)
@@ -579,7 +579,7 @@ func createBlock(
 		g.Go(func() error {
 			t := mint
 
-			for i := 0; i < numSamples; i++ {
+			for range numSamples {
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
@@ -755,11 +755,11 @@ func CreateBlockWithChurn(
 	}()
 
 	app := h.Appender(ctx)
-	for i := 0; i < len(series); i++ {
+	for i := range series {
 
 		var ref storage.SeriesRef
 		start := RandRange(rnd, mint, maxt)
-		for j := 0; j < numSamples; j++ {
+		for j := range numSamples {
 			if ref == 0 {
 				ref, err = app.Append(0, series[i], start, float64(i+j))
 			} else {

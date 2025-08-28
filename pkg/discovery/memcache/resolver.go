@@ -95,7 +95,7 @@ func (s *memcachedAutoDiscovery) parseConfig(reader *bufio.Reader) (*clusterConf
 		return nil, fmt.Errorf("expected %d in config payload, but got %d instead", configSize, len(configVersion)+len(nodes))
 	}
 
-	for _, host := range strings.Split(strings.TrimSpace(nodes), " ") {
+	for host := range strings.SplitSeq(strings.TrimSpace(nodes), " ") {
 		dnsIpPort := strings.Split(host, "|")
 		if len(dnsIpPort) != 3 {
 			return nil, fmt.Errorf("node not in expected format: %s", dnsIpPort)
