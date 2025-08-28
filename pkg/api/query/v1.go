@@ -251,7 +251,7 @@ type queryData struct {
 	Result     parser.Value     `json:"result"`
 	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	QueryAnalysis queryTelemetry `json:"analysis"`
+	QueryAnalysis queryTelemetry `json:"analysis,omitempty"`
 	Warnings      []error        `json:"warnings,omitempty"`
 }
 
