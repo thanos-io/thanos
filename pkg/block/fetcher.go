@@ -821,16 +821,30 @@ func NewDeduplicateFilter(concurrency int) *DefaultDeduplicateFilter {
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
 func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
-	f.duplicateIDs = f.duplicateIDs[:0]
-
-	var wg sync.WaitGroup
+	var filterWg, dupWg sync.WaitGroup
 	var groupChan = make(chan []*metadata.Meta)
+
+	var dupsChan = make(chan ulid.ULID)
+
+	dupWg.Go(func() {
+		dups := make([]ulid.ULID, 0)
+		for dup := range dupsChan {
+			if metas[dup] != nil {
+				dups = append(dups, dup)
+			}
+			synced.WithLabelValues(duplicateMeta).Inc()
+			delete(metas, dup)
+		}
+		f.mu.Lock()
+		f.duplicateIDs = dups
+		f.mu.Unlock()
+	})
 
 	// Start up workers to deduplicate workgroups when they're ready.
 	for i := 0; i < f.concurrency; i++ {
-		wg.Go(func() {
+		filterWg.Go(func() {
 			for group := range groupChan {
-				f.filterGroup(group, metas, synced)
+				f.filterGroup(group, dupsChan)
 			}
 		})
 	}
@@ -845,12 +859,15 @@ func (f *DefaultDeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID
 		groupChan <- group
 	}
 	close(groupChan)
-	wg.Wait()
+	filterWg.Wait()
+
+	close(dupsChan)
+	dupWg.Wait()
 
 	return nil
 }
 
-func (f *DefaultDeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec) {
+func (f *DefaultDeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, dupsChan chan ulid.ULID) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -881,19 +898,16 @@ childLoop:
 		coveringSet = append(coveringSet, child)
 	}
 
-	f.mu.Lock()
 	for _, duplicate := range duplicates {
-		if metas[duplicate] != nil {
-			f.duplicateIDs = append(f.duplicateIDs, duplicate)
-		}
-		synced.WithLabelValues(duplicateMeta).Inc()
-		delete(metas, duplicate)
+		dupsChan <- duplicate
 	}
-	f.mu.Unlock()
 }
 
 // DuplicateIDs returns slice of block ids that are filtered out by DefaultDeduplicateFilter.
 func (f *DefaultDeduplicateFilter) DuplicateIDs() []ulid.ULID {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return f.duplicateIDs
 }
 

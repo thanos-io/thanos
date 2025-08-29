@@ -631,6 +631,9 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 }
 
 func TestGarbageCollect_FilterRace(t *testing.T) {
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(timeoutCancel)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
 
@@ -694,7 +697,7 @@ func TestGarbageCollect_FilterRace(t *testing.T) {
 		Name: "test_block_cleaner_errors",
 	}))
 
-	for t.Context().Err() == nil {
+	for timeoutCtx.Err() == nil {
 		t.Log("doing iteration")
 
 		testutil.Equals(t, float64(0.0), promtestutil.ToFloat64(garbageCollection))
