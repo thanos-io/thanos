@@ -28,7 +28,7 @@ const (
 // IndexCacheConfig specifies the index cache config.
 type IndexCacheConfig struct {
 	Type   IndexCacheProvider `yaml:"type"`
-	Config interface{}        `yaml:"config"`
+	Config any                `yaml:"config"`
 
 	// Available item types are Postings, Series and ExpandedPostings.
 	EnabledItems []string `yaml:"enabled_items"`

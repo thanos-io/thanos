@@ -55,7 +55,7 @@ func timeMilliseconds(t time.Time) int64 {
 type test struct {
 	testing.TB
 
-	cmds       []interface{}
+	cmds       []any
 	rootEngine *promql.Engine
 	stores     []*testStore
 
@@ -156,7 +156,7 @@ func getLines(input string) []string {
 }
 
 // parse parses the given input and returns command sequence.
-func parse(input string) (cmds []interface{}, err error) {
+func parse(input string) (cmds []any, err error) {
 	lines := getLines(input)
 
 	// Scan for steps line by line.
@@ -165,7 +165,7 @@ func parse(input string) (cmds []interface{}, err error) {
 		if l == "" {
 			continue
 		}
-		var cmd interface{}
+		var cmd any
 
 		switch c := strings.ToLower(patSpace.Split(l, 2)[0]); {
 		case c == "clear":
@@ -187,7 +187,7 @@ func parse(input string) (cmds []interface{}, err error) {
 	return cmds, nil
 }
 
-func raise(line int, format string, v ...interface{}) error {
+func raise(line int, format string, v ...any) error {
 	return &parser.ParseErr{
 		LineOffset: line,
 		Err:        errors.Errorf(format, v...),
@@ -206,7 +206,7 @@ func (t *test) run(createQueryableFn func([]*testStore) storage.Queryable) error
 }
 
 // exec processes a single step of the test.
-func (t *test) exec(tc interface{}, createQueryableFn func([]*testStore) storage.Queryable) error {
+func (t *test) exec(tc any, createQueryableFn func([]*testStore) storage.Queryable) error {
 	switch cmd := tc.(type) {
 	case *clearCmd:
 		t.reset()

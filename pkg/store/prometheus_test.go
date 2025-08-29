@@ -190,8 +190,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
@@ -361,8 +360,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
@@ -424,8 +422,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 

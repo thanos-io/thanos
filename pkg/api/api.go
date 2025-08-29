@@ -118,11 +118,11 @@ type RuntimeInfo struct {
 type RuntimeInfoFn func() RuntimeInfo
 
 type response struct {
-	Status    status      `json:"status"`
-	Data      interface{} `json:"data,omitempty"`
-	ErrorType ErrorType   `json:"errorType,omitempty"`
-	Error     string      `json:"error,omitempty"`
-	Warnings  []string    `json:"warnings,omitempty"`
+	Status    status    `json:"status"`
+	Data      any       `json:"data,omitempty"`
+	ErrorType ErrorType `json:"errorType,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Warnings  []string  `json:"warnings,omitempty"`
 }
 
 // SetCORS enables cross-site script calls.
@@ -132,7 +132,7 @@ func SetCORS(w http.ResponseWriter) {
 	}
 }
 
-type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError, func())
+type ApiFunc func(r *http.Request) (any, []error, *ApiError, func())
 
 type BaseAPI struct {
 	logger      log.Logger
@@ -167,19 +167,19 @@ func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger 
 	r.Get("/status/buildinfo", instr("status_build", api.serveBuildInfo))
 }
 
-func (api *BaseAPI) options(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) options(r *http.Request) (any, []error, *ApiError, func()) {
 	return nil, nil, nil, func() {}
 }
 
-func (api *BaseAPI) flags(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) flags(r *http.Request) (any, []error, *ApiError, func()) {
 	return api.flagsMap, nil, nil, func() {}
 }
 
-func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (any, []error, *ApiError, func()) {
 	return api.runtimeInfo(), nil, nil, func() {}
 }
 
-func (api *BaseAPI) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) serveBuildInfo(r *http.Request) (any, []error, *ApiError, func()) {
 	return api.buildInfo, nil, nil, func() {}
 }
 
@@ -255,7 +255,7 @@ func shouldNotCacheBecauseOfWarnings(warnings []error) bool {
 	return false
 }
 
-func Respond(w http.ResponseWriter, data interface{}, warnings []error, logger log.Logger) {
+func Respond(w http.ResponseWriter, data any, warnings []error, logger log.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	if shouldNotCacheBecauseOfWarnings(warnings) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -283,7 +283,7 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error, logger l
 	}
 }
 
-func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}, logger log.Logger) {
+func RespondError(w http.ResponseWriter, apiErr *ApiError, data any, logger log.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 

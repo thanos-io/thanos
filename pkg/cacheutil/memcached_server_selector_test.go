@@ -125,7 +125,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServer
 	// Calculate the distribution of keys.
 	distribution := make(map[string]int)
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("key-%d", i)
 		addr, err := selector.PickServer(key)
 		testutil.Ok(t, err)
@@ -163,7 +163,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 	distribution := make(map[string]string)
 	numKeys := 1000
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("key-%d", i)
 		addr, err := selector.PickServer(key)
 		testutil.Ok(t, err)
@@ -177,7 +177,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 	// Calculate the number of keys who has been moved due to the resharding.
 	moved := 0
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("key-%d", i)
 		addr, err := selector.PickServer(key)
 		testutil.Ok(t, err)
@@ -214,9 +214,7 @@ func BenchmarkMemcachedJumpHashSelector_PickServer(b *testing.B) {
 		b.Error(err)
 	}
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		_, err := selector.PickServer(fmt.Sprint(i))
 		if err != nil {
 			b.Error(err)

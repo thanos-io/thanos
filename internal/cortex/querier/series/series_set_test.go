@@ -61,7 +61,7 @@ func TestMatrixToSeriesSetSortsMetricLabels(t *testing.T) {
 func TestDeletedSeriesIterator(t *testing.T) {
 	cs := ConcreteSeries{labels: labels.FromStrings("foo", "bar")}
 	// Insert random stuff from (0, 1000).
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		cs.samples = append(cs.samples, model.SamplePair{Timestamp: model.Time(i), Value: model.SampleValue(rand.Float64())})
 	}
 
@@ -118,7 +118,7 @@ func TestDeletedSeriesIterator(t *testing.T) {
 func TestDeletedIterator_WithSeek(t *testing.T) {
 	cs := ConcreteSeries{labels: labels.FromStrings("foo", "bar")}
 	// Insert random stuff from (0, 1000).
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		cs.samples = append(cs.samples, model.SamplePair{Timestamp: model.Time(i), Value: model.SampleValue(rand.Float64())})
 	}
 

@@ -5,6 +5,7 @@ package extpromql
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -17,12 +18,8 @@ import (
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
 	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
-	for k, v := range parser.Functions {
-		allFuncs[k] = v
-	}
-	for k, v := range parse.XFunctions {
-		allFuncs[k] = v
-	}
+	maps.Copy(allFuncs, parser.Functions)
+	maps.Copy(allFuncs, parse.XFunctions)
 	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
 	defer p.Close()
 	return p.ParseExpr()

@@ -11,7 +11,7 @@ import (
 // with units.
 type Bytes uint64
 
-func (b *Bytes) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (b *Bytes) UnmarshalYAML(unmarshal func(any) error) error {
 	var value string
 	err := unmarshal(&value)
 	if err != nil {
@@ -27,6 +27,6 @@ func (b *Bytes) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-func (b *Bytes) MarshalYAML() (interface{}, error) {
+func (b *Bytes) MarshalYAML() (any, error) {
 	return units.Base2Bytes(*b).String(), nil
 }

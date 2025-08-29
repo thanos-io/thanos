@@ -57,7 +57,7 @@ func (b *base) Format(s fmt.State, verb rune) {
 //
 // If no args have been passed, it is same as `New` function without formatting. Character like
 // '%' still has to be escaped in that scenario.
-func Newf(format string, args ...interface{}) error {
+func Newf(format string, args ...any) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -70,7 +70,7 @@ func Newf(format string, args ...interface{}) error {
 //
 // If cause is nil, this is the same as fmt.Errorf. If no args have been passed, it is same as `Wrap`
 // function without formatting. Character like '%' still has to be escaped in that scenario.
-func Wrapf(cause error, format string, args ...interface{}) error {
+func Wrapf(cause error, format string, args ...any) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -130,7 +130,7 @@ func Is(err, target error) bool {
 // As is a wrapper of built-in errors.As. It finds the first error in err's
 // chain that matches target, and if one is found, sets target to that error
 // value and returns true. Otherwise, it returns false.
-func As(err error, target interface{}) bool {
+func As(err error, target any) bool {
 	return errors.As(err, target)
 }
 

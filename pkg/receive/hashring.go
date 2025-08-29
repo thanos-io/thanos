@@ -466,7 +466,7 @@ func newShuffleShardHashring(baseRing Hashring, shuffleShardingConfig ShuffleSha
 
 	nodeCountByAZ := make(map[string]int)
 	for _, node := range ssh.nodes {
-		var az string = node.AZ
+		var az = node.AZ
 		if shuffleShardingConfig.ZoneAwarenessDisabled {
 			az = ""
 		}
@@ -525,13 +525,12 @@ func (s *shuffleShardHashring) dedupedNodes() []Endpoint {
 // getShardSize returns the shard size for a specific tenant, taking into account any overrides.
 func (s *shuffleShardHashring) getShardSize(tenant string) int {
 	for _, override := range s.shuffleShardingConfig.Overrides {
-		if override.TenantMatcherType == TenantMatcherTypeExact {
-			for _, t := range override.Tenants {
-				if t == tenant {
-					return override.ShardSize
-				}
+		switch override.TenantMatcherType {
+		case TenantMatcherTypeExact:
+			if slices.Contains(override.Tenants, tenant) {
+				return override.ShardSize
 			}
-		} else if override.TenantMatcherType == TenantMatcherGlob {
+		case TenantMatcherGlob:
 			for _, t := range override.Tenants {
 				matches, err := filepath.Match(t, tenant)
 				if err == nil && matches {

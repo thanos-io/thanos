@@ -8,6 +8,7 @@ import (
 	"hash"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -116,7 +117,7 @@ func NewTSDBStore(
 		maxBytesPerFrame: RemoteReadFrameLimit,
 		storeFilter:      filter.AllowAllStoreFilter{},
 		close:            func() {},
-		buffers: sync.Pool{New: func() interface{} {
+		buffers: sync.Pool{New: func() any {
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
@@ -435,10 +436,8 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
 	}
 
-	for i := range r.WithoutReplicaLabels {
-		if r.Label == r.WithoutReplicaLabels[i] {
-			return &storepb.LabelValuesResponse{}, nil
-		}
+	if slices.Contains(r.WithoutReplicaLabels, r.Label) {
+		return &storepb.LabelValuesResponse{}, nil
 	}
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherCache)

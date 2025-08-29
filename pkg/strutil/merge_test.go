@@ -97,9 +97,9 @@ func TestMergeUnsortedSlices(t *testing.T) {
 
 func BenchmarkMergeSlices(b *testing.B) {
 	var slices [][]string
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		var slice []string
-		for j := 0; j < 10000; j++ {
+		for j := range 10000 {
 			slice = append(slice, fmt.Sprintf("str_%d_%d", i, j))
 		}
 		slices = append(slices, slice)

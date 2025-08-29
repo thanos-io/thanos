@@ -118,7 +118,7 @@ func (c *LruMatchersCache) GetOrSet(m ConversionLabelMatcher, newItem NewItemFun
 		return nil, err
 	}
 
-	v, err, _ := c.sf.Do(key, func() (interface{}, error) {
+	v, err, _ := c.sf.Do(key, func() (any, error) {
 		if item, ok := c.cache.Get(key); ok {
 			c.metrics.hitsTotal.Inc()
 			return item, nil

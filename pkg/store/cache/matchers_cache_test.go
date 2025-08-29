@@ -121,9 +121,8 @@ func BenchmarkMatchersCache(b *testing.B) {
 		{Type: storepb.LabelMatcher_RE, Name: "key5", Value: "^(val5|val6|val7|val8|val9).*$"},
 	}
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		matcher := matchers[i%len(matchers)]
 		_, err := cache.GetOrSet(matcher, func() (*labels.Matcher, error) {
 			return storepb.MatcherToPromMatcher(*matcher)

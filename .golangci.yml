@@ -1,85 +1,68 @@
-# This file contains all available configuration options
-# with their default values.
-
-# options for analysis running
+version: "2"
 run:
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  timeout: 5m
-
-  # exit code when at least one issue was found, default is 1
-  issues-exit-code: 1
-
   build-tags:
     - slicelabels
-
-# output configuration options
-output:
-  # The formats used to render issues.
-  formats:
-    - format: colored-line-number
-      path: stdout
-
-  # print lines of code with issue, default is true
-  print-issued-lines: true
-
-  # print linter name in the end of issue text, default is true
-  print-linter-name: true
-
+  issues-exit-code: 1
 linters:
   enable:
-    # Sorted alphabetically.
-    - errcheck
     - goconst
     - godot
+    - misspell
+    - promlinter
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions:
+        - (github.com/go-kit/log.Logger).Log
+        - fmt.Fprintln
+        - fmt.Fprint
+    goconst:
+      min-occurrences: 5
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - promlinter
+        path: _test\.go
+      - linters:
+          - unused
+        text: SourceStoreAPI.implementsStoreAPI
+      - linters:
+          - unused
+        text: SourceStoreAPI.producesBlocks
+      - linters:
+          - unused
+        text: Source.producesBlocks
+      - linters:
+          - unused
+        text: newMockAlertmanager
+      - linters:
+          - unused
+        text: ruleAndAssert
+    paths:
+      - vendor
+      - internal/cortex
+      - .bingo
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
     - gofmt
     - goimports
-    - gosimple
-    - govet
-    - ineffassign
-    - misspell
-    - staticcheck
-    - typecheck
-    - unparam
-    - unused
-    - promlinter
-
-linters-settings:
-  errcheck:
-    # List of functions to exclude from checking, where each entry is a single function to exclude.
-    exclude-functions:
-      - (github.com/go-kit/log.Logger).Log
-      - fmt.Fprintln
-      - fmt.Fprint
-  misspell:
-    locale: US
-  goconst:
-    min-occurrences: 5
-
-issues:
-  exclude-rules:
-    # We don't check metrics naming in the tests.
-    - path: _test\.go
-      linters:
-        - promlinter
-    # These are not being checked since these methods exist
-    # so that no one else could implement them.
-    - linters:
-        - unused
-      text: "SourceStoreAPI.implementsStoreAPI"
-    - linters:
-        - unused
-      text: "SourceStoreAPI.producesBlocks"
-    - linters:
-        - unused
-      text: "Source.producesBlocks"
-    - linters:
-        - unused
-      text: "newMockAlertmanager"
-    - linters:
-        - unused
-      text: "ruleAndAssert"
-  # Which dirs to exclude: issues from them won't be reported.
-  exclude-dirs:
-    - vendor
-    - internal/cortex
-    - .bingo
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - internal/cortex
+      - .bingo
+      - third_party$
+      - builtin$
+      - examples$

@@ -100,7 +100,7 @@ func NewCommonMetrics(reg prometheus.Registerer) *CommonMetrics {
 // CacheKey defines cache key used in index cache.
 type CacheKey struct {
 	Block string
-	Key   interface{}
+	Key   any
 
 	Compression string
 }

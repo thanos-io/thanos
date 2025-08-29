@@ -32,7 +32,7 @@ func NewAsyncOperationProcessor(bufferSize, concurrency int) *AsyncOperationProc
 	}
 
 	p.workers.Add(concurrency)
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go p.asyncQueueProcessLoop()
 	}
 

@@ -1406,7 +1406,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	t.Parallel()
 
 	var cls []Client
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		cls = append(cls, &storetestutil.TestClient{
 			StoreClient: &mockedStoreAPI{
 				RespError: errors.New("test error"),
@@ -2110,7 +2110,7 @@ func BenchmarkProxySeriesRegex(b *testing.B) {
 
 	words := []string{"foo", "bar", "baz", "qux", "quux", "corge", "grault", "garply", "waldo", "fred", "plugh", "xyzzy", "thud"}
 	bigRegex := strings.Builder{}
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		bigRegex.WriteString(words[rand.Intn(len(words))])
 		bigRegex.WriteString("|")
 	}
@@ -2130,7 +2130,7 @@ func BenchmarkProxySeriesRegex(b *testing.B) {
 
 	tb.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		testutil.Ok(b, q.Series(req, s))
 	}
 }
@@ -2163,7 +2163,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		})
 		testutil.Ok(t, head.Close())
 
-		for i := 0; i < len(created); i++ {
+		for i := range created {
 			resps = append(resps, storepb.NewSeriesResponse(created[i]))
 		}
 

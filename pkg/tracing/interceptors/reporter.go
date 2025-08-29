@@ -48,27 +48,27 @@ func FullMethod(service, method string) string {
 }
 
 type ClientReportable interface {
-	ClientReporter(ctx context.Context, reqProtoOrNil interface{}, typ GRPCType, service string, method string) (Reporter, context.Context)
+	ClientReporter(ctx context.Context, reqProtoOrNil any, typ GRPCType, service string, method string) (Reporter, context.Context)
 }
 
 type ServerReportable interface {
-	ServerReporter(ctx context.Context, reqProtoOrNil interface{}, typ GRPCType, service string, method string) (Reporter, context.Context)
+	ServerReporter(ctx context.Context, reqProtoOrNil any, typ GRPCType, service string, method string) (Reporter, context.Context)
 }
 
 type Reporter interface {
 	PostCall(err error, rpcDuration time.Duration)
 
-	PostMsgSend(reqProto interface{}, err error, sendDuration time.Duration)
-	PostMsgReceive(replyProto interface{}, err error, recvDuration time.Duration)
+	PostMsgSend(reqProto any, err error, sendDuration time.Duration)
+	PostMsgReceive(replyProto any, err error, recvDuration time.Duration)
 }
 
 var _ Reporter = NoopReporter{}
 
 type NoopReporter struct{}
 
-func (NoopReporter) PostCall(error, time.Duration)                    {}
-func (NoopReporter) PostMsgSend(interface{}, error, time.Duration)    {}
-func (NoopReporter) PostMsgReceive(interface{}, error, time.Duration) {}
+func (NoopReporter) PostCall(error, time.Duration)            {}
+func (NoopReporter) PostMsgSend(any, error, time.Duration)    {}
+func (NoopReporter) PostMsgReceive(any, error, time.Duration) {}
 
 type report struct {
 	rpcType   GRPCType

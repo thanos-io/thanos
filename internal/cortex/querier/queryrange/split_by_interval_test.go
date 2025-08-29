@@ -388,7 +388,6 @@ func Test_evaluateAtModifier(t *testing.T) {
 			expectedErrorCode: http.StatusBadRequest,
 		},
 	} {
-		tt := tt
 		t.Run(tt.in, func(t *testing.T) {
 			t.Parallel()
 			out, err := EvaluateAtModifierFunction(tt.in, start, end)

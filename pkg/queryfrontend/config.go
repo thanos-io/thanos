@@ -82,7 +82,7 @@ type RedisResponseCacheConfig struct {
 // Based on the config type the config is then parsed into a specific cache provider.
 type CacheProviderConfig struct {
 	Type   ResponseCacheProvider `yaml:"type"`
-	Config interface{}           `yaml:"config"`
+	Config any                   `yaml:"config"`
 }
 
 // NewCacheConfig is a parser that converts a Thanos cache config yaml into a cortex cache config struct.
@@ -287,7 +287,7 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
-	if cfg.LabelsConfig.DefaultTimeRange == 0 {
+	if cfg.DefaultTimeRange == 0 {
 		return errors.New("labels.default-time-range cannot be set to 0")
 	}
 
@@ -299,15 +299,15 @@ func (cfg *Config) Validate() error {
 }
 
 func (cfg *Config) validateDynamicSplitParams() error {
-	if cfg.QueryRangeConfig.HorizontalShards <= 0 {
+	if cfg.HorizontalShards <= 0 {
 		return errors.New("min horizontal shards should be greater than 0 when query split threshold is enabled")
 	}
 
-	if cfg.QueryRangeConfig.MaxQuerySplitInterval <= 0 {
+	if cfg.MaxQuerySplitInterval <= 0 {
 		return errors.New("max query split interval should be greater than 0 when query split threshold is enabled")
 	}
 
-	if cfg.QueryRangeConfig.MinQuerySplitInterval <= 0 {
+	if cfg.MinQuerySplitInterval <= 0 {
 		return errors.New("min query split interval should be greater than 0 when query split threshold is enabled")
 	}
 	return nil
@@ -318,7 +318,7 @@ func (cfg *Config) isStaticSplitSet() bool {
 }
 
 func (cfg *Config) isDynamicSplitSet() bool {
-	return cfg.QueryRangeConfig.MinQuerySplitInterval > 0 ||
-		cfg.QueryRangeConfig.HorizontalShards > 0 ||
-		cfg.QueryRangeConfig.MaxQuerySplitInterval > 0
+	return cfg.MinQuerySplitInterval > 0 ||
+		cfg.HorizontalShards > 0 ||
+		cfg.MaxQuerySplitInterval > 0
 }

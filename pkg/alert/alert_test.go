@@ -28,7 +28,7 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 	pushes := 3
 
 	q := NewQueue(nil, nil, qcapacity, batchsize, labels.EmptyLabels(), nil, nil)
-	for i := 0; i < pushes; i++ {
+	for range pushes {
 		q.Push([]*notifier.Alert{
 			{},
 			{},

@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -567,7 +569,7 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		Name: "coolcounter",
 	})
 
-	for i := 0; i < blocksNum; i++ {
+	for i := range blocksNum {
 		var meta metadata.Meta
 		meta.Version = 1
 		meta.ULID = ulid.MustNew(uint64(i), nil)
@@ -626,4 +628,113 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		cancel()
 	})
 	testutil.Ok(t, g.Run())
+}
+
+func TestGarbageCollect_FilterRace(t *testing.T) {
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(timeoutCancel)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	bkt := objstore.NewInMemBucket()
+
+	var metaParent metadata.Meta
+	metaParent.Version = 1
+	metaParent.ULID = ulid.MustNew(uint64(0), nil)
+
+	children := []ulid.ULID{
+		ulid.MustNew(uint64(1), nil), ulid.MustNew(uint64(2), nil), ulid.MustNew(uint64(3), nil),
+	}
+	metaParent.Compaction.Sources = children
+
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&metaParent))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(metaParent.ULID.String(), metadata.MetaFilename), &buf))
+
+	createBlocks := func() {
+		for _, ch := range children {
+			var metaChild metadata.Meta
+			metaChild.Version = 1
+			metaChild.ULID = ch
+
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&metaChild))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(metaChild.ULID.String(), metadata.MetaFilename), &buf))
+		}
+	}
+
+	reg := prometheus.NewRegistry()
+
+	baseFetcher, err := block.NewBaseFetcher(
+		log.NewNopLogger(),
+		10,
+		objstore.WithNoopInstr(bkt),
+		block.NewConcurrentLister(log.NewNopLogger(), objstore.WithNoopInstr(bkt)),
+		t.TempDir(),
+		reg,
+	)
+	testutil.Ok(t, err)
+
+	df := block.NewIgnoreDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 0*time.Second, 1)
+
+	duplicateFilter := block.NewDeduplicateFilter(5)
+	mf := baseFetcher.NewMetaFetcher(reg, []block.MetadataFilter{df, duplicateFilter})
+
+	garbageCollection := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_gc_counter",
+	})
+
+	syncer, err := NewMetaSyncer(log.NewNopLogger(), reg, bkt, mf, duplicateFilter, df, promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{
+		Name: "test_meta_syncer_syncs",
+	}), garbageCollection, 5*time.Minute)
+	testutil.Ok(t, err)
+
+	blocksCleanedMetric := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_block_cleaned",
+	})
+	blocksCleaner := NewBlocksCleaner(log.NewNopLogger(), objstore.WithNoopInstr(bkt), df, 0*time.Second, blocksCleanedMetric, promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_block_cleaner_errors",
+	}))
+
+	for timeoutCtx.Err() == nil {
+		t.Log("doing iteration")
+
+		testutil.Equals(t, float64(0.0), promtestutil.ToFloat64(garbageCollection))
+
+		createBlocks()
+		for _, ch := range children {
+			testutil.Ok(t, block.MarkForDeletion(context.Background(), log.NewNopLogger(), objstore.WithNoopInstr(bkt), ch, "foo", promauto.With(prometheus.NewRegistry()).NewCounter(
+				prometheus.CounterOpts{Name: "test_block_marked_for_deletion"},
+			)))
+		}
+		testutil.Ok(t, syncer.SyncMetas(context.Background()))
+
+		startWg := &sync.WaitGroup{}
+		startWg.Add(1)
+
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			r := rand.Uint32N(20)
+			time.Sleep(time.Duration(r) * time.Millisecond)
+			deleted, err := blocksCleaner.DeleteMarkedBlocks(context.Background())
+			testutil.Ok(t, err)
+			testutil.Ok(t, syncer.GarbageCollect(context.Background(), deleted))
+		}()
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			for range 100 {
+				testutil.Ok(t, syncer.SyncMetas(context.Background()))
+			}
+		}()
+
+		startWg.Done()
+		wg.Wait()
+	}
 }

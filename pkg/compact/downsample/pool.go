@@ -21,7 +21,7 @@ func NewPool() chunkenc.Pool {
 	return &pool{
 		wrapped: chunkenc.NewPool(),
 		aggr: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &AggrChunk{}
 			},
 		},

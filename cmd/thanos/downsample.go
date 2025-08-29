@@ -253,10 +253,8 @@ func downsampleBucket(
 	defer workerCancel()
 
 	level.Debug(logger).Log("msg", "downsampling bucket", "concurrency", downsampleConcurrency)
-	for i := 0; i < downsampleConcurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range downsampleConcurrency {
+		wg.Go(func() {
 			for m := range metaCh {
 				resolution := downsample.ResLevel1
 				errMsg := "downsampling to 5 min"
@@ -271,7 +269,7 @@ func downsampleBucket(
 				}
 				metrics.downsamples.WithLabelValues(m.Thanos.ResolutionString()).Inc()
 			}
-		}()
+		})
 	}
 
 	// Workers scheduled, distribute blocks.

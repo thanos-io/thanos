@@ -126,7 +126,7 @@ const (
 
 var (
 	errBlockSyncConcurrencyNotValid = errors.New("the block sync concurrency must be equal or greater than 1.")
-	hashPool                        = sync.Pool{New: func() interface{} { return xxhash.New() }}
+	hashPool                        = sync.Pool{New: func() any { return xxhash.New() }}
 	postingsPool                    zeropool.Pool[[]storage.SeriesRef]
 )
 
@@ -668,7 +668,7 @@ func NewBucketStore(
 		dir:          dir,
 		indexCache:   noopCache{},
 		matcherCache: storecache.NoopMatchersCache,
-		buffers: sync.Pool{New: func() interface{} {
+		buffers: sync.Pool{New: func() any {
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
@@ -744,8 +744,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	blockc := make(chan *metadata.Meta)
 
 	for i := 0; i < s.blockSyncConcurrency; i++ {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for meta := range blockc {
 				if preAddErr := s.blockLifecycleCallback.PreAdd(*meta); preAddErr != nil {
 					continue
@@ -754,8 +753,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 					continue
 				}
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	for id, meta := range metas {
@@ -1294,10 +1292,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 func (b *blockSeriesClient) nextBatch(tenant string) error {
 	start := b.i
-	end := start + uint64(b.batchSize)
-	if end > uint64(len(b.lazyPostings.postings)) {
-		end = uint64(len(b.lazyPostings.postings))
-	}
+	end := min(start+uint64(b.batchSize), uint64(len(b.lazyPostings.postings)))
 	b.i = end
 
 	lazyExpandedPosting := b.lazyPostings.lazyExpanded()
@@ -1334,7 +1329,7 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 	seriesMatched := 0
 	b.entries = b.entries[:0]
 OUTER:
-	for i := 0; i < len(postingsBatch); i++ {
+	for i := range postingsBatch {
 		if err := b.ctx.Err(); err != nil {
 			return err
 		}
@@ -1919,7 +1914,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var logger = s.requestLoggerFunc(ctx, s.logger)
 
 	for _, b := range s.blocks {
-		b := b
 		gctx := gctx
 
 		if !b.overlapsClosedInterval(req.Start, req.End) {
@@ -2100,10 +2094,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
-	for i := range req.WithoutReplicaLabels {
-		if req.Label == req.WithoutReplicaLabels[i] {
-			return &storepb.LabelValuesResponse{}, nil
-		}
+	if slices.Contains(req.WithoutReplicaLabels, req.Label) {
+		return &storepb.LabelValuesResponse{}, nil
 	}
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(ctx)
@@ -2144,7 +2136,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var stats = &queryStats{}
 
 	for _, b := range s.blocks {
-		b := b
 
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
@@ -2914,7 +2905,6 @@ func checkNilPosting(name, value string, p index.Postings) index.Postings {
 func matchersToPostingGroups(ctx context.Context, lvalsFn func(name string) ([]string, error), ms []*labels.Matcher) ([]*postingGroup, error) {
 	matchersMap := make(map[string]map[string]*labels.Matcher)
 	for _, m := range ms {
-		m := m
 		if _, ok := matchersMap[m.Name]; !ok {
 			matchersMap[m.Name] = make(map[string]*labels.Matcher)
 		}
@@ -3822,7 +3812,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		n, err = io.ReadFull(bufReader, cb)
 		readOffset += n
 		// Unexpected EOF for last chunk could be a valid case. Any other errors are definitely real.
-		if err != nil && !(errors.Is(err, io.ErrUnexpectedEOF) && i == len(pIdxs)-1) {
+		if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && i != len(pIdxs)-1 {
 			return errors.Wrapf(err, "read range for seq %d offset %x", seq, pIdx.offset)
 		}
 

@@ -193,12 +193,11 @@ func (nilWriter) WriteHeader(statusCode int) {}
 func BenchmarkRespond(b *testing.B) {
 	floats := []promql.FPoint{}
 
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		floats = append(floats, promql.FPoint{T: 1435781451 + int64(i), F: 1234.123 + float64(i)})
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Respond(&nilWriter{}, promql.Matrix{
 			promql.Series{
 				Metric: promLabels.FromMap(map[string]string{"__name__": "up", "job": "prometheus"}),

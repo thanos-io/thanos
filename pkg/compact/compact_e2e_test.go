@@ -48,7 +48,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			var m metadata.Meta
 
 			m.Version = 1
@@ -113,7 +113,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		var rem []ulid.ULID
 		err = bkt.Iter(ctx, "", func(n string) error {
@@ -140,7 +140,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// After another sync the changes should also be reflected in the local groups.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
 		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10)
@@ -219,7 +219,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
 		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
-		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true)
+		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true, nil)
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
@@ -447,7 +447,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			var m metadata.Meta
 
 			m.Version = 1
@@ -492,7 +492,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(garbageCollectedBlocks))
 
 		rem, err := listBlocksMarkedForDeletion(ctx, bkt)
@@ -511,7 +511,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// After another garbage-collect, we should not find new blocks that are deleted with new deletion mark files.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		rem, err = listBlocksMarkedForDeletion(ctx, bkt)
 		testutil.Ok(t, err)

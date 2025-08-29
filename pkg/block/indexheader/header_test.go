@@ -6,6 +6,7 @@ package indexheader
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"path/filepath"
@@ -411,8 +412,7 @@ func BenchmarkBinaryWrite(t *testing.B) {
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
 
-	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
+	for t.Loop() {
 		_, err := WriteBinary(ctx, bkt, m.ULID, fn, dummyHistogram)
 		testutil.Ok(t, err)
 	}
@@ -430,8 +430,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 	_, err = WriteBinary(ctx, bkt, m.ULID, fn, dummyHistogram)
 	testutil.Ok(t, err)
 
-	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
+	for t.Loop() {
 		br, err := newFileBinaryReader(fn, 32, NewBinaryReaderMetrics(nil))
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
@@ -460,7 +459,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	// Generate series labels.
 	seriesLabels := make([]labels.Labels, 0, numSeries)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		seriesLabels = append(seriesLabels, labels.FromStrings("a", strconv.Itoa(i)))
 	}
 
@@ -475,17 +474,15 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	// Get the offset of each label value symbol.
 	symbolsOffsets := make([]uint32, numSeries)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		o, err := reader.symbols.ReverseLookup(strconv.Itoa(i))
 		testutil.Ok(b, err)
 
 		symbolsOffsets[i] = o
 	}
 
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
-		for i := 0; i < len(symbolsOffsets); i++ {
+	for b.Loop() {
+		for i := range symbolsOffsets {
 			if _, err := reader.LookupSymbol(ctx, symbolsOffsets[i]); err != nil {
 				b.Fail()
 			}
@@ -511,9 +508,7 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 	}
 
 	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
-	for o, s := range symbolsV1 {
-		symbolsTable[o] = s
-	}
+	maps.Copy(symbolsTable, symbolsV1)
 	for o, s := range symbolsV2 {
 		symbolsTable[uint32(o)] = s
 	}
@@ -565,8 +560,8 @@ func TestReaderPostingsOffsets(t *testing.T) {
 	possibleClusters := []string{"us-west-2", "us-east-1", "us-east-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-south-1"}
 	possiblePrefixes := []string{"a", "b", "c", "d", "1", "2", "3", "4"}
 	totalValues := []string{}
-	for i := 0; i < len(possibleClusters); i++ {
-		for j := 0; j < len(possiblePrefixes); j++ {
+	for i := range possibleClusters {
+		for j := range possiblePrefixes {
 			totalValues = append(totalValues, fmt.Sprintf("%s-%s", possiblePrefixes[j], possibleClusters[i]))
 		}
 	}
@@ -613,9 +608,9 @@ func TestReaderPostingsOffsets(t *testing.T) {
 
 	defer func() { testutil.Ok(t, br.Close()) }()
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		vals := make([]string, 0, 15)
-		for j := 0; j < 15; j++ {
+		for range 15 {
 			vals = append(vals, totalValues[rnd.Intn(len(totalValues))])
 		}
 		sort.Strings(vals)

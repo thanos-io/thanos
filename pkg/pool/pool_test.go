@@ -25,21 +25,21 @@ func TestBytesPool(t *testing.T) {
 
 	testutil.Equals(t, []int{10, 20, 40, 80}, chunkPool.sizes)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		b, err := chunkPool.Get(40)
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, uint64(40), chunkPool.usedTotal)
 
 		if i%2 == 0 {
-			for j := 0; j < 6; j++ {
+			for range 6 {
 				*b = append(*b, []byte{'1', '2', '3', '4', '5'}...)
 			}
 		}
 		chunkPool.Put(b)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		b, err := chunkPool.Get(19)
 		testutil.Ok(t, err)
 		chunkPool.Put(b)
@@ -110,7 +110,7 @@ func TestRacePutGet(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		s.Add(1)
 		// make sure we start multiple goroutines with same len buf requirements, to hit same pools
 		s := strings.Repeat(string(byte(i)), i%10)

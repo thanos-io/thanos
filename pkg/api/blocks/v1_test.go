@@ -40,10 +40,10 @@ type endpointTestCase struct {
 	params   map[string]string
 	query    url.Values
 	method   string
-	response interface{}
+	response any
 	errType  baseAPI.ErrorType
 }
-type responeCompareFunction func(interface{}, interface{}) bool
+type responeCompareFunction func(any, any) bool
 
 func testEndpoint(t *testing.T, test endpointTestCase, name string, responseCompareFunc responeCompareFunction) bool {
 	return t.Run(name, func(t *testing.T) {
@@ -57,9 +57,10 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 		params := test.query.Encode()
 
 		var body io.Reader
-		if test.method == http.MethodPost {
+		switch test.method {
+		case http.MethodPost:
 			body = strings.NewReader(params)
-		} else if test.method == "" {
+		case "":
 			test.method = "ANY"
 			reqURL += "?" + params
 		}

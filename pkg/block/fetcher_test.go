@@ -418,9 +418,9 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
       source_labels: ["shard"]
       regex: %d
 `
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)), SelectorSupportedRelabelActions)
+			relabelConfig, err := ParseRelabelConfig(fmt.Appendf(nil, relabelContentYamlFmt, BlockIDLabel, i), SelectorSupportedRelabelActions)
 			testutil.Ok(t, err)
 
 			f := NewLabelShardedMetaFilter(relabelConfig)
@@ -989,10 +989,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 
 func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []ulid.ULID) {
 	_, file, line, _ := runtime.Caller(1)
-	matching := true
-	if len(m) != len(s) {
-		matching = false
-	}
+	matching := len(m) == len(s)
 
 	for _, val := range s {
 		if m[val] == nil {
@@ -1194,7 +1191,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 				},
 			}
 
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				cases[0][id].Compaction.Sources = append(cases[0][id].Compaction.Sources, ulid.MustNew(count, nil))
 				count++
 			}
@@ -1217,7 +1214,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 						Downsample: metadata.ThanosDownsample{Resolution: res},
 					},
 				}
-				for j := 0; j < 100; j++ {
+				for range 100 {
 					cases[1][id].Compaction.Sources = append(cases[1][id].Compaction.Sources, ulid.MustNew(count, nil))
 					count++
 				}
@@ -1277,7 +1274,7 @@ func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
 			metas: map[ulid.ULID]*metadata.Meta{
 				ulid.MustNew(2, nil): {
 					Thanos: metadata.Thanos{
-						Extensions: map[string]interface{}{
+						Extensions: map[string]any{
 							"other_key": "other_value",
 						},
 					},
@@ -1307,7 +1304,7 @@ func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
 			metas: map[ulid.ULID]*metadata.Meta{
 				ulid.MustNew(3, nil): {
 					Thanos: metadata.Thanos{
-						Extensions: map[string]interface{}{
+						Extensions: map[string]any{
 							metadata.ParquetMigratedExtensionKey: false,
 						},
 					},
@@ -1323,7 +1320,7 @@ func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
 			metas: map[ulid.ULID]*metadata.Meta{
 				ulid.MustNew(4, nil): {
 					Thanos: metadata.Thanos{
-						Extensions: map[string]interface{}{
+						Extensions: map[string]any{
 							metadata.ParquetMigratedExtensionKey: true,
 						},
 					},
@@ -1339,14 +1336,14 @@ func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
 			metas: map[ulid.ULID]*metadata.Meta{
 				ulid.MustNew(5, nil): {
 					Thanos: metadata.Thanos{
-						Extensions: map[string]interface{}{
+						Extensions: map[string]any{
 							metadata.ParquetMigratedExtensionKey: true,
 						},
 					},
 				},
 				ulid.MustNew(6, nil): {
 					Thanos: metadata.Thanos{
-						Extensions: map[string]interface{}{
+						Extensions: map[string]any{
 							metadata.ParquetMigratedExtensionKey: false,
 						},
 					},

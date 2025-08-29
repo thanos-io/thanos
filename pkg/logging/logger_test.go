@@ -12,7 +12,7 @@ import (
 func BenchmarkDisallowedLogLevels(b *testing.B) {
 	logger := NewLogger("warn", "logfmt", "benchmark")
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		level.Info(logger).Log("hello", "world", "number", i)
 		level.Debug(logger).Log("hello", "world", "number", i)
 	}

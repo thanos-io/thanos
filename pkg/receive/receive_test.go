@@ -832,7 +832,7 @@ func setupSetsOfExpectedAndActualStoreClientLabelSets(
 	setOfExpectedClientLabelSets := make([][]labels.Labels, len(expectedExternalLabelSets))
 	setOfActualClientLabelSets := make([][]labels.Labels, len(actualStoreClients))
 
-	for i := 0; i < len(actualStoreClients); i++ {
+	for i := range actualStoreClients {
 		testStore := store.TSDBStore{}
 		testStore.SetExtLset(expectedExternalLabelSets[i])
 

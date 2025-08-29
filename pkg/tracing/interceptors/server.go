@@ -19,7 +19,7 @@ import (
 
 // UnaryServerInterceptor is a gRPC server-side interceptor that provides reporting for Unary RPCs.
 func UnaryServerInterceptor(reportable ServerReportable) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		r := newReport(Unary, info.FullMethod)
 		reporter, newCtx := reportable.ServerReporter(ctx, req, r.rpcType, r.service, r.method)
 
@@ -34,7 +34,7 @@ func UnaryServerInterceptor(reportable ServerReportable) grpc.UnaryServerInterce
 
 // StreamServerInterceptor is a gRPC server-side interceptor that provides reporting for Streaming RPCs.
 func StreamServerInterceptor(reportable ServerReportable) grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		r := newReport(ServerStream, info.FullMethod)
 		reporter, newCtx := reportable.ServerReporter(ss.Context(), nil, streamRPCType(info), r.service, r.method)
 		err := handler(srv, &monitoredServerStream{ServerStream: ss, newCtx: newCtx, reporter: reporter})
@@ -64,14 +64,14 @@ func (s *monitoredServerStream) Context() context.Context {
 	return s.newCtx
 }
 
-func (s *monitoredServerStream) SendMsg(m interface{}) error {
+func (s *monitoredServerStream) SendMsg(m any) error {
 	start := time.Now()
 	err := s.ServerStream.SendMsg(m)
 	s.reporter.PostMsgSend(m, err, time.Since(start))
 	return err
 }
 
-func (s *monitoredServerStream) RecvMsg(m interface{}) error {
+func (s *monitoredServerStream) RecvMsg(m any) error {
 	start := time.Now()
 	err := s.ServerStream.RecvMsg(m)
 	s.reporter.PostMsgReceive(m, err, time.Since(start))

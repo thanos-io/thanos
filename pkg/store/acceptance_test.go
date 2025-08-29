@@ -881,15 +881,14 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 				ref storage.SeriesRef
 				err error
 			)
-			for i := int64(0); i < offset; i++ {
+			for i := range offset {
 				ref, err = app.Append(ref, labels.FromStrings("a", "b"), baseT+i, 1)
 				testutil.Ok(t, err)
 			}
 			testutil.Ok(t, app.Commit())
 
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		client := startStore(t, extLset, appendFn)
 		srv := newStoreSeriesServer(ctx)

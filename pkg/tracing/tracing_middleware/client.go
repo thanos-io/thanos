@@ -40,16 +40,16 @@ func (o *opentracingClientReporter) PostCall(err error, _ time.Duration) {
 	o.clientSpan.Finish()
 }
 
-func (o *opentracingClientReporter) PostMsgSend(interface{}, error, time.Duration) {}
+func (o *opentracingClientReporter) PostMsgSend(any, error, time.Duration) {}
 
-func (o *opentracingClientReporter) PostMsgReceive(interface{}, error, time.Duration) {}
+func (o *opentracingClientReporter) PostMsgReceive(any, error, time.Duration) {}
 
 type opentracingClientReportable struct {
 	tracer        opentracing.Tracer
 	filterOutFunc FilterFunc
 }
 
-func (o *opentracingClientReportable) ClientReporter(ctx context.Context, _ interface{}, typ interceptors.GRPCType, service string, method string) (interceptors.Reporter, context.Context) {
+func (o *opentracingClientReportable) ClientReporter(ctx context.Context, _ any, typ interceptors.GRPCType, service string, method string) (interceptors.Reporter, context.Context) {
 	if o.filterOutFunc != nil && !o.filterOutFunc(ctx, method) {
 		return interceptors.NoopReporter{}, ctx
 	}

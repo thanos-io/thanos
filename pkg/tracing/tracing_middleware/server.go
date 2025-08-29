@@ -43,9 +43,9 @@ func (o *opentracingServerReporter) PostCall(err error, _ time.Duration) {
 	o.serverSpan.Finish()
 }
 
-func (o *opentracingServerReporter) PostMsgSend(interface{}, error, time.Duration) {}
+func (o *opentracingServerReporter) PostMsgSend(any, error, time.Duration) {}
 
-func (o *opentracingServerReporter) PostMsgReceive(interface{}, error, time.Duration) {}
+func (o *opentracingServerReporter) PostMsgReceive(any, error, time.Duration) {}
 
 type opentracingServerReportable struct {
 	tracer opentracing.Tracer
@@ -54,7 +54,7 @@ type opentracingServerReportable struct {
 	filterOutFunc   FilterFunc
 }
 
-func (o *opentracingServerReportable) ServerReporter(ctx context.Context, _ interface{}, typ interceptors.GRPCType, service string, method string) (interceptors.Reporter, context.Context) {
+func (o *opentracingServerReportable) ServerReporter(ctx context.Context, _ any, typ interceptors.GRPCType, service string, method string) (interceptors.Reporter, context.Context) {
 	if o.filterOutFunc != nil && !o.filterOutFunc(ctx, interceptors.FullMethod(service, method)) {
 		return interceptors.NoopReporter{}, ctx
 	}

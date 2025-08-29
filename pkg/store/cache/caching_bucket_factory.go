@@ -38,7 +38,7 @@ const (
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingWithBackendConfig struct {
 	Type          BucketCacheProvider `yaml:"type"`
-	BackendConfig interface{}         `yaml:"config"`
+	BackendConfig any                 `yaml:"config"`
 
 	// Basic unit used to cache chunks.
 	ChunkSubrangeSize int64 `yaml:"chunk_subrange_size"`

@@ -736,7 +736,7 @@ func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
 
-func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data interface{}) error {
+func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data any) error {
 	span, ctx := tracing.StartSpan(ctx, spanName)
 	defer span.Finish()
 
@@ -753,9 +753,9 @@ func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string
 	}
 
 	var m struct {
-		Data   interface{} `json:"data"`
-		Status string      `json:"status"`
-		Error  string      `json:"error"`
+		Data   any    `json:"data"`
+		Status string `json:"status"`
+		Error  string `json:"error"`
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {

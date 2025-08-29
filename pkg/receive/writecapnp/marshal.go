@@ -223,7 +223,7 @@ func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *sym
 	if err != nil {
 		return err
 	}
-	for i := 0; i < len(pbExemplars); i++ {
+	for i := range pbExemplars {
 		ex := exemplars.At(i)
 
 		lbls, err := ex.NewLabels(int32(len(pbExemplars[i].Labels)))

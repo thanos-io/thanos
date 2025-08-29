@@ -89,7 +89,7 @@ func (b *bridgeTracerWrapper) StartSpan(operationName string, opts ...opentracin
 	return b.bt.StartSpan(operationName, opts...)
 }
 
-func (b *bridgeTracerWrapper) Inject(sm opentracing.SpanContext, format interface{}, carrier interface{}) error {
+func (b *bridgeTracerWrapper) Inject(sm opentracing.SpanContext, format any, carrier any) error {
 	otCarrier := opentracing.HTTPHeadersCarrier{}
 	err := b.bt.Inject(sm, format, otCarrier)
 	if err != nil {
@@ -109,7 +109,7 @@ func (b *bridgeTracerWrapper) Inject(sm opentracing.SpanContext, format interfac
 	return b.bt.Inject(sm, format, carrier)
 }
 
-func (b *bridgeTracerWrapper) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
+func (b *bridgeTracerWrapper) Extract(format any, carrier any) (opentracing.SpanContext, error) {
 	if tmr, ok := carrier.(opentracing.TextMapReader); ok {
 		otCarrier := opentracing.HTTPHeadersCarrier{}
 		err := tmr.ForeachKey(func(key, val string) error {

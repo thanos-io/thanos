@@ -173,10 +173,6 @@ func newQuerier(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	rl := make(map[string]struct{})
-	for _, replicaLabel := range replicaLabels {
-		rl[replicaLabel] = struct{}{}
-	}
 
 	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
 	if partialResponse {

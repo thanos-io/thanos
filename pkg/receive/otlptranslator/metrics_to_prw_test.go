@@ -174,7 +174,7 @@ func BenchmarkPrometheusConverter_FromMetrics(b *testing.B) {
 											payload := createExportRequest(resourceAttributeCount, histogramCount, nonHistogramCount, labelsPerMetric, exemplarsPerSeries)
 											b.ResetTimer()
 
-											for range b.N {
+											for b.Loop() {
 												converter := NewPrometheusConverter()
 												annots, err := converter.FromMetrics(context.Background(), payload.Metrics(), Settings{})
 												require.NoError(b, err.Err())

@@ -49,7 +49,7 @@ func (c GenNumMiddleware) Stop() {
 
 // InjectCacheGenNumber returns a derived context containing the cache gen.
 func InjectCacheGenNumber(ctx context.Context, cacheGen string) context.Context {
-	return context.WithValue(ctx, interface{}(cacheGenContextKey), cacheGen)
+	return context.WithValue(ctx, any(cacheGenContextKey), cacheGen)
 }
 
 // ExtractCacheGenNumbersFromHeaders gets the cache gen from the context.

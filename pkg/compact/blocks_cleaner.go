@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/objstore"
@@ -40,21 +41,24 @@ func NewBlocksCleaner(logger log.Logger, bkt objstore.Bucket, ignoreDeletionMark
 
 // DeleteMarkedBlocks uses ignoreDeletionMarkFilter to gather the blocks that are marked for deletion and deletes those
 // if older than given deleteDelay.
-func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
+func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) (map[ulid.ULID]struct{}, error) {
 	level.Info(s.logger).Log("msg", "started cleaning of blocks marked for deletion")
+
+	deletedBlocks := make(map[ulid.ULID]struct{}, 0)
 
 	deletionMarkMap := s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
 	for _, deletionMark := range deletionMarkMap {
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > s.deleteDelay.Seconds() {
 			if err := block.Delete(ctx, s.logger, s.bkt, deletionMark.ID); err != nil {
 				s.blockCleanupFailures.Inc()
-				return errors.Wrap(err, "delete block")
+				return deletedBlocks, errors.Wrap(err, "delete block")
 			}
 			s.blocksCleaned.Inc()
 			level.Info(s.logger).Log("msg", "deleted block marked for deletion", "block", deletionMark.ID)
+			deletedBlocks[deletionMark.ID] = struct{}{}
 		}
 	}
 
 	level.Info(s.logger).Log("msg", "cleaning of blocks marked for deletion done")
-	return nil
+	return deletedBlocks, nil
 }

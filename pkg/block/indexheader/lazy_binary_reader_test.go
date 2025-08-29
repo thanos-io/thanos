@@ -191,7 +191,7 @@ func TestLazyBinaryReader_ShouldReopenOnUsageAfterClose(t *testing.T) {
 			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
 
 			// Closing an already closed lazy reader should be a no-op.
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				testutil.Ok(t, r.Close())
 				testutil.Equals(t, float64(2), promtestutil.ToFloat64(m.unloadCount))
 				testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))

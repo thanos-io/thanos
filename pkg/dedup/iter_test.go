@@ -765,7 +765,6 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 	}
 
 	for i, c := range casesMixed {
-		c := c
 		t.Run(fmt.Sprintf("mixed-%d", i), func(t *testing.T) {
 			t.Parallel()
 			it := newDedupSeriesIterator(
@@ -803,10 +802,10 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	b.Run("equal", func(b *testing.B) {
 		var s1, s2 []sample
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s1 = append(s1, sample{t: int64(i * 10000), f: 1})
 		}
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s2 = append(s2, sample{t: int64(i * 10000), f: 2})
 		}
 		run(b, s1, s2)
@@ -814,10 +813,10 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	b.Run("fixed-delta", func(b *testing.B) {
 		var s1, s2 []sample
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s1 = append(s1, sample{t: int64(i * 10000), f: 1})
 		}
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s2 = append(s2, sample{t: int64(i*10000) + 10, f: 2})
 		}
 		run(b, s1, s2)
@@ -825,10 +824,10 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	b.Run("minor-rand-delta", func(b *testing.B) {
 		var s1, s2 []sample
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s1 = append(s1, sample{t: int64(i*10000) + rand.Int63n(5000), f: 1})
 		}
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s2 = append(s2, sample{t: int64(i*10000) + +rand.Int63n(5000), f: 2})
 		}
 		run(b, s1, s2)

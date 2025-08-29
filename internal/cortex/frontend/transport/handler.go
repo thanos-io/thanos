@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -132,9 +133,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hs := w.Header()
-	for h, vs := range resp.Header {
-		hs[h] = vs
-	}
+	maps.Copy(hs, resp.Header)
 
 	if f.cfg.QueryStatsEnabled {
 		writeServiceTimingHeader(queryResponseTime, hs, stats)
@@ -200,7 +199,7 @@ func (f *Handler) reportSlowQuery(
 		remoteUser, _, _ = r.BasicAuth()
 	}
 
-	logMessage := append([]interface{}{
+	logMessage := append([]any{
 		"msg", "slow query detected",
 		"method", r.Method,
 		"host", r.Host,
@@ -237,7 +236,7 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 	f.activeUsers.UpdateUserTimestamp(userID, time.Now())
 
 	// Log stats.
-	logMessage := append([]interface{}{
+	logMessage := append([]any{
 		"msg", "query stats",
 		"component", "query-frontend",
 		"method", r.Method,
@@ -269,14 +268,14 @@ func (f *Handler) parseRequestQueryString(r *http.Request, bodyBuf bytes.Buffer)
 	return r.Form
 }
 
-func formatQueryString(queryString url.Values) (fields []interface{}) {
+func formatQueryString(queryString url.Values) (fields []any) {
 	for k, v := range queryString {
 		fields = append(fields, fmt.Sprintf("param_%s", k), strings.Join(v, ","))
 	}
 	return fields
 }
 
-func (f *Handler) addStatsToLogMessage(message []interface{}, stats *querier_stats.Stats) []interface{} {
+func (f *Handler) addStatsToLogMessage(message []any, stats *querier_stats.Stats) []any {
 	if stats != nil {
 		message = append(message, "peak_samples", stats.LoadPeakSamples())
 		message = append(message, "total_samples_loaded", stats.LoadTotalSamples())
@@ -285,7 +284,7 @@ func (f *Handler) addStatsToLogMessage(message []interface{}, stats *querier_sta
 	return message
 }
 
-func addQueryRangeToLogMessage(logMessage []interface{}, queryString url.Values) []interface{} {
+func addQueryRangeToLogMessage(logMessage []any, queryString url.Values) []any {
 	queryRange := extractQueryRange(queryString)
 	if queryRange != time.Duration(0) {
 		logMessage = append(logMessage, "query_range_hours", int(queryRange.Hours()))

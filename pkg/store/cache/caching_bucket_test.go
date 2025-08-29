@@ -33,7 +33,7 @@ func TestChunksCaching(t *testing.T) {
 	subrangeSize := int64(16000) // All tests are based on this value.
 
 	data := make([]byte, length)
-	for ix := 0; ix < len(data); ix++ {
+	for ix := range data {
 		data[ix] = byte(ix)
 	}
 
@@ -181,7 +181,7 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  3 * subrangeSize,
 			init: func() {
 				// Delete all but 3 subranges in the middle, and keep unlimited number of ranged subrequests.
-				for i := int64(0); i < 10; i++ {
+				for i := range int64(10) {
 					if i > 0 && i%3 == 0 {
 						continue
 					}
@@ -202,7 +202,7 @@ func TestChunksCaching(t *testing.T) {
 			maxGetRangeRequests:    1,
 			init: func() {
 				// Delete all but 3 subranges in the middle, but only allow 1 subrequest.
-				for i := int64(0); i < 10; i++ {
+				for i := range int64(10) {
 					if i == 3 || i == 5 || i == 7 {
 						continue
 					}
@@ -222,7 +222,7 @@ func TestChunksCaching(t *testing.T) {
 			maxGetRangeRequests:  2,
 			init: func() {
 				// Delete all but one subranges in the middle, and allow 2 subrequests. They will be: 0-80000, 128000-160000.
-				for i := int64(0); i < 10; i++ {
+				for i := range int64(10) {
 					if i == 5 || i == 6 || i == 7 {
 						continue
 					}
@@ -259,7 +259,7 @@ func verifyGetRange(t *testing.T, cachingBucket *CachingBucket, name string, off
 	testutil.Ok(t, err)
 	testutil.Equals(t, expectedLength, int64(len(read)))
 
-	for ix := 0; ix < len(read); ix++ {
+	for ix := range read {
 		if byte(ix)+byte(offset) != read[ix] {
 			t.Fatalf("bytes differ at position %d", ix)
 		}

@@ -28,12 +28,12 @@ type compressor struct {
 func newCompressor() *compressor {
 	c := &compressor{}
 	c.readersPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return snappy.NewReader(nil)
 		},
 	}
 	c.writersPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return snappy.NewBufferedWriter(nil)
 		},
 	}

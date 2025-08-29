@@ -316,11 +316,9 @@ func (r *Reloader) Watch(ctx context.Context) error {
 
 	// Start watching the file-system.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		r.watcher.run(ctx)
-		wg.Done()
-	}()
+	})
 
 	cfgDirsNames := make([]string, 0, len(r.cfgDirs))
 	for _, cfgDir := range r.cfgDirs {
@@ -818,9 +816,7 @@ func (w *watcher) run(ctx context.Context) {
 		notify = make(chan struct{})
 	)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		var (
 			delayCtx context.Context
@@ -864,7 +860,7 @@ func (w *watcher) run(ctx context.Context) {
 				}(delayCtx)
 			}
 		}
-	}()
+	})
 
 	for {
 		select {

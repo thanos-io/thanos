@@ -12,7 +12,7 @@ import (
 
 // Ensure that the processor does not stop if there are still operations waiting in the queue.
 func TestAsyncOp(t *testing.T) {
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		runTest(t)
 	}
 }
@@ -20,9 +20,9 @@ func TestAsyncOp(t *testing.T) {
 func runTest(t *testing.T) {
 	p := NewAsyncOperationProcessor(100, 10)
 	mtx := sync.Mutex{}
-	var acc int = 0
+	var acc = 0
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		err := p.EnqueueAsync(func() {
 			mtx.Lock()
 			defer mtx.Unlock()

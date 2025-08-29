@@ -648,8 +648,7 @@ func TestMemcachedClient_GetMulti_ContextCancelled(t *testing.T) {
 
 	// Create a new context that will be used for our "blocking" backend so that we can
 	// actually stop it at the end of the test and not leak goroutines.
-	backendCtx, backendCancel := context.WithCancel(context.Background())
-	defer backendCancel()
+	backendCtx := t.Context()
 
 	selector := &MemcachedJumpHashSelector{}
 	backendMock := newMemcachedClientBlockingMock(backendCtx)
