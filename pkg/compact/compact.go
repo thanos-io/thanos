@@ -195,7 +195,9 @@ func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
 // GarbageCollect marks blocks for deletion from bucket if their data is available as part of a
 // block with a higher compaction level.
 // Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
-func (s *Syncer) GarbageCollect(ctx context.Context) error {
+// There is a temporal dependency on deleting marked blocks because otherwise the filters might
+// return inconsistent state if syncing of metas is happening in the background.
+func (s *Syncer) GarbageCollect(ctx context.Context, justDeletedBlocks map[ulid.ULID]struct{}) error {
 	begin := time.Now()
 
 	// Ignore filter exists before deduplicate filter.
@@ -205,10 +207,16 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 	// GarbageIDs contains the duplicateIDs, since these blocks can be replaced with other blocks.
 	// We also remove ids present in deletionMarkMap since these blocks are already marked for deletion.
 	garbageIDs := []ulid.ULID{}
+
 	for _, id := range duplicateIDs {
 		if _, exists := deletionMarkMap[id]; exists {
 			continue
 		}
+
+		if _, exists := justDeletedBlocks[id]; exists {
+			continue
+		}
+
 		garbageIDs = append(garbageIDs, id)
 	}
 
@@ -1378,6 +1386,7 @@ type BucketCompactor struct {
 	bkt                            objstore.Bucket
 	concurrency                    int
 	skipBlocksWithOutOfOrderChunks bool
+	blocksCleaner                  *BlocksCleaner
 }
 
 // NewBucketCompactor creates a new bucket compactor.
@@ -1391,6 +1400,7 @@ func NewBucketCompactor(
 	bkt objstore.Bucket,
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
+	blocksCleaner *BlocksCleaner,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
@@ -1407,6 +1417,7 @@ func NewBucketCompactor(
 		bkt,
 		concurrency,
 		skipBlocksWithOutOfOrderChunks,
+		blocksCleaner,
 	)
 }
 
@@ -1422,6 +1433,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 	bkt objstore.Bucket,
 	concurrency int,
 	skipBlocksWithOutOfOrderChunks bool,
+	blocksCleaner *BlocksCleaner,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
@@ -1438,6 +1450,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 		bkt:                            bkt,
 		concurrency:                    concurrency,
 		skipBlocksWithOutOfOrderChunks: skipBlocksWithOutOfOrderChunks,
+		blocksCleaner:                  blocksCleaner,
 	}, nil
 }
 
@@ -1513,15 +1526,24 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			})
 		}
 
-		level.Info(c.logger).Log("msg", "start sync of metas")
+		// Blocks that were compacted are garbage collected after each Compaction.
+		// However if compactor crashes we need to resolve those on startup.
+		level.Info(c.logger).Log("msg", "start initial sync of metas")
 		if err := c.sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync")
 		}
 
-		level.Info(c.logger).Log("msg", "start of GC")
-		// Blocks that were compacted are garbage collected after each Compaction.
-		// However if compactor crashes we need to resolve those on startup.
-		if err := c.sy.GarbageCollect(ctx); err != nil {
+		var ignoreBlocks map[ulid.ULID]struct{}
+		if c.blocksCleaner != nil {
+			deletedBlocks, err := c.blocksCleaner.DeleteMarkedBlocks(ctx)
+			if err != nil {
+				return errors.Wrap(err, "cleaning marked blocks")
+			}
+			ignoreBlocks = deletedBlocks
+		}
+
+		level.Info(c.logger).Log("msg", "start of initial garbage collection")
+		if err := c.sy.GarbageCollect(ctx, ignoreBlocks); err != nil {
 			return errors.Wrap(err, "garbage")
 		}
 
