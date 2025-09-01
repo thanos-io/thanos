@@ -14,18 +14,16 @@ gRPC gets a compressed protobuf message -> decompress -> protobuf decoder
 
 We still use gogoproto so in the protobuf decoder we specify a custom type for labels - ZLabels. This is a "hack" that uses unsafe underneath. With the `slicelabels` tag, it is possible to create labels.Labels objects (required by the PromQL layer) and reuse references to strings allocated in the protobuf layer. The protobuf message's bytes buffer is never recycled and it lives as far as possible until it is collected by the GC. Chunks and all other objects are still copied.
 
-
 ### gRPC gets the ability to recycle messages
 
 Nowadays, gRPC can and does by default recycle the decoded messages nowadays so that it wouldn't be needed to allocate a new `[]byte` all the time on the gRPC layer. But this means that we have to be conscious in the allocations that we make.
 
 Previously we had:
 
-
 ```go
 []struct {
-  Name string
-  Value string
+	Name  string
+	Value string
 }
 ```
 
@@ -37,11 +35,9 @@ Also, ideally we wouldn't have to allocate data for messages and stream them int
 
 [CodecV2 ref](https://pkg.go.dev/google.golang.org/grpc/encoding#CodecV2)
 
-
 Hence, the only possibility for further improvements at the moment it seems is to associate the life-time of messages with the query itself so that we could avoid copying `[]bytes` for the chunks (mostly).
 
 I wrote a benchmark and it seems like `stringlabel` + hand-rolled unmarshaling code wins:
-
 
 ```
 goos: linux
