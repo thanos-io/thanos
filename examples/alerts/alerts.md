@@ -562,36 +562,7 @@ rules:
 ## Replicate
 
 ```yaml mdox-exec="cat examples/tmp/thanos-bucket-replicate.yaml"
-name: thanos-bucket-replicate
-rules:
-- alert: ThanosBucketReplicateErrorRate
-  annotations:
-    description: Thanos Replicate is failing to run, {{$value | humanize}}% of attempts failed.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateerrorrate
-    summary: Thanos Replicate is failing to run.
-  expr: |
-    (
-      sum by (job) (rate(thanos_replicate_replication_runs_total{result="error", job=~".*thanos-bucket-replicate.*"}[5m]))
-    / on (job) group_left
-      sum by (job) (rate(thanos_replicate_replication_runs_total{job=~".*thanos-bucket-replicate.*"}[5m]))
-    ) * 100 >= 10
-  for: 5m
-  labels:
-    severity: critical
-- alert: ThanosBucketReplicateRunLatency
-  annotations:
-    description: Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{$value}} seconds for the replicate operations.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicaterunlatency
-    summary: Thanos Replicate has a high latency for replicate operations.
-  expr: |
-    (
-      histogram_quantile(0.99, sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~".*thanos-bucket-replicate.*"}[5m]))) > 20
-    and
-      sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~".*thanos-bucket-replicate.*"}[5m])) > 0
-    )
-  for: 5m
-  labels:
-    severity: critical
+null
 ```
 
 ## Extras

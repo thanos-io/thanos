@@ -1,16 +1,16 @@
 # Core Maintainers of this repository
 
-| Name                  | Email                       | Slack                    | GitHub                                             | Company             |
-|-----------------------|-----------------------------|--------------------------|----------------------------------------------------|---------------------|
-| Bartłomiej Płotka     | <bwplotka@gmail.com>        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
-| Frederic Branczyk     | <fbranczyk@gmail.com>       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
-| Giedrius Statkevičius | <giedriuswork@gmail.com>    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
-| Lucas Servén Marín    | <lserven@gmail.com>         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
-| Prem Saraswat         | <prmsrswt@gmail.com>        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
-| Ben Ye                | <yb532204897@gmail.com>     | `@yeya24`                | [@yeya24](https://github.com/yeya24)               | Amazon Web Services |
-| Filip Petkovski       | <filip.petkovsky@gmail.com> | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)       | Shopify             |
-| Saswata Mukherjee     | <saswata.mukhe@gmail.com>   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode)   | Red Hat             |
-| Michael Hoffmann      | <mhoffm@posteo.de>          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Cloudflare          |
+| Name                  | Email                     | Slack                    | GitHub                                             | Company             |
+|-----------------------|---------------------------|--------------------------|----------------------------------------------------|---------------------|
+| Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
+| Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
+| Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
+| Lucas Servén Marín    | lserven@gmail.com         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
+| Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |
+| Ben Ye                | yb532204897@gmail.com     | `@yeya24`                | [@yeya24](https://github.com/yeya24)               | Amazon Web Services |
+| Filip Petkovski       | filip.petkovsky@gmail.com | `@Filip Petkovski`       | [@fpetkovski](https://github.com/fpetkovski)       | Shopify             |
+| Saswata Mukherjee     | saswata.mukhe@gmail.com   | `@saswatamcode`          | [@saswatamcode](https://github.com/saswatamcode)   | Red Hat             |
+| Michael Hoffmann      | mhoffm@posteo.de          | `@Michael Hoffmann`      | [@MichaHoffmann](https://github.com/MichaHoffmann) | Cloudflare          |
 
 We are bunch of people from different companies with various interests and skills. We are from different parts of the world: Germany, Holland, Lithuania, US, UK and India. We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
@@ -106,11 +106,11 @@ Fabian Reinartz [@fabxc](https://github.com/fabxc) and Bartłomiej Płotka [@bwp
 
 ## Emeritus Maintainers
 
-| Name                | GitHub                                             |
-|---------------------|----------------------------------------------------|
-| Dominic Green       | [@domgreen](https://github.com/domgreen)           |
-| Povilas Versockas   | [@povilasv](https://github.com/povilasv)           |
-| Marco Pracucci      | [@pracucci](https://github.com/pracucci)           |
-| Matthias Loibl      | [@metalmatze](https://github.com/metalmatze)       |
-| Kemal Akkoyun       | [@kakkoyun](https://github.com/kakkoyun)           |
-| Matej Gera          | [@matej-g](https://github.com/matej-g)             |
+| Name              | GitHub                                       |
+|-------------------|----------------------------------------------|
+| Dominic Green     | [@domgreen](https://github.com/domgreen)     |
+| Povilas Versockas | [@povilasv](https://github.com/povilasv)     |
+| Marco Pracucci    | [@pracucci](https://github.com/pracucci)     |
+| Matthias Loibl    | [@metalmatze](https://github.com/metalmatze) |
+| Kemal Akkoyun     | [@kakkoyun](https://github.com/kakkoyun)     |
+| Matej Gera        | [@matej-g](https://github.com/matej-g)       |
