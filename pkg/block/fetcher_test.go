@@ -1406,3 +1406,73 @@ func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
 		})
 	}
 }
+
+func TestDeletionMarkFilter_HoldsOntoMarks(t *testing.T) {
+	ctx := context.Background()
+	bkt := objstore.NewInMemBucket()
+
+	now := time.Now()
+	f := NewIgnoreDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 48*time.Hour, 32)
+
+	shouldFetch := &metadata.DeletionMark{
+		ID:           ULID(1),
+		DeletionTime: now.Add(-15 * time.Hour).Unix(),
+		Version:      1,
+	}
+
+	shouldIgnore := &metadata.DeletionMark{
+		ID:           ULID(2),
+		DeletionTime: now.Add(-60 * time.Hour).Unix(),
+		Version:      1,
+	}
+
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&shouldFetch))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldFetch.ID.String(), metadata.DeletionMarkFilename), &buf))
+
+	buf.Truncate(0)
+
+	md := &metadata.Meta{
+		Thanos: metadata.Thanos{
+			Version: 1,
+		},
+	}
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(md))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldFetch.ID.String(), "meta.json"), &buf))
+
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&shouldIgnore))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnore.ID.String(), metadata.DeletionMarkFilename), &buf))
+
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(3).String(), metadata.DeletionMarkFilename), bytes.NewBufferString("not a valid deletion-mark.json")))
+
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(2): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
+
+	expected := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
+
+	m := newTestFetcherMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
+	testutil.Equals(t, 1.0, promtest.ToFloat64(m.Synced.WithLabelValues(MarkedForDeletionMeta)))
+	testutil.Equals(t, expected, input)
+
+	testutil.Equals(t, 2, len(f.DeletionMarkBlocks()))
+
+	testutil.Ok(t, bkt.Delete(ctx, path.Join(shouldFetch.ID.String(), metadata.DeletionMarkFilename)))
+	input = map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(2): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
+	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
+
+	testutil.Equals(t, 2, len(f.DeletionMarkBlocks()))
+}
