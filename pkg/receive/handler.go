@@ -410,7 +410,7 @@ func getStatsLimitParameter(r *http.Request) (int, error) {
 	return int(statsLimit), nil
 }
 
-func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
 	}

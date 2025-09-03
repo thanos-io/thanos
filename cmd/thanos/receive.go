@@ -49,6 +49,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -398,12 +399,37 @@ func runReceive(
 				return nil, errors.New("Not ready")
 			}),
 			info.WithExemplarsInfoFunc(),
+			info.WithStatusInfoFunc(),
+		)
+
+		statusSrv := status.NewServer(
+			component.Receive.String(),
+			status.WithTSDBStatisticsGetter(
+				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+					if !httpProbe.IsReady() {
+						return nil, errors.New("not ready")
+					}
+
+					var tenantIDs []string
+					if tenantID != "" {
+						tenantIDs = append(tenantIDs, tenantID)
+					}
+
+					stats := map[string]tsdb.Stats{}
+					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel, tenantIDs...) {
+						stats[ts.Tenant] = *ts.Stats
+					}
+
+					return stats, nil
+				}),
+			),
 		)
 
 		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
+			grpcserver.WithServer(status.RegisterStatusServer(statusSrv)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
