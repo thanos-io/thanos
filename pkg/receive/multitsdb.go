@@ -28,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
-	"github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -47,7 +47,7 @@ import (
 type TSDBStats interface {
 	// TenantStats returns TSDB head stats for the given tenants.
 	// If no tenantIDs are provided, stats for all tenants are returned.
-	TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats
+	TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []api.TenantStats
 }
 
 type MultiTSDB struct {
@@ -655,7 +655,7 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	return t.exemplarClients
 }
 
-func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats {
+func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []api.TenantStats {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	if len(tenantIDs) == 0 {
@@ -667,7 +667,7 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
-		result = make([]status.TenantStats, 0, len(t.tenants))
+		result = make([]api.TenantStats, 0, len(t.tenants))
 	)
 	for _, tenantID := range tenantIDs {
 		tenantInstance, ok := t.tenants[tenantID]
@@ -686,7 +686,7 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 
 			mu.Lock()
 			defer mu.Unlock()
-			result = append(result, status.TenantStats{
+			result = append(result, api.TenantStats{
 				Tenant: tenantID,
 				Stats:  stats,
 			})

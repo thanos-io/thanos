@@ -45,6 +45,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/strutil"
@@ -143,6 +144,9 @@ func registerQuery(app *extkingpin.App) {
 	featureList := cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions in query)").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
+		Hidden().Default("true").Bool()
+
+	enableStatusPartialResponse := cmd.Flag("status.partial-response", "Enable partial response for status endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
@@ -328,6 +332,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			*enableStatusPartialResponse,
 			*activeQueryDir,
 			time.Duration(*instantDefaultMaxSourceResolution),
 			*defaultMetadataTimeRange,
@@ -392,6 +397,7 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableStatusPartialResponse bool,
 	activeQueryDir string,
 	instantDefaultMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
@@ -440,6 +446,7 @@ func runQuery(
 		targetsProxy     = targets.NewProxy(logger, endpointSet.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpointSet.GetMetricMetadataClients)
 		exemplarsProxy   = exemplars.NewProxy(logger, endpointSet.GetExemplarsStores, selectorLset)
+		statusProxy      = status.NewProxy(logger, endpointSet.GetStatusClients)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -525,12 +532,14 @@ func runQuery(
 			targets.NewGRPCClientWithDedup(targetsProxy, queryReplicaLabels),
 			metadata.NewGRPCClient(metadataProxy),
 			exemplars.NewGRPCClientWithDedup(exemplarsProxy, queryReplicaLabels),
+			status.NewGRPCClient(statusProxy),
 			enableAutodownsampling,
 			enableQueryPartialResponse,
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
 			enableExemplarPartialResponse,
+			enableStatusPartialResponse,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,
@@ -605,6 +614,7 @@ func runQuery(
 			info.WithMetricMetadataInfoFunc(),
 			info.WithTargetsInfoFunc(),
 			info.WithQueryAPIInfoFunc(),
+			info.WithStatusInfoFunc(),
 		)
 
 		defaultEngineType := querypb.EngineType(querypb.EngineType_value[string(defaultEngine)])
@@ -617,6 +627,7 @@ func runQuery(
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarsProxy)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
+			grpcserver.WithServer(status.RegisterStatusServer(statusProxy)),
 			grpcserver.WithListen(grpcServerConfig.bindAddress),
 			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),

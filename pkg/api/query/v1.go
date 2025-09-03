@@ -59,6 +59,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/status"
+	"github.com/thanos-io/thanos/pkg/status/statuspb"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
@@ -100,6 +102,7 @@ type QueryAPI struct {
 	targets               targets.UnaryClient
 	metadatas             metadata.UnaryClient
 	exemplars             exemplars.UnaryClient
+	status                status.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
@@ -107,6 +110,7 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
+	enableStatusPartialResponse         bool
 	disableCORS                         bool
 
 	replicaLabels  []string
@@ -141,12 +145,14 @@ func NewQueryAPI(
 	targets targets.UnaryClient,
 	metadatas metadata.UnaryClient,
 	exemplars exemplars.UnaryClient,
+	status status.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableStatusPartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -179,12 +185,14 @@ func NewQueryAPI(
 		targets:                                targets,
 		metadatas:                              metadatas,
 		exemplars:                              exemplars,
+		status:                                 status,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
+		enableStatusPartialResponse:            enableStatusPartialResponse,
 		replicaLabels:                          replicaLabels,
 		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -244,6 +252,8 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 
 	r.Get("/query_exemplars", instr("exemplars", NewExemplarsHandler(qapi.exemplars, qapi.enableExemplarPartialResponse)))
 	r.Post("/query_exemplars", instr("exemplars", NewExemplarsHandler(qapi.exemplars, qapi.enableExemplarPartialResponse)))
+
+	r.Get("/status/tsdb", instr("status_tsdb", qapi.tsdbStatus))
 }
 
 type queryData struct {
@@ -1633,4 +1643,99 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 
 		return t, warnings.AsErrors(), nil, func() {}
 	}
+}
+
+func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, func()) {
+	span, ctx := tracing.StartSpan(r.Context(), "tsdb_statistics_query_request")
+	defer span.Finish()
+
+	ps := storepb.PartialResponseStrategy_ABORT
+	if qapi.enableStatusPartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	var (
+		warnings annotations.Annotations
+		err      error
+	)
+
+	limit, err := parseLimitParam(r.FormValue("limit"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
+	if limit < 1 {
+		// Ensure that a positive limit is always applied.
+		limit = 10
+	}
+
+	var tenant string
+	if qapi.enforceTenancy {
+		tenant, err = tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+	}
+
+	if limit > math.MaxInt32 {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("limit %d overflows int32", limit)}, func() {}
+	}
+	req := &statuspb.TSDBStatisticsRequest{
+		Tenant:                  tenant,
+		Limit:                   int32(limit),
+		PartialResponseStrategy: ps,
+	}
+
+	var stats map[string]*statuspb.TSDBStatisticsEntry
+	tracing.DoInSpan(ctx, "retrieve_tsdb_statistics", func(ctx context.Context) {
+		stats, warnings, err = qapi.status.TSDBStatistics(ctx, req)
+	})
+
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving tsdb statistics")}, func() {}
+	}
+
+	if tenant != "" {
+		return convertToTSDBSTatus(stats[tenant], limit), warnings.AsErrors(), nil, func() {}
+	}
+
+	// Merge statistics from all tenants.
+	aggregatedStats := &statuspb.TSDBStatisticsEntry{}
+	for _, v := range stats {
+		aggregatedStats.Merge(v)
+	}
+
+	return convertToTSDBSTatus(aggregatedStats, limit), warnings.AsErrors(), nil, func() {}
+}
+
+func convertToTSDBSTatus(tsdbStatsEntry *statuspb.TSDBStatisticsEntry, limit int) *v1.TSDBStatus {
+	return &v1.TSDBStatus{
+		HeadStats: v1.HeadStats{
+			NumSeries:     tsdbStatsEntry.HeadStatistics.NumSeries,
+			NumLabelPairs: int(tsdbStatsEntry.HeadStatistics.NumLabelPairs),
+			ChunkCount:    tsdbStatsEntry.HeadStatistics.ChunkCount,
+			MinTime:       tsdbStatsEntry.HeadStatistics.MinTime,
+			MaxTime:       tsdbStatsEntry.HeadStatistics.MaxTime,
+		},
+		SeriesCountByMetricName:     convertToTSDBStat(tsdbStatsEntry.SeriesCountByMetricName, limit),
+		LabelValueCountByLabelName:  convertToTSDBStat(tsdbStatsEntry.LabelValueCountByLabelName, limit),
+		MemoryInBytesByLabelName:    convertToTSDBStat(tsdbStatsEntry.MemoryInBytesByLabelName, limit),
+		SeriesCountByLabelValuePair: convertToTSDBStat(tsdbStatsEntry.SeriesCountByLabelValuePair, limit),
+	}
+}
+
+func convertToTSDBStat(stats []statuspb.Statistic, limit int) []v1.TSDBStat {
+	if limit > 0 && limit < len(stats) {
+		stats = stats[:limit]
+	}
+
+	ret := make([]v1.TSDBStat, len(stats))
+	for i := range stats {
+		ret[i] = v1.TSDBStat{
+			Name:  stats[i].Name,
+			Value: stats[i].Value,
+		}
+	}
+
+	return ret
 }
