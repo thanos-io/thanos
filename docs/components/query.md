@@ -51,7 +51,7 @@ Thanos Querier instead pulls the data from both replicas, and deduplicate those 
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/). The above diagram shows what Querier does for each Prometheus query request.
 
-See [here](../service-discovery.md) on how to connect Querier with desired StoreAPIs.
+See [here](#endpoint-file-sd) on how to connect Querier with desired StoreAPIs.
 
 ### Deduplication
 
@@ -254,7 +254,44 @@ It is possible to expose thanos-query UI and optionally API on a sub-path. The s
 
 Additionally, Thanos supports dynamic prefix configuration, which [is not yet implemented by Prometheus](https://github.com/prometheus/prometheus/issues/3156). Dynamic prefixing simplifies setup when `thanos query` is exposed on a sub-path behind a reverse proxy, for example, via a Kubernetes ingress controller [Traefik](https://docs.traefik.io/routing/routers/) or [nginx](https://github.com/kubernetes/ingress-nginx/pull/1805). If `PathPrefixStrip: /some-path` option or `traefik.frontend.rule.type: PathPrefixStrip` Kubernetes Ingress annotation is set, then `Traefik` writes the stripped prefix into X-Forwarded-Prefix header. Then, `thanos query --web.prefix-header=X-Forwarded-Prefix` will serve correct HTTP redirects and links prefixed by the stripped path.
 
-## File SD
+## Endpoint File SD
+
+`--endpoint.sd-config-file` or `--endpoint.sd-config` (mutually exclusive, not repeatable) flags provide a path to or content (respectively) of a YAML formatted file, which contains a list of endpoints and their configurations. The format of the file is as follows:
+
+```yaml
+endpoints:
+    # Address of the StoreAPI server. Can be prefixed with 'dns+' or 'dnssrv+'
+    # to detect multiple StoreAPI servers through DNS lookups.
+  - address: localhost:10902 # String, required
+
+    # If set to true, the provided StoreAPI server(s) will be used, even if the health check fails. Useful if
+    # you have a caching layer on top.
+    strict: true # Boolean, optional, `false` by default
+
+    # If set to true, targets resolved from the DNS name will be queried in a round-robin
+    # instead of a fanout manner. Should be used when connecting a Thanos Query
+    # to HA groups of Thanos components.
+    group: true # Boolean, optional, `false` by default
+
+    # Parameters of the gRPC dial options when connecting to endpoint groups
+    # More details and configuration options here: https://github.com/grpc/grpc/blob/master/doc/service_config.md
+    service_config: | # String passed as Raw JSON, optional, `group` must be set to `true`
+      {
+        "loadBalancingPolicy":"round_robin",
+        "retryPolicy": {
+          "maxAttempts": 3,
+          "initialBackoff": "0.1s",
+          "backoffMultiplier": 2,
+          "retryableStatusCodes": ["UNAVAILABLE"]
+        }
+      }
+  - <...>
+  - address: localhost:11902
+```
+
+The flag `--endpoint.sd-config-reload-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
+
+## File SD (deprecated)
 
 `--store.sd-files` flag provides a path to a JSON or YAML formatted file, which contains a list of targets in [Prometheus target format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
 
