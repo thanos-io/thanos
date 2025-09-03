@@ -38,7 +38,6 @@ type TenantStats struct {
 }
 
 // TSDBStatus has information of cardinality statistics from postings.
-// TODO(fpetkovski): replace with upstream struct after dependency update.
 type TSDBStatus struct {
 	Tenant        string `json:"tenant"`
 	v1.TSDBStatus `json:","`
