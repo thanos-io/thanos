@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
 
 ### Added
+- [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 - [#8359](https://github.com/thanos-io/thanos/pull/8359) Tools: add `--shipper.upload-compacted` flag for uploading compacted blocks to bucket upload-blocks
