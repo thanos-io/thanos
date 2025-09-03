@@ -1081,10 +1081,15 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	}
 
 	var (
-		eg  errgroup.Group
-		ch  = make(chan ulid.ULID, f.concurrency)
-		mtx sync.Mutex
+		eg             errgroup.Group
+		ch             = make(chan ulid.ULID, f.concurrency)
+		mtx            sync.Mutex
+		preFilterMetas = make(map[ulid.ULID]struct{}, len(metas))
 	)
+
+	for k := range metas {
+		preFilterMetas[k] = struct{}{}
+	}
 
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
@@ -1140,7 +1145,19 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	}
 
 	f.mtx.Lock()
-	f.deletionMarkMap = deletionMarkMap
+	if f.deletionMarkMap == nil {
+		f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
+	}
+	maps.Copy(f.deletionMarkMap, deletionMarkMap)
+
+	for u := range f.deletionMarkMap {
+		if _, exists := preFilterMetas[u]; exists {
+			continue
+		}
+
+		delete(f.deletionMarkMap, u)
+	}
+
 	f.mtx.Unlock()
 
 	return nil
