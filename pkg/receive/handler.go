@@ -11,6 +11,7 @@ import (
 	"io"
 	stdlog "log"
 	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"sort"
@@ -671,7 +672,24 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	nowMS := time.Now().UnixNano() / int64(time.Millisecond)
 	for _, ts := range wreq.Timeseries {
 		if lat := secondsSinceFirstSample(nowMS, ts); lat > 0 {
-			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP, strconv.FormatBool(isPreAgged(ts))).Observe(lat)
+			isPreAgged := isPreAgged(ts)
+			h.writeE2eLatency.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP, strconv.FormatBool(isPreAgged)).Observe(lat)
+
+			// Log high latency requests (>3 minutes) with sampling (1 in 10000)
+			if lat > 180 && !isPreAgged && rand.Intn(10000) == 0 {
+
+				// Convert labels to string for logging
+				var labelPairs []string
+				for _, label := range ts.Labels {
+					labelPairs = append(labelPairs, fmt.Sprintf("%s=%s", label.Name, label.Value))
+				}
+
+				level.Warn(h.logger).Log(
+					"msg", "high e2e latency detected for non-rollup timeseries",
+					"latency_seconds", lat,
+					"labels", fmt.Sprintf("{%s}", strings.Join(labelPairs, ", ")),
+				)
+			}
 		}
 	}
 }
