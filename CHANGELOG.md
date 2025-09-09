@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
+- [#8480](https://github.com/thanos-io/thanos/pull/8480) Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
 
 ### Added
 
