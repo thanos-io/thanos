@@ -71,6 +71,7 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		builder labels.ScratchBuilder
 	)
 	for wreq.Next() {
+		// TODO this is where we go into write_request to deserialize the series
 		if err := wreq.At(&series); err != nil {
 			return errors.Wrap(err, "request.At")
 		}
@@ -114,12 +115,26 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 			for _, ex := range series.Exemplars {
 				exLogger := log.With(tLogger, "exemplarLset", ex.Labels)
 
-				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
-					Labels: ex.Labels,
+				// Create completely new strings to detach from Cap'n Proto memory
+				// Do not want to reference Cap'n Proto memory as it will be empty when stored in the TSDB
+				builder := labels.NewBuilder(labels.EmptyLabels())
+				ex.Labels.Range(func(l labels.Label) {
+
+					newName := string([]byte(l.Name))
+					newValue := string([]byte(l.Value))
+
+					builder.Set(newName, newValue)
+				})
+				copiedLabels := builder.Labels()
+
+				exemplarToAppend := exemplar.Exemplar{
+					Labels: copiedLabels,
 					Value:  ex.Value,
 					Ts:     ex.Ts,
 					HasTs:  true,
-				}); err != nil {
+				}
+
+				if _, err = app.AppendExemplar(ref, lset, exemplarToAppend); err != nil {
 					errorTracker.addExemplarError(err, exLogger)
 				}
 			}
