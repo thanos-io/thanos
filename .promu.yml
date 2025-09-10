@@ -1,5 +1,5 @@
 go:
-  version: 1.23
+  version: 1.25
 repository:
   path: github.com/thanos-io/thanos
 build:
@@ -8,9 +8,9 @@ build:
       path: ./cmd/thanos
   flags: -a
   tags:
-    - netgo
-    - slicelabels
-
+    all:
+      - netgo
+      - slicelabels
   ldflags: |
     -X github.com/prometheus/common/version.Version={{.Version}}
     -X github.com/prometheus/common/version.Revision={{.Revision}}
@@ -20,8 +20,6 @@ build:
 crossbuild:
   platforms:
     - linux/amd64
-    - darwin
     - linux/arm64
     - windows/amd64
-    - freebsd/amd64
     - linux/ppc64le

@@ -132,9 +132,9 @@ func WithTargetsInfoFunc(getTargetsInfo ...func() *infopb.TargetsInfo) ServerOpt
 	}
 }
 
-// WithTargetsInfoFunc determines the function that should be executed to obtain
-// the targets information. If no function is provided, the default empty
-// targets info is returned. Only the first function from the list is considered.
+// WithMetricMetadataInfoFunc determines the function that should be executed to obtain
+// the metric metadata information. If no function is provided, the default empty
+// metric metadata info is returned. Only the first function from the list is considered.
 func WithMetricMetadataInfoFunc(getMetricMetadataInfo ...func() *infopb.MetricMetadataInfo) ServerOptionFunc {
 	if len(getMetricMetadataInfo) == 0 {
 		return func(s *InfoServer) {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -290,9 +291,7 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 		r2 := new(http.Request)
 		*r2 = *r
 		r2.Header = make(http.Header)
-		for k, s := range r.Header {
-			r2.Header[k] = s
-		}
+		maps.Copy(r2.Header, r.Header)
 		r2.Header.Set("User-Agent", u.name)
 		r = r2
 	}

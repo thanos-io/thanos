@@ -6,6 +6,7 @@ package compact
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"path/filepath"
 
@@ -307,12 +308,8 @@ func WithLargeTotalIndexSizeFilter(with *tsdbBasedPlanner, bkt objstore.Bucket, 
 func (t *largeTotalIndexSizeFilter) plan(ctx context.Context, extraNoCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error) {
 	noCompactMarked := t.noCompBlocksFunc()
 	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(noCompactMarked)+len(extraNoCompactMarked))
-	for k, v := range noCompactMarked {
-		copiedNoCompactMarked[k] = v
-	}
-	for k, v := range extraNoCompactMarked {
-		copiedNoCompactMarked[k] = v
-	}
+	maps.Copy(copiedNoCompactMarked, noCompactMarked)
+	maps.Copy(copiedNoCompactMarked, extraNoCompactMarked)
 
 PlanLoop:
 	for {

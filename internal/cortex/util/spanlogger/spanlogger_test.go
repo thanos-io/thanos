@@ -28,8 +28,8 @@ func TestSpanLogger_Log(t *testing.T) {
 }
 
 func TestSpanLogger_CustomLogger(t *testing.T) {
-	var logged [][]interface{}
-	var logger funcLogger = func(keyvals ...interface{}) error {
+	var logged [][]any
+	var logger funcLogger = func(keyvals ...any) error {
 		logged = append(logged, keyvals)
 		return nil
 	}
@@ -42,7 +42,7 @@ func TestSpanLogger_CustomLogger(t *testing.T) {
 	span = FromContextWithFallback(context.Background(), logger)
 	_ = span.Log("msg", "fallback spanlogger")
 
-	expect := [][]interface{}{
+	expect := [][]any{
 		{"method", "test", "msg", "original spanlogger"},
 		{"msg", "restored spanlogger"},
 		{"msg", "fallback spanlogger"},
@@ -71,8 +71,8 @@ func createSpan(ctx context.Context) *mocktracer.MockSpan {
 	return logger.Span.(*mocktracer.MockSpan)
 }
 
-type funcLogger func(keyvals ...interface{}) error
+type funcLogger func(keyvals ...any) error
 
-func (f funcLogger) Log(keyvals ...interface{}) error {
+func (f funcLogger) Log(keyvals ...any) error {
 	return f(keyvals...)
 }

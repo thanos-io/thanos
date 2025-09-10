@@ -338,7 +338,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 					// Simulate very long external labels.
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
-						for i := 0; i < 1000; i++ {
+						for range 1000 {
 							sLabel = append(sLabel, "lbl")
 							sLabel = append(sLabel, "val")
 						}
@@ -595,14 +595,12 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	defer endpointSet.Close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Never(t, func() bool {
 			numStatuses := len(endpointSet.GetStoreClients())
 			return numStatuses != numResponses && numStatuses != 0
 		}, 3*time.Second, 100*time.Millisecond)
-	}()
+	})
 
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, numResponses, len(endpointSet.GetEndpointStatus()))
@@ -1429,7 +1427,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 func makeInfoResponses(n int) []testEndpointMeta {
 	responses := make([]testEndpointMeta, 0, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		responses = append(responses, testEndpointMeta{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) []labelpb.ZLabelSet {
@@ -1598,10 +1596,7 @@ func TestDeadlockLocking(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.update(time.Now, &endpointMetadata{
 				InfoResponse: &infopb.InfoResponse{},
 			}, nil)
@@ -1610,10 +1605,7 @@ func TestDeadlockLocking(t *testing.T) {
 	})
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.HasStoreAPI()
 			mockEndpointRef.HasExemplarsAPI()
 			mockEndpointRef.HasMetricMetadataAPI()
@@ -1624,4 +1616,216 @@ func TestDeadlockLocking(t *testing.T) {
 	})
 
 	testutil.Ok(t, g.Wait())
+}
+
+func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WaitForFirstUpdate blocks until first update", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Track when WaitForFirstUpdate returns
+		waitReturned := make(chan struct{})
+		var waitErr error
+
+		// Start waiting in a goroutine
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			waitErr = endpointSet.WaitForFirstUpdate(ctx)
+			close(waitReturned)
+		}()
+
+		// Give some time to ensure WaitForFirstUpdate is blocking
+		select {
+		case <-waitReturned:
+			t.Fatal("WaitForFirstUpdate returned before Update was called")
+		case <-time.After(100 * time.Millisecond):
+			// Expected: still waiting
+		}
+
+		// Now trigger the update
+		endpointSet.Update(context.Background())
+
+		// WaitForFirstUpdate should return quickly after Update
+		select {
+		case <-waitReturned:
+			testutil.Ok(t, waitErr)
+		case <-time.After(1 * time.Second):
+			t.Fatal("WaitForFirstUpdate did not return after Update")
+		}
+
+		// Verify endpoints were discovered
+		testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
+		testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	})
+
+	t.Run("WaitForFirstUpdate returns immediately if update already done", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// First do an update
+		endpointSet.Update(context.Background())
+
+		// Now WaitForFirstUpdate should return immediately
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		duration := time.Since(start)
+
+		testutil.Ok(t, err)
+		testutil.Assert(t, duration < 50*time.Millisecond, "WaitForFirstUpdate took too long: %v", duration)
+	})
+
+	t.Run("WaitForFirstUpdate respects context timeout", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Use a short timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		duration := time.Since(start)
+
+		// Should timeout
+		testutil.NotOk(t, err)
+		testutil.Assert(t, errors.Is(err, context.DeadlineExceeded), "expected context.DeadlineExceeded, got %v", err)
+		testutil.Assert(t, duration >= 100*time.Millisecond && duration < 200*time.Millisecond,
+			"timeout duration out of expected range: %v", duration)
+	})
+
+	t.Run("Multiple WaitForFirstUpdate calls work correctly", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Start multiple waiters
+		var wg sync.WaitGroup
+		errors := make([]error, 3)
+
+		for i := range 3 {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				errors[idx] = endpointSet.WaitForFirstUpdate(ctx)
+			}(i)
+		}
+
+		// Give waiters time to start
+		time.Sleep(100 * time.Millisecond)
+
+		// Trigger update
+		endpointSet.Update(context.Background())
+
+		// All waiters should complete
+		wg.Wait()
+
+		// All should succeed
+		for i, err := range errors {
+			testutil.Ok(t, err, "waiter %d failed", i)
+		}
+
+		// Additional calls should still work
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		testutil.Ok(t, err)
+	})
+
+	t.Run("Update called multiple times only signals once", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Call Update multiple times
+		for range 3 {
+			endpointSet.Update(context.Background())
+		}
+
+		// WaitForFirstUpdate should still work correctly
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		testutil.Ok(t, err)
+
+		// Verify only one endpoint set (no duplicates from multiple updates)
+		testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
+		testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	})
 }

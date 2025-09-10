@@ -248,8 +248,8 @@ func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 func (l *localClient) String() string {
 	mint, maxt := l.store.TimeRange()
 	return fmt.Sprintf(
-		"LabelSets: %v MinTime: %d MaxTime: %d",
-		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
+		"MinTime: %d MaxTime: %d",
+		mint, maxt,
 	)
 }
 
@@ -365,7 +365,6 @@ func (t *MultiTSDB) Open() error {
 
 	var g errgroup.Group
 	for _, f := range files {
-		f := f
 		if !f.IsDir() {
 			continue
 		}
@@ -393,15 +392,13 @@ func (t *MultiTSDB) Flush() error {
 			continue
 		}
 		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			if err := t.flushHead(db); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -604,8 +601,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 		if s == nil {
 			continue
 		}
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			up, err := s.Sync(ctx)
 			if err != nil {
 				errmtx.Lock()
@@ -613,8 +609,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 				errmtx.Unlock()
 			}
 			uploaded.Add(int64(up))
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 	return int(uploaded.Load()), merr.Err()

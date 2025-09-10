@@ -125,7 +125,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
 				testutil.Ok(b, err)
 			}
@@ -136,7 +136,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 
 			ch := make(chan struct{})
 
-			for i := 0; i < 500; i++ {
+			for range 500 {
 				go func() {
 					for range ch {
 						_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
@@ -145,7 +145,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 				}()
 			}
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				ch <- struct{}{}
 			}
 			close(ch)
@@ -167,7 +167,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
 				testutil.Ok(b, err)
 			}
@@ -179,7 +179,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 
 			ch := make(chan struct{})
 
-			for i := 0; i < 500; i++ {
+			for range 500 {
 				go func() {
 					for range ch {
 						_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
@@ -188,7 +188,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 				}()
 			}
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				ch <- struct{}{}
 			}
 			close(ch)
@@ -207,7 +207,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
 				testutil.Ok(b, err)
 			}
@@ -219,7 +219,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 
 			ch := make(chan struct{})
 
-			for i := 0; i < 500; i++ {
+			for range 500 {
 				go func() {
 					for range ch {
 						_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
@@ -228,7 +228,7 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 				}()
 			}
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				ch <- struct{}{}
 			}
 			close(ch)

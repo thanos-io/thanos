@@ -67,7 +67,6 @@ func TestLimits_Validate(t *testing.T) {
 	}
 
 	for testName, testData := range tests {
-		testData := testData
 
 		t.Run(testName, func(t *testing.T) {
 			assert.Equal(t, testData.expected, testData.limits.Validate(testData.shardByAllLabels))
@@ -185,7 +184,7 @@ func TestLimitsTagsYamlMatchJson(t *testing.T) {
 	n := limits.NumField()
 	var mismatch []string
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		field := limits.Field(i)
 
 		// Note that we aren't requiring YAML and JSON tags to match, just that
@@ -225,7 +224,7 @@ func TestLimitsAlwaysUsesPromDuration(t *testing.T) {
 	n := limits.NumField()
 	var badDurationType []string
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		field := limits.Field(i)
 		if field.Type == stdlibDuration {
 			badDurationType = append(badDurationType, field.Name)

@@ -206,14 +206,13 @@ func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
 	g := &errgroup.Group{}
 	respFoo := make(chan *storepb.Series)
 	respBar := make(chan *storepb.Series)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		ss := m.TSDBLocalClients()
 		testutil.Assert(t, len(ss) == 2)
 
 		for _, s := range ss {
-			s := s
 
-			switch isFoo := strings.Contains(s.String(), "foo"); isFoo {
+			switch isFoo := strings.Contains(labelpb.PromLabelSetsToString(s.LabelSets()), "foo"); isFoo {
 			case true:
 				g.Go(func() error {
 					return getResponses(s, respFoo)
@@ -302,7 +301,7 @@ func testMultiTSDBExemplars(t *testing.T, m *MultiTSDB) {
 	g := &errgroup.Group{}
 	respFoo := make(chan []exemplarspb.ExemplarData)
 	respBar := make(chan []exemplarspb.ExemplarData)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		s := m.TSDBExemplars()
 		testutil.Assert(t, len(s) == 2)
 
@@ -461,11 +460,9 @@ func TestMultiTSDBPrune(t *testing.T) {
 			defer func() { cancel(); g.Wait() }()
 
 			if test.bucket != nil {
-				g.Add(1)
-				go func() {
-					defer g.Done()
+				g.Go(func() {
 					testutil.Ok(t, syncTSDBs(ctx, m, 10*time.Millisecond))
-				}()
+				})
 			}
 
 			testutil.Ok(t, m.Prune(ctx))
@@ -536,7 +533,7 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 	t.Parallel()
 	const iterations = 10
 	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
 			dir := t.TempDir()
 			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -556,7 +553,7 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 
 			concurrency := 50
 			var wg sync.WaitGroup
-			for i := 0; i < concurrency; i++ {
+			for i := range concurrency {
 				wg.Add(1)
 				// simulate remote write with new tenant concurrently
 				go func(i int) {
@@ -637,8 +634,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 
 			testutil.Ok(t, m.Flush())
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			_, err := m.Sync(ctx)
 			testutil.Ok(t, err)
 
@@ -783,8 +779,7 @@ func TestProxyLabelValues(t *testing.T) {
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		for {
 			select {
@@ -895,9 +890,8 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	l := labels.FromStrings("a", "1", "b", "2")
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		_, _ = a.Append(0, l, int64(i), float64(i))
 	}
 }

@@ -57,7 +57,7 @@ func TestProxyDataRace(t *testing.T) {
 		}
 		size := 100
 		endpoints := make([]targetspb.TargetsClient, 0, size)
-		for i := 0; i < size; i++ {
+		for range size {
 			endpoints = append(endpoints, es)
 		}
 		return endpoints
