@@ -678,10 +678,7 @@ func LookbackDeltaFactory(
 	}
 	return func(maxSourceResolutionMillis int64) time.Duration {
 		for i := len(resolutions) - 1; i >= 1; i-- {
-			left := resolutions[i-1]
-			if resolutions[i-1] < ld {
-				left = ld
-			}
+			left := max(resolutions[i-1], ld)
 			if left < maxSourceResolutionMillis {
 				return lds[i]
 			}

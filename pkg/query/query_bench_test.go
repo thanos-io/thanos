@@ -61,7 +61,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	random := rand.New(rand.NewSource(120))
 	var resps []*storepb.SeriesResponse
 	var expectedSeries []labels.Labels
-	for j := 0; j < numOfReplicas; j++ {
+	for j := range numOfReplicas {
 		// Note 0 argument - this is because we want to have two replicas for the same time duration.
 		head, created := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
 			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", j)),
@@ -71,7 +71,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 			PrependLabels:    labels.FromStrings("a_replica", fmt.Sprintf("%d", j)), // a_ prefix so we keep sorted order.
 		})
 		testutil.Ok(t, head.Close())
-		for i := 0; i < len(created); i++ {
+		for i := range created {
 			if !dedup || j == 0 {
 				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {

@@ -1,6 +1,6 @@
 module github.com/thanos-io/thanos
 
-go 1.24.0
+go 1.25.0
 
 require (
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.1
@@ -116,6 +116,7 @@ require (
 )
 
 require (
+	github.com/VictoriaMetrics/easyproto v0.1.4
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/otlptranslator v0.0.0-20250620074007-94f535e0c588

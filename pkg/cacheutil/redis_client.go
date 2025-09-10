@@ -198,10 +198,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		tlsConfig = tlsClientConfig
 	}
 
-	clientSideCacheDisabled := false
-	if config.CacheSize == 0 {
-		clientSideCacheDisabled = true
-	}
+	clientSideCacheDisabled := config.CacheSize == 0
 
 	clientOpts := rueidis.ClientOption{
 		InitAddress:       strings.Split(config.Addr, ","),

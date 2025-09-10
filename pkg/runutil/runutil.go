@@ -124,7 +124,7 @@ func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct
 }
 
 // CloseWithLogOnErr is making sure we log every error, even those from best effort tiny closers.
-func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...interface{}) {
+func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...any) {
 	err := closer.Close()
 	if err == nil {
 		return
@@ -143,7 +143,7 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 }
 
 // ExhaustCloseWithLogOnErr closes the io.ReadCloser with a log message on error but exhausts the reader before.
-func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string, a ...interface{}) {
+func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string, a ...any) {
 	_, err := io.Copy(io.Discard, r)
 	if err != nil {
 		level.Warn(logger).Log("msg", "failed to exhaust reader, performance may be impeded", "err", err)
@@ -153,7 +153,7 @@ func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string,
 }
 
 // CloseWithErrCapture closes closer, wraps any error with message from fmt and args, and stores this in err.
-func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
+func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...any) {
 	merr := errutil.MultiError{}
 
 	merr.Add(*err)
@@ -163,7 +163,7 @@ func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...inter
 }
 
 // ExhaustCloseWithErrCapture closes the io.ReadCloser with error capture but exhausts the reader before.
-func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ...interface{}) {
+func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ...any) {
 	_, copyErr := io.Copy(io.Discard, r)
 
 	CloseWithErrCapture(err, r, format, a...)

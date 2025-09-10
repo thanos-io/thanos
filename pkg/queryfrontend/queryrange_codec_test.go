@@ -342,9 +342,8 @@ func BenchmarkQueryRangeCodecEncodeAndDecodeRequest(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for n := 0; n < b.N; n++ {
+	for b.Loop() {
 		reqEnc, err := codec.EncodeRequest(ctx, req)
 		testutil.Ok(b, err)
 		_, err = codec.DecodeRequest(ctx, reqEnc, nil)

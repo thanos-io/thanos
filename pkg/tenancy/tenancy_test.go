@@ -107,8 +107,7 @@ func TestTenantProxyPassing(t *testing.T) {
 	// outgoing grpc metadata
 	t.Run("tenant-via-context", func(t *testing.T) {
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		ctx = context.WithValue(ctx, tenancy.TenantKey, testTenant)
 
 		mockedStore := &mockedStoreAPI{
@@ -150,8 +149,7 @@ func TestTenantProxyPassing(t *testing.T) {
 	// grpc metadata to be sent to its stores.
 	t.Run("tenant-via-grpc", func(t *testing.T) {
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		md := metadata.New(map[string]string{tenancy.DefaultTenantHeader: testTenant})
 		ctx = metadata.NewIncomingContext(ctx, md)
