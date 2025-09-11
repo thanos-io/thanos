@@ -37,7 +37,7 @@ func Test_ShouldFetchPromiseOnlyOnce(t *testing.T) {
 		return 0, 0, nil //nolint:unparam
 	}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		go func() {
 			defer wg.Done()
 			cache.getPromiseForKey("key1", fetchFunc)
@@ -80,7 +80,7 @@ func TestFifoCacheExpire(t *testing.T) {
 			timeNow := time.Now
 			cache := newFifoCache[int]("test", m, timeNow, c.maxBytes)
 
-			for i := 0; i < numberOfKeys; i++ {
+			for i := range numberOfKeys {
 				key := repeatStringIfNeeded(fmt.Sprintf("key%d", i), keySize)
 				p, loaded := cache.getPromiseForKey(key, func() (int, int64, error) {
 					return 1, 8, nil
@@ -97,7 +97,7 @@ func TestFifoCacheExpire(t *testing.T) {
 
 			totalCacheSize := 0
 
-			for i := 0; i < numberOfKeys; i++ {
+			for i := range numberOfKeys {
 				key := repeatStringIfNeeded(fmt.Sprintf("key%d", i), keySize)
 				if cache.contains(key) {
 					totalCacheSize++
@@ -121,7 +121,7 @@ func TestFifoCacheExpire(t *testing.T) {
 					return timeNow().Add(2 * c.ttl)
 				}
 
-				for i := 0; i < numberOfKeys; i++ {
+				for i := range numberOfKeys {
 					key := repeatStringIfNeeded(fmt.Sprintf("key%d", i), keySize)
 					originalSize := cache.cachedBytes
 					p, loaded := cache.getPromiseForKey(key, func() (int, int64, error) {
@@ -170,16 +170,16 @@ func repeatStringIfNeeded(seed string, length int) string {
 }
 
 func TestLockRaceExpireSeries(t *testing.T) {
-	for j := 0; j < 10; j++ {
+	for range 10 {
 		wg := &sync.WaitGroup{}
 
 		c := NewBlocksPostingsForMatchersCache(ExpandedPostingsCacheMetrics{}, 1<<7, 1<<7, 3)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			wg.Add(2)
 
 			go func() {
 				defer wg.Done()
-				for i := 0; i < 10; i++ {
+				for range 10 {
 					c.ExpireSeries(
 						labels.FromMap(map[string]string{"__name__": randSeq(10)}),
 					)
@@ -189,7 +189,7 @@ func TestLockRaceExpireSeries(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				for i := 0; i < 10; i++ {
+				for range 10 {
 					c.getSeedForMetricName(randSeq(10))
 				}
 			}()

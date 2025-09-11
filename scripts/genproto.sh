@@ -50,7 +50,7 @@ done
 popd
 
 # Generate vendored Cortex protobufs.
-CORTEX_DIRS="cortex/querier/queryrange/ cortex/querier/stats"
+CORTEX_DIRS="cortex/querier/queryrange/ cortex/querier/stats cortex/cortexpb/"
 pushd "internal"
 for dir in ${CORTEX_DIRS}; do
   ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \

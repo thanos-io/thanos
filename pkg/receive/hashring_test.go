@@ -543,10 +543,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 
 			}
 
-			expectedAzSpreadLength := int(tt.replicas)
-			if int(tt.replicas) > len(availableAzs) {
-				expectedAzSpreadLength = len(availableAzs)
-			}
+			expectedAzSpreadLength := min(int(tt.replicas), len(availableAzs))
 			testutil.Equals(t, len(azSpread), expectedAzSpreadLength)
 
 			for _, writeToAz := range azSpread {
@@ -800,7 +797,7 @@ func TestShuffleShardHashring(t *testing.T) {
 			usedNodes := make(map[string]struct{})
 
 			// We'll sample multiple times to ensure consistency
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				ts := &prompb.TimeSeries{
 					Labels: []labelpb.ZLabel{
 						{
@@ -827,7 +824,7 @@ func TestShuffleShardHashring(t *testing.T) {
 			}
 
 			// Test consistency - same tenant should always get same nodes.
-			for trial := 0; trial < 50; trial++ {
+			for trial := range 50 {
 				trialNodes := make(map[string]struct{})
 
 				for i := 0; i < 10+trial; i++ {
@@ -859,7 +856,7 @@ func TestShuffleShardHashring(t *testing.T) {
 func makeSeries() []prompb.TimeSeries {
 	numSeries := 10000
 	series := make([]prompb.TimeSeries, numSeries)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		series[i] = prompb.TimeSeries{
 			Labels: []labelpb.ZLabel{
 				{
@@ -894,7 +891,7 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 		return nil, err
 	}
 	assignments := make(map[string][]prompb.TimeSeries)
-	for i := uint64(0); i < replicas; i++ {
+	for i := range replicas {
 		for _, ts := range series {
 			result, err := hashRing.GetN("tenant", &ts, i)
 			if err != nil {

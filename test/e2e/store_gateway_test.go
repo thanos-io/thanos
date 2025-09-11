@@ -1166,7 +1166,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 
 	numSeries := 10000
 	ss := make([]labels.Labels, 0, 10000)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		ss = append(ss, labels.FromStrings("a", strconv.Itoa(i), "b", "1"))
 	}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
@@ -1268,7 +1268,7 @@ var labelSetsComparer = cmp.Comparer(func(x, y []map[string]string) bool {
 	if len(x) != len(y) {
 		return false
 	}
-	for i := 0; i < len(x); i++ {
+	for i := range x {
 		if !reflect.DeepEqual(x[i], y[i]) {
 			return false
 		}
@@ -1338,7 +1338,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	metricName := "http_requests_total"
 	statusCodes := []string{"200", "400", "404", "500", "502"}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		lbl := labels.FromStrings(labels.MetricName, metricName, "job", "test", "series", strconv.Itoa(i%200), "status_code", statusCodes[i%5])
 		lbls = append(lbls, lbl)
 	}
@@ -1390,7 +1390,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 		return len(res) > 0
 	})
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		matchers := ps.WalkSelectors()
 		matcherStrings := storepb.PromMatchersToString(matchers...)
 		minT := e2eutil.RandRange(rnd, startMs, endMs)

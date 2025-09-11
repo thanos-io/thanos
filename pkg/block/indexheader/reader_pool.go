@@ -132,7 +132,7 @@ func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt
 	}
 
 	idBytes := id.Bytes()
-	lazyReader, err, _ := p.lazyReadersSF.Do(*(*string)(unsafe.Pointer(&idBytes)), func() (interface{}, error) {
+	lazyReader, err, _ := p.lazyReadersSF.Do(*(*string)(unsafe.Pointer(&idBytes)), func() (any, error) {
 		return NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.metrics.lazyReader, p.metrics.binaryReader, p.onLazyReaderClosed, p.lazyDownloadFunc(meta))
 	})
 

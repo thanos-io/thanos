@@ -110,7 +110,7 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 		},
 	}
 
-	buffers := sync.Pool{New: func() interface{} {
+	buffers := sync.Pool{New: func() any {
 		b := make([]byte, 0, 10*units.Kilobyte)
 		return &b
 	}}
