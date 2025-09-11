@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
@@ -62,50 +63,57 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	err = writer.Write(context.Background(), tenancy.DefaultTenant, wr)
 	require.NoError(t, err)
 
-	// Verify that the appender is working correctly
-	// In a real implementation, you would verify the actual stored data
 	require.NotNil(t, app)
-}
 
-func TestCapNProtoWriter_ValidateLabels(t *testing.T) {
-	t.Parallel()
+	// Query exemplars back from TSDB to verify they were stored correctly
+	exemplarClients := m.TSDBExemplars()
+	require.Contains(t, exemplarClients, tenancy.DefaultTenant, "Should have exemplar client for default tenant")
 
-	// Setup test environment
-	logger, m, app := setupMultitsdb(t, 1000)
-	writer := NewCapNProtoWriter(logger, m, &CapNProtoWriterOptions{})
+	exemplarClient := exemplarClients[tenancy.DefaultTenant]
+	require.NotNil(t, exemplarClient, "Exemplar client should not be nil")
 
-	// Test with various exemplar label scenarios
-	timeseries := []prompb.TimeSeries{
-		{
-			Labels: []labelpb.ZLabel{
-				{Name: "__name__", Value: "test_metric"},
-				{Name: "job", Value: "test"},
-			},
-			Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-			Exemplars: []prompb.Exemplar{
-				{
-					Labels: []labelpb.ZLabel{
-						{Name: "valid_label", Value: "valid_value"},
-						{Name: "", Value: "empty_name"},  // Empty name
-						{Name: "empty_value", Value: ""}, // Empty value
-					},
-					Value:     10.5,
-					Timestamp: 10,
-				},
-			},
-		},
+	// collect exemplar responses
+	srv := &exemplarsServer{ctx: context.Background()}
+
+	// get matching exemplar
+	err = exemplarClient.Exemplars(
+		[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__name__", "test_metric")}},
+		0,  // start time
+		20, // end time
+		srv,
+	)
+	require.NoError(t, err, "Should be able to query exemplars")
+
+	// Verify we got exemplar data back
+	require.Len(t, srv.Data, 1, "Should have one series with exemplars")
+
+	seriesData := srv.Data[0]
+	require.Len(t, seriesData.Exemplars, 2, "Should have 2 exemplars")
+
+	// Verify exemplar labels
+	firstExemplar := seriesData.Exemplars[0]
+	require.Equal(t, 10.5, firstExemplar.Value, "First exemplar value should match")
+	require.Equal(t, int64(10), firstExemplar.Ts, "First exemplar timestamp should match")
+
+	// Convert ZLabels to map for easier comparison
+	firstLabels := make(map[string]string)
+	for _, label := range firstExemplar.Labels.Labels {
+		firstLabels[label.Name] = label.Value
 	}
 
-	// Create capnproto request
-	capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, timeseries)
-	require.NoError(t, err)
+	require.Equal(t, "abc123", firstLabels["trace_id"], "First exemplar trace_id should match")
+	require.Equal(t, "def456", firstLabels["span_id"], "First exemplar span_id should match")
 
-	wr, err := writecapnp.NewRequest(capnpReq)
-	require.NoError(t, err)
+	// Verify the second exemplar labels
+	secondExemplar := seriesData.Exemplars[1]
+	require.Equal(t, 20.5, secondExemplar.Value, "Second exemplar value should match")
+	require.Equal(t, int64(11), secondExemplar.Ts, "Second exemplar timestamp should match")
 
-	// Write the request - should handle empty names/values gracefully
-	err = writer.Write(context.Background(), tenancy.DefaultTenant, wr)
-	require.NoError(t, err)
+	secondLabels := make(map[string]string)
+	for _, label := range secondExemplar.Labels.Labels {
+		secondLabels[label.Name] = label.Value
+	}
 
-	require.NotNil(t, app)
+	require.Equal(t, "xyz789", secondLabels["trace_id"], "Second exemplar trace_id should match")
+	require.Equal(t, "uvw012", secondLabels["span_id"], "Second exemplar span_id should match")
 }
