@@ -114,8 +114,16 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 			for _, ex := range series.Exemplars {
 				exLogger := log.With(tLogger, "exemplarLset", ex.Labels)
 
+				// Create completely new strings to detach from Cap'n Proto memory
+				// Do not want to reference Cap'n Proto memory as it will be empty when stored in the TSDB
+				builder := labels.NewBuilder(labels.EmptyLabels())
+				ex.Labels.Range(func(l labels.Label) {
+					builder.Set(string([]byte(l.Name)), string([]byte(l.Value)))
+				})
+				copiedLabels := builder.Labels()
+
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
-					Labels: ex.Labels,
+					Labels: copiedLabels,
 					Value:  ex.Value,
 					Ts:     ex.Ts,
 					HasTs:  true,
