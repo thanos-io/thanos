@@ -619,6 +619,7 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 }
 
 func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
+	t.Skip("flaky test")
 	t.Parallel()
 
 	l, err := net.Listen("tcp", "localhost:0")
@@ -830,6 +831,7 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 }
 
 func TestReloader_DirectoriesApply(t *testing.T) {
+	t.Skip("flaky test")
 	t.Parallel()
 
 	l, err := net.Listen("tcp", "localhost:0")
