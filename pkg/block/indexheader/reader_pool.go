@@ -136,6 +136,11 @@ func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt
 		return NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.metrics.lazyReader, p.metrics.binaryReader, p.onLazyReaderClosed, p.lazyDownloadFunc(meta))
 	})
 
+	if err != nil {
+		level.Error(p.logger).Log("msg", "failed to create lazy index-header reader", "block", id.String(), "err", err)
+		return nil, err
+	}
+
 	reader := lazyReader.(Reader)
 
 	// Keep track of lazy readers only if required.
