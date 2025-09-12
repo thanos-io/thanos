@@ -20,7 +20,6 @@ import (
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
@@ -32,19 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 )
 
-type TenantStats struct {
-	Tenant string
-	Stats  *tsdb.Stats
-}
-
-// TSDBStatus has information of cardinality statistics from postings.
-// TODO(fpetkovski): replace with upstream struct after dependency update.
-type TSDBStatus struct {
-	Tenant        string `json:"tenant"`
-	v1.TSDBStatus `json:","`
-}
-
-type GetStatsFunc func(r *http.Request, statsByLabelName string) ([]TenantStats, *api.ApiError)
+type GetStatsFunc func(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError)
 
 type Options struct {
 	GetStats GetStatsFunc
@@ -74,7 +61,7 @@ func (sapi *StatusAPI) httpServeStats(r *http.Request) (any, []error, *api.ApiEr
 		return nil, nil, sterr, func() {}
 	}
 
-	result := make([]TSDBStatus, 0, len(stats))
+	result := make([]api.TSDBStatus, 0, len(stats))
 	if len(stats) == 0 {
 		return result, nil, nil, func() {}
 	}
@@ -104,7 +91,7 @@ func (sapi *StatusAPI) httpServeStats(r *http.Request) (any, []error, *api.ApiEr
 		if c, ok := tenantChunks[s.Tenant]; ok {
 			chunkCount = c
 		}
-		result = append(result, TSDBStatus{
+		result = append(result, api.TSDBStatus{
 			Tenant: s.Tenant,
 			TSDBStatus: v1.TSDBStatus{
 				HeadStats: v1.HeadStats{

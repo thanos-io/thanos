@@ -49,6 +49,9 @@ message InfoResponse {
 
     // QueryAPIInfo holds the metadata related to Query API if exposed by the component, otherwise it will be null.
     QueryAPIInfo query                 = 8;
+
+    // StatusInfo holds the metadata related to Status API if exposed by the component, otherwise it will be null.
+    StatusInfo status                  = 9;
 }
 
 // StoreInfo holds the metadata related to Store API exposed by the component.
@@ -86,6 +89,10 @@ message ExemplarsInfo {
 
 // QueryInfo holds the metadata related to Query API exposed by the component.
 message QueryAPIInfo {
+}
+
+// StatusInfo holds the metadata related to Status API exposed by the component.
+message StatusInfo {
 }
 
 message TSDBInfo {
