@@ -743,7 +743,10 @@ func (er *endpointRef) updateMetadata(metadata *endpointMetadata, err error) {
 	}
 
 	if err != nil && er.metadata == nil {
+		mint, maxt := er.timeRange()
 		er.metadata = maxRangeStoreMetadata()
+		er.metadata.Store.MinTime = mint
+		er.metadata.Store.MaxTime = maxt
 	}
 }
 

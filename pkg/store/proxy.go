@@ -105,13 +105,19 @@ type ProxyStore struct {
 	lazyRetrievalMaxBufferedResponses int
 	blockedMetricPrefixes             *radix.Tree
 	blockedMetricExacts               map[string]struct{}
+	forwardPartialStrategy            bool
 }
 
 type proxyStoreMetrics struct {
-	emptyStreamResponses       prometheus.Counter
-	storeFailureCount          *prometheus.CounterVec
-	missingBlockFileErrorCount prometheus.Counter
-	blockedQueriesCount        *prometheus.CounterVec
+	emptyStreamResponses             prometheus.Counter
+	storeFailureCount                *prometheus.CounterVec
+	queryPartialStrategyCount        *prometheus.CounterVec
+	queryForwardPartialStrategyCount *prometheus.CounterVec
+	missingBlockFileErrorCount       prometheus.Counter
+	blockedQueriesCount              *prometheus.CounterVec
+	storesPerQueryBeforeFiltering    prometheus.Gauge
+	storesPerQueryAfterFiltering     prometheus.Gauge
+	failedStoresPerQuery             prometheus.Gauge
 }
 
 func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
@@ -125,6 +131,26 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 		Name: "thanos_proxy_store_failure_total",
 		Help: "Total number of store failures.",
 	}, []string{"group", "replica"})
+	m.queryPartialStrategyCount = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_proxy_query_partial_strategy_total",
+		Help: "Total number of queries broken down by partial strategy.",
+	}, []string{"strategy"})
+	m.queryForwardPartialStrategyCount = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_proxy_query_forward_partial_strategy_total",
+		Help: "How many times queries are sent out with forward partial strategy.",
+	}, []string{"strategy"})
+	m.storesPerQueryBeforeFiltering = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_proxy_stores_per_query_before_filtering",
+		Help: "The number of stores before filtering using external labels and (min, max) time range.",
+	})
+	m.storesPerQueryAfterFiltering = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_proxy_stores_per_query_after_filtering",
+		Help: "The number of stores after filtering using external labels and (min, max) time range.",
+	})
+	m.failedStoresPerQuery = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_proxy_failed_stores_per_query",
+		Help: "The number of failed stores per query.",
+	})
 	m.missingBlockFileErrorCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_proxy_querier_missing_block_file_error_total",
 		Help: "Total number of missing block file errors.",
@@ -216,6 +242,12 @@ func WithBlockedMetricPatterns(patterns []string) ProxyStoreOption {
 				}
 			}
 		}
+	}
+}
+
+func WithoutForwardPartialStrategy() ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.forwardPartialStrategy = true
 	}
 }
 
@@ -440,11 +472,14 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		ShardInfo:               originalRequest.ShardInfo,
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
-	if originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA {
+	if originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_GROUP_REPLICA && !s.forwardPartialStrategy {
 		// Do not forward this field as it might cause data loss.
 		r.PartialResponseDisabled = true
 		r.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
+	} else {
+		s.metrics.queryForwardPartialStrategyCount.WithLabelValues(originalRequest.PartialResponseStrategy.String()).Inc()
 	}
+	s.metrics.queryPartialStrategyCount.WithLabelValues(originalRequest.PartialResponseStrategy.String()).Inc()
 
 	storeResponses := make([]respSet, 0, len(stores))
 
@@ -480,6 +515,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 				"errors", fmt.Sprintf("%+v", failedStores),
 				"total_failed_stores", totalFailedStores,
 			)
+			s.metrics.failedStoresPerQuery.Set(float64(totalFailedStores))
 		}
 	}
 	defer logGroupReplicaErrors()
@@ -854,7 +890,9 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 		storeLabelSets []labels.Labels
 		storeDebugMsgs []string
 	)
+	totalStores := 0
 	for _, st := range s.stores() {
+		totalStores++
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
 			if s.debugLogging {
@@ -876,6 +914,9 @@ func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64,
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 		}
 	}
+
+	s.metrics.storesPerQueryBeforeFiltering.Set(float64(totalStores))
+	s.metrics.storesPerQueryAfterFiltering.Set(float64(len(stores)))
 
 	return stores, storeLabelSets, storeDebugMsgs
 }

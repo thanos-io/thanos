@@ -255,6 +255,7 @@ func registerQuery(app *extkingpin.App) {
 		Default("0s"))
 
 	blockQueryMetricsWithoutFilter := cmd.Flag("query.block-query-metrics-without-filter", "Comma-separated list of metric patterns to block queries without sufficient label filters. Helps prevent high-cardinality metric queries.").Default("").String()
+	forwardPartialStrategy := cmd.Flag("query.forward-partial-strategy", "Enable forward partial strategy for queries. This is used for a Queier stacked on the top of other Queiers.").Default("false").Bool()
 
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
@@ -410,6 +411,7 @@ func registerQuery(app *extkingpin.App) {
 			*lazyRetrievalMaxBufferedResponses,
 			time.Duration(*grpcStoreClientKeepAlivePingInterval),
 			blockedMetricPatterns,
+			*forwardPartialStrategy,
 		)
 	})
 }
@@ -499,6 +501,7 @@ func runQuery(
 	lazyRetrievalMaxBufferedResponses int,
 	grpcStoreClientKeepAlivePingInterval time.Duration,
 	blockedMetricPatterns []string,
+	forwardPartialStrategy bool,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -597,6 +600,9 @@ func runQuery(
 	// Add blocked metric patterns option if specified
 	if len(blockedMetricPatterns) > 0 {
 		options = append(options, store.WithBlockedMetricPatterns(blockedMetricPatterns))
+	}
+	if forwardPartialStrategy {
+		options = append(options, store.WithoutForwardPartialStrategy())
 	}
 
 	// Parse and sanitize the provided replica labels flags.

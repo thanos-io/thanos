@@ -1668,6 +1668,16 @@ func TestDefaultTimeRange(t *testing.T) {
 		now := time.Now()
 		testutil.Equals(t, now.Add(-9600*time.Hour).Unix()/60, minTime/(1000*60))
 		testutil.Equals(t, now.Add(-11490*time.Minute).Unix()/60, maxTime/(1000*60))
+
+		endpointRef.updateMetadata(maxRangeStoreMetadata(), errors.New("test err"))
+		minTime, maxTime = endpointRef.timeRange()
+		testutil.Equals(t, now.Add(-9600*time.Hour).Unix()/60, minTime/(1000*60))
+		testutil.Equals(t, now.Add(-11490*time.Minute).Unix()/60, maxTime/(1000*60))
+
+		endpointRef.updateMetadata(maxRangeStoreMetadata(), nil)
+		minTime, maxTime = endpointRef.timeRange()
+		testutil.Equals(t, int64(math.MinInt64), minTime)
+		testutil.Equals(t, int64(math.MaxInt64), maxTime)
 	}
 	{
 		endpointRef := &endpointRef{
