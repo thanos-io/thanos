@@ -344,17 +344,11 @@ config:
     }
 ```
 
-##### GCS Policies
+##### GCS IAM roles
 
-**Note:** GCS Policies should be applied at the project level, not at the bucket level
-
-For deployment:
-
-`Storage Object Creator` and `Storage Object Viewer`
-
-For testing:
-
-`Storage Object Admin` for ability to create and delete temporary buckets.
+After ensuring the <abbr title="Google Cloud Storage">GCS</abbr> bucket, together with
+the <abbr title="Kubernetes Service Account">KSA</abbr> were created, proceed assign it
+the IAM role `roles/storage.objectAdmin` as per [this kb article](https://cloud.google.com/storage/docs/access-control/using-iam-permissions)
 
 To test the policy is working as expected, exec into the sidecar container, eg:
 
