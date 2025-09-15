@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
+- [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
 
 ### Added
 

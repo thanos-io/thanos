@@ -109,6 +109,15 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.conn != nil {
+		s := capnp.Client(r.writer).State()
+		if !s.IsPromise {
+			if err, ok := s.Brand.Value.(error); ok {
+				level.Error(r.logger).Log("err", err, "msg", "recreating client in error state")
+				r.writer.Release()
+				r.writer = Writer(r.conn.Bootstrap(ctx))
+			}
+		}
+
 		return nil
 	}
 
