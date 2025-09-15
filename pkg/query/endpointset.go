@@ -217,9 +217,10 @@ type EndpointSet struct {
 
 	updateMtx sync.Mutex
 
-	endpointsMtx    sync.RWMutex
-	endpoints       map[string]*endpointRef
-	endpointsMetric *endpointSetNodeCollector
+	endpointsMtx         sync.RWMutex
+	endpoints            map[string]*endpointRef
+	endpointsMetric      *endpointSetNodeCollector
+	endpointsStatusCount *prometheus.GaugeVec
 
 	// Track if the first update has completed
 	firstUpdateOnce sync.Once
@@ -243,8 +244,16 @@ func NewEndpointSet(
 	endpointMetricLabels ...string,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector(logger, endpointMetricLabels...)
+	endpointsStatusMetric := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "thanos_query_endpoints_count",
+			Help: "Number of endpoints connected to the querier categorised by healthy/unhealthy. Strict endpoints are never considered as unhealthy.",
+		},
+		[]string{"status"},
+	)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
+		reg.MustRegister(endpointsStatusMetric)
 	}
 
 	if logger == nil {
@@ -268,8 +277,9 @@ func NewEndpointSet(
 			}
 			return res
 		},
-		endpoints:       make(map[string]*endpointRef),
-		firstUpdateChan: make(chan struct{}),
+		endpoints:            make(map[string]*endpointRef),
+		firstUpdateChan:      make(chan struct{}),
+		endpointsStatusCount: endpointsStatusMetric,
 	}
 }
 
@@ -393,6 +403,15 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	}
 
 	e.endpointsMetric.Update(stats)
+
+	activeCount := len(e.endpoints)
+	specsCount := len(e.endpointSpecs())
+	inactiveCount := specsCount - activeCount
+	if inactiveCount < 0 {
+		inactiveCount = 0
+	}
+	e.endpointsStatusCount.WithLabelValues("healthy").Set(float64(activeCount))
+	e.endpointsStatusCount.WithLabelValues("unhealthy").Set(float64(inactiveCount))
 
 	// Signal that the first update has completed
 	e.firstUpdateOnce.Do(func() {
