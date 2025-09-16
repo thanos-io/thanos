@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -244,16 +245,8 @@ func NewEndpointSet(
 	endpointMetricLabels ...string,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector(logger, endpointMetricLabels...)
-	endpointsStatusMetric := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "thanos_query_endpoints_count",
-			Help: "Number of endpoints connected to the querier categorised by healthy/unhealthy. Strict endpoints are never considered as unhealthy.",
-		},
-		[]string{"status"},
-	)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
-		reg.MustRegister(endpointsStatusMetric)
 	}
 
 	if logger == nil {
@@ -277,9 +270,15 @@ func NewEndpointSet(
 			}
 			return res
 		},
-		endpoints:            make(map[string]*endpointRef),
-		firstUpdateChan:      make(chan struct{}),
-		endpointsStatusCount: endpointsStatusMetric,
+		endpoints:       make(map[string]*endpointRef),
+		firstUpdateChan: make(chan struct{}),
+		endpointsStatusCount: promauto.With(reg).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_query_endpoints_count",
+				Help: "Number of endpoints connected to the querier categorised by healthy/unhealthy. Strict endpoints are never considered as unhealthy.",
+			},
+			[]string{"status"},
+		),
 	}
 }
 
