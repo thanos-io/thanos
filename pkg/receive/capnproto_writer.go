@@ -122,6 +122,13 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 				})
 				copiedLabels := builder.Labels()
 
+				// Validate exemplar labels after copying them out of Cap'n Proto memory
+				// If moved before copying the labels, Cap'n Proto memory may be freed before validation is complete
+				if err := validateLabels(copiedLabels); err != nil {
+					exlset := &labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(copiedLabels)}
+					errorTracker.addLabelsError(err, exlset, exLogger)
+					continue
+				}
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
 					Labels: copiedLabels,
 					Value:  ex.Value,

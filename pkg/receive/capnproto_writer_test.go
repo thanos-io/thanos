@@ -7,6 +7,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
@@ -19,11 +21,10 @@ import (
 func TestCapNProtoWriter_Write(t *testing.T) {
 	t.Parallel()
 
-	// Setup test environment
 	logger, m, app := setupMultitsdb(t, 1000)
 	writer := NewCapNProtoWriter(logger, m, &CapNProtoWriterOptions{})
 
-	// Create test data with exemplars
+	// Create test data with valid exemplars
 	timeseries := []prompb.TimeSeries{
 		{
 			Labels: []labelpb.ZLabel{
@@ -72,7 +73,6 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	exemplarClient := exemplarClients[tenancy.DefaultTenant]
 	require.NotNil(t, exemplarClient, "Exemplar client should not be nil")
 
-	// collect exemplar responses
 	srv := &exemplarsServer{ctx: context.Background()}
 
 	// get matching exemplar
@@ -116,4 +116,89 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 
 	require.Equal(t, "xyz789", secondLabels["trace_id"], "Second exemplar trace_id should match")
 	require.Equal(t, "uvw012", secondLabels["span_id"], "Second exemplar span_id should match")
+}
+
+func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
+	t.Parallel()
+
+	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
+	tests := map[string]struct {
+		reqs             []*prompb.WriteRequest
+		expectedErr      error
+		expectedIngested []prompb.TimeSeries
+		maxExemplars     int64
+		opts             *WriterOptions
+	}{
+		"should succeed on valid series with exemplars": {
+			reqs: []*prompb.WriteRequest{{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: lbls,
+						// Ingesting an exemplar requires a sample to create the series first.
+						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels:    []labelpb.ZLabel{{Name: "trace_id", Value: "123"}},
+								Value:     11,
+								Timestamp: 12,
+							},
+						},
+					},
+				},
+			}},
+			expectedErr:  nil,
+			maxExemplars: 2,
+		},
+		"should fail on empty exemplar label name": {
+			reqs: []*prompb.WriteRequest{{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels:  lbls,
+						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels:    []labelpb.ZLabel{{Name: "", Value: "123"}},
+								Value:     11,
+								Timestamp: 12,
+							},
+						},
+					},
+				},
+			}},
+			expectedErr:  errors.Wrapf(labelpb.ErrEmptyLabels, "add 1 series"),
+			maxExemplars: 2,
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Run("capnproto_writer", func(t *testing.T) {
+				logger, m, app := setupMultitsdb(t, testData.maxExemplars)
+
+				opts := &CapNProtoWriterOptions{}
+				if testData.opts != nil {
+					opts.TooFarInFutureTimeWindow = testData.opts.TooFarInFutureTimeWindow
+				}
+				w := NewCapNProtoWriter(logger, m, opts)
+
+				for idx, req := range testData.reqs {
+					capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, req.Timeseries)
+					testutil.Ok(t, err)
+
+					wr, err := writecapnp.NewRequest(capnpReq)
+					testutil.Ok(t, err)
+					err = w.Write(context.Background(), tenancy.DefaultTenant, wr)
+
+					if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
+						testutil.Ok(t, err)
+					} else {
+						testutil.NotOk(t, err)
+						testutil.Equals(t, testData.expectedErr.Error(), err.Error())
+					}
+				}
+
+				assertWrittenData(t, app, testData.expectedIngested)
+			})
+		})
+	}
 }
