@@ -274,8 +274,8 @@ func NewEndpointSet(
 		firstUpdateChan: make(chan struct{}),
 		endpointsStatusCount: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "thanos_query_endpoints_count",
-				Help: "Number of endpoints connected to the querier categorised by healthy/unhealthy. Strict endpoints are never considered as unhealthy.",
+				Name: "thanos_query_endpoints",
+				Help: "Number of endpoints connected to the querier categorized by healthy/unhealthy. Strict endpoints are never considered as unhealthy.",
 			},
 			[]string{"status"},
 		),
