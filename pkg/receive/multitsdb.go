@@ -159,14 +159,36 @@ func (t *MultiTSDB) isNoUploadTenant(tenantID string) bool {
 	return false
 }
 
-func (t *MultiTSDB) GetTenants() []string {
+func (t *MultiTSDB) GetActiveTenants() []string {
+	tenants := make(map[string]*tenant)
 	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	tenants := make([]string, 0, len(t.tenants))
-	for tname := range t.tenants {
-		tenants = append(tenants, tname)
+	for tname, tenantInstance := range t.tenants {
+		tenants[tname] = tenantInstance
 	}
-	return tenants
+	t.mtx.RUnlock()
+
+	activeTenants := make([]string, 0, len(tenants))
+	for tname, tenantInstance := range tenants {
+		tenantTSDB := tenantInstance.readyStorage()
+		if tenantTSDB == nil {
+			continue
+		}
+		tenantTSDB.mtx.RLock()
+		if tenantTSDB.a == nil || tenantTSDB.a.db == nil {
+			tenantTSDB.mtx.RUnlock()
+			continue
+		}
+		tdb := tenantTSDB.a.db
+		head := tdb.Head()
+		if head.MaxTime() < 0 {
+			tenantTSDB.mtx.RUnlock()
+			level.Info(t.logger).Log("msg", "skipping zombie tenant", "tenant", tname)
+			continue
+		}
+		tenantTSDB.mtx.RUnlock()
+		activeTenants = append(activeTenants, tname)
+	}
+	return activeTenants
 }
 
 // testGetTenant returns the tenant with the given tenantID for testing purposes.

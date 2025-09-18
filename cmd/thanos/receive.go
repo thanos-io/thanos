@@ -376,10 +376,10 @@ func runReceive(
 			httpserver.WithTLSConfig(*conf.httpTLSConfig),
 		)
 		srv.Handle("/-/downscale", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tenants := dbs.GetTenants()
-			n := len(tenants)
+			activeTenants := dbs.GetActiveTenants()
+			n := len(activeTenants)
 			w.Header().Set("Tenant-Count", strconv.Itoa(n))
-			for _, tname := range tenants {
+			for _, tname := range activeTenants {
 				w.Header().Add("Tenants", tname)
 			}
 			if n > 0 {
