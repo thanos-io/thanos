@@ -3183,6 +3183,265 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 
 }
 
+func TestProxyStore_FilterByExclusiveExternalLabels(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		title                    string
+		exclusiveExternalLabels  []string
+		stores                   []Client
+		matchers                 []*labels.Matcher
+		debugLogging             bool
+		expectedStores           []Client
+		expectedStoreIndices     []int // indices of expected stores from original stores slice
+		expectedDebugMsgsContain []string
+	}{
+		{
+			title:                   "no exclusive external labels configured",
+			exclusiveExternalLabels: []string{},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{0, 1}, // All stores should be returned
+		},
+		{
+			title:                   "exclusive external labels configured but no matching matchers",
+			exclusiveExternalLabels: []string{"datacenter"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{0, 1}, // All stores should be returned since no datacenter matcher
+		},
+		{
+			title:                   "single exclusive external label with exact match",
+			exclusiveExternalLabels: []string{"region"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "eu-west-1")},
+					Name:    "store3",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{0}, // Only store1 should match
+		},
+		{
+			title:                   "single exclusive external label with regex match",
+			exclusiveExternalLabels: []string{"region"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "eu-west-1")},
+					Name:    "store3",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, "region", "us-.*"),
+			},
+			expectedStoreIndices: []int{0, 1, 2}, // Return all stores since no non-regex match found
+		},
+		{
+			title:                   "multiple exclusive external labels",
+			exclusiveExternalLabels: []string{"region", "datacenter"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1", "datacenter", "dc1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1", "datacenter", "dc2")},
+					Name:    "store2",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "eu-west-1", "datacenter", "dc3")},
+					Name:    "store3",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+				labels.MustNewMatcher(labels.MatchEqual, "datacenter", "dc1"),
+			},
+			expectedStoreIndices: []int{0}, // Only store1 matches both region and datacenter
+		},
+		{
+			title:                   "matcher with non-equal/non-regex type should be ignored",
+			exclusiveExternalLabels: []string{"region"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{0, 1}, // All stores returned since MatchNotEqual is ignored
+		},
+		{
+			title:                   "no matching stores found should return original stores",
+			exclusiveExternalLabels: []string{"region"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "non-existent-region"),
+			},
+			expectedStoreIndices: []int{0, 1}, // Original stores returned when no matches
+		},
+		{
+			title:                   "store with multiple label sets - partial match",
+			exclusiveExternalLabels: []string{"region"},
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{
+						labels.FromStrings("region", "us-east-1", "env", "prod"),
+						labels.FromStrings("region", "us-west-1", "env", "dev"),
+					},
+					Name: "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "eu-west-1")},
+					Name:    "store2",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{0}, // store1 matches because one of its label sets matches
+		},
+		{
+			title:                   "debug logging enabled",
+			exclusiveExternalLabels: []string{"region"},
+			debugLogging:            true,
+			stores: []Client{
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-east-1")},
+					Name:    "store1",
+				},
+				&storetestutil.TestClient{
+					ExtLset: []labels.Labels{labels.FromStrings("region", "us-west-1")},
+					Name:    "store2",
+				},
+			},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{0},
+			expectedDebugMsgsContain: []string{
+				"Filtering stores by exclusive external labels with target matchers",
+				"Store store1 matched exclusive external labels",
+			},
+		},
+		{
+			title:                   "empty stores slice",
+			exclusiveExternalLabels: []string{"region"},
+			stores:                  []Client{},
+			matchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "region", "us-east-1"),
+			},
+			expectedStoreIndices: []int{}, // Empty result
+		},
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			// Create ProxyStore with the exclusive external labels option
+			var options []ProxyStoreOption
+			if len(tc.exclusiveExternalLabels) > 0 {
+				options = append(options, WithExclusiveExternalLabels(tc.exclusiveExternalLabels))
+			}
+			if tc.debugLogging {
+				options = append(options, WithProxyStoreDebugLogging(true))
+			}
+
+			proxyStore := NewProxyStore(
+				nil, // logger
+				nil, // registry
+				func() []Client { return tc.stores },
+				component.Query,
+				labels.EmptyLabels(),
+				0*time.Second,
+				EagerRetrieval,
+				options...,
+			)
+
+			// Call the function under test
+			filteredStores, debugMsgs := proxyStore.filterByExclusiveExternalLabels(tc.stores, tc.matchers)
+
+			// Build expected stores based on indices
+			var expectedStores []Client
+			for _, idx := range tc.expectedStoreIndices {
+				if idx < len(tc.stores) {
+					expectedStores = append(expectedStores, tc.stores[idx])
+				}
+			}
+
+			// Verify the filtered stores
+			testutil.Equals(t, len(expectedStores), len(filteredStores), "number of filtered stores")
+			for i, expectedStore := range expectedStores {
+				if i < len(filteredStores) {
+					testutil.Equals(t, expectedStore, filteredStores[i], "store at index %d", i)
+				}
+			}
+
+			// Verify debug messages if specified
+			if len(tc.expectedDebugMsgsContain) > 0 {
+				testutil.Assert(t, len(debugMsgs) > 0, "expected debug messages but got none")
+				debugMsgsStr := strings.Join(debugMsgs, " ")
+				for _, expectedSubstring := range tc.expectedDebugMsgsContain {
+					testutil.Assert(t, strings.Contains(debugMsgsStr, expectedSubstring),
+						"expected debug messages to contain '%s', but got: %v", expectedSubstring, debugMsgs)
+				}
+			}
+		})
+	}
+}
+
 func TestDedupRespHeap_QuorumChunkDedup(t *testing.T) {
 	t.Parallel()
 
