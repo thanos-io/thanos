@@ -14,7 +14,7 @@ Thanos is a clustered system of components with distinct and decoupled purposes.
 
 ### Metric Sources
 
-A data source is a very generalized definition of a component that produces or collects metric data. Source advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
+A data source is a very generalized definition of a component that produces or collects metric data. Sources advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
 
 Thanos provides two components that act as data sources: the Prometheus sidecar and rule nodes.
 
