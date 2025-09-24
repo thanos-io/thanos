@@ -146,7 +146,7 @@ func registerQuery(app *extkingpin.App) {
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	enableStatusPartialResponse := cmd.Flag("status.partial-response", "Enable partial response for status endpoint. --no-exemplar.partial-response for disabling.").
+	enableStatusPartialResponse := cmd.Flag("status.partial-response", "Enable partial response for status endpoint. --no-status.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
