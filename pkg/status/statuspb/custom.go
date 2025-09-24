@@ -7,6 +7,8 @@ import (
 	"cmp"
 	"maps"
 	"slices"
+
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 )
 
 func NewTSDBStatisticsResponse(statistics *TSDBStatistics) *TSDBStatisticsResponse {
@@ -25,6 +27,7 @@ func NewWarningTSDBStatisticsResponse(warning error) *TSDBStatisticsResponse {
 	}
 }
 
+// Merge merges the provided TSDBStatisticsEntry with the receiver.
 func (tse *TSDBStatisticsEntry) Merge(stats *TSDBStatisticsEntry) {
 	tse.HeadStatistics.NumSeries += stats.HeadStatistics.NumSeries
 	tse.HeadStatistics.NumLabelPairs += stats.HeadStatistics.NumLabelPairs
@@ -39,6 +42,8 @@ func (tse *TSDBStatisticsEntry) Merge(stats *TSDBStatisticsEntry) {
 	}
 
 	tse.SeriesCountByMetricName = mergeStatistics(tse.SeriesCountByMetricName, stats.SeriesCountByMetricName, addValue)
+	// The same label values may exist on different instances so it makes more
+	// sense to keep the max value rather than adding them all.
 	tse.LabelValueCountByLabelName = mergeStatistics(tse.LabelValueCountByLabelName, stats.LabelValueCountByLabelName, maxValue)
 	tse.MemoryInBytesByLabelName = mergeStatistics(tse.MemoryInBytesByLabelName, stats.MemoryInBytesByLabelName, addValue)
 	tse.SeriesCountByLabelValuePair = mergeStatistics(tse.SeriesCountByLabelValuePair, stats.SeriesCountByLabelValuePair, addValue)
@@ -75,4 +80,17 @@ func mergeStatistics(a, b []Statistic, mergeFunc func(uint64, uint64) uint64) []
 		// Descending sort.
 		return cmp.Compare(b.Value, a.Value)
 	})
+}
+
+// ConvertToPrometheusTSDBStat converts a protobuf Statistic slice to the equivalent Prometheus struct.
+func ConvertToPrometheusTSDBStat(stats []Statistic) []v1.TSDBStat {
+	ret := make([]v1.TSDBStat, len(stats))
+	for i := range stats {
+		ret[i] = v1.TSDBStat{
+			Name:  stats[i].Name,
+			Value: stats[i].Value,
+		}
+	}
+
+	return ret
 }

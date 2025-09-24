@@ -1729,13 +1729,5 @@ func convertToTSDBStat(stats []statuspb.Statistic, limit int) []v1.TSDBStat {
 		stats = stats[:limit]
 	}
 
-	ret := make([]v1.TSDBStat, len(stats))
-	for i := range stats {
-		ret[i] = v1.TSDBStat{
-			Name:  stats[i].Name,
-			Value: stats[i].Value,
-		}
-	}
-
-	return ret
+	return statuspb.ConvertToPrometheusTSDBStat(stats)
 }
