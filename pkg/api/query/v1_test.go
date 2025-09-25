@@ -955,13 +955,13 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			response: []string{"a"},
 		},
-		// Bad name parameter.
+		// UTF-8 label name.
 		{
 			endpoint: api.labelValues,
 			params: map[string]string{
-				"name": "not!!!allowed",
+				"name": "http.request.method",
 			},
-			errType: baseAPI.ErrorBadData,
+			response: []string{},
 		},
 		{
 			endpoint: api.series,
