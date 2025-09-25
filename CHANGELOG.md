@@ -20,6 +20,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 - [#8359](https://github.com/thanos-io/thanos/pull/8359) Tools: add `--shipper.upload-compacted` flag for uploading compacted blocks to bucket upload-blocks
+- [#8501](https://github.com/thanos-io/thanos/pull/8501) Tools: Add 'thanos tools' 'query range' and 'query instant' subcommands for running PromQL queries over Thanos gRPC API
 
 ### Changed
 
