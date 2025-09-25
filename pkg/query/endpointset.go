@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -217,9 +218,10 @@ type EndpointSet struct {
 
 	updateMtx sync.Mutex
 
-	endpointsMtx    sync.RWMutex
-	endpoints       map[string]*endpointRef
-	endpointsMetric *endpointSetNodeCollector
+	endpointsMtx         sync.RWMutex
+	endpoints            map[string]*endpointRef
+	endpointsMetric      *endpointSetNodeCollector
+	endpointsStatusCount *prometheus.GaugeVec
 
 	// Track if the first update has completed
 	firstUpdateOnce sync.Once
@@ -270,6 +272,13 @@ func NewEndpointSet(
 		},
 		endpoints:       make(map[string]*endpointRef),
 		firstUpdateChan: make(chan struct{}),
+		endpointsStatusCount: promauto.With(reg).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_query_endpoints",
+				Help: "Number of endpoints connected to the querier categorized by healthy/unhealthy. Strict endpoints are never considered as unhealthy.",
+			},
+			[]string{"status"},
+		),
 	}
 }
 
@@ -393,6 +402,15 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	}
 
 	e.endpointsMetric.Update(stats)
+
+	activeCount := len(e.endpoints)
+	specsCount := len(e.endpointSpecs())
+	inactiveCount := specsCount - activeCount
+	if inactiveCount < 0 {
+		inactiveCount = 0
+	}
+	e.endpointsStatusCount.WithLabelValues("healthy").Set(float64(activeCount))
+	e.endpointsStatusCount.WithLabelValues("unhealthy").Set(float64(inactiveCount))
 
 	// Signal that the first update has completed
 	e.firstUpdateOnce.Do(func() {
