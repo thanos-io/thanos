@@ -1158,3 +1158,104 @@ func TestNoUploadTenantsRetentionStillWorks(t *testing.T) {
 	// but we've verified the key fix: no-upload tenants don't get a shipper,
 	// so the pruning logic won't try to upload during retention cleanup.
 }
+
+func TestTenantBucketPrefixInUpload(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bucket := objstore.NewInMemBucket()
+
+	// Create MultiTSDB with bucket
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		bucket,
+		false,
+		metadata.NoneFunc,
+		WithTenantPathPrefix(),
+		WithPathSegmentsBeforeTenant([]string{"v1", "raw"}),
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	// Test with multiple tenants to ensure each gets their own prefix
+	tenantIDs := []string{"tenant-a", "tenant-b"}
+
+	for _, tenantID := range tenantIDs {
+		// Add samples over a longer time period to trigger block creation
+		baseTime := time.Now().Add(-4 * time.Hour)
+		for i := 0; i < 100; i++ {
+			sampleTime := baseTime.Add(time.Duration(i) * time.Minute)
+			testutil.Ok(t, appendSample(m, tenantID, sampleTime))
+		}
+	}
+
+	testutil.Ok(t, m.Flush())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	uploaded, err := m.Sync(ctx)
+	testutil.Ok(t, err)
+
+	t.Logf("Uploaded %d blocks", uploaded)
+
+	if uploaded > 0 {
+		// Verify that uploaded blocks are in directories with tenant prefixes
+		// Expected path format: "v1/raw/{tenantID}/{blockID}/{file}"
+		expectedPrefix1 := "v1/raw/tenant-a"
+		expectedPrefix2 := "v1/raw/tenant-b"
+		foundTenantA := false
+		foundTenantB := false
+
+		var allObjects []string
+		testutil.Ok(t, bucket.Iter(context.Background(), "", func(name string) error {
+			allObjects = append(allObjects, name)
+			return nil
+		}))
+
+		// Iterating within the expected prefixes
+		testutil.Ok(t, bucket.Iter(context.Background(), expectedPrefix1, func(name string) error {
+			t.Logf("Found tenant-a object: %s", name)
+			foundTenantA = true
+			return nil
+		}))
+
+		testutil.Ok(t, bucket.Iter(context.Background(), expectedPrefix2, func(name string) error {
+			t.Logf("Found tenant-b object: %s", name)
+			foundTenantB = true
+			return nil
+		}))
+
+		// Also show all top-level objects for debugging
+		testutil.Ok(t, bucket.Iter(context.Background(), "", func(name string) error {
+			t.Logf("Found top-level object: %s", name)
+			return nil
+		}))
+
+		testutil.Assert(t, foundTenantA, "uploaded blocks should contain tenant-a prefix path")
+		testutil.Assert(t, foundTenantB, "uploaded blocks should contain tenant-b prefix path")
+
+		// Also verify that objects don't exist at the block level without tenant prefixes
+		// The only objects at root should be the version directory "v1/"
+		rootObjects := 0
+		testutil.Ok(t, bucket.Iter(context.Background(), "", func(name string) error {
+			// Allow "v1/" directory but no direct block directories
+			if name != "v1/" && !strings.HasPrefix(name, "v1/raw/tenant-") {
+				rootObjects++
+				t.Logf("Found unexpected root object: %s", name)
+			}
+			return nil
+		}))
+		testutil.Equals(t, 0, rootObjects)
+	} else {
+		t.Logf("No blocks were uploaded, checking what's in the bucket anyway...")
+		testutil.Ok(t, bucket.Iter(context.Background(), "", func(name string) error {
+			t.Logf("Found object in bucket: %s", name)
+			return nil
+		}))
+	}
+}

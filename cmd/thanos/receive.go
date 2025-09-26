@@ -162,6 +162,16 @@ func runReceive(
 		level.Info(logger).Log("msg", "configured tenants for local storage only", "tenants", strings.Join(*conf.noUploadTenants, ","))
 	}
 
+	if conf.tsdbEnableTenantPathPrefix {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithTenantPathPrefix())
+		level.Info(logger).Log("msg", "tenant path prefix feature enabled")
+	}
+
+	if len(conf.tsdbPathSegmentsBeforeTenant) > 0 {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithPathSegmentsBeforeTenant(conf.tsdbPathSegmentsBeforeTenant))
+		level.Info(logger).Log("msg", "tenant path segments before tenant feature enabled", "segments", path.Join(conf.tsdbPathSegmentsBeforeTenant...))
+	}
+
 	// Create a matcher converter if specified by command line to cache expensive regex matcher conversions.
 	// Proxy store and TSDB stores of all tenants share a single cache.
 	var matcherConverter *storepb.MatcherConverter
@@ -996,6 +1006,8 @@ type receiveConfig struct {
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbDisableFlushOnShutdown   bool
 	tsdbEnableNativeHistograms   bool
+	tsdbEnableTenantPathPrefix   bool
+	tsdbPathSegmentsBeforeTenant []string
 
 	walCompression       bool
 	noLockFile           bool
@@ -1160,6 +1172,15 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.enable-native-histograms",
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
 		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
+
+	cmd.Flag("tsdb.enable-tenant-path-prefix",
+		"[EXPERIMENTAL] Enables the tenant path prefix for object storage.").
+		Default("false").Hidden().BoolVar(&rc.tsdbEnableTenantPathPrefix)
+
+	cmd.Flag("tsdb.path-segments-before-tenant",
+		"[EXPERIMENTAL] Specifies the path segments before the tenant for object storage."+
+			"Must only be used in combination with tsdb.enable-tenant-path-prefix.").
+		Default("raw").Hidden().StringsVar(&rc.tsdbPathSegmentsBeforeTenant)
 
 	cmd.Flag("writer.intern",
 		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
