@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/thanos-io/thanos/pkg/pantheon"
 )
 
 var (
@@ -395,4 +397,240 @@ func hashAsMetricValue(data []byte) float64 {
 	var bytes = make([]byte, 8)
 	copy(bytes, smallSum)
 	return float64(binary.LittleEndian.Uint64(bytes))
+}
+
+// PantheonConfigWatcher is able to watch a file containing a Pantheon cluster configuration
+// for updates.
+type PantheonConfigWatcher struct {
+	ch       chan *pantheon.PantheonCluster
+	path     string
+	interval time.Duration
+	logger   log.Logger
+	watcher  *fsnotify.Watcher
+
+	hashGauge            prometheus.Gauge
+	successGauge         prometheus.Gauge
+	lastSuccessTimeGauge prometheus.Gauge
+	changesCounter       prometheus.Counter
+	errorCounter         prometheus.Counter
+	refreshCounter       prometheus.Counter
+
+	// lastLoadedConfigHash is the hash of the last successfully loaded configuration.
+	lastLoadedConfigHash float64
+}
+
+// NewPantheonConfigWatcher creates a new PantheonConfigWatcher.
+func NewPantheonConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string, interval model.Duration) (*PantheonConfigWatcher, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, errors.Wrap(err, "creating file watcher")
+	}
+	if err := watcher.Add(path); err != nil {
+		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
+	}
+
+	c := &PantheonConfigWatcher{
+		ch:       make(chan *pantheon.PantheonCluster),
+		path:     path,
+		interval: time.Duration(interval),
+		logger:   logger,
+		watcher:  watcher,
+		hashGauge: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_pantheon_config_hash",
+				Help: "Hash of the currently loaded Pantheon configuration file.",
+			}),
+		successGauge: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_pantheon_config_last_reload_successful",
+				Help: "Whether the last Pantheon configuration file reload attempt was successful.",
+			}),
+		lastSuccessTimeGauge: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_pantheon_config_last_reload_success_timestamp_seconds",
+				Help: "Timestamp of the last successful Pantheon configuration file reload.",
+			}),
+		changesCounter: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_pantheon_file_changes_total",
+				Help: "The number of times the Pantheon configuration file has changed.",
+			}),
+		errorCounter: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_pantheon_file_errors_total",
+				Help: "The number of errors watching the Pantheon configuration file.",
+			}),
+		refreshCounter: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_pantheon_file_refreshes_total",
+				Help: "The number of refreshes of the Pantheon configuration file.",
+			}),
+	}
+	return c, nil
+}
+
+// Run starts the PantheonConfigWatcher until the given context is canceled.
+func (cw *PantheonConfigWatcher) Run(ctx context.Context) {
+	defer cw.Stop()
+
+	cw.refresh(ctx)
+
+	ticker := time.NewTicker(cw.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case event := <-cw.watcher.Events:
+			if event.Name == "" {
+				break
+			}
+			if event.Op^(fsnotify.Chmod|fsnotify.Remove) == 0 {
+				break
+			}
+			cw.refresh(ctx)
+
+		case <-ticker.C:
+			cw.refresh(ctx)
+
+		case err := <-cw.watcher.Errors:
+			if err != nil {
+				cw.errorCounter.Inc()
+				level.Error(cw.logger).Log("msg", "error watching file", "err", err)
+			}
+		}
+	}
+}
+
+// C returns a chan that gets Pantheon cluster configuration updates.
+func (cw *PantheonConfigWatcher) C() <-chan *pantheon.PantheonCluster {
+	return cw.ch
+}
+
+// ValidateConfig returns an error if the configuration that's being watched is not valid.
+func (cw *PantheonConfigWatcher) ValidateConfig() error {
+	_, _, err := loadPantheonConfig(cw.logger, cw.path)
+	return err
+}
+
+// Stop shuts down the config watcher.
+func (cw *PantheonConfigWatcher) Stop() {
+	level.Debug(cw.logger).Log("msg", "stopping Pantheon configuration watcher...", "path", cw.path)
+
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		for {
+			select {
+			case <-cw.watcher.Errors:
+			case <-cw.watcher.Events:
+			case <-done:
+				return
+			}
+		}
+	}()
+	if err := cw.watcher.Close(); err != nil {
+		level.Error(cw.logger).Log("msg", "error closing file watcher", "path", cw.path, "err", err)
+	}
+
+	close(cw.ch)
+	level.Debug(cw.logger).Log("msg", "Pantheon configuration watcher stopped")
+}
+
+// refresh reads the configured file and sends the Pantheon cluster configuration on the channel.
+func (cw *PantheonConfigWatcher) refresh(ctx context.Context) {
+	cw.refreshCounter.Inc()
+
+	config, cfgHash, err := loadPantheonConfig(cw.logger, cw.path)
+	if err != nil {
+		cw.errorCounter.Inc()
+		level.Error(cw.logger).Log("msg", "failed to load configuration file", "err", err, "path", cw.path)
+		return
+	}
+
+	// If there was no change to the configuration, return early.
+	if cw.lastLoadedConfigHash == cfgHash {
+		return
+	}
+
+	cw.changesCounter.Inc()
+
+	// Save the last known configuration.
+	cw.lastLoadedConfigHash = cfgHash
+	cw.hashGauge.Set(cfgHash)
+	cw.successGauge.Set(1)
+	cw.lastSuccessTimeGauge.SetToCurrentTime()
+
+	level.Debug(cw.logger).Log("msg", "refreshed Pantheon config")
+	select {
+	case <-ctx.Done():
+		return
+	case cw.ch <- config:
+		return
+	}
+}
+
+func PantheonConfigFromWatcher(ctx context.Context, updates chan<- *pantheon.PantheonCluster, cw *PantheonConfigWatcher) error {
+	defer close(updates)
+	go cw.Run(ctx)
+
+	for {
+		select {
+		case cfg, ok := <-cw.C():
+			if !ok {
+				return errors.New("Pantheon config watcher stopped unexpectedly")
+			}
+			updates <- cfg
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// parsePantheonConfig parses the raw configuration content and returns the latest PantheonCluster.
+func parsePantheonConfig(content []byte) (*pantheon.PantheonCluster, error) {
+	var config pantheon.PantheonClusterVersions
+	err := json.Unmarshal(content, &config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate the configuration.
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Return the latest version (Versions[0] with empty DeletionDate).
+	if len(config.Versions) == 0 {
+		return nil, errors.New("no versions found in Pantheon configuration")
+	}
+
+	latestCluster := &config.Versions[0]
+	if latestCluster.DeletionDate != "" {
+		return nil, errors.New("latest version has non-empty deletion date")
+	}
+
+	return latestCluster, nil
+}
+
+// loadPantheonConfig loads raw configuration content and returns the latest PantheonCluster.
+func loadPantheonConfig(logger log.Logger, path string) (*pantheon.PantheonCluster, float64, error) {
+	cfgContent, err := readFile(logger, path)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to read configuration file")
+	}
+
+	config, err := parsePantheonConfig(cfgContent)
+	if err != nil {
+		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
+	}
+
+	return config, hashAsMetricValue(cfgContent), nil
 }
