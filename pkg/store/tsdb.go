@@ -309,7 +309,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: completeLabelset}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -318,9 +318,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		}
 
 		bytesLeftForChunks := s.maxBytesPerFrame
-		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
-		}
+		// TODO: double-check the logic here.
+		storeSeries.Labels.Range(func(l labels.Label) {
+			bytesLeftForChunks -= len(l.Name)
+			bytesLeftForChunks -= len(l.Value)
+		})
 		frameBytesLeft := bytesLeftForChunks
 
 		seriesChunks := []storepb.AggrChunk{}

@@ -1789,7 +1789,7 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	ret := make([]rawSeries, len(got))
 	for i, s := range got {
 		r := rawSeries{
-			lset: labelpb.ZLabelsToPromLabels(s.Labels),
+			lset: s.Labels,
 		}
 		for _, chk := range s.Chunks {
 			var samples []sample
@@ -2056,7 +2056,7 @@ func (s *mockedStoreAPI) LabelValues(_ context.Context, req *storepb.LabelValues
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	s.Labels = append(s.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
+	s.Labels = lset.Copy()
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()
@@ -2446,7 +2446,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				{
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
-							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Labels: labels.FromStrings("foo", "bar"),
 							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
@@ -2472,7 +2472,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				{
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
-							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Labels: labels.FromStrings("foo", "bar"),
 							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{
@@ -2487,7 +2487,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				{
 					Result: &storepb.SeriesResponse_Series{
 						Series: &storepb.Series{
-							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Labels: labels.FromStrings("foo", "bar"),
 							Chunks: []storepb.AggrChunk{
 								{
 									Raw: &storepb.Chunk{

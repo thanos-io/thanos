@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -244,13 +245,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: lset, Chunks: chks}
 			continue
 		}
 
 		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
 			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: lset, Chunks: chks}
 			return true
 		}
 
@@ -467,7 +468,7 @@ func (x LabelMatcher_Type) PromString() string {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.ZLabelsToPromLabels(m.Labels)
+	return m.Labels
 }
 
 // Deprecated.
@@ -506,8 +507,8 @@ type SeriesStatsCounter struct {
 	Samples int
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
-	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
+func (c *SeriesStatsCounter) CountSeries(seriesLabels labels.Labels) {
+	seriesHash := seriesLabels.Hash()
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
 		c.Series++
@@ -569,4 +570,192 @@ func (m *LabelMatcher) MatcherType() (labels.MatchType, error) {
 	}
 
 	return t, nil
+}
+
+type Series struct {
+	Labels labels.Labels `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
+	Chunks []AggrChunk   `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks"`
+}
+
+func (m *Series) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Chunks) > 0 {
+		for iNdEx := len(m.Chunks) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Chunks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTypes(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	i, err := labelpb.MarshalToSizedBufferPromLabels(m.Labels, dAtA)
+	if err != nil {
+		return i, err
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Series) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	m.Labels.Range(func(l labels.Label) {
+		ln := l.Name
+		lln := len(ln)
+		n += 1 + lln + sovTypes(uint64(lln))
+		lv := l.Value
+		lln = len(lv)
+		n += 1 + lln + sovTypes(uint64(lln))
+	})
+	if len(m.Chunks) > 0 {
+		for _, e := range m.Chunks {
+			l = e.Size()
+			n += 1 + l + sovTypes(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Series) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+
+	var labelsStart, labelsEnd int = -1, -1
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTypes
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		if fieldNum == 1 && labelsStart == -1 {
+			labelsStart = preIndex
+		}
+		if fieldNum != 1 && labelsStart != -1 && labelsEnd == -1 {
+			labelsEnd = preIndex
+		}
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Series: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Series: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Labels", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Chunks", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Chunks = append(m.Chunks, AggrChunk{})
+			if err := m.Chunks[len(m.Chunks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTypes(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+
+	if labelsEnd == -1 && labelsStart == -1 {
+		return fmt.Errorf("labels subslice not found")
+	}
+
+	lbls, err := labelpb.UnmarshalProtobuf(dAtA[labelsStart:labelsEnd])
+	if err != nil {
+		return err
+	}
+
+	m.Labels = lbls
+	return nil
 }

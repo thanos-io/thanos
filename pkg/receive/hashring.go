@@ -445,7 +445,7 @@ func newShuffleShardHashring(baseRing Hashring, shuffleShardingConfig ShuffleSha
 	metrics := newShuffleShardCacheMetrics(reg, name)
 	metrics.maxItems.Set(float64(shuffleShardingConfig.CacheSize))
 
-	cache, err := lru.NewWithEvict[string, *ketamaHashring](shuffleShardingConfig.CacheSize, func(key string, value *ketamaHashring) {
+	cache, err := lru.NewWithEvict(shuffleShardingConfig.CacheSize, func(key string, value *ketamaHashring) {
 		metrics.evicted.Inc()
 		metrics.numItems.Dec()
 	})

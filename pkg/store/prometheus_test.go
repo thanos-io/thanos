@@ -239,7 +239,11 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}, {Name: "b", Value: "d"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "b",
+						"b":      "d",
+						"region": "eu-west",
+					}),
 				},
 			},
 		},
@@ -265,10 +269,20 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "c",
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "d",
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 			},
 		},
@@ -283,10 +297,20 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "c",
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "d",
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 			},
 		},
@@ -301,7 +325,11 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 			},
 		},
@@ -316,13 +344,27 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			},
 			expected: []storepb.Series{
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "c",
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 				{
-					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"a":      "d",
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 				{
-					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}, {Name: "region", Value: "eu-west"}},
+					Labels: labels.FromMap(map[string]string{
+						"b":      "d",
+						"job":    "test",
+						"region": "eu-west",
+					}),
 				},
 			},
 		},

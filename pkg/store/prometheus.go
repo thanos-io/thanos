@@ -165,8 +165,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 			finalExtLset.Range(func(l labels.Label) {
 				b.Set(l.Name, l.Value)
 			})
-			lset := labelpb.ZLabelsFromPromLabels(b.Labels())
-			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
+			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: b.Labels()})); err != nil {
 				return err
 			}
 		}
@@ -261,7 +260,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.ZLabelsFromPromLabels(lset),
+			Labels: lset,
 			Chunks: aggregatedChunks,
 		})); err != nil {
 			return err
@@ -325,7 +324,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 				continue
 			}
 
-			seriesStats.CountSeries(series.Labels)
+			seriesStats.CountSeries(labelpb.ZLabelsToPromLabels(series.Labels))
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 
 			for i, chk := range series.Chunks {
@@ -350,7 +349,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
+				Labels: completeLabelset,
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {

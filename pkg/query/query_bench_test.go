@@ -20,7 +20,6 @@ import (
 
 	deduppkg "github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/gate"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -73,7 +72,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		testutil.Ok(t, head.Close())
 		for i := range created {
 			if !dedup || j == 0 {
-				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
+				lset := created[i].Labels.Copy()
 				if dedup {
 					lset = lset.MatchLabels(false, "a_replica")
 				}

@@ -17,7 +17,6 @@ import (
 	"github.com/efficientgo/core/testutil"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 type sample struct {
@@ -32,7 +31,7 @@ type listSeriesSet struct {
 
 func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
 	s := Series{
-		Labels: labelpb.ZLabelsFromPromLabels(lset),
+		Labels: lset,
 	}
 
 	for _, smpls := range smplChunks {

@@ -22,7 +22,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -144,7 +143,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	var chosen []int
 	for si, series := range s.series {
-		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
+		lbls := series.Labels
 		var noMatch bool
 		for _, m := range matchers {
 			extValue := lbls.Get(m.Name)
@@ -163,7 +162,8 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		chosen = chosen[:0]
 		resp := &storepb.Series{
 			// Copy labels as in-process clients like proxy tend to work on same memory for labels.
-			Labels: labelpb.DeepCopy(series.Labels),
+			// TODO: double check if copying is needed.
+			Labels: series.Labels.Copy(),
 			Chunks: make([]storepb.AggrChunk, 0, len(s.sortedChunks[si])),
 		}
 
@@ -196,9 +196,9 @@ func (s *LocalStore) LabelNames(_ context.Context, _ *storepb.LabelNamesRequest)
 	// TODO(bwplotka): Consider precomputing.
 	names := map[string]struct{}{}
 	for _, series := range s.series {
-		for _, l := range series.Labels {
+		series.Labels.Range(func(l labels.Label) {
 			names[l.Name] = struct{}{}
-		}
+		})
 	}
 	resp := &storepb.LabelNamesResponse{}
 	for n := range names {
@@ -213,7 +213,7 @@ func (s *LocalStore) LabelValues(_ context.Context, r *storepb.LabelValuesReques
 ) {
 	vals := map[string]struct{}{}
 	for _, series := range s.series {
-		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
+		lbls := series.Labels
 		val := lbls.Get(r.Label)
 		if val == "" {
 			continue

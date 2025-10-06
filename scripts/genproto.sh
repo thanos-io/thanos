@@ -68,3 +68,10 @@ for dir in ${CORTEX_DIRS}; do
   popd
 done
 popd
+
+./scripts/remove_type.sh Series ./pkg/store/storepb/types.pb.go
+./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series MarshalToSizedBuffer
+./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series Size
+./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series Unmarshal
+go fmt ./pkg/store/storepb
+

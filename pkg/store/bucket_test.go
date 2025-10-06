@@ -1587,12 +1587,11 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 
 			// seriesCut does not cut chunks properly, but those are assured against for non benchmarks only, where we use 100% case only.
 			for _, s := range series[:seriesCut] {
-				for _, label := range s.Labels {
-					if label.Name == lm.Name && lm.Matches(label.Value) {
+				s.Labels.Range(func(l labels.Label) {
+					if l.Name == lm.Name && lm.Matches(l.Value) {
 						expectedSeries = append(expectedSeries, s)
-						break
 					}
-				}
+				})
 			}
 			bCases = append(bCases, &storetestutil.SeriesCase{
 				Name: fmt.Sprintf("%dof%d[%s]", expectedSamples, totalSeries*samplesPerSeries, lm.String()),
@@ -2284,7 +2283,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 
 			var response []labels.Labels
 			for _, respSeries := range srv.SeriesSet {
-				promLabels := labelpb.ZLabelsToPromLabels(respSeries.Labels)
+				promLabels := respSeries.Labels
 				response = append(response, promLabels)
 			}
 
@@ -2726,9 +2725,9 @@ func labelNamesFromSeriesSet(series []*storepb.Series) []string {
 	labelsMap := map[string]struct{}{}
 
 	for _, s := range series {
-		for _, label := range s.Labels {
-			labelsMap[label.Name] = struct{}{}
-		}
+		s.Labels.Range(func(l labels.Label) {
+			labelsMap[l.Name] = struct{}{}
+		})
 	}
 
 	labels := make([]string, 0, len(labelsMap))

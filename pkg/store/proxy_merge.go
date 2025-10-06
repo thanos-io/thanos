@@ -105,7 +105,7 @@ func (d *responseDeduplicator) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(atLbls)) == 0 {
+		if labels.Compare(lbls, atLbls) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
@@ -182,8 +182,8 @@ func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.S
 			return true
 		}
 		if a.GetSeries() != nil && b.GetSeries() != nil {
-			iLbls := labelpb.ZLabelsToPromLabels(a.GetSeries().Labels)
-			jLbls := labelpb.ZLabelsToPromLabels(b.GetSeries().Labels)
+			iLbls := a.GetSeries().Labels
+			jLbls := b.GetSeries().Labels
 
 			return labels.Compare(iLbls, jLbls) < 0
 		} else if a.GetSeries() == nil && b.GetSeries() != nil {
@@ -474,7 +474,7 @@ func newLazyRespSet(
 			numResponses++
 			bytesProcessed += resp.Size()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -726,7 +726,7 @@ func newEagerRespSet(
 			numResponses++
 			bytesProcessed += resp.Size()
 
-			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+			if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesLabels(resp.GetSeries().Labels) {
 				return true
 			}
 
@@ -776,7 +776,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		}
 
 		if len(labelsToRemove) > 0 {
-			ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+			ser.Labels = rmLabels(ser.Labels, labelsToRemove)
 		}
 	}
 
@@ -791,7 +791,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
+		return labels.Compare(si.Labels, sj.Labels) < 0
 	})
 }
 

@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"sort"
 	"testing"
 
 	"github.com/cespare/xxhash/v2"
@@ -21,7 +20,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/logutil"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
@@ -560,27 +558,17 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+extLabels.Len())
-			for _, l := range s.Labels {
-				lbls = append(lbls, labelpb.ZLabel{
-					Name:  l.Name,
-					Value: l.Value,
-				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
-			}
-			extLabels.Range(func(l labels.Label) {
-				lbls = append(lbls, labelpb.ZLabel{
-					Name:  l.Name,
-					Value: l.Value,
-				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
+			s.Labels.Range(func(l labels.Label) {
+				bytesLeftForChunks -= len(l.Name)
+				bytesLeftForChunks -= len(l.Value)
 			})
-			sort.Slice(lbls, func(i, j int) bool {
-				return lbls[i].Name < lbls[j].Name
+			extLabels.Range(func(l labels.Label) {
+				bytesLeftForChunks -= len(l.Name)
+				bytesLeftForChunks -= len(l.Value)
 			})
 
 			frameBytesLeft := bytesLeftForChunks
-			frame := &storepb.Series{Labels: lbls}
+			frame := &storepb.Series{Labels: s.Labels}
 			for i, c := range s.Chunks {
 				frame.Chunks = append(frame.Chunks, c)
 				frameBytesLeft -= c.Size()
@@ -594,7 +582,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 				}
 				expected = append(expected, frame)
 				frameBytesLeft = bytesLeftForChunks
-				frame = &storepb.Series{Labels: lbls}
+				frame = &storepb.Series{Labels: s.Labels}
 			}
 			expected = append(expected, frame)
 		}

@@ -428,8 +428,6 @@ func (z ZLabelSets) Less(i, j int) bool {
 	return l == lenI
 }
 
-type CustomLabelset labels.Labels
-
 var builderPool = &sync.Pool{
 	New: func() any {
 		b := labels.NewScratchBuilder(8)
@@ -437,7 +435,11 @@ var builderPool = &sync.Pool{
 	},
 }
 
-func (l *CustomLabelset) UnmarshalProtobuf(src []byte) (err error) {
+// UnmarshalProtobuf expects field number 1 to contains labels (name, value string).
+// Only pass the subslice with only labels.
+func UnmarshalProtobuf(src []byte) (labels.Labels, error) {
+	var err error
+
 	b := builderPool.Get().(*labels.ScratchBuilder)
 	b.Reset()
 
@@ -448,16 +450,16 @@ func (l *CustomLabelset) UnmarshalProtobuf(src []byte) (err error) {
 	for len(src) > 0 {
 		src, err = fc.NextField(src)
 		if err != nil {
-			return errors.Wrap(err, "unmarshal next field")
+			return labels.Labels{}, errors.Wrap(err, "unmarshal next field")
 		}
 
 		if fc.FieldNum != 1 {
-			return fmt.Errorf("expected field 1, got %d", fc.FieldNum)
+			return labels.Labels{}, fmt.Errorf("expected field 1, got %d", fc.FieldNum)
 		}
 
 		dat, ok := fc.MessageData()
 		if !ok {
-			return fmt.Errorf("expected message data for field %d", fc.FieldNum)
+			return labels.Labels{}, fmt.Errorf("expected message data for field %d", fc.FieldNum)
 		}
 
 		var n, v string
@@ -465,22 +467,22 @@ func (l *CustomLabelset) UnmarshalProtobuf(src []byte) (err error) {
 		for len(dat) > 0 {
 			dat, err = msgFc.NextField(dat)
 			if err != nil {
-				return errors.Wrap(err, "unmarshal next field in message")
+				return labels.Labels{}, errors.Wrap(err, "unmarshal next field in message")
 			}
 
 			switch msgFc.FieldNum {
 			case 1:
 				n, ok = msgFc.String()
 				if !ok {
-					return fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
+					return labels.Labels{}, fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
 				}
 			case 2:
 				v, ok = msgFc.String()
 				if !ok {
-					return fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
+					return labels.Labels{}, fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
 				}
 			default:
-				return fmt.Errorf("unexpected field %d in label message", msgFc.FieldNum)
+				return labels.Labels{}, fmt.Errorf("unexpected field %d in label message", msgFc.FieldNum)
 			}
 		}
 
@@ -488,6 +490,5 @@ func (l *CustomLabelset) UnmarshalProtobuf(src []byte) (err error) {
 
 	}
 
-	*l = CustomLabelset(b.Labels())
-	return nil
+	return b.Labels(), nil
 }
