@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"capnproto.org/go/capnp/v3"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -24,17 +24,14 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	)
 	series := make([]prompb.TimeSeries, 0, numSeries)
 	for range numSeries {
-		lbls := make([]labelpb.ZLabel, 0, numClusters*numPods)
+		bldr := labels.NewBuilder(labels.EmptyLabels())
 		for j := range numClusters {
 			for k := range numPods {
-				lbls = append(lbls, labelpb.ZLabel{
-					Name:  fmt.Sprintf("cluster-%d", j),
-					Value: fmt.Sprintf("pod-%d", k),
-				})
+				bldr.Set(fmt.Sprintf("cluster-%d", j), fmt.Sprintf("pod-%d", k))
 			}
 		}
 		series = append(series, prompb.TimeSeries{
-			Labels: lbls,
+			Labels: bldr.Labels(),
 			Samples: []prompb.Sample{
 				{
 					Value:     1,

@@ -751,7 +751,7 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 		return fmt.Errorf("labels subslice not found")
 	}
 
-	lbls, err := labelpb.UnmarshalProtobuf(dAtA[labelsStart:labelsEnd])
+	lbls, err := labelpb.UnmarshalProtobuf(dAtA[labelsStart:labelsEnd], 1)
 	if err != nil {
 		return err
 	}

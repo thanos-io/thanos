@@ -14,7 +14,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -42,10 +41,10 @@ func TestMarshalWriteRequest(t *testing.T) {
 		Tenant: "example-tenant",
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
-					{Name: "__name__", Value: "up"},
-					{Name: "job", Value: "prometheus"},
-				},
+				Labels: labels.FromMap(map[string]string{
+					"__name__": "up",
+					"job":      "prometheus",
+				}),
 				Samples: []prompb.Sample{
 					{Timestamp: 1, Value: 1},
 					{Timestamp: 2, Value: 2},
@@ -56,17 +55,14 @@ func TestMarshalWriteRequest(t *testing.T) {
 				},
 				Exemplars: []prompb.Exemplar{
 					{
-						Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "1234"}},
+						Labels:    labels.FromStrings("traceID", "1234"),
 						Value:     10,
 						Timestamp: 14,
 					},
 				},
 			},
 			{
-				Labels: []labelpb.ZLabel{
-					{Name: "__name__", Value: "up"},
-					{Name: "job", Value: "thanos"},
-				},
+				Labels: labels.FromStrings("__name__", "up", "job", "thanos"),
 				Samples: []prompb.Sample{
 					{Timestamp: 3, Value: 3},
 					{Timestamp: 4, Value: 4},
@@ -102,11 +98,10 @@ func TestMarshalWriteRequest(t *testing.T) {
 		expected := wreq.Timeseries[i]
 
 		t.Run("test_labels", func(t *testing.T) {
-			builder := labels.ScratchBuilder{}
-			for _, lbl := range expected.Labels {
-				builder.Add(lbl.Name, lbl.Value)
-			}
-			builder.Sort()
+			builder := labels.NewBuilder(labels.EmptyLabels())
+			expected.Labels.Range(func(l labels.Label) {
+				builder.Set(l.Name, l.Value)
+			})
 			require.Equal(t, builder.Labels(), actual.Labels, fmt.Sprintf("incorrect series labels at %d", i))
 		})
 		t.Run("test_float_samples", func(t *testing.T) {
@@ -133,7 +128,7 @@ func TestMarshalWriteRequest(t *testing.T) {
 		})
 		t.Run("test_exemplars", func(t *testing.T) {
 			for i, ex := range expected.Exemplars {
-				require.Equal(t, labelpb.ZLabelsToPromLabels(ex.Labels), actual.Exemplars[i].Labels)
+				require.Equal(t, ex.Labels, actual.Exemplars[i].Labels)
 				require.Equal(t, ex.Timestamp, actual.Exemplars[i].Ts)
 				require.Equal(t, ex.Value, actual.Exemplars[i].Value)
 			}
@@ -148,9 +143,7 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 		Tenant: "example-tenant",
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
-					{Name: "job", Value: "prometheus-1"},
-				},
+				Labels: labels.FromStrings("job", "prometheus-1"),
 				Histograms: []prompb.Histogram{
 					prompb.HistogramToHistogramProto(1, &histogram.Histogram{}),
 					prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1)),
@@ -158,9 +151,7 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 				},
 			},
 			{
-				Labels: []labelpb.ZLabel{
-					{Name: "job", Value: "prometheus-2"},
-				},
+				Labels: labels.FromStrings("job", "prometheus-2"),
 				Histograms: []prompb.Histogram{
 					prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1)),
 					prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2)),

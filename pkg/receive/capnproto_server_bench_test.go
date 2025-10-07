@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -23,20 +23,20 @@ func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 		Tenant: "example-tenant",
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
-					{Name: "__name__", Value: "up"},
-					{Name: "job", Value: "prometheus"},
-				},
+				Labels: labels.FromMap(map[string]string{
+					"__name__": "up",
+					"job":      "prometheus",
+				}),
 				Samples: []prompb.Sample{
 					{Timestamp: 1, Value: 1},
 					{Timestamp: 2, Value: 2},
 				},
 			},
 			{
-				Labels: []labelpb.ZLabel{
-					{Name: "__name__", Value: "up"},
-					{Name: "job", Value: "thanos"},
-				},
+				Labels: labels.FromMap(map[string]string{
+					"__name__": "up",
+					"job":      "thanos",
+				}),
 				Samples: []prompb.Sample{
 					{Timestamp: 3, Value: 3},
 					{Timestamp: 4, Value: 4},

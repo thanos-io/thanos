@@ -27,25 +27,25 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	// Create test data with valid exemplars
 	timeseries := []prompb.TimeSeries{
 		{
-			Labels: []labelpb.ZLabel{
-				{Name: "__name__", Value: "test_metric"},
-				{Name: "job", Value: "test"},
-			},
+			Labels: labels.FromMap(map[string]string{
+				"__name__": "test_metric",
+				"job":      "test",
+			}),
 			Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 			Exemplars: []prompb.Exemplar{
 				{
-					Labels: []labelpb.ZLabel{
-						{Name: "trace_id", Value: "abc123"},
-						{Name: "span_id", Value: "def456"},
-					},
+					Labels: labels.FromMap(map[string]string{
+						"trace_id": "abc123",
+						"span_id":  "def456",
+					}),
 					Value:     10.5,
 					Timestamp: 10,
 				},
 				{
-					Labels: []labelpb.ZLabel{
-						{Name: "trace_id", Value: "xyz789"},
-						{Name: "span_id", Value: "uvw012"},
-					},
+					Labels: labels.FromMap(map[string]string{
+						"trace_id": "xyz789",
+						"span_id":  "uvw012",
+					}),
 					Value:     20.5,
 					Timestamp: 11,
 				},
@@ -121,7 +121,9 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 	t.Parallel()
 
-	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
+	lbls := labels.FromMap(map[string]string{
+		"__name__": "test",
+	})
 	tests := map[string]struct {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
@@ -138,7 +140,9 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						Exemplars: []prompb.Exemplar{
 							{
-								Labels:    []labelpb.ZLabel{{Name: "trace_id", Value: "123"}},
+								Labels: labels.FromMap(map[string]string{
+									"trace_id": "123",
+								}),
 								Value:     11,
 								Timestamp: 12,
 							},
@@ -157,7 +161,9 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 						Exemplars: []prompb.Exemplar{
 							{
-								Labels:    []labelpb.ZLabel{{Name: "", Value: "123"}},
+								Labels: labels.FromMap(map[string]string{
+									"": "123",
+								}),
 								Value:     11,
 								Timestamp: 12,
 							},

@@ -55,7 +55,7 @@ message Sample {
 
 message Exemplar {
   // Optional, can be empty.
-  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false];
   double value = 2;
   // timestamp is in ms format, see pkg/timestamp/timestamp.go for
   // conversion from time.Time to Prometheus timestamp.
@@ -136,7 +136,7 @@ message BucketSpan {
 message TimeSeries {
   // Labels have to be sorted by label names and without duplicated label names.
   // TODO(bwplotka): Don't use zero copy ZLabels, see https://github.com/thanos-io/thanos/pull/3279 for details.
-  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false];
   repeated Sample samples = 2 [(gogoproto.nullable) = false];
   repeated Exemplar exemplars = 3 [(gogoproto.nullable) = false];
   repeated Histogram histograms = 4 [(gogoproto.nullable) = false];
@@ -185,7 +185,7 @@ message Chunk {
 // ChunkedSeries represents single, encoded time series.
 message ChunkedSeries {
   // Labels should be sorted.
-  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false];
   // Chunks will be in start time order and may overlap.
   repeated Chunk chunks = 2 [(gogoproto.nullable) = false];
 }

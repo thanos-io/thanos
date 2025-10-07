@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -48,146 +49,65 @@ func TestCreateAttributes(t *testing.T) {
 		name                      string
 		promoteResourceAttributes []string
 		ignoreAttrs               []string
-		expectedLabels            []labelpb.ZLabel
+		expectedLabels            labels.Labels
 	}{
 		{
 			name:                      "Successful conversion without resource attribute promotion",
 			promoteResourceAttributes: nil,
-			expectedLabels: []labelpb.ZLabel{
-				{
-					Name:  "__name__",
-					Value: "test_metric",
-				},
-				{
-					Name:  "instance",
-					Value: "service ID",
-				},
-				{
-					Name:  "job",
-					Value: "service name",
-				},
-				{
-					Name:  "metric_attr",
-					Value: "metric value",
-				},
-				{
-					Name:  "metric_attr_other",
-					Value: "metric value other",
-				},
-			},
+			expectedLabels: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "service ID",
+				"job", "service name",
+				"metric_attr", "metric value",
+				"metric_attr_other", "metric value other",
+			),
 		},
 		{
 			name:                      "Successful conversion with some attributes ignored",
 			promoteResourceAttributes: nil,
 			ignoreAttrs:               []string{"metric-attr-other"},
-			expectedLabels: []labelpb.ZLabel{
-				{
-					Name:  "__name__",
-					Value: "test_metric",
-				},
-				{
-					Name:  "instance",
-					Value: "service ID",
-				},
-				{
-					Name:  "job",
-					Value: "service name",
-				},
-				{
-					Name:  "metric_attr",
-					Value: "metric value",
-				},
-			},
+			expectedLabels: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "service ID",
+				"job", "service name",
+				"metric_attr", "metric value",
+			),
 		},
 		{
 			name:                      "Successful conversion with resource attribute promotion",
 			promoteResourceAttributes: []string{"non-existent-attr", "existent-attr"},
-			expectedLabels: []labelpb.ZLabel{
-				{
-					Name:  "__name__",
-					Value: "test_metric",
-				},
-				{
-					Name:  "instance",
-					Value: "service ID",
-				},
-				{
-					Name:  "job",
-					Value: "service name",
-				},
-				{
-					Name:  "metric_attr",
-					Value: "metric value",
-				},
-				{
-					Name:  "metric_attr_other",
-					Value: "metric value other",
-				},
-				{
-					Name:  "existent_attr",
-					Value: "resource value",
-				},
-			},
+			expectedLabels: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "service ID",
+				"job", "service name",
+				"metric_attr", "metric value",
+				"metric_attr_other", "metric value other",
+				"existent_attr", "resource value",
+			),
 		},
 		{
 			name:                      "Successful conversion with resource attribute promotion, conflicting resource attributes are ignored",
 			promoteResourceAttributes: []string{"non-existent-attr", "existent-attr", "metric-attr", "job", "instance"},
-			expectedLabels: []labelpb.ZLabel{
-				{
-					Name:  "__name__",
-					Value: "test_metric",
-				},
-				{
-					Name:  "instance",
-					Value: "service ID",
-				},
-				{
-					Name:  "job",
-					Value: "service name",
-				},
-				{
-					Name:  "existent_attr",
-					Value: "resource value",
-				},
-				{
-					Name:  "metric_attr",
-					Value: "metric value",
-				},
-				{
-					Name:  "metric_attr_other",
-					Value: "metric value other",
-				},
-			},
+			expectedLabels: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "service ID",
+				"job", "service name",
+				"existent_attr", "resource value",
+				"metric_attr", "metric value",
+				"metric_attr_other", "metric value other",
+			),
 		},
 		{
 			name:                      "Successful conversion with resource attribute promotion, attributes are only promoted once",
 			promoteResourceAttributes: []string{"existent-attr", "existent-attr"},
-			expectedLabels: []labelpb.ZLabel{
-				{
-					Name:  "__name__",
-					Value: "test_metric",
-				},
-				{
-					Name:  "instance",
-					Value: "service ID",
-				},
-				{
-					Name:  "job",
-					Value: "service name",
-				},
-				{
-					Name:  "existent_attr",
-					Value: "resource value",
-				},
-				{
-					Name:  "metric_attr",
-					Value: "metric value",
-				},
-				{
-					Name:  "metric_attr_other",
-					Value: "metric value other",
-				},
-			},
+			expectedLabels: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "service ID",
+				"job", "service name",
+				"existent_attr", "resource value",
+				"metric_attr", "metric value",
+				"metric_attr_other", "metric value other",
+			),
 		},
 	}
 	for _, tc := range testCases {
@@ -241,29 +161,29 @@ func TestPrometheusConverter_AddSummaryDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_summary" + countStr},
-				}
-				createdLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_summary" + createdSuffix},
-				}
-				sumLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_summary" + sumStr},
-				}
+				lbls := labels.FromStrings(
+					model.MetricNameLabel, "test_summary"+countStr,
+				)
+				createdLabels := labels.FromStrings(
+					model.MetricNameLabel, "test_summary"+createdSuffix,
+				)
+				sumLabels := labels.FromStrings(
+					model.MetricNameLabel, "test_summary"+sumStr,
+				)
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(sumLabels): {
+					labelpb.HashPromLabelsWithPrefix("", sumLabels): {
 						Labels: sumLabels,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(createdLabels): {
+					labelpb.HashPromLabelsWithPrefix("", createdLabels): {
 						Labels: createdLabels,
 						Samples: []prompb.Sample{
 							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts)},
@@ -285,20 +205,20 @@ func TestPrometheusConverter_AddSummaryDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_summary" + countStr},
-				}
-				sumLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_summary" + sumStr},
-				}
+				lbls := labels.FromStrings(
+					model.MetricNameLabel, "test_summary"+countStr,
+				)
+				sumLabels := labels.FromStrings(
+					model.MetricNameLabel, "test_summary"+sumStr,
+				)
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(sumLabels): {
+					labelpb.HashPromLabelsWithPrefix("", sumLabels): {
 						Labels: sumLabels,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
@@ -350,30 +270,26 @@ func TestPrometheusConverter_AddHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist" + countStr},
-				}
-				createdLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist" + createdSuffix},
-				}
-				infLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist_bucket"},
-					{Name: model.BucketLabel, Value: "+Inf"},
-				}
+				lbls := labels.FromStrings(model.MetricNameLabel, "test_hist"+countStr)
+				createdLabels := labels.FromStrings(model.MetricNameLabel, "test_hist"+createdSuffix)
+				infLabels := labels.FromStrings(
+					model.MetricNameLabel, "test_hist_bucket",
+					model.BucketLabel, "+Inf",
+				)
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(infLabels): {
+					labelpb.HashPromLabelsWithPrefix("", infLabels): {
 						Labels: infLabels,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(createdLabels): {
+					labelpb.HashPromLabelsWithPrefix("", createdLabels): {
 						Labels: createdLabels,
 						Samples: []prompb.Sample{
 							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts)},
@@ -395,22 +311,20 @@ func TestPrometheusConverter_AddHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist" + countStr},
-				}
-				infLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist_bucket"},
-					{Name: model.BucketLabel, Value: "+Inf"},
-				}
+				lbls := labels.FromStrings(model.MetricNameLabel, "test_hist"+countStr)
+				infLabels := labels.FromStrings(
+					model.MetricNameLabel, "test_hist_bucket",
+					model.BucketLabel, "+Inf",
+				)
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(infLabels): {
+					labelpb.HashPromLabelsWithPrefix("", infLabels): {
 						Labels: infLabels,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},

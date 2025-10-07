@@ -376,9 +376,9 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				continue
 			}
 			builder.Reset()
-			for _, l := range ts.Labels {
+			ts.Labels.Range(func(l labels.Label) {
 				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
-			}
+			})
 			// Point might have a different timestamp, force it to the evaluation
 			// timestamp as that is when we ran the evaluation.
 			// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
@@ -443,9 +443,9 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			continue
 		}
 		builder.Reset()
-		for _, l := range ts.Labels {
+		ts.Labels.Range(func(l labels.Label) {
 			builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
-		}
+		})
 		series := promql.Series{
 			Metric:     builder.Labels(),
 			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),

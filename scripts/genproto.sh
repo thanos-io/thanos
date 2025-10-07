@@ -73,5 +73,24 @@ popd
 ./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series MarshalToSizedBuffer
 ./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series Size
 ./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series Unmarshal
-go fmt ./pkg/store/storepb
 
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar GetLabels
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar MarshalToSizedBuffer
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar Size
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar Unmarshal
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go TimeSeries GetLabels
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go TimeSeries MarshalToSizedBuffer
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go TimeSeries Unmarshal
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go TimeSeries Size
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go ChunkedSeries GetLabels
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go ChunkedSeries MarshalToSizedBuffer
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go ChunkedSeries Size
+./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go ChunkedSeries Unmarshal
+./scripts/remove_type.sh Exemplar ./pkg/store/storepb/prompb/types.pb.go
+./scripts/remove_type.sh TimeSeries ./pkg/store/storepb/prompb/types.pb.go
+./scripts/remove_type.sh ChunkedSeries ./pkg/store/storepb/prompb/types.pb.go
+
+go fmt ./pkg/store/storepb/
+go fmt ./pkg/store/storepb/prompb/
+goimports -w ./pkg/store/storepb/prompb/types.pb.go
+goimports -w ./pkg/store/storepb/types.pb.go

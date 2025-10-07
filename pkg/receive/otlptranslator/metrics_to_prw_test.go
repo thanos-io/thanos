@@ -75,7 +75,8 @@ func TestFromMetrics(t *testing.T) {
 			target_info_count := 0
 			for _, s := range ts {
 				b := labels.NewScratchBuilder(2)
-				lbls := labelProtosToLabels(&b, s.Labels)
+				s.Labels = b.Labels()
+				lbls := s.Labels
 				if lbls.Get(labels.MetricName) == "target_info" {
 					target_info_count++
 					require.Equal(t, "test-namespace/test-service", lbls.Get("job"))

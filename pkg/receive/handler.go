@@ -875,7 +875,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		var tenant = tenantHTTP
 
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+			lbls := ts.Labels
 
 			tenantLabel := lbls.Get(h.splitTenantLabelName)
 			if tenantLabel != "" {
@@ -884,9 +884,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 				newLabels := labels.NewBuilder(lbls)
 				newLabels.Del(h.splitTenantLabelName)
 
-				ts.Labels = labelpb.ZLabelsFromPromLabels(
-					newLabels.Labels(),
-				)
+				ts.Labels = newLabels.Labels()
 			}
 		}
 
@@ -967,8 +965,7 @@ func (h *Handler) sendLocalWrite(
 	for _, ts := range trackedSeries.timeSeries {
 		var tenant = tenantHTTP
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
-			if tnt := lbls.Get(h.splitTenantLabelName); tnt != "" {
+			if tnt := ts.Labels.Get(h.splitTenantLabelName); tnt != "" {
 				tenant = tnt
 			}
 		}
@@ -1101,11 +1098,11 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(ts.Labels, h.options.RelabelConfigs...)
 		if !keep {
 			continue
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		ts.Labels = lbls
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries

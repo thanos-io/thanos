@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -38,11 +39,9 @@ func TestPrometheusConverter_addGaugeNumberDataPoints(t *testing.T) {
 				)
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test"},
-				}
+				labels := labels.FromStrings(model.MetricNameLabel, "test")
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
+					labelpb.HashPromLabelsWithPrefix("", labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{
@@ -93,11 +92,10 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				)
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test"},
-				}
+				labels := labels.FromStrings(model.MetricNameLabel, "test")
+
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
+					labelpb.HashPromLabelsWithPrefix("", labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{
@@ -121,11 +119,10 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return m
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test"},
-				}
+				labels := labels.FromStrings(model.MetricNameLabel, "test")
+
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
+					labelpb.HashPromLabelsWithPrefix("", labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{{
 							Value:     1,
@@ -154,20 +151,17 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_sum"},
-				}
-				createdLabels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_sum" + createdSuffix},
-				}
+				lbls := labels.FromStrings(model.MetricNameLabel, "test_sum")
+				createdLabels := labels.FromStrings(model.MetricNameLabel, "test_sum"+createdSuffix)
+
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 1, Timestamp: convertTimeStamp(ts)},
 						},
 					},
-					timeSeriesSignature(createdLabels): {
+					labelpb.HashPromLabelsWithPrefix("", createdLabels): {
 						Labels: createdLabels,
 						Samples: []prompb.Sample{
 							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts)},
@@ -190,12 +184,11 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_sum"},
-				}
+				lbls := labels.FromStrings(model.MetricNameLabel, "test_sum")
+
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
@@ -217,12 +210,10 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_sum"},
-				}
+				lbls := labels.FromStrings(model.MetricNameLabel, "test_sum")
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},

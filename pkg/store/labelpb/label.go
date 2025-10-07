@@ -341,6 +341,53 @@ func DeepCopy(lbls []ZLabel) []ZLabel {
 	return ret
 }
 
+// HashPromLabelsWithPrefix returns a hash for the given prefix and labels.
+func HashPromLabelsWithPrefix(prefix string, lbls labels.Labels) uint64 {
+	// Use xxhash.Sum64(b) for fast path as it's faster.
+	b := make([]byte, 0, 1024)
+	b = append(b, prefix...)
+	b = append(b, sep[0])
+
+	var i int
+
+	var stopIter bool
+	lbls.Range(func(l labels.Label) {
+		if stopIter {
+			return
+		}
+		if len(b)+len(l.Name)+len(l.Value)+2 >= cap(b) {
+			stopIter = true
+			return
+		}
+		b = append(b, l.Name...)
+		b = append(b, sep[0])
+		b = append(b, l.Value...)
+		b = append(b, sep[0])
+		i++
+	})
+
+	if stopIter {
+		// If labels entry is 1KB allocate do not allocate whole entry.
+		h := xxhash.New()
+		_, _ = h.Write(b)
+
+		lbls.Range(func(l labels.Label) {
+			i--
+			if i >= 0 {
+				return
+			}
+
+			_, _ = h.WriteString(l.Name)
+			_, _ = h.Write(sep)
+			_, _ = h.WriteString(l.Value)
+			_, _ = h.Write(sep)
+		})
+		return h.Sum64()
+	}
+
+	return xxhash.Sum64(b)
+}
+
 // HashWithPrefix returns a hash for the given prefix and labels.
 func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
@@ -435,9 +482,9 @@ var builderPool = &sync.Pool{
 	},
 }
 
-// UnmarshalProtobuf expects field number 1 to contains labels (name, value string).
+// UnmarshalProtobuf expects field number to contain labels (name, value string).
 // Only pass the subslice with only labels.
-func UnmarshalProtobuf(src []byte) (labels.Labels, error) {
+func UnmarshalProtobuf(src []byte, fieldNumber int) (labels.Labels, error) {
 	var err error
 
 	b := builderPool.Get().(*labels.ScratchBuilder)
@@ -453,8 +500,8 @@ func UnmarshalProtobuf(src []byte) (labels.Labels, error) {
 			return labels.Labels{}, errors.Wrap(err, "unmarshal next field")
 		}
 
-		if fc.FieldNum != 1 {
-			return labels.Labels{}, fmt.Errorf("expected field 1, got %d", fc.FieldNum)
+		if fc.FieldNum != uint32(fieldNumber) {
+			return labels.Labels{}, fmt.Errorf("expected field %d, got %d", fieldNumber, fc.FieldNum)
 		}
 
 		dat, ok := fc.MessageData()

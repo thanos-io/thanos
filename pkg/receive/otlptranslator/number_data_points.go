@@ -12,10 +12,10 @@ import (
 	"math"
 
 	"github.com/prometheus/common/model"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -102,15 +102,14 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 				return nil
 			}
 
-			createdLabels := make([]labelpb.ZLabel, len(lbls))
-			copy(createdLabels, lbls)
-			for i, l := range createdLabels {
+			createdLabels := labels.NewBuilder(lbls.Copy())
+			createdLabels.Range(func(l labels.Label) {
 				if l.Name == model.MetricNameLabel {
-					createdLabels[i].Value = name + createdSuffix
-					break
+					createdLabels.Set(l.Name, l.Value+createdSuffix)
+					return
 				}
-			}
-			c.addTimeSeriesIfNeeded(createdLabels, startTimestamp, pt.Timestamp())
+			})
+			c.addTimeSeriesIfNeeded(createdLabels.Labels(), startTimestamp, pt.Timestamp())
 		}
 	}
 

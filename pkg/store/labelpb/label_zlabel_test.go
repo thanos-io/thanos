@@ -581,7 +581,7 @@ func BenchmarkLabelUnmarshal(b *testing.B) {
 		b.ResetTimer()
 
 		for b.Loop() {
-			_, err := UnmarshalProtobuf(lblsetm)
+			_, err := UnmarshalProtobuf(lblsetm, 1)
 			require.NoError(b, err)
 		}
 	})

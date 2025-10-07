@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -635,12 +636,12 @@ func TestPrometheusConverter_addExponentialHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			wantSeries: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist"},
-					{Name: "attr", Value: "test_attr"},
-				}
+				labels := labels.FromStrings(
+					model.MetricNameLabel, "test_hist",
+					"attr", "test_attr",
+				)
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
+					labelpb.HashPromLabelsWithPrefix("", labels): {
 						Labels: labels,
 						Histograms: []prompb.Histogram{
 							{
@@ -694,18 +695,18 @@ func TestPrometheusConverter_addExponentialHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			wantSeries: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist"},
-					{Name: "attr", Value: "test_attr"},
-				}
-				labelsAnother := []labelpb.ZLabel{
-					{Name: model.MetricNameLabel, Value: "test_hist"},
-					{Name: "attr", Value: "test_attr_two"},
-				}
+				lbls := labels.FromStrings(
+					model.MetricNameLabel, "test_hist",
+					"attr", "test_attr",
+				)
+				labelsAnother := labels.FromStrings(
+					model.MetricNameLabel, "test_hist",
+					"attr", "test_attr_two",
+				)
 
 				return map[uint64]*prompb.TimeSeries{
-					timeSeriesSignature(labels): {
-						Labels: labels,
+					labelpb.HashPromLabelsWithPrefix("", lbls): {
+						Labels: lbls,
 						Histograms: []prompb.Histogram{
 							{
 								Count:          &prompb.Histogram_CountInt{CountInt: 7},
@@ -720,7 +721,7 @@ func TestPrometheusConverter_addExponentialHistogramDataPoints(t *testing.T) {
 							{Value: 1},
 						},
 					},
-					timeSeriesSignature(labelsAnother): {
+					labelpb.HashPromLabelsWithPrefix("", labelsAnother): {
 						Labels: labelsAnother,
 						Histograms: []prompb.Histogram{
 							{

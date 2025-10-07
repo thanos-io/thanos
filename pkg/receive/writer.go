@@ -17,7 +17,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -101,23 +100,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
-		if err := labelpb.ValidateLabels(t.Labels); err != nil {
-			lset := &labelpb.ZLabelSet{Labels: t.Labels}
-			errorTracker.addLabelsError(err, lset, tLogger)
-			continue
-		}
+		// TODO(GiedriusS): add back validation.
 
-		lset := labelpb.ZLabelsToPromLabels(t.Labels)
-
+		lset := t.Labels
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(lset, lset.Hash())
-		if ref == 0 {
-			// If not, copy labels, as TSDB will hold those strings long term. Given no
-			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels, r.opts.Intern)
-			lset = labelpb.ZLabelsToPromLabels(t.Labels)
-		}
 
+		// TODO(GiedriusS): check what to do with copying here.
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
 			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
@@ -147,7 +136,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
-				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
+				exLset := ex.Labels
 				exLogger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
 
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{

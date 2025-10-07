@@ -19,7 +19,6 @@ import (
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -146,7 +145,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		for _, sample := range vector {
 			floats, histograms := prompb.SamplesFromPromqlSamples(sample)
 			series := &prompb.TimeSeries{
-				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+				Labels:     sample.Metric,
 				Samples:    floats,
 				Histograms: histograms,
 			}
@@ -231,7 +230,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		for _, series := range value {
 			floats, histograms := prompb.SamplesFromPromqlSeries(series)
 			series := &prompb.TimeSeries{
-				Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
+				Labels:     series.Metric,
 				Samples:    floats,
 				Histograms: histograms,
 			}
@@ -243,7 +242,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		for _, sample := range value {
 			floats, histograms := prompb.SamplesFromPromqlSamples(sample)
 			series := &prompb.TimeSeries{
-				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+				Labels:     sample.Metric,
 				Samples:    floats,
 				Histograms: histograms,
 			}

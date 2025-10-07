@@ -14,11 +14,9 @@ import (
 	"log"
 	"math"
 	"slices"
-	"sort"
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -26,6 +24,7 @@ import (
 	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	prometheustranslator "github.com/prometheus/otlptranslator"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -63,44 +62,6 @@ func (m byBucketBoundsData) Len() int           { return len(m) }
 func (m byBucketBoundsData) Less(i, j int) bool { return m[i].bound < m[j].bound }
 func (m byBucketBoundsData) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
 
-// ByLabelName enables the usage of sort.Sort() with a slice of labels.
-type ByLabelName []labelpb.ZLabel
-
-func (a ByLabelName) Len() int           { return len(a) }
-func (a ByLabelName) Less(i, j int) bool { return a[i].Name < a[j].Name }
-func (a ByLabelName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-
-// timeSeriesSignature returns a hashed label set signature.
-// The label slice should not contain duplicate label names; this method sorts the slice by label name before creating
-// the signature.
-// The algorithm is the same as in Prometheus' labels.StableHash function.
-func timeSeriesSignature(labels []labelpb.ZLabel) uint64 {
-	sort.Sort(ByLabelName(labels))
-
-	// Use xxhash.Sum64(b) for fast path as it's faster.
-	b := make([]byte, 0, 1024)
-	for i, v := range labels {
-		if len(b)+len(v.Name)+len(v.Value)+2 >= cap(b) {
-			// If labels entry is 1KB+ do not allocate whole entry.
-			h := xxhash.New()
-			_, _ = h.Write(b)
-			for _, v := range labels[i:] {
-				_, _ = h.WriteString(v.Name)
-				_, _ = h.Write(seps)
-				_, _ = h.WriteString(v.Value)
-				_, _ = h.Write(seps)
-			}
-			return h.Sum64()
-		}
-
-		b = append(b, v.Name...)
-		b = append(b, seps[0])
-		b = append(b, v.Value...)
-		b = append(b, seps[0])
-	}
-	return xxhash.Sum64(b)
-}
-
 var seps = []byte{'\xff'}
 
 // createAttributes creates a slice of Prometheus Labels with OTLP attributes and pairs of string values.
@@ -108,65 +69,53 @@ var seps = []byte{'\xff'}
 // if logOnOverwrite is true, the overwrite is logged. Resulting label names are sanitized.
 // If settings.PromoteResourceAttributes is not empty, it's a set of resource attributes that should be promoted to labels.
 func createAttributes(resource pcommon.Resource, attributes pcommon.Map, settings Settings,
-	ignoreAttrs []string, logOnOverwrite bool, extras ...string) []labelpb.ZLabel {
+	ignoreAttrs []string, logOnOverwrite bool, extras ...string) labels.Labels {
 	resourceAttrs := resource.Attributes()
 	serviceName, haveServiceName := resourceAttrs.Get(conventions.AttributeServiceName)
 	instance, haveInstanceID := resourceAttrs.Get(conventions.AttributeServiceInstanceID)
 
-	promotedAttrs := make([]labelpb.ZLabel, 0, len(settings.PromoteResourceAttributes))
-	for _, name := range settings.PromoteResourceAttributes {
-		if value, exists := resourceAttrs.Get(name); exists {
-			promotedAttrs = append(promotedAttrs, labelpb.ZLabel{Name: name, Value: value.AsString()})
-		}
-	}
-	sort.Stable(ByLabelName(promotedAttrs))
-
-	// Calculate the maximum possible number of labels we could return so we can preallocate l
-	maxLabelCount := attributes.Len() + len(settings.ExternalLabels) + len(promotedAttrs) + len(extras)/2
-
+	// Using a map to handle label name collisions and sanitization first.
+	maxLabelCount := attributes.Len() + len(settings.ExternalLabels) + len(settings.PromoteResourceAttributes) + len(extras)/2
 	if haveServiceName {
 		maxLabelCount++
 	}
-
 	if haveInstanceID {
 		maxLabelCount++
 	}
+	l := make(map[string]string, maxLabelCount)
 
-	// Ensure attributes are sorted by key for consistent merging of keys which
-	// collide when sanitized.
-	labels := make([]labelpb.ZLabel, 0, maxLabelCount)
-	// XXX: Should we always drop service namespace/service name/service instance ID from the labels
-	// (as they get mapped to other Prometheus labels)?
+	labelNamer := prometheustranslator.LabelNamer{}
+
+	// Process attributes
 	attributes.Range(func(key string, value pcommon.Value) bool {
 		if !slices.Contains(ignoreAttrs, key) {
-			labels = append(labels, labelpb.ZLabel{Name: key, Value: value.AsString()})
+			finalKey := key
+			if !settings.AllowUTF8 {
+				finalKey = labelNamer.Build(finalKey)
+			}
+			if existingValue, alreadyExists := l[finalKey]; alreadyExists {
+				l[finalKey] = existingValue + ";" + value.AsString()
+			} else {
+				l[finalKey] = value.AsString()
+			}
 		}
 		return true
 	})
-	sort.Stable(ByLabelName(labels))
 
-	labelNamer := prometheustranslator.LabelNamer{}
-	// map ensures no duplicate label names.
-	l := make(map[string]string, maxLabelCount)
-	for _, label := range labels {
-		finalKey := label.Name
-		if !settings.AllowUTF8 {
-			finalKey = labelNamer.Build(finalKey)
-		}
-		if existingValue, alreadyExists := l[finalKey]; alreadyExists {
-			l[finalKey] = existingValue + ";" + label.Value
-		} else {
-			l[finalKey] = label.Value
+	// Process promoted resource attributes
+	promotedAttrs := make(map[string]string, len(settings.PromoteResourceAttributes))
+	for _, name := range settings.PromoteResourceAttributes {
+		if value, exists := resourceAttrs.Get(name); exists {
+			normalized := name
+			if !settings.AllowUTF8 {
+				normalized = labelNamer.Build(normalized)
+			}
+			promotedAttrs[normalized] = value.AsString()
 		}
 	}
-
-	for _, lbl := range promotedAttrs {
-		normalized := lbl.Name
-		if !settings.AllowUTF8 {
-			normalized = labelNamer.Build(normalized)
-		}
-		if _, exists := l[normalized]; !exists {
-			l[normalized] = lbl.Value
+	for k, v := range promotedAttrs {
+		if _, exists := l[k]; !exists {
+			l[k] = v
 		}
 	}
 
@@ -182,10 +131,9 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 	if haveInstanceID {
 		l[model.InstanceLabel] = instance.AsString()
 	}
+
 	for key, value := range settings.ExternalLabels {
-		// External labels have already been sanitized
 		if _, alreadyExists := l[key]; alreadyExists {
-			// Skip external labels if they are overridden by metric attributes
 			continue
 		}
 		l[key] = value
@@ -195,25 +143,22 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 		if i+1 >= len(extras) {
 			break
 		}
-
 		name := extras[i]
-		_, found := l[name]
-		if found && logOnOverwrite {
+		if _, found := l[name]; found && logOnOverwrite {
 			log.Println("label " + name + " is overwritten. Check if Prometheus reserved labels are used.")
 		}
-		// internal labels should be maintained
+		finalName := name
 		if !settings.AllowUTF8 && len(name) <= 4 && name[:2] != "__" && name[len(name)-2:] != "__" {
-			name = labelNamer.Build(name)
+			finalName = labelNamer.Build(name)
 		}
-		l[name] = extras[i+1]
+		l[finalName] = extras[i+1]
 	}
 
-	labels = labels[:0]
+	b := labels.NewBuilder(labels.EmptyLabels())
 	for k, v := range l {
-		labels = append(labels, labelpb.ZLabel{Name: k, Value: v})
+		b.Set(k, v)
 	}
-
-	return labels
+	return b.Labels()
 }
 
 // isValidAggregationTemporality checks whether an OTel metric has a valid
@@ -363,40 +308,35 @@ func getPromExemplars[T exemplarType](ctx context.Context, everyN *everyNTimes, 
 		if traceID := exemplar.TraceID(); !traceID.IsEmpty() {
 			val := hex.EncodeToString(traceID[:])
 			exemplarRunes += utf8.RuneCountInString(traceIDKey) + utf8.RuneCountInString(val)
-			promLabel := labelpb.ZLabel{
-				Name:  traceIDKey,
-				Value: val,
-			}
-			promExemplar.Labels = append(promExemplar.Labels, promLabel)
+			bl := labels.NewBuilder(promExemplar.Labels)
+			bl.Set(traceIDKey, val)
+
+			promExemplar.Labels = bl.Labels()
 		}
 		if spanID := exemplar.SpanID(); !spanID.IsEmpty() {
 			val := hex.EncodeToString(spanID[:])
 			exemplarRunes += utf8.RuneCountInString(spanIDKey) + utf8.RuneCountInString(val)
-			promLabel := labelpb.ZLabel{
-				Name:  spanIDKey,
-				Value: val,
-			}
-			promExemplar.Labels = append(promExemplar.Labels, promLabel)
+			bl := labels.NewBuilder(promExemplar.Labels)
+			bl.Set(spanIDKey, val)
+			promExemplar.Labels = bl.Labels()
 		}
 
 		attrs := exemplar.FilteredAttributes()
-		labelsFromAttributes := make([]labelpb.ZLabel, 0, attrs.Len())
 		attrs.Range(func(key string, value pcommon.Value) bool {
 			val := value.AsString()
 			exemplarRunes += utf8.RuneCountInString(key) + utf8.RuneCountInString(val)
-			promLabel := labelpb.ZLabel{
-				Name:  key,
-				Value: val,
-			}
-
-			labelsFromAttributes = append(labelsFromAttributes, promLabel)
 
 			return true
 		})
 		if exemplarRunes <= maxExemplarRunes {
+			lbls := labels.NewBuilder(promExemplar.Labels)
+			attrs.Range(func(key string, value pcommon.Value) bool {
+				lbls.Set(key, value.AsString())
+				return true
+			})
 			// only append filtered attributes if it does not cause exemplar
 			// labels to exceed the max number of runes
-			promExemplar.Labels = append(promExemplar.Labels, labelsFromAttributes...)
+			promExemplar.Labels = lbls.Labels()
 		}
 
 		promExemplars = append(promExemplars, promExemplar)
@@ -502,25 +442,23 @@ func (c *PrometheusConverter) addSummaryDataPoints(ctx context.Context, dataPoin
 // createLabels returns a copy of baseLabels, adding to it the pair model.MetricNameLabel=name.
 // If extras are provided, corresponding label pairs are also added to the returned slice.
 // If extras is uneven length, the last (unpaired) extra will be ignored.
-func createLabels(name string, baseLabels []labelpb.ZLabel, extras ...string) []labelpb.ZLabel {
-	extraLabelCount := len(extras) / 2
-	labels := make([]labelpb.ZLabel, len(baseLabels), len(baseLabels)+extraLabelCount+1) // +1 for name
-	copy(labels, baseLabels)
+func createLabels(name string, baseLabels labels.Labels, extras ...string) labels.Labels {
+	b := labels.NewBuilder(baseLabels)
 
 	n := len(extras)
 	n -= n % 2
 	for extrasIdx := 0; extrasIdx < n; extrasIdx += 2 {
-		labels = append(labels, labelpb.ZLabel{Name: extras[extrasIdx], Value: extras[extrasIdx+1]})
+		b.Set(extras[extrasIdx], extras[extrasIdx+1])
 	}
 
-	labels = append(labels, labelpb.ZLabel{Name: model.MetricNameLabel, Value: name})
-	return labels
+	b.Set(model.MetricNameLabel, name)
+	return b.Labels()
 }
 
 // getOrCreateTimeSeries returns the time series corresponding to the label set if existent, and false.
 // Otherwise it creates a new one and returns that, and true.
-func (c *PrometheusConverter) getOrCreateTimeSeries(lbls []labelpb.ZLabel) (*prompb.TimeSeries, bool) {
-	h := timeSeriesSignature(lbls)
+func (c *PrometheusConverter) getOrCreateTimeSeries(lbls labels.Labels) (*prompb.TimeSeries, bool) {
+	h := labelpb.HashPromLabelsWithPrefix("", lbls)
 	ts := c.unique[h]
 	if ts != nil {
 		if isSameMetric(ts, lbls) {
@@ -555,7 +493,7 @@ func (c *PrometheusConverter) getOrCreateTimeSeries(lbls []labelpb.ZLabel) (*pro
 // addTimeSeriesIfNeeded adds a corresponding time series if it doesn't already exist.
 // If the time series doesn't already exist, it gets added with startTimestamp for its value and timestamp for its timestamp,
 // both converted to milliseconds.
-func (c *PrometheusConverter) addTimeSeriesIfNeeded(lbls []labelpb.ZLabel, startTimestamp pcommon.Timestamp, timestamp pcommon.Timestamp) {
+func (c *PrometheusConverter) addTimeSeriesIfNeeded(lbls labels.Labels, startTimestamp pcommon.Timestamp, timestamp pcommon.Timestamp) {
 	ts, created := c.getOrCreateTimeSeries(lbls)
 	if created {
 		ts.Samples = []prompb.Sample{
@@ -602,14 +540,13 @@ func addResourceTargetInfo(resource pcommon.Resource, settings Settings, timesta
 		// Do not pass identifying attributes as ignoreAttrs below.
 		identifyingAttrs = nil
 	}
-	labels := createAttributes(resource, attributes, settings, identifyingAttrs, false, model.MetricNameLabel, name)
+	lbls := createAttributes(resource, attributes, settings, identifyingAttrs, false, model.MetricNameLabel, name)
 	haveIdentifier := false
-	for _, l := range labels {
+	lbls.Range(func(l labels.Label) {
 		if l.Name == model.JobLabel || l.Name == model.InstanceLabel {
 			haveIdentifier = true
-			break
 		}
-	}
+	})
 
 	if !haveIdentifier {
 		// We need at least one identifying label to generate target_info.
@@ -621,7 +558,7 @@ func addResourceTargetInfo(resource pcommon.Resource, settings Settings, timesta
 		// convert ns to ms
 		Timestamp: convertTimeStamp(timestamp),
 	}
-	converter.addSample(sample, labels)
+	converter.addSample(sample, lbls)
 }
 
 // convertTimeStamp converts OTLP timestamp in ns to timestamp in ms.

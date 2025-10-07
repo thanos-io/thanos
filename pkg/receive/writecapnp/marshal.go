@@ -7,8 +7,8 @@ import (
 	"capnproto.org/go/capnp/v3"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -59,7 +59,7 @@ func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error 
 	for i, ts := range tsreq {
 		tsc := series.At(i)
 
-		lblsc, err := tsc.NewLabels(int32(len(ts.Labels)))
+		lblsc, err := tsc.NewLabels(int32(ts.Labels.Len()))
 		if err != nil {
 			return errors.Wrap(err, "new labels")
 		}
@@ -102,12 +102,14 @@ func marshalSymbols(builder *symbolsBuilder, symbols Symbols) error {
 	return symbols.SetData(data)
 }
 
-func marshalLabels(lbls Label_List, pbLbls []labelpb.ZLabel, symbols *symbolsBuilder) error {
-	for i, pbLbl := range pbLbls {
+func marshalLabels(lbls Label_List, pbLbls labels.Labels, symbols *symbolsBuilder) error {
+	var i int
+	pbLbls.Range(func(l labels.Label) {
 		lbl := lbls.At(i)
-		lbl.SetName(symbols.addEntry(pbLbl.Name))
-		lbl.SetValue(symbols.addEntry(pbLbl.Value))
-	}
+		lbl.SetName(symbols.addEntry(l.Name))
+		lbl.SetValue(symbols.addEntry(l.Value))
+		i++
+	})
 	return nil
 }
 
@@ -226,7 +228,7 @@ func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *sym
 	for i := range pbExemplars {
 		ex := exemplars.At(i)
 
-		lbls, err := ex.NewLabels(int32(len(pbExemplars[i].Labels)))
+		lbls, err := ex.NewLabels(int32(pbExemplars[i].Labels.Len()))
 		if err != nil {
 			return err
 		}

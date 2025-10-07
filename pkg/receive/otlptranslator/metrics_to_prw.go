@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/errutil"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -177,16 +177,17 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 	return annots, errs
 }
 
-func isSameMetric(ts *prompb.TimeSeries, lbls []labelpb.ZLabel) bool {
-	if len(ts.Labels) != len(lbls) {
+func isSameMetric(ts *prompb.TimeSeries, lbls labels.Labels) bool {
+	if ts.Labels.Len() != lbls.Len() {
 		return false
 	}
-	for i, l := range ts.Labels {
-		if l.Name != ts.Labels[i].Name || l.Value != ts.Labels[i].Value {
-			return false
+	var eq = true
+	ts.Labels.Range(func(l labels.Label) {
+		if lbls.Get(l.Name) != l.Value {
+			eq = false
 		}
-	}
-	return true
+	})
+	return eq
 }
 
 // addExemplars adds exemplars for the dataPoint. For each exemplar, if it can find a bucket bound corresponding to its value,
@@ -224,8 +225,8 @@ func (c *PrometheusConverter) addExemplars(ctx context.Context, dataPoint pmetri
 // If there is no corresponding TimeSeries already, it's created.
 // The corresponding TimeSeries is returned.
 // If either lbls is nil/empty or sample is nil, nothing is done.
-func (c *PrometheusConverter) addSample(sample *prompb.Sample, lbls []labelpb.ZLabel) *prompb.TimeSeries {
-	if sample == nil || len(lbls) == 0 {
+func (c *PrometheusConverter) addSample(sample *prompb.Sample, lbls labels.Labels) *prompb.TimeSeries {
+	if sample == nil || lbls.Len() == 0 {
 		// This shouldn't happen
 		return nil
 	}
