@@ -29,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/status/statuspb"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -543,6 +544,19 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 	return exemplarStores
 }
 
+// GetStatusClients returns a list of all active status clients.
+func (e *EndpointSet) GetStatusClients() []statuspb.StatusClient {
+	endpoints := e.getQueryableRefs()
+
+	statusClients := make([]statuspb.StatusClient, 0, len(endpoints))
+	for _, er := range endpoints {
+		if er.HasStatusAPI() {
+			statusClients = append(statusClients, statuspb.NewStatusClient(er.cc))
+		}
+	}
+	return statusClients
+}
+
 func (e *EndpointSet) Close() {
 	e.endpointsMtx.Lock()
 	defer e.endpointsMtx.Unlock()
@@ -712,6 +726,13 @@ func (er *endpointRef) HasExemplarsAPI() bool {
 	defer er.mtx.RUnlock()
 
 	return er.metadata != nil && er.metadata.Exemplars != nil
+}
+
+func (er *endpointRef) HasStatusAPI() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	return er.metadata != nil && er.metadata.Status != nil
 }
 
 func (er *endpointRef) LabelSets() []labels.Labels {
