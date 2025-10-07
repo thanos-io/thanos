@@ -46,7 +46,6 @@ const (
 	// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification%2Fmetrics%2Fdatamodel.md#exemplars-2
 	traceIDKey       = "trace_id"
 	spanIDKey        = "span_id"
-	infoType         = "info"
 	targetMetricName = "target_info"
 )
 
@@ -61,8 +60,6 @@ type byBucketBoundsData []bucketBoundsData
 func (m byBucketBoundsData) Len() int           { return len(m) }
 func (m byBucketBoundsData) Less(i, j int) bool { return m[i].bound < m[j].bound }
 func (m byBucketBoundsData) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
-
-var seps = []byte{'\xff'}
 
 // createAttributes creates a slice of Prometheus Labels with OTLP attributes and pairs of string values.
 // Unpaired string values are ignored. String pairs overwrite OTLP labels if collisions happen and

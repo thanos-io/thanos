@@ -20,18 +20,8 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
-
-func labelProtosToLabels(b *labels.ScratchBuilder, labelPairs []labelpb.ZLabel) labels.Labels {
-	b.Reset()
-	for _, l := range labelPairs {
-		b.Add(l.Name, l.Value)
-	}
-	b.Sort()
-	return b.Labels()
-}
 
 func TestFromMetrics(t *testing.T) {
 	for _, keepIdentifyingResourceAttributes := range []bool{false, true} {

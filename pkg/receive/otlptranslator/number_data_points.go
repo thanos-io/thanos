@@ -88,7 +88,7 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 		}
 		ts := c.addSample(sample, lbls)
 		if ts != nil {
-			exemplars, err := getPromExemplars[pmetric.NumberDataPoint](ctx, &c.everyN, pt)
+			exemplars, err := getPromExemplars(ctx, &c.everyN, pt)
 			if err != nil {
 				return err
 			}
