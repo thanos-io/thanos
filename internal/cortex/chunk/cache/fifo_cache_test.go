@@ -47,7 +47,7 @@ func TestFifoCacheEviction(t *testing.T) {
 		// Check put / get works
 		keys := []string{}
 		values := [][]byte{}
-		for i := 0; i < cnt; i++ {
+		for i := range cnt {
 			key := fmt.Sprintf("%02d", i)
 			value := make([]byte, len(key))
 			copy(value, key)
@@ -68,7 +68,7 @@ func TestFifoCacheEviction(t *testing.T) {
 		assert.Equal(t, testutil.ToFloat64(c.staleGets), float64(0))
 		assert.Equal(t, testutil.ToFloat64(c.memoryBytes), float64(cnt*sizeOf(itemTemplate)))
 
-		for i := 0; i < cnt; i++ {
+		for i := range cnt {
 			key := fmt.Sprintf("%02d", i)
 			value, ok := c.Get(ctx, key)
 			require.True(t, ok)
@@ -110,7 +110,7 @@ func TestFifoCacheEviction(t *testing.T) {
 		assert.Equal(t, testutil.ToFloat64(c.staleGets), float64(0))
 		assert.Equal(t, testutil.ToFloat64(c.memoryBytes), float64(cnt*sizeOf(itemTemplate)))
 
-		for i := 0; i < cnt-evicted; i++ {
+		for i := range cnt - evicted {
 			_, ok := c.Get(ctx, fmt.Sprintf("%02d", i))
 			require.False(t, ok)
 		}
@@ -148,7 +148,7 @@ func TestFifoCacheEviction(t *testing.T) {
 		for i := cnt; i < cnt+evicted; i++ {
 			value, ok := c.Get(ctx, fmt.Sprintf("%02d", i))
 			require.True(t, ok)
-			require.Equal(t, []byte(fmt.Sprintf("%02d", i*2)), value)
+			require.Equal(t, fmt.Appendf(nil, "%02d", i*2), value)
 		}
 
 		assert.Equal(t, testutil.ToFloat64(c.entriesAdded), float64(3))

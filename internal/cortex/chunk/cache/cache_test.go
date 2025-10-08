@@ -20,9 +20,9 @@ import (
 func fillCache(t *testing.T, cache cache.Cache) ([]string, [][]byte) {
 	keys := []string{}
 	bufs := [][]byte{}
-	for i := 0; i < 111; i++ {
+	for i := range 111 {
 		keys = append(keys, fmt.Sprintf("test%d", i))
-		bufs = append(bufs, []byte(fmt.Sprintf("buf%d", i)))
+		bufs = append(bufs, fmt.Appendf(nil, "buf%d", i))
 	}
 
 	cache.Store(context.Background(), keys, bufs)
@@ -30,7 +30,7 @@ func fillCache(t *testing.T, cache cache.Cache) ([]string, [][]byte) {
 }
 
 func testCacheSingle(t *testing.T, cache cache.Cache, keys []string, data [][]byte) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		index := rand.Intn(len(keys))
 		key := keys[index]
 
@@ -57,7 +57,7 @@ func testCacheMultiple(t *testing.T, cache cache.Cache, keys []string, data [][]
 }
 
 func testCacheMiss(t *testing.T, cache cache.Cache) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		key := strconv.Itoa(rand.Int()) // arbitrary key which should fail: no chunk key is a single integer
 		found, bufs, missing := cache.Fetch(context.Background(), []string{key})
 		require.Empty(t, found)

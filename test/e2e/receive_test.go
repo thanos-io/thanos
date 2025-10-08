@@ -1275,10 +1275,10 @@ func TestReceiveCpnp(t *testing.T) {
 		},
 	}, v)
 
-	// TODO(GiedriusS): repro for https://github.com/thanos-io/thanos/issues/8224. Fix in following PRs.
+	// Verify fix for https://github.com/thanos-io/thanos/issues/8224
 	queryExemplars(
 		t, context.Background(), q.Endpoint("http"), "myself", timestamp.FromTime(ts), timestamp.FromTime(ts), func(data []*exemplarspb.ExemplarData) error {
-			require.Equal(t, "\000\000\000\000\000\000\000", data[0].Exemplars[0].Labels.Labels[0].Name)
+			require.Equal(t, "receive", data[0].Exemplars[0].Labels.Labels[0].Name)
 			return nil
 		},
 	)

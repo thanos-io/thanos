@@ -506,9 +506,9 @@ groups:
       runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulenoevaluationfor10intervals
       summary: Thanos Rule has rule groups that did not evaluate for 10 intervals.
     expr: |
-      time() -  max by (job, instance, rule_group) (prometheus_rule_group_last_evaluation_timestamp_seconds{job=~".*thanos-rule.*"})
+      time() -  max by (job, instance, group) (prometheus_rule_group_last_evaluation_timestamp_seconds{job=~".*thanos-rule.*"})
       >
-      10 * max by (job, instance, rule_group) (prometheus_rule_group_interval_seconds{job=~".*thanos-rule.*"})
+      10 * max by (job, instance, group) (prometheus_rule_group_interval_seconds{job=~".*thanos-rule.*"})
     for: 5m
     labels:
       severity: info

@@ -236,6 +236,7 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --label "receive_replica=\"${i}\"" \
       --label 'receive="true"' \
       --receive.local-endpoint 127.0.0.1:1${i}907 \
+      --receive.capnproto-address 0.0.0.0:1${i}391 \
       --receive.hashrings '[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]' \
       --remote-write.address 0.0.0.0:1${i}908 \
       ${OBJSTORECFG} &

@@ -5,6 +5,7 @@ package dns
 
 import (
 	"context"
+	"maps"
 	"net"
 	"strings"
 	"sync"
@@ -143,9 +144,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string, flushOld bool) e
 	if flushOld && len(errs) == 0 {
 		p.resolved = map[string][]string{}
 	}
-	for name, addrs := range resolvedAddrs {
-		p.resolved[name] = addrs
-	}
+	maps.Copy(p.resolved, resolvedAddrs)
 	for name, addrs := range p.resolved {
 		p.resolverAddrs.WithLabelValues(name).Set(float64(len(addrs)))
 	}

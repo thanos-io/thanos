@@ -97,10 +97,7 @@ func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Requ
 	case SplitRequest:
 		dur := int64(interval / time.Millisecond)
 		for start := r.GetStart(); start < r.GetEnd(); start = start + dur {
-			end := start + dur
-			if end > r.GetEnd() {
-				end = r.GetEnd()
-			}
+			end := min(start+dur, r.GetEnd())
 
 			reqs = append(reqs, tr.WithSplitInterval(interval).WithStartEnd(start, end))
 		}

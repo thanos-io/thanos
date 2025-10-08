@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"runtime/debug"
+	"slices"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
@@ -72,7 +73,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		Help: "Total number of gRPC requests recovered from internal panic.",
 	})
 
-	grpcPanicRecoveryHandler := func(p interface{}) (err error) {
+	grpcPanicRecoveryHandler := func(p any) (err error) {
 		panicsTotal.Inc()
 		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
@@ -91,12 +92,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			tracing.UnaryServerInterceptor(tracer),
 			selector.UnaryServerInterceptor(grpc_logging.UnaryServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, c interceptors.CallMeta) bool {
 				//if RequestConfig.GRPC.Config was provided
-				for _, m := range logFilterMethods {
-					if m == c.FullMethod() {
-						return true
-					}
-				}
-				return false
+				return slices.Contains(logFilterMethods, c.FullMethod())
 			})),
 			selector.UnaryServerInterceptor(grpc_logging.UnaryServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, _ interceptors.CallMeta) bool {
 				//if RequestConfig.Options only was provided
@@ -113,12 +109,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			met.StreamServerInterceptor(),
 			tracing.StreamServerInterceptor(tracer),
 			selector.StreamServerInterceptor(grpc_logging.StreamServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, c interceptors.CallMeta) bool {
-				for _, m := range logFilterMethods {
-					if m == c.FullMethod() {
-						return true
-					}
-				}
-				return false
+				return slices.Contains(logFilterMethods, c.FullMethod())
 			})),
 			selector.StreamServerInterceptor(grpc_logging.StreamServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, _ interceptors.CallMeta) bool {
 				if len(logFilterMethods) == 0 && logOpts != nil {

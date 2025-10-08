@@ -75,13 +75,13 @@ type endpointTestCase struct {
 	params   map[string]string
 	query    url.Values
 	method   string
-	response interface{}
+	response any
 	errType  baseAPI.ErrorType
 }
-type responeCompareFunction func(interface{}, interface{}) bool
+type responeCompareFunction func(any, any) bool
 
 // Checks if both responses have Stats present or not.
-func lookupStats(a, b interface{}) bool {
+func lookupStats(a, b any) bool {
 	ra := a.(*queryData)
 	rb := b.(*queryData)
 	return (ra.Stats == nil && rb.Stats == nil) || (ra.Stats != nil && rb.Stats != nil)
@@ -124,9 +124,11 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 		params := test.query.Encode()
 
 		var body io.Reader
-		if test.method == http.MethodPost {
+
+		switch test.method {
+		case http.MethodPost:
 			body = strings.NewReader(params)
-		} else if test.method == "" {
+		case "":
 			test.method = "ANY"
 			reqURL += "?" + params
 		}
@@ -178,7 +180,7 @@ func TestQueryEndpoints(t *testing.T) {
 
 	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
-		for i := int64(0); i < 10; i++ {
+		for i := range int64(10) {
 			_, err := app.Append(0, lbl, i*60000, float64(i))
 			testutil.Ok(t, err)
 		}
@@ -704,7 +706,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	for _, lbl := range old {
 		var samples []chunks.Sample
 
-		for i := int64(0); i < 10; i++ {
+		for i := range int64(10) {
 			samples = append(samples, sample{
 				t: i * 60_000,
 				f: float64(i),
@@ -729,7 +731,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		app              = db.Appender(context.Background())
 	)
 	for _, lbl := range recent {
-		for i := int64(0); i < 10; i++ {
+		for i := range int64(10) {
 			_, err := app.Append(0, lbl, start+(i*60_000), float64(i)) // ms
 			testutil.Ok(t, err)
 		}
@@ -953,13 +955,13 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			response: []string{"a"},
 		},
-		// Bad name parameter.
+		// UTF-8 label name.
 		{
 			endpoint: api.labelValues,
 			params: map[string]string{
-				"name": "not!!!allowed",
+				"name": "http.request.method",
 			},
-			errType: baseAPI.ErrorBadData,
+			response: []string{},
 		},
 		{
 			endpoint: api.series,
@@ -1783,7 +1785,7 @@ func TestRulesHandler(t *testing.T) {
 	type test struct {
 		params   map[string]string
 		query    url.Values
-		response interface{}
+		response any
 	}
 	expectedAll := []testpromcompatibility.Rule{
 		testpromcompatibility.RecordingRule{
@@ -1959,7 +1961,7 @@ func TestRulesHandler(t *testing.T) {
 
 func BenchmarkQueryResultEncoding(b *testing.B) {
 	var mat promql.Matrix
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		lset := labels.FromStrings(
 			"__name__", "my_test_metric_name",
 			"instance", fmt.Sprintf("abcdefghijklmnopqrstuvxyz-%d", i),

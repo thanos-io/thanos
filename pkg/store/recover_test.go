@@ -4,7 +4,6 @@
 package store
 
 import (
-	"context"
 	"io"
 	"testing"
 
@@ -20,8 +19,7 @@ func TestRecoverableServer(t *testing.T) {
 	logger := log.NewNopLogger()
 	store := NewRecoverableStoreServer(logger, &panicStoreServer{})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	client := storepb.ServerAsClient(store)
 	seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{})
 	testutil.Ok(t, err)

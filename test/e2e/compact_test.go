@@ -943,7 +943,7 @@ func TestCompactorIssue6775(t *testing.T) {
 		maxt:    maxTime,
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rawBlockID, err := baseBlockDesc.Create(context.Background(), dir, 0, metadata.NoneFunc, 1200+i, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, rawBlockID.String()), rawBlockID.String()))

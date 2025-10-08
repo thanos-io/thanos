@@ -82,7 +82,7 @@ type loggerCapturer struct {
 	WasCalled bool
 }
 
-func (lc *loggerCapturer) Log(keyvals ...interface{}) error {
+func (lc *loggerCapturer) Log(keyvals ...any) error {
 	lc.WasCalled = true
 	return nil
 }

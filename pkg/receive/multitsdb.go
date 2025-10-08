@@ -28,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
-	"github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -47,7 +47,7 @@ import (
 type TSDBStats interface {
 	// TenantStats returns TSDB head stats for the given tenants.
 	// If no tenantIDs are provided, stats for all tenants are returned.
-	TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats
+	TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []api.TenantStats
 }
 
 type MultiTSDB struct {
@@ -365,7 +365,6 @@ func (t *MultiTSDB) Open() error {
 
 	var g errgroup.Group
 	for _, f := range files {
-		f := f
 		if !f.IsDir() {
 			continue
 		}
@@ -393,15 +392,13 @@ func (t *MultiTSDB) Flush() error {
 			continue
 		}
 		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			if err := t.flushHead(db); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -604,8 +601,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 		if s == nil {
 			continue
 		}
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			up, err := s.Sync(ctx)
 			if err != nil {
 				errmtx.Lock()
@@ -613,8 +609,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 				errmtx.Unlock()
 			}
 			uploaded.Add(int64(up))
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 	return int(uploaded.Load()), merr.Err()
@@ -660,7 +655,7 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	return t.exemplarClients
 }
 
-func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []status.TenantStats {
+func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ...string) []api.TenantStats {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	if len(tenantIDs) == 0 {
@@ -672,7 +667,7 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
-		result = make([]status.TenantStats, 0, len(t.tenants))
+		result = make([]api.TenantStats, 0, len(t.tenants))
 	)
 	for _, tenantID := range tenantIDs {
 		tenantInstance, ok := t.tenants[tenantID]
@@ -691,7 +686,7 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 
 			mu.Lock()
 			defer mu.Unlock()
-			result = append(result, status.TenantStats{
+			result = append(result, api.TenantStats{
 				Tenant: tenantID,
 				Stats:  stats,
 			})
