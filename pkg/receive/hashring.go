@@ -51,6 +51,9 @@ func (i *insufficientNodesError) Error() string {
 	return fmt.Sprintf("insufficient nodes; have %d, want %d", i.have, i.want)
 }
 
+// ErrNoMatchingHashring is returned when no hashring matches the given tenant.
+var ErrNoMatchingHashring = errors.New("no matching hashring to handle tenant")
+
 // Hashring finds the correct node to handle a given time series
 // for a specified tenant.
 // It returns the node and any error encountered.
@@ -326,7 +329,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 			return m.hashrings[i].GetN(tenant, ts, n)
 		}
 	}
-	return Endpoint{}, errors.New("no matching hashring to handle tenant")
+	return Endpoint{}, ErrNoMatchingHashring
 }
 
 func (m *multiHashring) Nodes() []Endpoint {

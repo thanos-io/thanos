@@ -8,39 +8,33 @@ import (
 	"strings"
 
 	"github.com/cespare/xxhash"
-	"github.com/pkg/errors"
 )
 
-// GetTenantFromScope computes the tenant for a metric based on the scope and Pantheon configuration.
-// It returns the computed tenant string in the format: <scope>_<group> or <scope>_<n>-of-<m>.
-func GetTenantFromScope(scope string, metricName string, cluster *PantheonCluster) (string, error) {
-	if cluster == nil {
-		return "", errors.New("pantheon cluster configuration is nil")
-	}
-
-	// Find the metric scope in the configuration.
-	var metricScope *MetricScope
+// GetMetricScope returns the MetricScope for a given scope name from the cluster configuration.
+// Returns nil if scope is not found.
+// Caller must ensure cluster is not nil.
+func GetMetricScope(scope string, cluster *PantheonCluster) *MetricScope {
 	for i := range cluster.MetricScopes {
 		if cluster.MetricScopes[i].ScopeName == scope {
-			metricScope = &cluster.MetricScopes[i]
-			break
+			return &cluster.MetricScopes[i]
 		}
 	}
 
-	if metricScope == nil {
-		return "", errors.Errorf("scope '%s' not found in pantheon configuration", scope)
-	}
+	return nil
+}
 
+// GetTenantFromScope computes the tenant for a metric based on the metric scope.
+// It returns the computed tenant string in the format: <scope>_<group> or <scope>_<n>-of-<m>.
+func GetTenantFromScope(metricName string, metricScope *MetricScope) string {
 	// Check if the metric belongs to any special group.
 	for _, group := range metricScope.SpecialMetricGroups {
 		if matchesSpecialGroup(metricName, &group) {
-			return fmt.Sprintf("%s_%s", scope, group.GroupName), nil
+			return fmt.Sprintf("%s_%s", metricScope.ScopeName, group.GroupName)
 		}
 	}
 
-	// If not in any special group, compute the shard using hash.
-	shard := computeMetricShard(metricName, metricScope.Shards)
-	return fmt.Sprintf("%s_%d-of-%d", scope, shard, metricScope.Shards), nil
+	// If not in any special group, compute the hashmod tenant.
+	return GetHashmodTenant(metricName, metricScope)
 }
 
 // matchesSpecialGroup checks if a metric name matches any pattern in the special group.
@@ -53,20 +47,17 @@ func matchesSpecialGroup(metricName string, group *SpecialMetricGroup) bool {
 		}
 	}
 
-	// Check metric name prefixes.
+	// Check metric name prefixes and suffixes.
 	for _, prefix := range group.MetricNamePrefixes {
 		if strings.HasPrefix(metricName, prefix) {
 			return true
 		}
 	}
-
-	// Check metric name suffixes.
 	for _, suffix := range group.MetricNameSuffixes {
 		if strings.HasSuffix(metricName, suffix) {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -78,4 +69,12 @@ func computeMetricShard(metricName string, totalShards int) int {
 
 	h := xxhash.Sum64String(metricName)
 	return int(h % uint64(totalShards))
+}
+
+// GetHashmodTenant computes the hashmod-based tenant for a metric name within a metric scope.
+// It returns the tenant in format: <scope>_<n>-of-<m> where n is the computed shard.
+// This is used for metrics that don't belong to any special group.
+func GetHashmodTenant(metricName string, metricScope *MetricScope) string {
+	shard := computeMetricShard(metricName, metricScope.Shards)
+	return fmt.Sprintf("%s_%d-of-%d", metricScope.ScopeName, shard, metricScope.Shards)
 }
