@@ -38,9 +38,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             3,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    3,
 								DbHpa: DbHpaConfig{
 									Enabled:     true,
 									MaxReplicas: 10,
@@ -55,9 +54,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 								},
 							},
 							{
-								DbGroupName:          "pantheon-db-a1",
-								Replicas:             2,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a1",
+								Replicas:    2,
 								DbHpa: DbHpaConfig{
 									Enabled:     true,
 									MaxReplicas: 5,
@@ -95,9 +93,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "test-db",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "test-db",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -119,9 +116,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "test-db",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "test-db",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -152,9 +148,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -176,9 +171,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a1",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a1",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -210,9 +204,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "test-db",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "test-db",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -243,9 +236,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -259,9 +251,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 								},
 							},
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             2,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    2,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 2,
@@ -305,9 +296,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -338,9 +328,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -354,9 +343,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 								},
 							},
 							{
-								DbGroupName:          "pantheon-db-a1",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a1",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -387,9 +375,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -420,9 +407,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -453,9 +439,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -486,9 +471,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     true,
 									MaxReplicas: 5,
@@ -519,9 +503,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -551,9 +534,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -584,9 +566,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -600,9 +581,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 								},
 							},
 							{
-								DbGroupName:          "pantheon-db-a1",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a1",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -642,9 +622,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -675,9 +654,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     true,
 									MaxReplicas: 5,
@@ -707,9 +685,8 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     true,
 									MaxReplicas: 5,
@@ -728,39 +705,6 @@ func TestPantheonClusterVersions_Validate(t *testing.T) {
 			},
 			expectError:   true,
 			errorContains: []string{"min_replicas must be >= 0"},
-		},
-		{
-			name: "invalid block duration",
-			clusterVersions: &PantheonClusterVersions{
-				Versions: []PantheonCluster{
-					{
-						DeletionDate: "",
-						MetricScopes: []MetricScope{
-							{ScopeName: "hgcp", Shards: 20},
-						},
-						DBGroups: []DbGroup{
-							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 3, // Invalid: less than 5.
-								DbHpa: DbHpaConfig{
-									Enabled:     false,
-									MaxReplicas: 1,
-									MinReplicas: 1,
-								},
-								TenantSets: []TenantSet{
-									{
-										MetricScopeName: "hgcp",
-										Shards:          []int{0},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectError:   true,
-			errorContains: []string{"block duration must be >= 5 minutes"},
 		},
 	}
 
@@ -927,9 +871,8 @@ func TestDBGroup_validate(t *testing.T) {
 		{
 			name: "valid DB group",
 			dbGroup: DbGroup{
-				DbGroupName:          "pantheon-db-a0",
-				Replicas:             3,
-				BlockDurationMinutes: 10,
+				DbGroupName: "pantheon-db-a0",
+				Replicas:    3,
 				DbHpa: DbHpaConfig{
 					Enabled:     true,
 					MaxReplicas: 10,
@@ -947,9 +890,8 @@ func TestDBGroup_validate(t *testing.T) {
 		{
 			name: "empty DB group name",
 			dbGroup: DbGroup{
-				DbGroupName:          "",
-				Replicas:             3,
-				BlockDurationMinutes: 10,
+				DbGroupName: "",
+				Replicas:    3,
 				DbHpa: DbHpaConfig{
 					Enabled:     false,
 					MaxReplicas: 1,
@@ -968,9 +910,8 @@ func TestDBGroup_validate(t *testing.T) {
 		{
 			name: "zero replicas",
 			dbGroup: DbGroup{
-				DbGroupName:          "pantheon-db-a0",
-				Replicas:             0,
-				BlockDurationMinutes: 10,
+				DbGroupName: "pantheon-db-a0",
+				Replicas:    0,
 				DbHpa: DbHpaConfig{
 					Enabled:     false,
 					MaxReplicas: 1,
@@ -989,9 +930,8 @@ func TestDBGroup_validate(t *testing.T) {
 		{
 			name: "too many replicas",
 			dbGroup: DbGroup{
-				DbGroupName:          "pantheon-db-a0",
-				Replicas:             20,
-				BlockDurationMinutes: 10,
+				DbGroupName: "pantheon-db-a0",
+				Replicas:    20,
 				DbHpa: DbHpaConfig{
 					Enabled:     false,
 					MaxReplicas: 20,
@@ -1006,27 +946,6 @@ func TestDBGroup_validate(t *testing.T) {
 			},
 			expectError:   true,
 			errorContains: "replicas should be <= 15 to avoid long release times",
-		},
-		{
-			name: "invalid block duration",
-			dbGroup: DbGroup{
-				DbGroupName:          "pantheon-db-a0",
-				Replicas:             1,
-				BlockDurationMinutes: 3, // Invalid: less than 5.
-				DbHpa: DbHpaConfig{
-					Enabled:     false,
-					MaxReplicas: 1,
-					MinReplicas: 1,
-				},
-				TenantSets: []TenantSet{
-					{
-						MetricScopeName: "hgcp",
-						Shards:          []int{0},
-					},
-				},
-			},
-			expectError:   true,
-			errorContains: "block duration must be >= 5 minutes",
 		},
 	}
 
@@ -1085,7 +1004,6 @@ func TestPantheonClusterVersions_UnmarshalJSON(t *testing.T) {
 					{
 						"db_group_name": "pantheon-db-a0",
 						"replicas": 3,
-						"block_duration_minutes": 10,
 						"db_hpa": {
 							"enabled": true,
 							"max_replicas": 10,
@@ -1102,7 +1020,6 @@ func TestPantheonClusterVersions_UnmarshalJSON(t *testing.T) {
 					{
 						"db_group_name": "pantheon-db-a1",
 						"replicas": 2,
-						"block_duration_minutes": 10,
 						"db_hpa": {
 							"enabled": true,
 							"max_replicas": 10,
@@ -1235,7 +1152,6 @@ versions:
     db_groups:
       - db_group_name: "pantheon-db-a0"
         replicas: 3
-        block_duration_minutes: 10
         db_hpa:
           enabled: true
           max_replicas: 10
@@ -1246,7 +1162,6 @@ versions:
             special_group_names: ["kube-metrics"]
       - db_group_name: "pantheon-db-a1"
         replicas: 2
-        block_duration_minutes: 10
         db_hpa:
           enabled: true
           max_replicas: 10
@@ -1354,9 +1269,8 @@ func TestPantheonClusterVersions_MarshalUnmarshalRoundTrip(t *testing.T) {
 				},
 				DBGroups: []DbGroup{
 					{
-						DbGroupName:          "pantheon-db-a0",
-						Replicas:             3,
-						BlockDurationMinutes: 10,
+						DbGroupName: "pantheon-db-a0",
+						Replicas:    3,
 						DbHpa: DbHpaConfig{
 							Enabled:     true,
 							MaxReplicas: 10,
@@ -1371,9 +1285,8 @@ func TestPantheonClusterVersions_MarshalUnmarshalRoundTrip(t *testing.T) {
 						},
 					},
 					{
-						DbGroupName:          "pantheon-db-a1",
-						Replicas:             1,
-						BlockDurationMinutes: 10,
+						DbGroupName: "pantheon-db-a1",
+						Replicas:    1,
 						DbHpa: DbHpaConfig{
 							Enabled:     false,
 							MaxReplicas: 1,
@@ -1821,9 +1734,8 @@ func TestPantheonClusterVersions_ValidateWithTenantSets(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             2,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    2,
 								DbHpa: DbHpaConfig{
 									Enabled:     true,
 									MaxReplicas: 5,
@@ -1837,9 +1749,8 @@ func TestPantheonClusterVersions_ValidateWithTenantSets(t *testing.T) {
 								},
 							},
 							{
-								DbGroupName:          "pantheon-db-a1",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a1",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -1873,9 +1784,8 @@ func TestPantheonClusterVersions_ValidateWithTenantSets(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -1906,9 +1816,8 @@ func TestPantheonClusterVersions_ValidateWithTenantSets(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -1922,9 +1831,8 @@ func TestPantheonClusterVersions_ValidateWithTenantSets(t *testing.T) {
 								},
 							},
 							{
-								DbGroupName:          "pantheon-db-a1",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a1",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,
@@ -1961,9 +1869,8 @@ func TestPantheonClusterVersions_ValidateWithTenantSets(t *testing.T) {
 						},
 						DBGroups: []DbGroup{
 							{
-								DbGroupName:          "pantheon-db-a0",
-								Replicas:             1,
-								BlockDurationMinutes: 10,
+								DbGroupName: "pantheon-db-a0",
+								Replicas:    1,
 								DbHpa: DbHpaConfig{
 									Enabled:     false,
 									MaxReplicas: 1,

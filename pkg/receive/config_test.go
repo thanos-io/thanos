@@ -140,9 +140,8 @@ func TestValidatePantheonConfig(t *testing.T) {
 				},
 				DBGroups: []pantheon.DbGroup{
 					{
-						DbGroupName:          "test-db-group",
-						Replicas:             3,
-						BlockDurationMinutes: 120,
+						DbGroupName: "test-db-group",
+						Replicas:    3,
 						DbHpa: pantheon.DbHpaConfig{
 							Enabled:     true,
 							MaxReplicas: 10,
@@ -195,9 +194,8 @@ func TestValidatePantheonConfig(t *testing.T) {
 						},
 						DBGroups: []pantheon.DbGroup{
 							{
-								DbGroupName:          "test-db",
-								Replicas:             1,
-								BlockDurationMinutes: 120,
+								DbGroupName: "test-db",
+								Replicas:    1,
 								TenantSets: []pantheon.TenantSet{
 									{
 										MetricScopeName: "test-scope",
@@ -264,9 +262,8 @@ func TestParsePantheonConfig(t *testing.T) {
 				},
 				DBGroups: []pantheon.DbGroup{
 					{
-						DbGroupName:          "pantheon-db-a0",
-						Replicas:             5,
-						BlockDurationMinutes: 120,
+						DbGroupName: "pantheon-db-a0",
+						Replicas:    5,
 						DbHpa: pantheon.DbHpaConfig{
 							Enabled:     true,
 							MaxReplicas: 15,
@@ -292,9 +289,8 @@ func TestParsePantheonConfig(t *testing.T) {
 				},
 				DBGroups: []pantheon.DbGroup{
 					{
-						DbGroupName:          "pantheon-db-a0",
-						Replicas:             3,
-						BlockDurationMinutes: 120,
+						DbGroupName: "pantheon-db-a0",
+						Replicas:    3,
 						TenantSets: []pantheon.TenantSet{
 							{
 								MetricScopeName: "hgcp",

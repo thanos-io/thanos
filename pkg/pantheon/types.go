@@ -102,10 +102,6 @@ type DbGroup struct {
 	// Must be >= 1 for production use.
 	Replicas int `json:"replicas" yaml:"replicas"`
 
-	// BlockDurationMinutes is the duration of the in-memory metric data blocks in minutes.
-	// Must be >= 5
-	BlockDurationMinutes int `json:"block_duration_minutes" yaml:"block_duration_minutes"`
-
 	// DbHpa configures horizontal pod autoscaling for this DB group.
 	// Automatically scales replicas based on CPU/memory/disk utilization.
 	// Triggers tenant reassignment when scaling beyond limits (>45 total pods or <3 total pods).
@@ -466,14 +462,6 @@ func (dbg *DbGroup) validate(prefix string) ValidationErrors {
 		errors = append(errors, ValidationError{
 			Field:   prefix + ".replicas",
 			Message: "replicas should be <= 15 to avoid long release times",
-		})
-	}
-
-	// Validate block duration.
-	if dbg.BlockDurationMinutes < 5 {
-		errors = append(errors, ValidationError{
-			Field:   prefix + ".block_duration_minutes",
-			Message: "block duration must be >= 5 minutes",
 		})
 	}
 
