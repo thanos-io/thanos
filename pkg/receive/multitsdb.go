@@ -222,7 +222,7 @@ func (l *localClient) Matches(matchers []*labels.Matcher) bool {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
+	return l.store.LabelSet()
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {

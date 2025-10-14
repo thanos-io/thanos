@@ -484,6 +484,60 @@ var builderPool = &sync.Pool{
 
 // UnmarshalProtobuf expects field number to contain labels (name, value string).
 // Only pass the subslice with only labels.
+func UnmarshalLabelsetsProtobuf(src []byte, upperFieldNumber, subFieldNumber int) ([]labels.Labels, error) {
+	var err error
+
+	var fc easyproto.FieldContext
+
+	var lbls []labels.Labels
+
+	for len(src) > 0 {
+		src, err = fc.NextField(src)
+		if err != nil {
+			return []labels.Labels{}, errors.Wrap(err, "unmarshal next field")
+		}
+
+		if fc.FieldNum != uint32(upperFieldNumber) {
+			return []labels.Labels{}, fmt.Errorf("expected field %d, got %d", upperFieldNumber, fc.FieldNum)
+		}
+
+		dat, ok := fc.MessageData()
+		if !ok {
+			return []labels.Labels{}, fmt.Errorf("expected message data for field %d", fc.FieldNum)
+		}
+
+		var msgFc easyproto.FieldContext
+		for len(dat) > 0 {
+			dat, err = msgFc.NextField(dat)
+			if err != nil {
+				return []labels.Labels{}, errors.Wrap(err, "unmarshal next field in message")
+			}
+
+			switch msgFc.FieldNum {
+			case 1:
+				v, ok := msgFc.Bytes()
+				if !ok {
+					return []labels.Labels{}, fmt.Errorf("expected string data for field %d", msgFc.FieldNum)
+				}
+
+				ls, err := UnmarshalProtobuf(v, subFieldNumber)
+				if err != nil {
+					return nil, err
+				}
+				lbls = append(lbls, ls)
+
+			default:
+				return []labels.Labels{}, fmt.Errorf("unexpected field %d in label message", msgFc.FieldNum)
+			}
+		}
+
+	}
+
+	return lbls, nil
+}
+
+// UnmarshalProtobuf expects field number to contain labels (name, value string).
+// Only pass the subslice with only labels.
 func UnmarshalProtobuf(src []byte, fieldNumber int) (labels.Labels, error) {
 	var err error
 

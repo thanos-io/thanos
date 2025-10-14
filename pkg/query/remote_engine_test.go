@@ -21,7 +21,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
@@ -125,14 +124,14 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 		{
 			name: "non-empty label sets",
 			tsdbInfos: []infopb.TSDBInfo{{
-				Labels: zLabelSetFromStrings("a", "1"),
+				Labels: labels.FromStrings("a", "1"),
 			}},
 			expected: []labels.Labels{labels.FromStrings("a", "1")},
 		},
 		{
 			name: "non-empty label sets with replica labels",
 			tsdbInfos: []infopb.TSDBInfo{{
-				Labels: zLabelSetFromStrings("a", "1", "b", "2"),
+				Labels: labels.FromStrings("a", "1", "b", "2"),
 			}},
 			replicaLabels: []string{"a"},
 			expected:      []labels.Labels{labels.FromStrings("b", "2")},
@@ -141,7 +140,7 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 			name: "replica labels not in label sets",
 			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels: zLabelSetFromStrings("a", "1", "c", "2"),
+					Labels: labels.FromStrings("a", "1", "c", "2"),
 				},
 			},
 			replicaLabels: []string{"a", "b"},
@@ -151,7 +150,7 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 			name: "non-empty label sets with partition labels",
 			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels: zLabelSetFromStrings("a", "1", "c", "2"),
+					Labels: labels.FromStrings("a", "1", "c", "2"),
 				},
 			},
 			partitionLabels: []string{"a"},
@@ -195,7 +194,7 @@ func TestRemoteEngine_MinT(t *testing.T) {
 		{
 			name: "non-empty label sets",
 			tsdbInfos: []infopb.TSDBInfo{{
-				Labels:  zLabelSetFromStrings("a", "1"),
+				Labels:  labels.FromStrings("a", "1"),
 				MinTime: 30,
 			}},
 			expected: 30,
@@ -203,7 +202,7 @@ func TestRemoteEngine_MinT(t *testing.T) {
 		{
 			name: "non-empty label sets with replica labels",
 			tsdbInfos: []infopb.TSDBInfo{{
-				Labels:  zLabelSetFromStrings("a", "1", "b", "2"),
+				Labels:  labels.FromStrings("a", "1", "b", "2"),
 				MinTime: 30,
 			}},
 			replicaLabels: []string{"a"},
@@ -213,11 +212,11 @@ func TestRemoteEngine_MinT(t *testing.T) {
 			name: "replicated labelsets with different mint",
 			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels:  zLabelSetFromStrings("a", "1", "replica", "1"),
+					Labels:  labels.FromStrings("a", "1", "replica", "1"),
 					MinTime: 30,
 				},
 				{
-					Labels:  zLabelSetFromStrings("a", "1", "replica", "2"),
+					Labels:  labels.FromStrings("a", "1", "replica", "2"),
 					MinTime: 60,
 				},
 			},
@@ -228,19 +227,19 @@ func TestRemoteEngine_MinT(t *testing.T) {
 			name: "multiple replicated labelsets with different mint",
 			tsdbInfos: []infopb.TSDBInfo{
 				{
-					Labels:  zLabelSetFromStrings("a", "1", "replica", "1"),
+					Labels:  labels.FromStrings("a", "1", "replica", "1"),
 					MinTime: 30,
 				},
 				{
-					Labels:  zLabelSetFromStrings("a", "1", "replica", "2"),
+					Labels:  labels.FromStrings("a", "1", "replica", "2"),
 					MinTime: 60,
 				},
 				{
-					Labels:  zLabelSetFromStrings("a", "2", "replica", "1"),
+					Labels:  labels.FromStrings("a", "2", "replica", "1"),
 					MinTime: 80,
 				},
 				{
-					Labels:  zLabelSetFromStrings("a", "2", "replica", "2"),
+					Labels:  labels.FromStrings("a", "2", "replica", "2"),
 					MinTime: 120,
 				},
 			},
@@ -258,12 +257,6 @@ func TestRemoteEngine_MinT(t *testing.T) {
 
 			testutil.Equals(t, testCase.expected, engine.MinT())
 		})
-	}
-}
-
-func zLabelSetFromStrings(ss ...string) labelpb.ZLabelSet {
-	return labelpb.ZLabelSet{
-		Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings(ss...)),
 	}
 }
 

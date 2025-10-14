@@ -177,14 +177,9 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelSetsFromPromLabels(s.getExtLset())
-	labelSets := []labelpb.ZLabelSet{}
-	if len(labels) > 0 {
-		labelSets = append(labelSets, labels...)
-	}
-
-	return labelSets
+func (s *TSDBStore) LabelSet() []labels.Labels {
+	lbls := s.getExtLset()
+	return []labels.Labels{lbls}
 }
 
 func (s *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
@@ -196,9 +191,7 @@ func (s *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
 	mint, maxt := s.TimeRange()
 	return []infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
-				Labels: labels[0].Labels,
-			},
+			Labels:  labels[0],
 			MinTime: mint,
 			MaxTime: maxt,
 		},

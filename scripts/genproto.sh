@@ -74,6 +74,14 @@ popd
 ./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series Size
 ./scripts/remove_method.sh ./pkg/store/storepb/types.pb.go Series Unmarshal
 
+./scripts/remove_method.sh ./pkg/info/infopb/rpc.pb.go InfoResponse MarshalToSizedBuffer
+./scripts/remove_method.sh ./pkg/info/infopb/rpc.pb.go InfoResponse Size
+./scripts/remove_method.sh ./pkg/info/infopb/rpc.pb.go InfoResponse Unmarshal
+
+./scripts/remove_method.sh ./pkg/info/infopb/rpc.pb.go TSDBInfo MarshalToSizedBuffer
+./scripts/remove_method.sh ./pkg/info/infopb/rpc.pb.go TSDBInfo Size
+./scripts/remove_method.sh ./pkg/info/infopb/rpc.pb.go TSDBInfo Unmarshal
+
 ./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar GetLabels
 ./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar MarshalToSizedBuffer
 ./scripts/remove_method.sh ./pkg/store/storepb/prompb/types.pb.go Exemplar Size
@@ -89,8 +97,12 @@ popd
 ./scripts/remove_type.sh Exemplar ./pkg/store/storepb/prompb/types.pb.go
 ./scripts/remove_type.sh TimeSeries ./pkg/store/storepb/prompb/types.pb.go
 ./scripts/remove_type.sh ChunkedSeries ./pkg/store/storepb/prompb/types.pb.go
+./scripts/remove_type.sh InfoResponse ./pkg/info/infopb/rpc.pb.go
+./scripts/remove_type.sh TSDBInfo ./pkg/info/infopb/rpc.pb.go
 
 go fmt ./pkg/store/storepb/
 go fmt ./pkg/store/storepb/prompb/
+go fmt ./pkg/info/infopb/
 goimports -w ./pkg/store/storepb/prompb/types.pb.go
 goimports -w ./pkg/store/storepb/types.pb.go
+goimports -w ./pkg/info/infopb/rpc.pb.go

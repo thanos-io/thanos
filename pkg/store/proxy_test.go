@@ -31,7 +31,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -64,12 +63,12 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 		},
 		&storetestutil.TestClient{
 			StoreTSDBInfos: []infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
+				{Labels: labels.FromStrings("lbl", "val1"), MinTime: 0, MaxTime: 10},
 			},
 		},
 		&storetestutil.TestClient{
 			StoreTSDBInfos: []infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
+				{Labels: labels.FromStrings("lbl", "val2"), MinTime: 0, MaxTime: 20},
 			},
 		},
 	}
@@ -79,8 +78,8 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 	)
 
 	expected := []infopb.TSDBInfo{
-		infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
-		infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
+		{Labels: labels.FromStrings("lbl", "val1"), MinTime: 0, MaxTime: 10},
+		{Labels: labels.FromStrings("lbl", "val2"), MinTime: 0, MaxTime: 20},
 	}
 	testutil.Equals(t, expected, q.TSDBInfos())
 }

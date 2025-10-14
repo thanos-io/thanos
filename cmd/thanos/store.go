@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	commonmodel "github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/model/labels"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
@@ -49,7 +50,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
@@ -525,7 +525,7 @@ func runStore(
 
 	infoSrv := info.NewInfoServer(
 		component.Store.String(),
-		info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+		info.WithLabelSetFunc(func() []labels.Labels {
 			return bs.LabelSet()
 		}),
 		info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {

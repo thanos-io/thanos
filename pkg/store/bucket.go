@@ -431,7 +431,7 @@ type BucketStore struct {
 	partitioner Partitioner
 
 	filterConfig             *FilterConfig
-	advLabelSets             []labelpb.ZLabelSet
+	advLabelSets             []labels.Labels
 	enableCompatibilityLabel bool
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
@@ -795,12 +795,12 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 
 	// Sync advertise labels.
 	s.mtx.Lock()
-	s.advLabelSets = make([]labelpb.ZLabelSet, 0, len(s.advLabelSets))
+	s.advLabelSets = make([]labels.Labels, 0, len(s.blockSets))
 	for _, bs := range s.blockSets {
-		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(bs.labels.Copy())})
+		s.advLabelSets = append(s.advLabelSets, bs.labels.Copy())
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
-		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
+		return s.advLabelSets[i].String() < s.advLabelSets[j].String()
 	})
 	s.mtx.Unlock()
 	return nil
@@ -994,9 +994,7 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 		lbls := labels.FromMap(b.meta.Thanos.Labels)
 		hash := lbls.Hash()
 		infoMap[hash] = append(infoMap[hash], infopb.TSDBInfo{
-			Labels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(lbls),
-			},
+			Labels:  lbls,
 			MinTime: b.meta.MinTime,
 			MaxTime: b.meta.MaxTime,
 		})
@@ -1022,13 +1020,13 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	return res
 }
 
-func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
+func (s *BucketStore) LabelSet() []labels.Labels {
 	s.mtx.RLock()
 	labelSets := s.advLabelSets
 	s.mtx.RUnlock()
 
 	if s.enableCompatibilityLabel && len(labelSets) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+		labelSets = append(labelSets, labels.FromStrings(CompatibilityTypeLabelName, "store"))
 	}
 
 	return labelSets

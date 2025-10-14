@@ -26,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	grpc_tracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 )
@@ -150,7 +149,7 @@ func (r *remoteEngine) MinT() int64 {
 			highestMintByLabelSet = make(map[uint64]int64)
 		)
 		for _, lset := range r.adjustedInfos() {
-			key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+			key, _ := lset.Labels.HashWithoutLabels(hashBuf)
 			lsetMinT, ok := highestMintByLabelSet[key]
 			if !ok {
 				highestMintByLabelSet[key] = lset.MinTime
@@ -214,20 +213,21 @@ func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
 	var builder labels.ScratchBuilder
 	for _, info := range r.client.tsdbInfos {
 		builder.Reset()
-		for _, lbl := range info.Labels.Labels {
+		info.Labels.Range(func(lbl labels.Label) {
 			if _, ok := replicaLabelSet[lbl.Name]; ok {
-				continue
+				return
 			}
 			if _, ok := partitionLabelsSet[lbl.Name]; !ok && len(partitionLabelsSet) > 0 {
-				continue
+				return
 			}
+
 			builder.Add(lbl.Name, lbl.Value)
-		}
-		infos = append(infos, infopb.NewTSDBInfo(
-			info.MinTime,
-			info.MaxTime,
-			labelpb.ZLabelsFromPromLabels(builder.Labels())),
-		)
+		})
+		infos = append(infos, infopb.TSDBInfo{
+			Labels:  builder.Labels(),
+			MinTime: info.MinTime,
+			MaxTime: info.MaxTime,
+		})
 	}
 	return infos
 }

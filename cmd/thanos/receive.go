@@ -51,7 +51,6 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -383,7 +382,7 @@ func runReceive(
 
 		infoSrv := info.NewInfoServer(
 			component.Receive.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
+			info.WithLabelSetFunc(func() []labels.Labels { return proxy.LabelSet() }),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					minTime, maxTime := proxy.TimeRange()

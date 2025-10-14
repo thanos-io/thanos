@@ -536,7 +536,7 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
 				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
-				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
+				LabelSets:       er.metadata.LabelSets,
 			})
 		}
 	}
@@ -726,14 +726,7 @@ func (er *endpointRef) labelSets() []labels.Labels {
 		return make([]labels.Labels, 0)
 	}
 
-	labelSet := make([]labels.Labels, 0, len(er.metadata.LabelSets))
-	for _, ls := range labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...) {
-		if ls.Len() == 0 {
-			continue
-		}
-		labelSet = append(labelSet, ls.Copy())
-	}
-	return labelSet
+	return er.metadata.LabelSets
 }
 
 func (er *endpointRef) TimeRange() (mint, maxt int64) {

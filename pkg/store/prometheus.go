@@ -656,17 +656,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }
 
-func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(p.externalLabelsFn())
-
-	labelset := []labelpb.ZLabelSet{}
-	if len(labels) > 0 {
-		labelset = append(labelset, labelpb.ZLabelSet{
-			Labels: labels,
-		})
+func (p *PrometheusStore) LabelSet() []labels.Labels {
+	lbls := p.externalLabelsFn()
+	if lbls.Len() > 0 {
+		return []labels.Labels{lbls}
 	}
-
-	return labelset
+	return []labels.Labels{}
 }
 
 func (p *PrometheusStore) TSDBInfos() []infopb.TSDBInfo {
@@ -678,9 +673,7 @@ func (p *PrometheusStore) TSDBInfos() []infopb.TSDBInfo {
 	mint, maxt := p.Timestamps()
 	return []infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
-				Labels: labels[0].Labels,
-			},
+			Labels:  labels[0],
 			MinTime: mint,
 			MaxTime: maxt,
 		},

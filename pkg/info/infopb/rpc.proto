@@ -29,7 +29,7 @@ service Info {
 message InfoRequest {}
 
 message InfoResponse {
-    repeated ZLabelSet label_sets      = 1 [(gogoproto.nullable) = false];
+    repeated LabelSet label_sets       = 1 [(gogoproto.nullable) = false];
     string ComponentType               = 2;
 
     // StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
@@ -89,7 +89,7 @@ message QueryAPIInfo {
 }
 
 message TSDBInfo {
-    ZLabelSet labels = 1 [(gogoproto.nullable) = false];
+    LabelSet labels = 1 [(gogoproto.nullable) = false];
 
     int64 min_time = 2;
     int64 max_time = 3;

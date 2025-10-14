@@ -194,20 +194,20 @@ func NewProxyStore(
 	return s
 }
 
-func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
+func (s *ProxyStore) LabelSet() []labels.Labels {
 	stores := s.storesForTSDBSelector()
 	if len(stores) == 0 {
 		// We always want to enforce announcing the subset of data that
 		// selector-labels represents. If no stores match the filter,
 		// we still want to enforce announcing this subset.
-		selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
-		if len(selectorLabels) > 0 {
-			return []labelpb.ZLabelSet{{Labels: selectorLabels}}
+		selectorLabels := s.selectorLabels
+		if selectorLabels.Len() > 0 {
+			return []labels.Labels{selectorLabels}
 		}
-		return []labelpb.ZLabelSet{}
+		return []labels.Labels{}
 	}
 
-	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]labels.Labels, len(stores))
 	for _, st := range stores {
 		// Get filtered label sets from TSDBSelector
 		_, filteredLabelSets := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
@@ -221,11 +221,11 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 
 		for _, lset := range labelSetsToProcess {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = mergedLabelSet
 		}
 	}
 
-	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]labels.Labels, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
 		labelSets = append(labelSets, v)
 	}
@@ -234,9 +234,8 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 	// selector-labels represents. If no label-sets are announced by the
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
-	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
-	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
+	if len(labelSets) == 0 && s.selectorLabels.Len() > 0 {
+		labelSets = append(labelSets, s.selectorLabels)
 	}
 
 	return labelSets

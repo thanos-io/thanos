@@ -77,7 +77,6 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -750,7 +749,7 @@ func runRule(
 		tsdbStore := store.NewTSDBStore(logger, tsdbDB, component.Rule, conf.lset)
 		infoOptions = append(
 			infoOptions,
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+			info.WithLabelSetFunc(func() []labels.Labels {
 				return tsdbStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {

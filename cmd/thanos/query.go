@@ -46,7 +46,6 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -586,7 +585,7 @@ func runQuery(
 
 		infoSrv := info.NewInfoServer(
 			component.Query.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxyStore.LabelSet() }),
+			info.WithLabelSetFunc(func() []labels.Labels { return proxyStore.LabelSet() }),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
 				if httpProbe.IsReady() {
 					mint, maxt := proxyStore.TimeRange()

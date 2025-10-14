@@ -4,19 +4,7 @@ import (
 	"math"
 
 	"github.com/prometheus/prometheus/model/labels"
-
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
-
-func NewTSDBInfo(mint, maxt int64, lbls []labelpb.ZLabel) TSDBInfo {
-	return TSDBInfo{
-		Labels: labelpb.ZLabelSet{
-			Labels: lbls,
-		},
-		MinTime: mint,
-		MaxTime: maxt,
-	}
-}
 
 type TSDBInfos []TSDBInfo
 
@@ -33,7 +21,7 @@ func (infos TSDBInfos) MaxT() int64 {
 func (infos TSDBInfos) LabelSets() []labels.Labels {
 	lsets := make([]labels.Labels, 0, len(infos))
 	for _, info := range infos {
-		lsets = append(lsets, labelpb.ZLabelsToPromLabels(info.Labels.Labels))
+		lsets = append(lsets, info.Labels)
 
 	}
 	return lsets

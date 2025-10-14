@@ -48,7 +48,6 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -325,7 +324,7 @@ func runSidecar(
 
 		infoSrv := info.NewInfoServer(
 			component.Sidecar.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+			info.WithLabelSetFunc(func() []labels.Labels {
 				return promStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() (*infopb.StoreInfo, error) {
