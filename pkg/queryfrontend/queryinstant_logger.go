@@ -37,6 +37,7 @@ type MetricsInstantQueryLogging struct {
 	ForwardedFor        string `json:"forwarded_for"`
 	UserAgent           string `json:"user_agent"`
 	EmailId             string `json:"email_id"`
+	Groups              string `json:"groups"`
 	// Query-related fields (instant query specific)
 	QueryTimestampMs      int64    `json:"query_timestamp_ms"` // Query timestamp for instant queries
 	Path                  string   `json:"path"`
@@ -50,6 +51,8 @@ type MetricsInstantQueryLogging struct {
 	Analyze               bool     `json:"analyze"`              // Whether query analysis is enabled
 	Engine                string   `json:"engine"`               // Query engine being used
 	Stats                 string   `json:"stats"`                // Query statistics information
+	MetricNames           []string `json:"metric_names"`         // Unique metric names (__name__ labels) in response
+	Shard                 string   `json:"shard"`                // Pantheon shard name
 	// Store-matcher details
 	StoreMatchers []StoreMatcherSet `json:"store_matchers"`
 }
@@ -134,18 +137,12 @@ func (m *instantQueryLoggingMiddleware) logInstantQuery(req *ThanosQueryInstantR
 	success := err == nil
 	userInfo := ExtractUserInfoFromHeaders(req.Headers)
 
-	// Extract email from response headers
-	email := ExtractEmailFromResponse(resp)
-
-	// This is to avoid logging queries that come from rule manager.
-	if userInfo.UserAgent == "Databricks-RuleManager/1.0" {
-		return
-	}
-
 	// Calculate stats (only for successful queries).
 	var stats ResponseStats
+	var metricNames []string
 	if success && resp != nil {
 		stats = GetResponseStats(resp)
+		metricNames = ExtractMetricNames(resp)
 	}
 
 	// Create the instant query log entry.
@@ -166,7 +163,8 @@ func (m *instantQueryLoggingMiddleware) logInstantQuery(req *ThanosQueryInstantR
 		Tenant:              userInfo.Tenant,
 		ForwardedFor:        userInfo.ForwardedFor,
 		UserAgent:           userInfo.UserAgent,
-		EmailId:             email,
+		EmailId:             userInfo.Email,
+		Groups:              userInfo.Groups,
 		// Query-related fields (instant query specific)
 		QueryTimestampMs:      req.Time,
 		Path:                  req.Path,
@@ -180,6 +178,8 @@ func (m *instantQueryLoggingMiddleware) logInstantQuery(req *ThanosQueryInstantR
 		Analyze:               req.Analyze,
 		Engine:                req.Engine,
 		Stats:                 req.Stats,
+		MetricNames:           metricNames,
+		Shard:                 os.Getenv("PANTHEON_SHARDNAME"),
 		// Store-matcher details
 		StoreMatchers: ConvertStoreMatchers(req.StoreMatchers),
 	}

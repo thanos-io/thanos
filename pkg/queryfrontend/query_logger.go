@@ -36,6 +36,8 @@ type UserInfo struct {
 	Tenant              string
 	ForwardedFor        string
 	UserAgent           string
+	Groups              string
+	Email               string
 }
 
 // ResponseStats holds statistics extracted from query response.
@@ -91,6 +93,10 @@ func ExtractUserInfoFromHeaders(headers []*RequestHeader) UserInfo {
 			if userInfo.Source == "" {
 				userInfo.Source = headerValue
 			}
+		case "x-auth-request-groups":
+			userInfo.Groups = headerValue
+		case "x-auth-request-email":
+			userInfo.Email = headerValue
 		}
 	}
 
@@ -100,29 +106,6 @@ func ExtractUserInfoFromHeaders(headers []*RequestHeader) UserInfo {
 	}
 
 	return userInfo
-}
-
-// ExtractEmailFromResponse extracts the email from response headers (works for both range and instant queries).
-func ExtractEmailFromResponse(resp queryrange.Response) string {
-	if resp == nil {
-		return ""
-	}
-
-	// Check both response types using OR condition
-	var headers []*queryrange.PrometheusResponseHeader
-	if promResp, ok := resp.(*queryrange.PrometheusResponse); ok {
-		headers = promResp.GetHeaders()
-	} else if promResp, ok := resp.(*queryrange.PrometheusInstantQueryResponse); ok {
-		headers = promResp.GetHeaders()
-	}
-
-	for _, header := range headers {
-		if strings.ToLower(header.Name) == "x-auth-request-email" && len(header.Values) > 0 {
-			return header.Values[0]
-		}
-	}
-
-	return ""
 }
 
 // ConvertStoreMatchers converts internal store matchers to logging format.
@@ -172,6 +155,59 @@ func GetResponseStats(resp queryrange.Response) ResponseStats {
 	}
 
 	return stats
+}
+
+// ExtractMetricNames extracts all unique __name__ labels from query response (works for both range and instant queries).
+func ExtractMetricNames(resp queryrange.Response) []string {
+	if resp == nil {
+		return nil
+	}
+
+	metricNamesMap := make(map[string]struct{})
+
+	// Handle range query response (resultType: matrix)
+	if r, ok := resp.(*queryrange.PrometheusResponse); ok {
+		for _, stream := range r.Data.Result {
+			for _, label := range stream.Labels {
+				if label.Name == "__name__" {
+					metricNamesMap[label.Value] = struct{}{}
+					break
+				}
+			}
+		}
+	} else if r, ok := resp.(*queryrange.PrometheusInstantQueryResponse); ok {
+		// Handle instant query response - check all result types
+		if vector := r.Data.Result.GetVector(); vector != nil {
+			// resultType: vector
+			for _, sample := range vector.Samples {
+				for _, label := range sample.Labels {
+					if label.Name == "__name__" {
+						metricNamesMap[label.Value] = struct{}{}
+						break
+					}
+				}
+			}
+		} else if matrix := r.Data.Result.GetMatrix(); matrix != nil {
+			// resultType: matrix (subqueries in instant queries)
+			for _, stream := range matrix.SampleStreams {
+				for _, label := range stream.Labels {
+					if label.Name == "__name__" {
+						metricNamesMap[label.Value] = struct{}{}
+						break
+					}
+				}
+			}
+		}
+		// Scalar and StringSample don't have __name__ labels
+	}
+
+	// Convert map to slice
+	metricNames := make([]string, 0, len(metricNamesMap))
+	for name := range metricNamesMap {
+		metricNames = append(metricNames, name)
+	}
+
+	return metricNames
 }
 
 // WriteJSONLogToFile writes query logs to file in JSON format.

@@ -37,6 +37,7 @@ type MetricsRangeQueryLogging struct {
 	ForwardedFor        string `json:"forwardedFor"`
 	UserAgent           string `json:"userAgent"`
 	EmailId             string `json:"emailId"`
+	Groups              string `json:"groups"`
 	// Query-related fields
 	StartTimestampMs      int64    `json:"startTimestampMs"`
 	EndTimestampMs        int64    `json:"endTimestampMs"`
@@ -53,6 +54,8 @@ type MetricsRangeQueryLogging struct {
 	Engine                string   `json:"engine"`                // Query engine being used
 	SplitIntervalMs       int64    `json:"splitIntervalMs"`       // Query splitting interval in milliseconds
 	Stats                 string   `json:"stats"`                 // Query statistics information
+	MetricNames           []string `json:"metricNames"`           // Unique metric names (__name__ labels) in response
+	Shard                 string   `json:"shard"`                 // Pantheon shard name
 	// Store-matcher details
 	StoreMatchers []StoreMatcherSet `json:"storeMatchers"`
 }
@@ -137,13 +140,12 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 	success := err == nil
 	userInfo := ExtractUserInfoFromHeaders(req.Headers)
 
-	// Extract email from response headers
-	email := ExtractEmailFromResponse(resp)
-
 	// Calculate stats (only for successful queries).
 	var stats ResponseStats
+	var metricNames []string
 	if success && resp != nil {
 		stats = GetResponseStats(resp)
+		metricNames = ExtractMetricNames(resp)
 	}
 
 	// Create the range query log entry.
@@ -164,7 +166,8 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		Tenant:              userInfo.Tenant,
 		ForwardedFor:        userInfo.ForwardedFor,
 		UserAgent:           userInfo.UserAgent,
-		EmailId:             email,
+		EmailId:             userInfo.Email,
+		Groups:              userInfo.Groups,
 		// Query-related fields
 		StartTimestampMs:      req.Start,
 		EndTimestampMs:        req.End,
@@ -181,6 +184,8 @@ func (m *rangeQueryLoggingMiddleware) logRangeQuery(req *ThanosQueryRangeRequest
 		Engine:                req.Engine,
 		SplitIntervalMs:       req.SplitInterval.Milliseconds(),
 		Stats:                 req.Stats,
+		MetricNames:           metricNames,
+		Shard:                 os.Getenv("PANTHEON_SHARDNAME"),
 		// Store-matcher details
 		StoreMatchers: ConvertStoreMatchers(req.StoreMatchers),
 	}
