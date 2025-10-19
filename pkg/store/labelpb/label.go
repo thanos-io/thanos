@@ -30,12 +30,12 @@ var (
 	sep = []byte{'\xff'}
 )
 
-func safeBytes(buf string) []byte {
-	return []byte(buf)
+func noAllocString(buf []byte) string {
+	return *(*string)(unsafe.Pointer(&buf))
 }
 
-func safeString(buf []byte) string {
-	return string(buf)
+func noAllocBytes(buf string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&buf))
 }
 
 // ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
@@ -67,8 +67,8 @@ func ReAllocZLabelsStrings(lset *[]ZLabel, intern bool) {
 	}
 
 	for j, l := range *lset {
-		(*lset)[j].Name = string(safeBytes(l.Name))
-		(*lset)[j].Value = string(safeBytes(l.Value))
+		(*lset)[j].Name = string(noAllocBytes(l.Name))
+		(*lset)[j].Value = string(noAllocBytes(l.Value))
 	}
 }
 
@@ -82,7 +82,7 @@ func internLabelString(s string) string {
 // detachAndInternLabelString reallocates the label string to detach it
 // from a bigger memory pool and interns the string.
 func detachAndInternLabelString(s string) string {
-	return internLabelString(string(safeBytes(s)))
+	return internLabelString(string(noAllocBytes(s)))
 }
 
 // ZLabelSetsToPromLabelSets converts slice of labelpb.ZLabelSet to slice of Prometheus labels.
@@ -193,7 +193,7 @@ func (m *ZLabel) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = safeString(data[iNdEx:postIndex])
+			m.Name = noAllocString(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -225,7 +225,7 @@ func (m *ZLabel) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = safeString(data[iNdEx:postIndex])
+			m.Value = noAllocString(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -335,8 +335,8 @@ func (m *ZLabelSet) PromLabels() labels.Labels {
 func DeepCopy(lbls []ZLabel) []ZLabel {
 	ret := make([]ZLabel, len(lbls))
 	for i := range lbls {
-		ret[i].Name = string(safeBytes(lbls[i].Name))
-		ret[i].Value = string(safeBytes(lbls[i].Value))
+		ret[i].Name = string(noAllocBytes(lbls[i].Name))
+		ret[i].Value = string(noAllocBytes(lbls[i].Value))
 	}
 	return ret
 }
