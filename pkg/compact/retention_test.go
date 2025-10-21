@@ -374,6 +374,47 @@ func TestParseRetentionPolicyByTenant(t *testing.T) {
 			nil,
 			true,
 		},
+		{
+			"wildcard tenant with duration",
+			[]string{"*:30d"},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 30 * 24 * time.Hour,
+					IsAll:             false,
+				},
+			},
+			false,
+		},
+		{
+			"wildcard tenant with cutoff date and all flag",
+			[]string{"*:2024-01-01:all"},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+					RetentionDuration: time.Duration(0),
+					IsAll:             true,
+				},
+			},
+			false,
+		},
+		{
+			"wildcard with specific tenant override",
+			[]string{"*:90d", "tenant-special:30d:all"},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 90 * 24 * time.Hour,
+					IsAll:             false,
+				},
+				"tenant-special": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 30 * 24 * time.Hour,
+					IsAll:             true,
+				},
+			},
+			false,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := compact.ParesRetentionPolicyByTenant(log.NewNopLogger(), tt.retentionTenants)
@@ -570,6 +611,172 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW48/",
 				"01CPHBEX20729MJQZXE3W0BW51/",
+			},
+			false,
+		},
+		{
+			"wildcard tenant applies to all tenants",
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-b",
+					time.Now().Add(-2 * 24 * time.Hour),
+					time.Now().Add(-24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					"tenant-c",
+					time.Now().Add(-24 * time.Hour),
+					time.Now().Add(-23 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW51",
+					"tenant-d",
+					time.Now().Add(-5 * time.Hour),
+					time.Now().Add(-4 * time.Hour),
+					compact.Level1,
+				},
+			},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 10 * time.Hour,
+					IsAll:             false,
+				},
+			},
+			[]string{
+				"01CPHBEX20729MJQZXE3W0BW51/",
+			},
+			false,
+		},
+		{
+			"wildcard tenant with all flag applies to all levels",
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-b",
+					time.Now().Add(-2 * 24 * time.Hour),
+					time.Now().Add(-24 * time.Hour),
+					compact.Level2,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					"tenant-c",
+					time.Now().Add(-5 * time.Hour),
+					time.Now().Add(-4 * time.Hour),
+					compact.Level1,
+				},
+			},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 10 * time.Hour,
+					IsAll:             true,
+				},
+			},
+			[]string{
+				"01CPHBEX20729MJQZXE3W0BW50/",
+			},
+			false,
+		},
+		{
+			"wildcard with specific tenant override - wildcard longer retention, specific shorter",
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-50 * 24 * time.Hour),
+					time.Now().Add(-49 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-cleanup",
+					time.Now().Add(-15 * 24 * time.Hour),
+					time.Now().Add(-14 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					"tenant-b",
+					time.Now().Add(-20 * 24 * time.Hour),
+					time.Now().Add(-19 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW51",
+					"tenant-cleanup",
+					time.Now().Add(-5 * time.Hour),
+					time.Now().Add(-4 * time.Hour),
+					compact.Level1,
+				},
+			},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 30 * 24 * time.Hour, // 30 days for most tenants
+					IsAll:             false,
+				},
+				"tenant-cleanup": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 10 * 24 * time.Hour, // 10 days for cleanup tenant
+					IsAll:             false,
+				},
+			},
+			[]string{
+				"01CPHBEX20729MJQZXE3W0BW50/",
+				"01CPHBEX20729MJQZXE3W0BW51/",
+			},
+			false,
+		},
+		{
+			"wildcard precedence - specific policy takes priority over wildcard",
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-override",
+					time.Now().Add(-15 * 24 * time.Hour),
+					time.Now().Add(-14 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-normal",
+					time.Now().Add(-15 * 24 * time.Hour),
+					time.Now().Add(-14 * 24 * time.Hour),
+					compact.Level1,
+				},
+			},
+			map[string]compact.RetentionPolicy{
+				"*": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 10 * 24 * time.Hour, // 10 days wildcard
+					IsAll:             false,
+				},
+				"tenant-override": {
+					CutoffDate:        time.Time{},
+					RetentionDuration: 20 * 24 * time.Hour, // 20 days specific override
+					IsAll:             false,
+				},
+			},
+			[]string{
+				"01CPHBEX20729MJQZXE3W0BW48/", // kept due to 20-day specific policy
 			},
 			false,
 		},

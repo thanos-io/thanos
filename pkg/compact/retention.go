@@ -27,7 +27,10 @@ const (
 	// tenantRetentionRegex is the regex pattern for parsing tenant retention.
 	// valid format is `<tenant>:(<yyyy-mm-dd>|<duration>d)(:all)?` where <duration> > 0.
 	// Default behavior is to delete only level 1 blocks, use :all to delete all blocks.
-	tenantRetentionRegex = `^([\w-]+):((\d{4}-\d{2}-\d{2})|(\d+d))(:all)?$`
+	// Use `*` as tenant name to apply policy to all tenants (as a default/fallback).
+	// Specific tenant policies take precedence over the wildcard policy.
+	tenantRetentionRegex = `^([\w-]+|\*):((\d{4}-\d{2}-\d{2})|(\d+d))(:all)?$`
+	wildCardTenant       = "*"
 
 	Level1 = 1 // compaction level 1 indicating a new block
 	Level2 = 2 // compaction level 2 indicating a compacted block
@@ -120,6 +123,8 @@ func ParesRetentionPolicyByTenant(logger log.Logger, retentionTenants []string) 
 }
 
 // ApplyRetentionPolicyByTenant removes blocks depending on the specified retentionByTenant based on blocks MaxTime.
+// The wildcard policy ("*") applies to all tenants as a default/fallback.
+// Specific tenant policies take precedence over the wildcard policy.
 func ApplyRetentionPolicyByTenant(
 	ctx context.Context,
 	logger log.Logger,
@@ -133,11 +138,20 @@ func ApplyRetentionPolicyByTenant(
 	}
 	level.Info(logger).Log("msg", "start tenant retention", "total", len(metas))
 	deleted, skipped, notExpired := 0, 0, 0
+	// Check if wildcard policy exists
+	wildcardPolicy, hasWildcard := retentionByTenant[wildCardTenant]
 	for id, m := range metas {
-		policy, ok := retentionByTenant[m.Thanos.GetTenant()]
+		tenant := m.Thanos.GetTenant()
+		// First try to find tenant-specific policy
+		policy, ok := retentionByTenant[tenant]
 		if !ok {
-			skipped++
-			continue
+			// Fallback to wildcard policy if tenant-specific policy not found
+			if hasWildcard {
+				policy = wildcardPolicy
+			} else {
+				skipped++
+				continue
+			}
 		}
 		maxTime := time.Unix(m.MaxTime/1000, 0)
 		// Default behavior: only delete level 1 blocks unless IsAll is true
@@ -145,7 +159,7 @@ func ApplyRetentionPolicyByTenant(
 			continue
 		}
 		if policy.isExpired(maxTime) {
-			level.Info(logger).Log("msg", "deleting blocks applying retention policy", "id", id, "maxTime", maxTime.String())
+			level.Info(logger).Log("msg", "deleting blocks applying retention policy", "id", id, "tenant", tenant, "maxTime", maxTime.String())
 			if err := block.Delete(ctx, logger, bkt, id); err != nil {
 				level.Error(logger).Log("msg", "failed to delete block", "id", id, "err", err)
 				continue // continue to next block to clean up backlogs
