@@ -1031,12 +1031,9 @@ func (h *Handler) sendRemoteWrite(
 			if !alreadyReplicated {
 				h.replications.WithLabelValues(labelError).Inc()
 			}
-
-			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
-			if st, ok := status.FromError(err); ok {
-				if st.Code() == codes.Unavailable {
-					h.peers.markPeerUnavailable(endpointReplica.endpoint)
-				}
+			h.peers.markPeerUnavailable(endpointReplica.endpoint)
+			if cerr := h.peers.close(endpointReplica.endpoint); cerr != nil {
+				level.Warn(h.logger).Log("msg", "failed to close peer connection after forward error", "endpoint", endpointReplica.endpoint, "err", cerr)
 			}
 		}
 		wg.Done()

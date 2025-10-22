@@ -67,6 +67,14 @@ func (t *fakeTenantAppendable) TenantAppendable(_ string) (Appendable, error) {
 	return t.f, nil
 }
 
+func mustNewLimiter(t *testing.T) *Limiter {
+	t.Helper()
+
+	l, err := NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), time.Second)
+	testutil.Ok(t, err)
+	return l
+}
+
 type fakeAppendable struct {
 	appender    storage.Appender
 	appenderErr func() error
@@ -1001,6 +1009,86 @@ func TestHandlerReceiveHTTP(t *testing.T) {
 
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
+
+func TestSendRemoteWriteMarksPeerUnavailableOnAnyError(t *testing.T) {
+	t.Parallel()
+
+	h := NewHandler(log.NewNopLogger(), &Options{
+		Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(&fakeAppendable{appender: newFakeAppender(nil, nil, nil)}), &WriterOptions{}),
+		ForwardTimeout:    time.Second,
+		ReplicationFactor: 1,
+		Limiter:           mustNewLimiter(t),
+	})
+
+	endpoint := Endpoint{Address: "addr-a", CapNProtoAddress: "addr-a"}
+	stubPeers := &stubPeersGroup{
+		client: &stubAsyncClient{err: context.DeadlineExceeded},
+	}
+
+	h.peers = stubPeers
+
+	responses := make(chan writeResponse, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h.sendRemoteWrite(ctx, "tenant-a", endpointReplica{
+		endpoint: endpoint,
+		replica:  0,
+	}, trackedSeries{
+		seriesIDs:  []int{0},
+		timeSeries: []prompb.TimeSeries{{}},
+	}, false, responses, &wg)
+
+	wg.Wait()
+	close(responses)
+
+	testutil.Equals(t, []Endpoint{endpoint}, stubPeers.markUnavailable)
+	testutil.Equals(t, []Endpoint{endpoint}, stubPeers.closed)
+}
+
+type stubPeersGroup struct {
+	client WriteableStoreAsyncClient
+
+	markUnavailable []Endpoint
+	closed          []Endpoint
+}
+
+func (s *stubPeersGroup) Close() error { return nil }
+
+func (s *stubPeersGroup) markPeerUnavailable(endpoint Endpoint) {
+	s.markUnavailable = append(s.markUnavailable, endpoint)
+}
+
+func (s *stubPeersGroup) markPeerAvailable(Endpoint) {}
+
+func (s *stubPeersGroup) reset() {}
+
+func (s *stubPeersGroup) close(endpoint Endpoint) error {
+	s.closed = append(s.closed, endpoint)
+	return nil
+}
+
+func (s *stubPeersGroup) getConnection(context.Context, Endpoint) (WriteableStoreAsyncClient, error) {
+	return s.client, nil
+}
+
+type stubAsyncClient struct {
+	err error
+}
+
+func (s *stubAsyncClient) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return &storepb.WriteResponse{}, nil
+}
+
+func (s *stubAsyncClient) RemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+	responses <- newWriteResponse(seriesIDs, errors.Wrapf(s.err, "forwarding request to endpoint %v", er.endpoint), er)
+	cb(errors.Wrapf(s.err, "forwarding request to endpoint %v", er.endpoint))
+}
+
+func (s *stubAsyncClient) Close() error { return nil }
 
 // tsOverrideTenantStorage is storage that overrides timestamp to make it have consistent interval.
 type tsOverrideTenantStorage struct {

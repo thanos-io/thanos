@@ -10,6 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
+- Receive: recycle Cap'n Proto remote write peers on timeouts to heal stale connections.
+
 ## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 20 (in progress)
 
 ### Fixed
